@@ -1,7 +1,9 @@
 //! Reusable widgets built from Kinetik UI core primitives.
 
+pub mod dock;
 pub mod overlays;
 
+pub use dock::*;
 pub use overlays::*;
 
 use kinetik_ui_core::{
