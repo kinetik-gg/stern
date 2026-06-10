@@ -6,6 +6,7 @@
 pub mod geometry;
 pub mod identity;
 pub mod input;
+pub mod interaction;
 pub mod layout;
 pub mod memory;
 pub mod render;
@@ -17,6 +18,9 @@ pub use identity::{DuplicateWidgetId, IdStack, WidgetId};
 pub use input::{
     Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PointerButtonState,
     PointerInput, TextInputEvent, UiInput,
+};
+pub use interaction::{
+    InteractionState, Response, draggable, focusable, hit_test, pressable, selectable,
 };
 pub use layout::{
     Alignment, Axis, Insets, LayoutItem, Measurement, SeparatorKind, SizeRule, column_layout,
