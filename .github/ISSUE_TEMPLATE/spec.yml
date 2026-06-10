@@ -1,0 +1,48 @@
+name: Specification
+description: Propose or refine architecture/specification details.
+title: "docs(spec): "
+labels: ["spec"]
+body:
+  - type: textarea
+    id: area
+    attributes:
+      label: Spec Area
+      description: Which section, subsystem, or architectural boundary does this affect?
+      placeholder: "Action routing priority between focused text fields, Frames, and global actions."
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the ambiguity, missing detail, or conflict.
+      placeholder: "The current spec names shortcut routing priority but does not define how disabled actions should be reported."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Direction
+      description: Describe the proposed specification change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacted Areas
+      description: List crates, APIs, tests, or examples likely affected.
+      placeholder: "kinetik-ui-core action types; shortcut routing tests; command palette examples."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Define what the spec PR should clarify.
+    validations:
+      required: true
+

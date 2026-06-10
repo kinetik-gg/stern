@@ -1,0 +1,66 @@
+name: Implementation
+description: Implement a bounded area from the Kinetik UI specification.
+title: "feat(scope): "
+labels: ["implementation"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: Describe the behavior, API, or subsystem to implement.
+      placeholder: Implement stable WidgetId stack behavior for scoped widget identity.
+    validations:
+      required: true
+
+  - type: textarea
+    id: spec
+    attributes:
+      label: Relevant Spec Sections
+      description: Link or list sections from docs/specs.md.
+      placeholder: "docs/specs.md: 9. Widget Identity, 10. UI Memory"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected API Or Behavior
+      description: Describe the expected API shape or behavior contract.
+      placeholder: "ui.with_id(...) pushes a scoped parent ID and restores the previous scope after the closure returns."
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-Goals
+      description: List related work that should not be included in this issue.
+      placeholder: "Do not implement layout, rendering, or widget components in this issue."
+    validations:
+      required: true
+
+  - type: textarea
+    id: tests
+    attributes:
+      label: Tests Required
+      description: List deterministic tests expected for this issue.
+      placeholder: "ID stability across frames; scoped IDs restore after nested closures; duplicate IDs produce a debug warning."
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples Required
+      description: List examples or snapshots required, if any.
+      placeholder: "None, unless a shared usage pattern is introduced."
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Define what must be true for the PR to be accepted.
+      placeholder: "- API is documented\n- Tests pass\n- No renderer/platform dependency is introduced into kinetik-ui-core"
+    validations:
+      required: true
+

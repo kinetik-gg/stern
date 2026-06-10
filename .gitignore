@@ -1,0 +1,38 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Cargo/local config
+.cargo/config.toml
+.cargo/credentials.toml
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Generated coverage/profiling output
+/coverage/
+/tarpaulin-report.html
+*.profraw
+*.profdata
+
+# Showcase/render test artifacts
+/outputs/
+/snapshots/generated/
+/test-results/
