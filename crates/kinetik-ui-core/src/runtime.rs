@@ -3,7 +3,10 @@
 use std::time::Duration;
 
 use crate::input::UiInput;
-use crate::{PhysicalSize, ScaleFactor, Size};
+use crate::{
+    ActionContext, ActionId, ActionInvocation, ActionQueue, ActionSource, PhysicalSize,
+    ScaleFactor, Size,
+};
 
 /// Information about the current rendering viewport.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -113,20 +116,38 @@ impl RepaintRequest {
 pub struct FrameOutput {
     /// Repaint scheduling request.
     pub repaint: RepaintRequest,
+    /// Action invocations emitted during the frame.
+    pub actions: ActionQueue,
 }
 
 impl FrameOutput {
     /// Creates empty frame output.
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             repaint: RepaintRequest::None,
+            actions: ActionQueue::new(),
         }
     }
 
     /// Requests repaint scheduling.
     pub fn request_repaint(&mut self, request: RepaintRequest) {
         self.repaint = self.repaint.merge(request);
+    }
+
+    /// Adds an action invocation to the frame output.
+    pub fn push_action(&mut self, invocation: ActionInvocation) {
+        self.actions.push(invocation);
+    }
+
+    /// Adds an action invocation from simple parts.
+    pub fn invoke_action(
+        &mut self,
+        action_id: ActionId,
+        source: ActionSource,
+        context: ActionContext,
+    ) {
+        self.actions.invoke(action_id, source, context);
     }
 }
 
@@ -137,7 +158,7 @@ mod tests {
 
     use super::{FrameContext, FrameOutput, RepaintRequest, TimeInfo, ViewportInfo};
     use crate::input::UiInput;
-    use crate::{PhysicalSize, ScaleFactor, Size};
+    use crate::{ActionContext, ActionId, ActionSource, PhysicalSize, ScaleFactor, Size};
 
     #[test]
     fn creates_viewport_info() {
@@ -168,7 +189,10 @@ mod tests {
 
     #[test]
     fn frame_output_defaults_to_no_repaint() {
-        assert_eq!(FrameOutput::new().repaint, RepaintRequest::None);
+        let output = FrameOutput::new();
+
+        assert_eq!(output.repaint, RepaintRequest::None);
+        assert!(output.actions.is_empty());
     }
 
     #[test]
@@ -198,6 +222,23 @@ mod tests {
         assert_eq!(
             output.repaint,
             RepaintRequest::After(Duration::from_secs(1))
+        );
+    }
+
+    #[test]
+    fn frame_output_accumulates_actions() {
+        let mut output = FrameOutput::new();
+
+        output.invoke_action(
+            ActionId::new("file.save"),
+            ActionSource::Shortcut,
+            ActionContext::Global,
+        );
+
+        assert_eq!(output.actions.len(), 1);
+        assert_eq!(
+            output.actions.pop_front().expect("action").action_id,
+            ActionId::new("file.save")
         );
     }
 }

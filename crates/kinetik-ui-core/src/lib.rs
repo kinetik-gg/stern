@@ -3,6 +3,7 @@
 //! This crate owns platform-independent UI concepts. It must not depend on
 //! windowing, renderer, or operating-system APIs.
 
+pub mod actions;
 pub mod geometry;
 pub mod identity;
 pub mod input;
@@ -14,6 +15,10 @@ pub mod runtime;
 pub mod theme;
 pub mod units;
 
+pub use actions::{
+    ActionBinding, ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation,
+    ActionPriority, ActionQueue, ActionRouter, ActionSource, ActionState, Shortcut,
+};
 pub use geometry::{Point, Rect, Size, Vec2};
 pub use identity::{DuplicateWidgetId, IdStack, WidgetId};
 pub use input::{
