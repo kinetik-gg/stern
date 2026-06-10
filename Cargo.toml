@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/kinetik-ui-core",
+    "crates/kinetik-ui-platform-winit",
     "crates/kinetik-ui-text",
     "crates/kinetik-ui-widgets",
 ]
