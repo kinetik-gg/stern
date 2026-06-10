@@ -11,6 +11,7 @@ pub mod layout;
 pub mod memory;
 pub mod render;
 pub mod runtime;
+pub mod theme;
 pub mod units;
 
 pub use geometry::{Point, Rect, Size, Vec2};
@@ -32,6 +33,10 @@ pub use render::{
     Stroke, TextureId, Transform,
 };
 pub use runtime::{FrameContext, FrameOutput, RepaintRequest, TimeInfo, ViewportInfo};
+pub use theme::{
+    ButtonRecipe, ComponentState, SemanticColor, SpacingScale, Theme, ThemeColors,
+    default_dark_theme,
+};
 pub use units::{PhysicalPoint, PhysicalSize, ScaleFactor};
 
 /// Returns the crate name.
