@@ -1,5 +1,9 @@
 //! Reusable widgets built from Kinetik UI core primitives.
 
+pub mod overlays;
+
+pub use overlays::*;
+
 use kinetik_ui_core::{
     Brush, ComponentState, CornerRadius, ImageId, ImagePrimitive, LinePrimitive, Point, Primitive,
     Rect, RectPrimitive, Response, Stroke, TextPrimitive, Theme, UiInput, UiMemory, WidgetId,
