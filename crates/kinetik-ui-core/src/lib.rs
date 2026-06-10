@@ -5,12 +5,14 @@
 
 pub mod accessibility;
 pub mod actions;
+pub mod debug;
 pub mod geometry;
 pub mod identity;
 pub mod input;
 pub mod interaction;
 pub mod layout;
 pub mod memory;
+pub mod perf;
 pub mod render;
 pub mod runtime;
 pub mod theme;
@@ -23,6 +25,10 @@ pub use accessibility::{
 pub use actions::{
     ActionBinding, ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation,
     ActionPriority, ActionQueue, ActionRouter, ActionSource, ActionState, Shortcut,
+};
+pub use debug::{
+    DebugOverlay, PrimitiveInspection, PrimitiveKind, inspect_primitives, primitive_bounds,
+    primitive_kind,
 };
 pub use geometry::{Point, Rect, Size, Vec2};
 pub use identity::{DuplicateWidgetId, IdStack, WidgetId};
@@ -38,6 +44,9 @@ pub use layout::{
     fit_box, pad_rect, row_layout, stack_layout,
 };
 pub use memory::UiMemory;
+pub use perf::{
+    AllocationBudget, AllocationUsage, BudgetStatus, FrameCounters, FrameMetrics, FrameTimings,
+};
 pub use render::{
     Brush, ClipId, Color, CornerRadius, ImageId, ImagePrimitive, LayerId, LinePrimitive, Primitive,
     RectPrimitive, Stroke, TextPrimitive, TextureId, TexturePrimitive, Transform,
