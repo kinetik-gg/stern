@@ -4,9 +4,16 @@
 //! windowing, renderer, or operating-system APIs.
 
 pub mod geometry;
+pub mod input;
+pub mod runtime;
 pub mod units;
 
 pub use geometry::{Point, Rect, Size, Vec2};
+pub use input::{
+    Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PointerButtonState,
+    PointerInput, TextInputEvent, UiInput,
+};
+pub use runtime::{FrameContext, FrameOutput, RepaintRequest, TimeInfo, ViewportInfo};
 pub use units::{PhysicalPoint, PhysicalSize, ScaleFactor};
 
 /// Returns the crate name.
