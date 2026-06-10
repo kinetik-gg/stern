@@ -16,7 +16,7 @@ pub enum MouseButton {
 }
 
 /// Pressed/released state for a pointer button.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct PointerButtonState {
     /// Whether the button is currently down.
     pub down: bool,
@@ -85,7 +85,7 @@ impl PointerInput {
 }
 
 /// Keyboard modifier state.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Modifiers {
     /// Shift key.
