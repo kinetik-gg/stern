@@ -6,6 +6,7 @@ members = [
     "crates/kinetik-ui-render-vello",
     "crates/kinetik-ui-text",
     "crates/kinetik-ui-widgets",
+    "apps/kinetik-ui-showcase",
 ]
 
 [workspace.package]

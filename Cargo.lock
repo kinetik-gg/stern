@@ -859,6 +859,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kinetik-ui-showcase"
+version = "0.1.0"
+dependencies = [
+ "kinetik-ui-core",
+ "kinetik-ui-text",
+ "kinetik-ui-widgets",
+]
+
+[[package]]
 name = "kinetik-ui-text"
 version = "0.1.0"
 dependencies = [
