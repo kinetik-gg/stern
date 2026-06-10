@@ -12,7 +12,8 @@ pub use viewport::*;
 
 use kinetik_ui_core::{
     Brush, ComponentState, CornerRadius, ImageId, ImagePrimitive, LinePrimitive, Point, Primitive,
-    Rect, RectPrimitive, Response, Stroke, TextPrimitive, Theme, UiInput, UiMemory, WidgetId,
+    Rect, RectPrimitive, Response, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
+    SemanticState, SemanticValue, Stroke, TextPrimitive, Theme, UiInput, UiMemory, WidgetId,
     draggable, fit_box, focusable, selectable,
 };
 use kinetik_ui_text::TextEditState;
@@ -314,6 +315,175 @@ pub fn image(rect: Rect, image: ImageId) -> WidgetOutput {
     WidgetOutput::new(None, vec![Primitive::Image(ImagePrimitive { image, rect })])
 }
 
+/// Returns semantics for a static label.
+#[must_use]
+pub fn label_semantics(id: WidgetId, rect: Rect, text: impl Into<String>) -> SemanticNode {
+    SemanticNode::new(id, SemanticRole::Label, rect).with_label(text)
+}
+
+/// Returns semantics for a push button.
+#[must_use]
+pub fn button_semantics(
+    id: WidgetId,
+    rect: Rect,
+    text: impl Into<String>,
+    disabled: bool,
+) -> SemanticNode {
+    let mut node = SemanticNode::new(id, SemanticRole::Button, rect)
+        .with_label(text)
+        .focusable(!disabled)
+        .with_action(SemanticAction::new(SemanticActionKind::Invoke, "Invoke"));
+    node.state.disabled = disabled;
+    node
+}
+
+/// Returns semantics for an icon button.
+#[must_use]
+pub fn icon_button_semantics(
+    id: WidgetId,
+    rect: Rect,
+    label: impl Into<String>,
+    disabled: bool,
+) -> SemanticNode {
+    let mut node = button_semantics(id, rect, label, disabled);
+    node.role = SemanticRole::IconButton;
+    node
+}
+
+/// Returns semantics for a checkbox.
+#[must_use]
+pub fn checkbox_semantics(
+    id: WidgetId,
+    rect: Rect,
+    label: impl Into<String>,
+    checked: bool,
+    disabled: bool,
+) -> SemanticNode {
+    let mut node = SemanticNode::new(id, SemanticRole::CheckBox, rect)
+        .with_label(label)
+        .focusable(!disabled)
+        .with_action(SemanticAction::new(SemanticActionKind::Invoke, "Toggle"));
+    node.state = SemanticState {
+        disabled,
+        checked: Some(checked),
+        ..SemanticState::default()
+    };
+    node
+}
+
+/// Returns semantics for a radio button.
+#[must_use]
+pub fn radio_button_semantics(
+    id: WidgetId,
+    rect: Rect,
+    label: impl Into<String>,
+    selected: bool,
+    disabled: bool,
+) -> SemanticNode {
+    let mut node = checkbox_semantics(id, rect, label, selected, disabled);
+    node.role = SemanticRole::RadioButton;
+    node.state.selected = selected;
+    node
+}
+
+/// Returns semantics for a toggle control.
+#[must_use]
+pub fn toggle_semantics(
+    id: WidgetId,
+    rect: Rect,
+    label: impl Into<String>,
+    on: bool,
+    disabled: bool,
+) -> SemanticNode {
+    let mut node = checkbox_semantics(id, rect, label, on, disabled);
+    node.role = SemanticRole::Toggle;
+    node
+}
+
+/// Returns semantics for a slider.
+#[must_use]
+pub fn slider_semantics(
+    id: WidgetId,
+    rect: Rect,
+    label: impl Into<String>,
+    value: f32,
+    range: core::ops::RangeInclusive<f32>,
+    disabled: bool,
+) -> SemanticNode {
+    let mut node = SemanticNode::new(id, SemanticRole::Slider, rect)
+        .with_label(label)
+        .focusable(!disabled)
+        .with_action(SemanticAction::new(
+            SemanticActionKind::Increment,
+            "Increase",
+        ))
+        .with_action(SemanticAction::new(
+            SemanticActionKind::Decrement,
+            "Decrease",
+        ))
+        .with_action(SemanticAction::new(
+            SemanticActionKind::SetValue,
+            "Set value",
+        ));
+    node.state = SemanticState {
+        disabled,
+        value: Some(SemanticValue::Number {
+            current: value,
+            min: *range.start(),
+            max: *range.end(),
+        }),
+        ..SemanticState::default()
+    };
+    node
+}
+
+/// Returns semantics for a text field.
+#[must_use]
+pub fn text_field_semantics(
+    id: WidgetId,
+    rect: Rect,
+    label: impl Into<String>,
+    text: impl Into<String>,
+    disabled: bool,
+) -> SemanticNode {
+    let mut node = SemanticNode::new(id, SemanticRole::TextField, rect)
+        .with_label(label)
+        .focusable(!disabled)
+        .with_action(SemanticAction::new(SemanticActionKind::SetText, "Set text"));
+    node.state = SemanticState {
+        disabled,
+        value: Some(SemanticValue::Text(text.into())),
+        ..SemanticState::default()
+    };
+    node
+}
+
+/// Returns semantics for a search field.
+#[must_use]
+pub fn search_field_semantics(
+    id: WidgetId,
+    rect: Rect,
+    label: impl Into<String>,
+    query: impl Into<String>,
+    disabled: bool,
+) -> SemanticNode {
+    let mut node = text_field_semantics(id, rect, label, query, disabled);
+    node.role = SemanticRole::SearchField;
+    node
+}
+
+/// Returns semantics for a passive panel.
+#[must_use]
+pub fn panel_semantics(id: WidgetId, rect: Rect, label: impl Into<String>) -> SemanticNode {
+    SemanticNode::new(id, SemanticRole::Panel, rect).with_label(label)
+}
+
+/// Returns semantics for a static image.
+#[must_use]
+pub fn image_semantics(id: WidgetId, rect: Rect, label: impl Into<String>) -> SemanticNode {
+    SemanticNode::new(id, SemanticRole::Image, rect).with_label(label)
+}
+
 /// Output emitted by editable text widgets.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextFieldOutput {
@@ -431,12 +601,13 @@ pub fn search_field(
 #[cfg(test)]
 mod tests {
     use super::{
-        IconId, button, checkbox, icon_button, image, label, numeric_input, panel, search_field,
-        slider, text_field, toggle,
+        IconId, button, button_semantics, checkbox, checkbox_semantics, icon_button, image, label,
+        numeric_input, panel, panel_semantics, search_field, search_field_semantics, slider,
+        slider_semantics, text_field, text_field_semantics, toggle,
     };
     use kinetik_ui_core::{
-        ImageId, Point, PointerButtonState, PointerInput, Primitive, Rect, UiInput, UiMemory,
-        WidgetId, default_dark_theme,
+        ImageId, Point, PointerButtonState, PointerInput, Primitive, Rect, SemanticActionKind,
+        SemanticRole, SemanticValue, UiInput, UiMemory, WidgetId, default_dark_theme,
     };
     use kinetik_ui_text::TextEditState;
 
@@ -619,5 +790,68 @@ mod tests {
 
         assert_eq!(output.query, "media");
         assert!(!output.empty);
+    }
+
+    #[test]
+    fn widget_semantics_map_roles_states_values_and_actions() {
+        let button = button_semantics(
+            WidgetId::from_key("button"),
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            "Analyze",
+            false,
+        );
+        let checkbox = checkbox_semantics(
+            WidgetId::from_key("checkbox"),
+            Rect::new(0.0, 28.0, 20.0, 20.0),
+            "Enabled",
+            true,
+            false,
+        );
+        let slider = slider_semantics(
+            WidgetId::from_key("slider"),
+            Rect::new(0.0, 56.0, 100.0, 12.0),
+            "Strength",
+            0.62,
+            0.0..=1.0,
+            false,
+        );
+        let field = text_field_semantics(
+            WidgetId::from_key("field"),
+            Rect::new(0.0, 72.0, 120.0, 24.0),
+            "Name",
+            "Project",
+            false,
+        );
+        let search = search_field_semantics(
+            WidgetId::from_key("search"),
+            Rect::new(0.0, 100.0, 120.0, 24.0),
+            "Search",
+            "media",
+            false,
+        );
+        let panel = panel_semantics(
+            WidgetId::from_key("panel"),
+            Rect::new(0.0, 0.0, 200.0, 200.0),
+            "Inspector",
+        );
+
+        assert_eq!(button.role, SemanticRole::Button);
+        assert!(button.focusable);
+        assert!(
+            button
+                .actions
+                .iter()
+                .any(|action| action.kind == SemanticActionKind::Invoke)
+        );
+        assert_eq!(checkbox.state.checked, Some(true));
+        assert!(matches!(
+            slider.state.value,
+            Some(SemanticValue::Number { current, .. }) if (current - 0.62).abs() < f32::EPSILON
+        ));
+        assert!(
+            matches!(field.state.value, Some(SemanticValue::Text(ref text)) if text == "Project")
+        );
+        assert_eq!(search.role, SemanticRole::SearchField);
+        assert_eq!(panel.role, SemanticRole::Panel);
     }
 }

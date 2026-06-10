@@ -3,6 +3,7 @@
 //! This crate owns platform-independent UI concepts. It must not depend on
 //! windowing, renderer, or operating-system APIs.
 
+pub mod accessibility;
 pub mod actions;
 pub mod geometry;
 pub mod identity;
@@ -15,6 +16,10 @@ pub mod runtime;
 pub mod theme;
 pub mod units;
 
+pub use accessibility::{
+    AccessibilityAdapter, FocusTraversal, SemanticAction, SemanticActionKind, SemanticNode,
+    SemanticRole, SemanticState, SemanticTree, SemanticValue,
+};
 pub use actions::{
     ActionBinding, ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation,
     ActionPriority, ActionQueue, ActionRouter, ActionSource, ActionState, Shortcut,
