@@ -9,6 +9,7 @@ repository.workspace = true
 kinetik-ui-core = { path = "../../crates/kinetik-ui-core" }
 kinetik-ui-text = { path = "../../crates/kinetik-ui-text" }
 kinetik-ui-widgets = { path = "../../crates/kinetik-ui-widgets" }
+minifb = "0.27.0"
 
 [lints]
 workspace = true
