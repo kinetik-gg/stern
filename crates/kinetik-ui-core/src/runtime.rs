@@ -156,7 +156,10 @@ pub enum PlatformRequest {
     /// Copy text to the platform clipboard.
     CopyToClipboard(String),
     /// Ask the platform adapter to provide clipboard text as future input.
-    RequestClipboardText,
+    RequestClipboardText {
+        /// Text-input widget that should receive the clipboard text.
+        target: WidgetId,
+    },
     /// Start platform text input or IME at an optional logical text-editing rect.
     StartTextInput {
         /// Logical rectangle for caret/composition placement.

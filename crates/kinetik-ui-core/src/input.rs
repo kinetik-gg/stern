@@ -1,5 +1,6 @@
 //! Platform-independent input snapshots.
 
+use crate::WidgetId;
 use crate::geometry::{Point, Vec2};
 
 /// Mouse or pointer buttons recognized by the core input model.
@@ -494,6 +495,26 @@ pub enum TextInputEvent {
     CompositionEnd,
 }
 
+/// Clipboard text returned by the platform for a specific text-editing widget.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClipboardText {
+    /// Text-input widget that requested the clipboard contents.
+    pub target: WidgetId,
+    /// Clipboard text snapshot.
+    pub text: String,
+}
+
+impl ClipboardText {
+    /// Creates targeted clipboard text input.
+    #[must_use]
+    pub fn new(target: WidgetId, text: impl Into<String>) -> Self {
+        Self {
+            target,
+            text: text.into(),
+        }
+    }
+}
+
 /// Complete normalized input snapshot for one UI frame.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UiInput {
@@ -503,6 +524,8 @@ pub struct UiInput {
     pub keyboard: KeyboardInput,
     /// Text input events.
     pub text_events: Vec<TextInputEvent>,
+    /// Clipboard text returned by a platform adapter.
+    pub clipboard_text: Vec<ClipboardText>,
     /// Whether the window is focused.
     pub window_focused: bool,
 }
@@ -513,6 +536,7 @@ impl UiInput {
         self.pointer.begin_frame();
         self.keyboard.events.clear();
         self.text_events.clear();
+        self.clipboard_text.clear();
     }
 
     /// Releases pressed pointer buttons, intended for window focus loss.
@@ -524,9 +548,10 @@ impl UiInput {
 #[cfg(test)]
 mod tests {
     use super::{
-        Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PhysicalKey,
+        ClipboardText, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PhysicalKey,
         PointerButtonState, PointerInput, TextInputEvent, TextRange, UiInput,
     };
+    use crate::WidgetId;
     use crate::geometry::{Point, Vec2};
 
     #[test]
@@ -616,6 +641,7 @@ mod tests {
                 )],
             },
             text_events: vec![TextInputEvent::Commit("s".to_owned())],
+            clipboard_text: vec![ClipboardText::new(WidgetId::from_key("field"), "clip")],
             window_focused: true,
             ..UiInput::default()
         };
@@ -626,6 +652,7 @@ mod tests {
             PhysicalKey::Unidentified
         );
         assert_eq!(input.text_events.len(), 1);
+        assert_eq!(input.clipboard_text.len(), 1);
         assert!(input.window_focused);
     }
 
@@ -684,6 +711,7 @@ mod tests {
                 )],
             },
             text_events: vec![TextInputEvent::Commit("x".to_owned())],
+            clipboard_text: vec![ClipboardText::new(WidgetId::from_key("field"), "paste")],
             window_focused: true,
         };
 
@@ -694,5 +722,6 @@ mod tests {
         assert_eq!(input.pointer.delta, Vec2::ZERO);
         assert!(input.keyboard.events.is_empty());
         assert!(input.text_events.is_empty());
+        assert!(input.clipboard_text.is_empty());
     }
 }

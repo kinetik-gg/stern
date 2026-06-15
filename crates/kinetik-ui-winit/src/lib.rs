@@ -3,10 +3,10 @@
 use std::time::Duration;
 
 use kinetik_ui_core::{
-    CursorShape, FrameContext, FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
-    MouseButton as CoreMouseButton, PhysicalKey, PhysicalSize, PlatformRequest, Point,
+    ClipboardText, CursorShape, FrameContext, FrameOutput, Key, KeyEvent, KeyState, KeyboardInput,
+    Modifiers, MouseButton as CoreMouseButton, PhysicalKey, PhysicalSize, PlatformRequest, Point,
     PointerButtonState, PointerInput, Rect, RepaintRequest, ScaleFactor, Size, TextInputEvent,
-    TextRange, TimeInfo, UiInput, Vec2, ViewportInfo,
+    TextRange, TimeInfo, UiInput, Vec2, ViewportInfo, WidgetId,
 };
 use winit::dpi::{
     LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize as WinitPhysicalSize,
@@ -64,8 +64,8 @@ impl WinitWindowOps for &Window {
 pub struct WinitShellRequests {
     /// Text to write to the platform clipboard.
     pub clipboard_text: Option<String>,
-    /// Whether the shell should read clipboard text and feed it back as input.
-    pub request_clipboard_text: bool,
+    /// Text-input widget that should receive clipboard text read by the shell.
+    pub request_clipboard_text: Option<WidgetId>,
     /// URLs the shell should open.
     pub open_urls: Vec<String>,
     /// Delay after which the shell should request another redraw.
@@ -95,8 +95,8 @@ pub struct WinitPlatformRequests {
     pub repaint: RepaintRequest,
     /// Text to write to the platform clipboard.
     pub clipboard_text: Option<String>,
-    /// Whether the app shell should read clipboard text and feed it back as input.
-    pub request_clipboard_text: bool,
+    /// Text-input widget that should receive clipboard text read by the shell.
+    pub request_clipboard_text: Option<WidgetId>,
     /// Text input/IME request.
     pub text_input: Option<WinitTextInputRequest>,
     /// Window title to apply.
@@ -136,8 +136,8 @@ impl WinitPlatformRequests {
             PlatformRequest::CopyToClipboard(text) => {
                 self.clipboard_text = Some(text.clone());
             }
-            PlatformRequest::RequestClipboardText => {
-                self.request_clipboard_text = true;
+            PlatformRequest::RequestClipboardText { target } => {
+                self.request_clipboard_text = Some(*target);
             }
             PlatformRequest::StartTextInput { rect } => {
                 self.text_input = Some(WinitTextInputRequest::Start { rect: *rect });
@@ -240,6 +240,7 @@ impl WinitInputAdapter {
                     events: Vec::new(),
                 },
                 text_events: Vec::new(),
+                clipboard_text: Vec::new(),
                 window_focused: false,
             },
             last_pointer_position: None,
@@ -367,6 +368,13 @@ impl WinitInputAdapter {
         self.input
             .text_events
             .push(TextInputEvent::Commit(text.into()));
+    }
+
+    /// Applies clipboard text returned by the application shell for a text input.
+    pub fn clipboard_text(&mut self, target: WidgetId, text: impl Into<String>) {
+        self.input
+            .clipboard_text
+            .push(ClipboardText::new(target, text));
     }
 
     /// Applies a winit IME event.
@@ -701,9 +709,9 @@ mod tests {
         viewport_from_winit,
     };
     use kinetik_ui_core::{
-        CursorShape, FrameOutput, Key, KeyState, Modifiers, MouseButton as CoreMouseButton,
-        PhysicalKey, PlatformRequest, Rect, RepaintRequest, ScaleFactor, TextInputEvent, TextRange,
-        TimeInfo, UiInput,
+        ClipboardText, CursorShape, FrameOutput, Key, KeyState, Modifiers,
+        MouseButton as CoreMouseButton, PhysicalKey, PlatformRequest, Rect, RepaintRequest,
+        ScaleFactor, TextInputEvent, TextRange, TimeInfo, UiInput, WidgetId,
     };
     use winit::dpi::{PhysicalPosition, PhysicalSize};
     use winit::event::{ElementState, Ime, MouseButton as WinitMouseButton, MouseScrollDelta};
@@ -1006,10 +1014,13 @@ mod tests {
     fn frame_output_platform_requests_translate_to_winit_request_data() {
         let mut output = FrameOutput::new();
         let text_rect = Rect::new(10.0, 20.0, 100.0, 24.0);
+        let text_target = WidgetId::from_key("field");
         output.request_repaint(RepaintRequest::After(core::time::Duration::from_millis(20)));
         output.push_platform_request(PlatformRequest::SetCursor(CursorShape::Text));
         output.push_platform_request(PlatformRequest::CopyToClipboard("copy".to_owned()));
-        output.push_platform_request(PlatformRequest::RequestClipboardText);
+        output.push_platform_request(PlatformRequest::RequestClipboardText {
+            target: text_target,
+        });
         output.push_platform_request(PlatformRequest::StartTextInput {
             rect: Some(text_rect),
         });
@@ -1024,7 +1035,7 @@ mod tests {
             RepaintRequest::After(core::time::Duration::from_millis(20))
         );
         assert_eq!(requests.clipboard_text, Some("copy".to_owned()));
-        assert!(requests.request_clipboard_text);
+        assert_eq!(requests.request_clipboard_text, Some(text_target));
         assert_eq!(
             requests.text_input,
             Some(WinitTextInputRequest::Start {
@@ -1049,11 +1060,12 @@ mod tests {
     #[test]
     fn platform_requests_apply_window_effects_and_return_shell_work() {
         let text_rect = Rect::new(10.0, 20.0, 100.0, 24.0);
+        let text_target = WidgetId::from_key("field");
         let requests = WinitPlatformRequests {
             cursor: CursorShape::Text,
             repaint: RepaintRequest::Continuous,
             clipboard_text: Some("copy".to_owned()),
-            request_clipboard_text: true,
+            request_clipboard_text: Some(text_target),
             text_input: Some(WinitTextInputRequest::Start {
                 rect: Some(text_rect),
             }),
@@ -1070,9 +1082,24 @@ mod tests {
         assert_eq!(window.ime_allowed, Some(true));
         assert_eq!(window.ime_rect, Some(text_rect));
         assert_eq!(shell.clipboard_text, Some("copy".to_owned()));
-        assert!(shell.request_clipboard_text);
+        assert_eq!(shell.request_clipboard_text, Some(text_target));
         assert_eq!(shell.open_urls, vec!["https://example.com".to_owned()]);
         assert!(shell.continuous_repaint);
+    }
+
+    #[test]
+    fn adapter_feeds_targeted_clipboard_text_into_input() {
+        let target = WidgetId::from_key("field");
+        let mut adapter = WinitInputAdapter::default();
+
+        adapter.clipboard_text(target, "pasted");
+        assert_eq!(
+            adapter.input().clipboard_text,
+            &[ClipboardText::new(target, "pasted")]
+        );
+
+        adapter.begin_frame();
+        assert!(adapter.input().clipboard_text.is_empty());
     }
 
     #[test]
