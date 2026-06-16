@@ -899,11 +899,30 @@ impl TextEditState {
         self.selection = TextSelection::new(0, self.text.len());
     }
 
+    /// Returns the selected text, if the current selection is non-empty.
+    #[must_use]
+    pub fn selected_text(&self) -> Option<&str> {
+        let range = self.selection.range_in(&self.text);
+        (!range.is_empty()).then(|| &self.text[range])
+    }
+
     /// Applies committed text input.
     pub fn insert_text(&mut self, text: &str) {
         self.record_undo();
         self.composition = None;
         self.replace_selection(text);
+    }
+
+    /// Inserts pasted text and records it in the local undo stack.
+    pub fn paste_text(&mut self, text: &str) {
+        self.insert_text(text);
+    }
+
+    /// Removes and returns the current selected text.
+    pub fn cut_selection(&mut self) -> Option<String> {
+        let selected = self.selected_text()?.to_owned();
+        self.insert_text("");
+        Some(selected)
     }
 
     /// Deletes backward from the current selection or caret.
@@ -1372,6 +1391,32 @@ mod tests {
 
         assert_eq!(state.text, "aXd");
         assert_eq!(state.caret(), 2);
+    }
+
+    #[test]
+    fn selected_text_and_cut_use_current_selection() {
+        let mut state = TextEditState::new("abcd");
+        state.set_selection(TextSelection::new(1, 3));
+
+        assert_eq!(state.selected_text(), Some("bc"));
+        assert_eq!(state.cut_selection(), Some("bc".to_owned()));
+
+        assert_eq!(state.text, "ad");
+        assert_eq!(state.caret(), 1);
+        assert!(state.undo());
+        assert_eq!(state.text, "abcd");
+    }
+
+    #[test]
+    fn paste_text_records_local_undo() {
+        let mut state = TextEditState::new("ad");
+        state.set_caret(1);
+
+        state.paste_text("bc");
+
+        assert_eq!(state.text, "abcd");
+        assert!(state.undo());
+        assert_eq!(state.text, "ad");
     }
 
     #[test]
