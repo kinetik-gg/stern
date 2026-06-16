@@ -7,13 +7,14 @@
 
 use kinetik_ui::core::{
     ActionContext, ActionDescriptor, ActionQueue, ActionSource, Axis, Brush, ClipId, Color,
-    CornerRadius, ImageId, Key, KeyEvent, KeyState, LayoutItem, LinePrimitive, LinearGradient,
-    Measurement, Modifiers, PathElement, Point, PointerButtonState, PointerInput, Primitive, Rect,
-    RectPrimitive, ShadowPrimitive, Size, SizeRule, Stroke, TextInputEvent, TextPrimitive,
-    TextureId, TexturePrimitive, Transform, UiInput, UiMemory, Vec2, column_layout,
-    default_dark_theme, inspect_primitives, row_layout,
+    CornerRadius, FrameContext, FrameOutput, ImageId, Insets, Key, KeyEvent, KeyState, LayoutItem,
+    LinePrimitive, Measurement, Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput,
+    Primitive, Rect, RectPrimitive, ScaleFactor, Size, SizeRule, Stroke, TextInputEvent,
+    TextPrimitive, TextureId, TexturePrimitive, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo,
+    column_layout, default_dark_theme, inspect_primitives, rect_from_size, row_layout,
+    split_leading,
 };
-use kinetik_ui::text::TextEditState;
+use kinetik_ui::text::{TextEditState, TextLayoutStore};
 use kinetik_ui::widgets::{
     CommandPalette, Crosshair, DockArea, DockDropTarget, DockNode, DockPlacement, Frame, FrameId,
     GridColumns, GridLayout, Guide, IconId, ItemId, ListLayout, Menu, OverlayDismissal,
@@ -22,8 +23,6 @@ use kinetik_ui::widgets::{
     place_popover, solve_dock_layout, solve_dock_splitters,
 };
 
-const BASE_WIDTH: f32 = 1440.0;
-const BASE_HEIGHT: f32 = 900.0;
 const MIN_VIEWPORT_WIDTH: f32 = 1.0;
 const MIN_VIEWPORT_HEIGHT: f32 = 1.0;
 
@@ -76,10 +75,10 @@ pub struct ShowcaseInput {
 }
 
 /// Interactive showcase app.
-#[derive(Debug, Clone, PartialEq)]
 pub struct ShowcaseApp {
     page: ShowcasePage,
     memory: UiMemory,
+    text_layouts: TextLayoutStore,
     previous_mouse_down: bool,
     previous_mouse: Option<Point>,
     viewport_size: Size,
@@ -99,7 +98,7 @@ pub struct ShowcaseApp {
     search: TextEditState,
     notes: TextEditState,
     status: String,
-    primitives: Vec<Primitive>,
+    output: FrameOutput,
 }
 
 impl Default for ShowcaseApp {
@@ -107,9 +106,10 @@ impl Default for ShowcaseApp {
         let mut app = Self {
             page: ShowcasePage::Components,
             memory: UiMemory::new(),
+            text_layouts: TextLayoutStore::new(),
             previous_mouse_down: false,
             previous_mouse: None,
-            viewport_size: Size::new(BASE_WIDTH, BASE_HEIGHT),
+            viewport_size: Size::new(1440.0, 900.0),
             action_count: 0,
             selected_row: 1,
             selected_tab: 0,
@@ -126,7 +126,7 @@ impl Default for ShowcaseApp {
             search: TextEditState::new("layout"),
             notes: TextEditState::new("First line\nSecond line"),
             status: "Ready".to_owned(),
-            primitives: Vec::new(),
+            output: FrameOutput::new(),
         };
         app.redraw_idle();
         app
@@ -189,7 +189,7 @@ impl ShowcaseApp {
         self.viewport_size
     }
 
-    /// Sets the viewport size used for primitive scaling and input mapping.
+    /// Sets the logical viewport size used for layout.
     pub fn set_viewport_size(&mut self, size: Size) {
         let size = sanitize_viewport_size(size);
         if self.viewport_size == size {
@@ -228,31 +228,35 @@ impl ShowcaseApp {
             self.invoke_action("keyboard.enter", ActionSource::Shortcut);
         }
 
-        self.memory.begin_frame();
-        let primitives = self.frame(&ui_input);
-        self.primitives = self.scale_primitives(primitives);
+        self.output = self.frame(ui_input);
         self.previous_mouse_down = input.mouse_down;
-        self.previous_mouse = self.pointer_to_design(input.mouse);
+        self.previous_mouse = input.mouse;
     }
 
     /// Builds the current primitive stream.
     #[must_use]
     pub fn primitives(&self) -> Vec<Primitive> {
-        self.primitives.clone()
+        self.output.primitives.clone()
+    }
+
+    /// Returns the full toolkit frame output for diagnostics and integration.
+    #[must_use]
+    pub const fn output(&self) -> &FrameOutput {
+        &self.output
     }
 
     fn redraw_idle(&mut self) {
-        let input = UiInput::default();
-        self.memory.begin_frame();
-        let primitives = self.frame(&input);
-        self.primitives = self.scale_primitives(primitives);
+        self.output = self.frame(UiInput::default());
     }
 
-    fn frame(&mut self, input: &UiInput) -> Vec<Primitive> {
+    fn frame(&mut self, input: UiInput) -> FrameOutput {
         let theme = default_dark_theme();
         let mut memory = std::mem::take(&mut self.memory);
-        let primitives = {
-            let mut ui = Ui::new(input, &mut memory, &theme);
+        let mut text_layouts = std::mem::take(&mut self.text_layouts);
+        let output = {
+            let context = frame_context(self.viewport_size, input);
+            let mut ui =
+                Ui::begin_frame_with_text_layouts(context, &mut memory, &theme, &mut text_layouts);
 
             Self::app_background(&mut ui);
             self.chrome(&mut ui);
@@ -263,14 +267,15 @@ impl ShowcaseApp {
                 ShowcasePage::Systems => self.systems_page(&mut ui),
             }
 
-            ui.finish()
+            ui.finish_output()
         };
         self.memory = memory;
-        primitives
+        self.text_layouts = text_layouts;
+        output
     }
 
     fn to_ui_input(&self, input: &ShowcaseInput, viewport_changed: bool) -> UiInput {
-        let mouse = self.pointer_to_design(input.mouse);
+        let mouse = input.mouse;
         let pressed = input.mouse_down && !self.previous_mouse_down;
         let released = !input.mouse_down && self.previous_mouse_down;
         let delta = match (mouse, self.previous_mouse) {
@@ -321,54 +326,40 @@ impl ShowcaseApp {
         }
     }
 
-    fn pointer_to_design(&self, point: Option<Point>) -> Option<Point> {
-        let scale_x = self.viewport_size.width / BASE_WIDTH;
-        let scale_y = self.viewport_size.height / BASE_HEIGHT;
-
-        point.map(|point| Point::new(point.x / scale_x, point.y / scale_y))
-    }
-
-    fn scale_primitives(&self, primitives: Vec<Primitive>) -> Vec<Primitive> {
-        let scale_x = self.viewport_size.width / BASE_WIDTH;
-        let scale_y = self.viewport_size.height / BASE_HEIGHT;
-        let text_scale = ((scale_x + scale_y) * 0.5).max(0.25);
-
-        primitives
-            .into_iter()
-            .map(|primitive| scale_primitive(primitive, scale_x, scale_y, text_scale))
-            .collect()
-    }
-
     fn invoke_action(&mut self, id: &str, source: ActionSource) {
         self.action_count += 1;
         self.status = format!("{id} via {source:?} ({})", self.action_count);
     }
 
     fn app_background(ui: &mut Ui<'_>) {
+        let viewport = rect_from_size(ui.viewport().logical_size);
+        let (_, body) = split_leading(viewport, Axis::Vertical, 52.0);
+        rect(ui, viewport, rgb(11, 12, 13), None);
         rect(
             ui,
-            Rect::new(0.0, 0.0, BASE_WIDTH, BASE_HEIGHT),
-            rgb(11, 12, 13),
-            None,
-        );
-        rect(
-            ui,
-            Rect::new(0.0, 52.0, BASE_WIDTH, 1.0),
+            Rect::new(0.0, 52.0, viewport.width, 1.0),
             rgb(65, 72, 84),
             None,
         );
+        let footer_height = body.height.min(140.0);
         rect(
             ui,
-            Rect::new(0.0, 760.0, BASE_WIDTH, 140.0),
+            Rect::new(
+                0.0,
+                viewport.max_y() - footer_height,
+                viewport.width,
+                footer_height,
+            ),
             rgb(13, 16, 17),
             None,
         );
     }
 
     fn chrome(&mut self, ui: &mut Ui<'_>) {
+        let viewport = rect_from_size(ui.viewport().logical_size);
         rect(
             ui,
-            Rect::new(0.0, 0.0, BASE_WIDTH, 52.0),
+            Rect::new(0.0, 0.0, viewport.width, 52.0),
             rgb(19, 21, 23),
             Some(rgb(58, 64, 72)),
         );
@@ -382,21 +373,30 @@ impl ShowcaseApp {
             rgb(238, 238, 238),
         );
         text(ui, 20.0, 40.0, "Workbench", 10.0, rgb(150, 160, 164));
-        Self::status_badge(
-            ui,
-            Rect::new(1006.0, 12.0, 128.0, 28.0),
-            "Primitives",
-            &self.primitives.len().to_string(),
-            rgb(82, 150, 132),
-        );
-        Self::status_badge(
-            ui,
-            Rect::new(1146.0, 12.0, 108.0, 28.0),
-            "Actions",
-            &self.action_count.to_string(),
-            rgb(144, 184, 255),
-        );
-        text(ui, 1270.0, 31.0, &self.status, 10.0, rgb(178, 182, 188));
+        if viewport.width >= 1200.0 {
+            Self::status_badge(
+                ui,
+                Rect::new(viewport.width - 434.0, 12.0, 128.0, 28.0),
+                "Primitives",
+                &self.output.primitives.len().to_string(),
+                rgb(82, 150, 132),
+            );
+            Self::status_badge(
+                ui,
+                Rect::new(viewport.width - 294.0, 12.0, 108.0, 28.0),
+                "Actions",
+                &self.action_count.to_string(),
+                rgb(144, 184, 255),
+            );
+            text(
+                ui,
+                viewport.width - 170.0,
+                31.0,
+                &self.status,
+                10.0,
+                rgb(178, 182, 188),
+            );
+        }
 
         for (page, item) in nav_items() {
             let response = ui.tab_button(
@@ -735,90 +735,100 @@ impl ShowcaseApp {
 
     fn layout_page(&mut self, ui: &mut Ui<'_>) {
         section_title(ui, 40.0, 86.0, "Layout, Docking, and Data Surfaces");
-        Self::layout_solver_preview(ui);
-        self.dock_preview(ui);
-        Self::table_preview(ui);
+        let viewport = rect_from_size(ui.viewport().logical_size);
+        let page = kinetik_ui::core::pad_rect(viewport, Insets::new(40.0, 40.0, 104.0, 40.0));
+        if page.width >= 1160.0 {
+            Self::layout_solver_preview(ui, Rect::new(page.x, page.y, 560.0, 250.0));
+            self.dock_preview(ui, Rect::new(page.x + 600.0, page.y, 560.0, 250.0));
+            Self::table_preview(ui, Rect::new(page.x, page.y + 286.0, 1160.0, 300.0));
+        } else {
+            let width = page.width.min(760.0);
+            Self::layout_solver_preview(ui, Rect::new(page.x, page.y, width, 250.0));
+            self.dock_preview(ui, Rect::new(page.x, page.y + 286.0, width, 250.0));
+            Self::table_preview(ui, Rect::new(page.x, page.y + 572.0, width, 300.0));
+        }
     }
 
-    fn layout_solver_preview(ui: &mut Ui<'_>) {
-        panel_title(
+    fn layout_solver_preview(ui: &mut Ui<'_>, panel: Rect) {
+        let body = panel_title_body(
             ui,
-            Rect::new(40.0, 104.0, 560.0, 250.0),
+            panel,
             "Measurement-Aware Layout",
+            Insets::new(20.0, 20.0, 46.0, 16.0),
         );
 
-        let items = [
-            LayoutItem::new(
-                SizeRule::Fixed(140.0),
-                SizeRule::Fixed(42.0),
-                Measurement::new(Size::new(140.0, 42.0)),
-            ),
-            LayoutItem::new(
-                SizeRule::Fill,
-                SizeRule::Fixed(42.0),
-                Measurement::new(Size::new(180.0, 42.0)),
-            ),
-            LayoutItem::new(
-                SizeRule::Fit,
-                SizeRule::Fixed(42.0),
-                Measurement::new(Size::new(96.0, 42.0)),
-            ),
-        ];
-        for (index, rect_value) in row_layout(Rect::new(64.0, 150.0, 500.0, 42.0), &items, 8.0)
-            .into_iter()
-            .enumerate()
-        {
-            rect(ui, rect_value, rgb(36, 42, 50), Some(rgb(90, 110, 140)));
-            text(
-                ui,
-                rect_value.x + 12.0,
-                rect_value.y + 26.0,
-                &format!("Row {index}"),
-                11.0,
-                rgb(236, 236, 236),
-            );
-        }
+        ui.clip_rect("layout.measurement.body", body, |ui| {
+            let row_bounds = Rect::new(body.x + 4.0, body.y, (body.width - 8.0).max(0.0), 42.0);
+            let items = [
+                LayoutItem::new(
+                    SizeRule::Fixed(140.0),
+                    SizeRule::Fixed(42.0),
+                    Measurement::new(Size::new(140.0, 42.0)),
+                ),
+                LayoutItem::new(
+                    SizeRule::Fill,
+                    SizeRule::Fixed(42.0),
+                    Measurement::new(Size::new(180.0, 42.0)),
+                ),
+                LayoutItem::new(
+                    SizeRule::Fit,
+                    SizeRule::Fixed(42.0),
+                    Measurement::new(Size::new(96.0, 42.0)),
+                ),
+            ];
+            for (index, rect_value) in row_layout(row_bounds, &items, 8.0).into_iter().enumerate() {
+                rect(ui, rect_value, rgb(36, 42, 50), Some(rgb(90, 110, 140)));
+                text(
+                    ui,
+                    rect_value.x + 12.0,
+                    rect_value.y + 26.0,
+                    &format!("Row {index}"),
+                    11.0,
+                    rgb(236, 236, 236),
+                );
+            }
 
-        let column_items = [
-            LayoutItem::new(
-                SizeRule::Fill,
-                SizeRule::Fixed(34.0),
-                Measurement::new(Size::new(80.0, 34.0)),
-            ),
-            LayoutItem::new(
-                SizeRule::Fill,
-                SizeRule::Fixed(54.0),
-                Measurement::new(Size::new(80.0, 54.0)),
-            ),
-            LayoutItem::new(
-                SizeRule::Fill,
-                SizeRule::Fixed(34.0),
-                Measurement::new(Size::new(80.0, 34.0)),
-            ),
-        ];
-        for rect_value in column_layout(Rect::new(64.0, 220.0, 220.0, 122.0), &column_items, 8.0) {
-            rect(ui, rect_value, rgb(44, 38, 52), Some(rgb(120, 94, 150)));
-        }
+            let column_items = [
+                LayoutItem::new(
+                    SizeRule::Fill,
+                    SizeRule::Fixed(34.0),
+                    Measurement::new(Size::new(80.0, 34.0)),
+                ),
+                LayoutItem::new(
+                    SizeRule::Fill,
+                    SizeRule::Fixed(54.0),
+                    Measurement::new(Size::new(80.0, 54.0)),
+                ),
+                LayoutItem::new(
+                    SizeRule::Fill,
+                    SizeRule::Fixed(34.0),
+                    Measurement::new(Size::new(80.0, 34.0)),
+                ),
+            ];
+            let column_bounds = Rect::new(body.x + 4.0, body.y + 70.0, 220.0, 122.0);
+            for rect_value in column_layout(column_bounds, &column_items, 8.0) {
+                rect(ui, rect_value, rgb(44, 38, 52), Some(rgb(120, 94, 150)));
+            }
 
-        let adaptive = GridLayout {
-            columns: GridColumns::Adaptive { min_width: 64.0 },
-            item_size: Size::new(58.0, 32.0),
-            gap: 8.0,
-        };
-        for item in adaptive.item_rects(Rect::new(320.0, 220.0, 240.0, 120.0), 12, 0..12) {
-            rect(ui, item.rect, rgb(38, 45, 44), Some(rgb(84, 122, 110)));
-        }
+            let grid_x = (body.x + 280.0).min(body.max_x() - 220.0).max(body.x + 4.0);
+            let adaptive = GridLayout {
+                columns: GridColumns::Adaptive { min_width: 64.0 },
+                item_size: Size::new(58.0, 32.0),
+                gap: 8.0,
+            };
+            for item in
+                adaptive.item_rects(Rect::new(grid_x, body.y + 70.0, 220.0, 120.0), 12, 0..12)
+            {
+                rect(ui, item.rect, rgb(38, 45, 44), Some(rgb(84, 122, 110)));
+            }
+        });
     }
 
-    fn dock_preview(&mut self, ui: &mut Ui<'_>) {
-        panel_title(
-            ui,
-            Rect::new(640.0, 104.0, 560.0, 250.0),
-            "Interactive Dock Model",
-        );
+    fn dock_preview(&mut self, ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Interactive Dock Model");
         let area = self.dock_area_preview();
-        self.dock_preview_controls(ui);
-        Self::draw_dock_preview(ui, &area);
+        self.dock_preview_controls(ui, panel);
+        Self::draw_dock_preview(ui, &area, panel);
     }
 
     fn dock_area_preview(&self) -> DockArea {
@@ -870,11 +880,11 @@ impl ShowcaseApp {
         area
     }
 
-    fn dock_preview_controls(&mut self, ui: &mut Ui<'_>) {
+    fn dock_preview_controls(&mut self, ui: &mut Ui<'_>, panel: Rect) {
         let before = self.dock_ratio;
         ui.slider(
             "layout.dock-ratio",
-            Rect::new(876.0, 128.0, 170.0, 14.0),
+            Rect::new(panel.x + 236.0, panel.y + 54.0, 170.0, 14.0),
             &mut self.dock_ratio,
             0.25..=0.75,
             false,
@@ -884,8 +894,8 @@ impl ShowcaseApp {
         }
         text(
             ui,
-            1060.0,
-            138.0,
+            panel.x + 420.0,
+            panel.y + 64.0,
             &format!("{:.0}%", self.dock_ratio * 100.0),
             10.0,
             rgb(190, 190, 194),
@@ -893,7 +903,7 @@ impl ShowcaseApp {
 
         let split = ui.button(
             "layout.split-demo",
-            Rect::new(672.0, 120.0, 132.0, 28.0),
+            Rect::new(panel.x + 32.0, panel.y + 46.0, 132.0, 28.0),
             if self.dock_split_demo == DockSplitDemoState::Inserted {
                 "Reset Dock"
             } else {
@@ -913,8 +923,13 @@ impl ShowcaseApp {
         }
     }
 
-    fn draw_dock_preview(ui: &mut Ui<'_>, area: &DockArea) {
-        let dock_bounds = Rect::new(660.0, 158.0, 500.0, 170.0);
+    fn draw_dock_preview(ui: &mut Ui<'_>, area: &DockArea, panel: Rect) {
+        let dock_bounds = Rect::new(
+            panel.x + 20.0,
+            panel.y + 86.0,
+            (panel.width - 60.0).max(0.0),
+            (panel.height - 116.0).max(0.0),
+        );
         for frame in solve_dock_layout(area, dock_bounds) {
             rect(ui, frame.rect, rgb(22, 22, 25), Some(rgb(70, 70, 76)));
             text(
@@ -936,8 +951,8 @@ impl ShowcaseApp {
         }
         for frame in area.frames() {
             let tabs = frame_tabs(frame);
-            let mut x = 672.0;
-            let y = 306.0 + frame.id.raw() as f32 * 0.0;
+            let mut x = panel.x + 32.0;
+            let y = panel.max_y() - 30.0 + frame.id.raw() as f32 * 0.0;
             for tab in tabs {
                 let width = 74.0;
                 rect(
@@ -956,20 +971,16 @@ impl ShowcaseApp {
         }
         text(
             ui,
-            672.0,
-            342.0,
+            panel.x + 32.0,
+            panel.max_y() - 10.0,
             &format!("Frames: {} | Snapshot: valid", area.frames().len()),
             10.0,
             rgb(160, 160, 164),
         );
     }
 
-    fn table_preview(ui: &mut Ui<'_>) {
-        panel_title(
-            ui,
-            Rect::new(40.0, 390.0, 1160.0, 300.0),
-            "Virtualized Table Model",
-        );
+    fn table_preview(ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Virtualized Table Model");
         let table = TableLayout {
             columns: vec![
                 TableColumn {
@@ -997,7 +1008,19 @@ impl ShowcaseApp {
             row_height: 28.0,
             sort: None,
         };
-        let bounds = Rect::new(64.0, 440.0, 680.0, 210.0);
+        let max_table_width = (panel.width - 48.0).max(0.0);
+        let preferred_table_width = (panel.width * 0.62).clamp(0.0, 680.0);
+        let table_width = if max_table_width < 420.0 {
+            max_table_width
+        } else {
+            preferred_table_width.clamp(420.0, max_table_width)
+        };
+        let bounds = Rect::new(
+            panel.x + 24.0,
+            panel.y + 50.0,
+            table_width,
+            (panel.height - 90.0).max(120.0),
+        );
         for header in table.header_rects(bounds) {
             rect(ui, header.rect, rgb(34, 34, 38), Some(rgb(72, 72, 76)));
             let column = &table.columns[header.index];
@@ -1038,8 +1061,8 @@ impl ShowcaseApp {
 
         text(
             ui,
-            800.0,
-            470.0,
+            bounds.max_x() + 56.0,
+            bounds.y + 30.0,
             "Rows: 7 | Columns: 4 | Overscan: 0",
             11.0,
             rgb(190, 190, 194),
@@ -1336,7 +1359,7 @@ impl ShowcaseApp {
             ui,
             920.0,
             510.0,
-            &format!("Primitive count: {}", self.primitives.len()),
+            &format!("Primitive count: {}", self.output.primitives.len()),
             10.0,
             rgb(190, 190, 194),
         );
@@ -1356,7 +1379,7 @@ impl ShowcaseApp {
             10.0,
             rgb(190, 190, 194),
         );
-        for (row, primitive) in inspect_primitives(&self.primitives)
+        for (row, primitive) in inspect_primitives(&self.output.primitives)
             .into_iter()
             .take(4)
             .enumerate()
@@ -1395,12 +1418,34 @@ fn nav_items() -> [(ShowcasePage, Rect); 4] {
     ]
 }
 
+fn frame_context(size: Size, input: UiInput) -> FrameContext {
+    let width = physical_dimension(size.width);
+    let height = physical_dimension(size.height);
+    FrameContext::new(
+        ViewportInfo::new(size, PhysicalSize::new(width, height), ScaleFactor::ONE),
+        input,
+        TimeInfo::default(),
+    )
+}
+
+fn physical_dimension(value: f32) -> u32 {
+    if value.is_finite() {
+        value.round().max(1.0).min(u32::MAX as f32) as u32
+    } else {
+        1
+    }
+}
+
 fn section_title(ui: &mut Ui<'_>, x: f32, baseline: f32, value: &str) {
     text(ui, x, baseline, value, 18.0, rgb(242, 242, 244));
 }
 
 fn panel_title(ui: &mut Ui<'_>, rect_value: Rect, value: &str) {
-    ui.panel(rect_value);
+    let _ = panel_title_body(ui, rect_value, value, Insets::new(20.0, 20.0, 46.0, 18.0));
+}
+
+fn panel_title_body(ui: &mut Ui<'_>, rect_value: Rect, value: &str, body_insets: Insets) -> Rect {
+    let frame = ui.panel_frame(rect_value, body_insets);
     text(
         ui,
         rect_value.x + 20.0,
@@ -1409,6 +1454,7 @@ fn panel_title(ui: &mut Ui<'_>, rect_value: Rect, value: &str) {
         14.0,
         rgb(238, 238, 240),
     );
+    frame.body
 }
 
 fn rect(ui: &mut Ui<'_>, rect: Rect, fill: Color, stroke: Option<Color>) {
@@ -1453,152 +1499,6 @@ fn sanitize_viewport_size(size: Size) -> Size {
     )
 }
 
-fn scale_primitive(primitive: Primitive, scale_x: f32, scale_y: f32, text_scale: f32) -> Primitive {
-    match primitive {
-        Primitive::Rect(mut rect) => {
-            rect.rect = scale_rect(rect.rect, scale_x, scale_y);
-            rect.fill = rect.fill.map(|brush| scale_brush(brush, scale_x, scale_y));
-            rect.stroke = rect
-                .stroke
-                .map(|stroke| scale_stroke(stroke, text_scale, scale_x, scale_y));
-            rect.radius = scale_radius(rect.radius, text_scale);
-            Primitive::Rect(rect)
-        }
-        Primitive::Line(mut line) => {
-            line.from = scale_point(line.from, scale_x, scale_y);
-            line.to = scale_point(line.to, scale_x, scale_y);
-            line.stroke = scale_stroke(line.stroke, text_scale, scale_x, scale_y);
-            Primitive::Line(line)
-        }
-        Primitive::Shadow(shadow) => Primitive::Shadow(scale_shadow(shadow, scale_x, scale_y)),
-        Primitive::Path(mut path) => {
-            for element in &mut path.elements {
-                *element = scale_path_element(*element, scale_x, scale_y);
-            }
-            path.fill = path.fill.map(|brush| scale_brush(brush, scale_x, scale_y));
-            path.stroke = path
-                .stroke
-                .map(|stroke| scale_stroke(stroke, text_scale, scale_x, scale_y));
-            Primitive::Path(path)
-        }
-        Primitive::Text(mut text) => {
-            text.origin = scale_point(text.origin, scale_x, scale_y);
-            text.size = (text.size * text_scale).round().max(6.0);
-            text.brush = scale_brush(text.brush, scale_x, scale_y);
-            Primitive::Text(text)
-        }
-        Primitive::Image(mut image) => {
-            image.rect = scale_rect(image.rect, scale_x, scale_y);
-            Primitive::Image(image)
-        }
-        Primitive::Texture(mut texture) => {
-            texture.rect = scale_rect(texture.rect, scale_x, scale_y);
-            Primitive::Texture(texture)
-        }
-        Primitive::ClipBegin { id, rect } => Primitive::ClipBegin {
-            id,
-            rect: scale_rect(rect, scale_x, scale_y),
-        },
-        Primitive::ClipEnd { id } => Primitive::ClipEnd { id },
-        Primitive::LayerBegin { id } => Primitive::LayerBegin { id },
-        Primitive::LayerEnd { id } => Primitive::LayerEnd { id },
-        Primitive::TransformBegin(transform) => {
-            Primitive::TransformBegin(scale_transform(transform, scale_x, scale_y))
-        }
-        Primitive::TransformEnd => Primitive::TransformEnd,
-    }
-}
-
-fn scale_rect(rect: Rect, scale_x: f32, scale_y: f32) -> Rect {
-    let x0 = (rect.x * scale_x).round();
-    let y0 = (rect.y * scale_y).round();
-    let x1 = (rect.max_x() * scale_x).round();
-    let y1 = (rect.max_y() * scale_y).round();
-
-    Rect::new(x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0))
-}
-
-fn scale_point(point: Point, scale_x: f32, scale_y: f32) -> Point {
-    Point::new((point.x * scale_x).round(), (point.y * scale_y).round())
-}
-
-fn scale_path_element(element: PathElement, scale_x: f32, scale_y: f32) -> PathElement {
-    match element {
-        PathElement::MoveTo(point) => PathElement::MoveTo(scale_point(point, scale_x, scale_y)),
-        PathElement::LineTo(point) => PathElement::LineTo(scale_point(point, scale_x, scale_y)),
-        PathElement::QuadTo { ctrl, to } => PathElement::QuadTo {
-            ctrl: scale_point(ctrl, scale_x, scale_y),
-            to: scale_point(to, scale_x, scale_y),
-        },
-        PathElement::CubicTo { ctrl1, ctrl2, to } => PathElement::CubicTo {
-            ctrl1: scale_point(ctrl1, scale_x, scale_y),
-            ctrl2: scale_point(ctrl2, scale_x, scale_y),
-            to: scale_point(to, scale_x, scale_y),
-        },
-        PathElement::Close => PathElement::Close,
-    }
-}
-
-fn scale_stroke(stroke: Stroke, width_scale: f32, scale_x: f32, scale_y: f32) -> Stroke {
-    Stroke::new(
-        (stroke.width * width_scale).round().max(1.0),
-        scale_brush(stroke.brush, scale_x, scale_y),
-    )
-}
-
-fn scale_brush(brush: Brush, scale_x: f32, scale_y: f32) -> Brush {
-    match brush {
-        Brush::Solid(_) => brush,
-        Brush::LinearGradient(gradient) => {
-            Brush::LinearGradient(scale_linear_gradient(gradient, scale_x, scale_y))
-        }
-    }
-}
-
-fn scale_linear_gradient(gradient: LinearGradient, scale_x: f32, scale_y: f32) -> LinearGradient {
-    LinearGradient::new(
-        scale_point(gradient.start(), scale_x, scale_y),
-        scale_point(gradient.end(), scale_x, scale_y),
-        gradient.stops(),
-    )
-    .unwrap_or(gradient)
-}
-
-fn scale_shadow(shadow: ShadowPrimitive, scale_x: f32, scale_y: f32) -> ShadowPrimitive {
-    let radius_scale = scale_x.min(scale_y);
-    ShadowPrimitive::new(
-        scale_rect(shadow.rect, scale_x, scale_y),
-        Vec2::new(
-            (shadow.offset.x * scale_x).round(),
-            (shadow.offset.y * scale_y).round(),
-        ),
-        (shadow.blur_radius * radius_scale).round().max(0.0),
-        (shadow.spread * radius_scale).round(),
-        (shadow.radius * radius_scale).round().max(0.0),
-        shadow.color,
-    )
-}
-
-fn scale_radius(radius: CornerRadius, scale: f32) -> CornerRadius {
-    CornerRadius {
-        top_left: (radius.top_left * scale).round(),
-        top_right: (radius.top_right * scale).round(),
-        bottom_right: (radius.bottom_right * scale).round(),
-        bottom_left: (radius.bottom_left * scale).round(),
-    }
-}
-
-fn scale_transform(transform: Transform, scale_x: f32, scale_y: f32) -> Transform {
-    Transform {
-        m11: transform.m11,
-        m12: transform.m12,
-        m21: transform.m21,
-        m22: transform.m22,
-        dx: (transform.dx * scale_x).round(),
-        dy: (transform.dy * scale_y).round(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{ShowcaseApp, ShowcaseInput, ShowcasePage};
@@ -1636,12 +1536,13 @@ mod tests {
     }
 
     #[test]
-    fn viewport_size_scales_output_primitives() {
+    fn viewport_size_sets_logical_frame_context() {
         let mut app = ShowcaseApp::new();
 
         app.set_viewport_size(Size::new(720.0, 450.0));
 
         assert_eq!(app.viewport_size(), Size::new(720.0, 450.0));
+        assert_eq!(app.output().warnings, Vec::new());
         assert!(app.primitives().iter().any(|primitive| matches!(
             primitive,
             Primitive::Rect(rect) if rect.rect == Rect::new(0.0, 0.0, 720.0, 450.0)
@@ -1649,11 +1550,14 @@ mod tests {
     }
 
     #[test]
-    fn resized_hit_testing_maps_pointer_to_design_space() {
+    fn resized_hit_testing_uses_logical_coordinates() {
         let mut app = ShowcaseApp::new();
         app.set_viewport_size(Size::new(720.0, 450.0));
 
         click(&mut app, Point::new(35.0, 77.0));
+        assert_eq!(app.action_count(), 0);
+
+        click(&mut app, Point::new(70.0, 154.0));
 
         assert_eq!(app.action_count(), 1);
     }
@@ -1733,7 +1637,7 @@ mod tests {
         let mut app = ShowcaseApp::new();
         app.set_page(ShowcasePage::Layout);
 
-        click(&mut app, Point::new(700.0, 132.0));
+        click(&mut app, Point::new(700.0, 162.0));
 
         assert!(app.primitives().iter().any(|primitive| {
             matches!(primitive, Primitive::Text(text) if text.text.contains("Frames: 3"))

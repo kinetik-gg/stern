@@ -19,11 +19,11 @@ pub use kinetik_ui_core::IconId;
 use std::collections::BTreeMap;
 
 use kinetik_ui_core::{
-    Brush, ClipId, ComponentState, CornerRadius, CursorShape, ImageId, ImagePrimitive, Key,
+    Brush, ClipId, ComponentState, CornerRadius, CursorShape, ImageId, ImagePrimitive, Insets, Key,
     KeyState, LinePrimitive, PathElement, PathPrimitive, PlatformRequest, Point, Primitive, Rect,
     RectPrimitive, Response, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
     SemanticState, SemanticValue, Stroke, TextFieldRecipe, TextInputEvent, TextPrimitive, TextRole,
-    Theme, UiInput, UiMemory, WidgetId, draggable, fit_box, focusable, selectable,
+    Theme, UiInput, UiMemory, WidgetId, draggable, fit_box, focusable, pad_rect, selectable,
 };
 use kinetik_ui_text::{
     ShapedTextLayout, TextEditState, TextLayoutKey, TextLayoutStore, TextSelection, TextStyle,
@@ -1425,6 +1425,26 @@ pub fn panel(rect: Rect, theme: &Theme) -> WidgetOutput {
     WidgetOutput::new(None, primitives)
 }
 
+/// Resolved panel surface and content body rectangles.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PanelFrame {
+    /// Full panel surface rectangle.
+    pub outer: Rect,
+    /// Inner content body after insets.
+    pub body: Rect,
+}
+
+impl PanelFrame {
+    /// Resolves a panel body from an outer rectangle and content insets.
+    #[must_use]
+    pub fn new(outer: Rect, body_insets: Insets) -> Self {
+        Self {
+            outer,
+            body: pad_rect(outer, body_insets),
+        }
+    }
+}
+
 /// Emits a simple horizontal separator line.
 #[must_use]
 pub fn separator(rect: Rect, theme: &Theme) -> Primitive {
@@ -1962,17 +1982,17 @@ pub fn search_field_with_text_layouts(
 #[cfg(test)]
 mod tests {
     use super::{
-        IconId, button, button_semantics, checkbox, checkbox_semantics, checkbox_with_label,
-        icon_button, icon_button_with_label, icon_button_with_library, image, label, list_row,
-        multi_line_text_field, multi_line_text_field_with_text_layouts, numeric_input, panel,
-        panel_semantics, radio_button_with_label, search_field, search_field_semantics, slider,
-        slider_semantics, slider_with_label, tab_button, text_field, text_field_semantics,
-        text_field_with_text_layouts, toggle, toggle_with_label,
+        IconId, PanelFrame, button, button_semantics, checkbox, checkbox_semantics,
+        checkbox_with_label, icon_button, icon_button_with_label, icon_button_with_library, image,
+        label, list_row, multi_line_text_field, multi_line_text_field_with_text_layouts,
+        numeric_input, panel, panel_semantics, radio_button_with_label, search_field,
+        search_field_semantics, slider, slider_semantics, slider_with_label, tab_button,
+        text_field, text_field_semantics, text_field_with_text_layouts, toggle, toggle_with_label,
     };
     use crate::{IconGraphic, IconLibrary, IconPath};
     use kinetik_ui_core::{
-        ClipboardText, ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PathElement,
-        PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect,
+        ClipboardText, ImageId, Insets, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
+        PathElement, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect,
         SemanticActionKind, SemanticRole, SemanticValue, UiInput, UiMemory, WidgetId,
         default_dark_theme,
     };
@@ -2028,6 +2048,17 @@ mod tests {
 
         assert!(matches!(output.primitives[0], Primitive::Text(_)));
         assert!(output.response.is_none());
+    }
+
+    #[test]
+    fn panel_frame_resolves_clamped_body_rect() {
+        let frame = PanelFrame::new(Rect::new(10.0, 20.0, 100.0, 50.0), Insets::all(12.0));
+
+        assert_eq!(frame.outer, Rect::new(10.0, 20.0, 100.0, 50.0));
+        assert_eq!(frame.body, Rect::new(22.0, 32.0, 76.0, 26.0));
+
+        let clamped = PanelFrame::new(Rect::new(0.0, 0.0, 10.0, 8.0), Insets::all(20.0));
+        assert_eq!(clamped.body, Rect::new(20.0, 20.0, 0.0, 0.0));
     }
 
     #[test]

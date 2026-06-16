@@ -157,6 +157,12 @@ impl Insets {
     pub const fn all(value: f32) -> Self {
         Self::new(value, value, value, value)
     }
+
+    /// Creates symmetric horizontal and vertical insets.
+    #[must_use]
+    pub const fn symmetric(horizontal: f32, vertical: f32) -> Self {
+        Self::new(horizontal, horizontal, vertical, vertical)
+    }
 }
 
 /// Alignment inside an available rectangle.
@@ -191,6 +197,76 @@ pub fn pad_rect(rect: Rect, insets: Insets) -> Rect {
         rect.height - insets.top - insets.bottom,
     )
     .max_zero()
+}
+
+/// Returns a rectangle whose origin is `(0, 0)` and size is `size`.
+#[must_use]
+pub fn rect_from_size(size: Size) -> Rect {
+    Rect::new(0.0, 0.0, size.width, size.height).max_zero()
+}
+
+/// Splits a rectangle into a leading band and remaining body along `axis`.
+#[must_use]
+pub fn split_leading(rect: Rect, axis: Axis, amount: f32) -> (Rect, Rect) {
+    let amount = sanitize_size(amount);
+    match axis {
+        Axis::Horizontal => {
+            let leading = amount.min(rect.width);
+            (
+                Rect::new(rect.x, rect.y, leading, rect.height),
+                Rect::new(
+                    rect.x + leading,
+                    rect.y,
+                    (rect.width - leading).max(0.0),
+                    rect.height,
+                ),
+            )
+        }
+        Axis::Vertical => {
+            let leading = amount.min(rect.height);
+            (
+                Rect::new(rect.x, rect.y, rect.width, leading),
+                Rect::new(
+                    rect.x,
+                    rect.y + leading,
+                    rect.width,
+                    (rect.height - leading).max(0.0),
+                ),
+            )
+        }
+    }
+}
+
+/// Splits a rectangle into a remaining body and trailing band along `axis`.
+#[must_use]
+pub fn split_trailing(rect: Rect, axis: Axis, amount: f32) -> (Rect, Rect) {
+    let amount = sanitize_size(amount);
+    match axis {
+        Axis::Horizontal => {
+            let trailing = amount.min(rect.width);
+            (
+                Rect::new(
+                    rect.x,
+                    rect.y,
+                    (rect.width - trailing).max(0.0),
+                    rect.height,
+                ),
+                Rect::new(rect.max_x() - trailing, rect.y, trailing, rect.height),
+            )
+        }
+        Axis::Vertical => {
+            let trailing = amount.min(rect.height);
+            (
+                Rect::new(
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    (rect.height - trailing).max(0.0),
+                ),
+                Rect::new(rect.x, rect.max_y() - trailing, rect.width, trailing),
+            )
+        }
+    }
 }
 
 /// Fits a size inside a rectangle according to alignment.
@@ -343,7 +419,8 @@ fn rect_from_axes(axis: Axis, parent: Rect, main_origin: f32, main: f32, cross: 
 mod tests {
     use super::{
         Alignment, Axis, Insets, LayoutItem, Measurement, SeparatorKind, SizeRule, column_layout,
-        fit_box, pad_rect, row_layout, separator, spacer, stack_layout,
+        fit_box, pad_rect, rect_from_size, row_layout, separator, spacer, split_leading,
+        split_trailing, stack_layout,
     };
     use crate::{Rect, Size};
 
@@ -391,6 +468,54 @@ mod tests {
         assert_eq!(
             pad_rect(Rect::new(0.0, 0.0, 10.0, 8.0), Insets::all(6.0)),
             Rect::new(6.0, 6.0, 0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn rect_from_size_sanitizes_negative_sizes() {
+        assert_eq!(
+            rect_from_size(Size::new(-10.0, 30.0)),
+            Rect::new(0.0, 0.0, 0.0, 30.0)
+        );
+    }
+
+    #[test]
+    fn split_leading_clamps_to_parent() {
+        let rect = Rect::new(10.0, 20.0, 100.0, 50.0);
+
+        assert_eq!(
+            split_leading(rect, Axis::Vertical, 12.0),
+            (
+                Rect::new(10.0, 20.0, 100.0, 12.0),
+                Rect::new(10.0, 32.0, 100.0, 38.0)
+            )
+        );
+        assert_eq!(
+            split_leading(rect, Axis::Horizontal, 120.0),
+            (
+                Rect::new(10.0, 20.0, 100.0, 50.0),
+                Rect::new(110.0, 20.0, 0.0, 50.0)
+            )
+        );
+    }
+
+    #[test]
+    fn split_trailing_clamps_to_parent() {
+        let rect = Rect::new(10.0, 20.0, 100.0, 50.0);
+
+        assert_eq!(
+            split_trailing(rect, Axis::Horizontal, 15.0),
+            (
+                Rect::new(10.0, 20.0, 85.0, 50.0),
+                Rect::new(95.0, 20.0, 15.0, 50.0)
+            )
+        );
+        assert_eq!(
+            split_trailing(rect, Axis::Vertical, 75.0),
+            (
+                Rect::new(10.0, 20.0, 100.0, 0.0),
+                Rect::new(10.0, 20.0, 100.0, 50.0)
+            )
         );
     }
 
