@@ -4,7 +4,7 @@ use std::hash::Hash;
 
 use kinetik_ui_core::{
     ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionSource, ClipId,
-    DropTargetResponse, FrameContext, FrameOutput, ImageId, PhysicalSize, Primitive, Rect,
+    DropTargetResponse, FrameContext, FrameOutput, ImageId, Insets, PhysicalSize, Primitive, Rect,
     Response, ScaleFactor, ScrollResponse, Size, TextPrimitive, Theme, TimeInfo, Transform,
     Ui as CoreUi, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, context_menu_trigger, draggable,
     drop_target, focusable, pressable, scrollable, selectable, tooltip_trigger,
@@ -12,9 +12,10 @@ use kinetik_ui_core::{
 use kinetik_ui_text::{TextEditState, TextLayoutKey, TextLayoutStore, TextStyle};
 
 use crate::{
-    IconId, IconLibrary, MultiLineTextFieldOutput, NumericInputOutput, SearchFieldOutput,
-    TextFieldOutput, WidgetOutput, button as button_widget, checkbox as checkbox_widget,
-    checkbox_with_label as checkbox_with_label_widget, icon_button as fallback_icon_button_widget,
+    IconId, IconLibrary, MultiLineTextFieldOutput, NumericInputOutput, PanelFrame,
+    SearchFieldOutput, TextFieldOutput, WidgetOutput, button as button_widget,
+    checkbox as checkbox_widget, checkbox_with_label as checkbox_with_label_widget,
+    icon_button as fallback_icon_button_widget,
     icon_button_with_label as fallback_icon_button_with_label_widget,
     icon_button_with_library as icon_button_with_library_widget, image as image_widget,
     image_semantics, label as label_widget, label_semantics, list_row as list_row_widget,
@@ -256,6 +257,41 @@ impl<'a> Ui<'a> {
         self.push_widget_output(&output);
         self.runtime
             .push_semantic_node(panel_semantics(id, rect, "Panel"));
+    }
+
+    /// Resolves and emits a passive panel surface with an inset content body.
+    pub fn panel_frame(&mut self, rect: Rect, body_insets: Insets) -> PanelFrame {
+        self.panel(rect);
+        PanelFrame::new(rect, body_insets)
+    }
+
+    /// Emits a passive panel and runs clipped content inside its inset body.
+    pub fn panel_body<T>(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        body_insets: Insets,
+        f: impl FnOnce(&mut Self, Rect) -> T,
+    ) -> T {
+        let frame = self.panel_frame(rect, body_insets);
+        self.clip_rect(key, frame.body, |ui| f(ui, frame.body))
+    }
+
+    /// Runs a closure inside a rectangular clip scope.
+    pub fn clip_rect<T>(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let id = self.id(key);
+        let clip = ClipId::from_raw(id.raw());
+        self.primitive(Primitive::ClipBegin { id: clip, rect });
+        self.runtime.push_id_scope(("clip_rect_content", id.raw()));
+        let inner = f(self);
+        self.runtime.pop_id_scope();
+        self.primitive(Primitive::ClipEnd { id: clip });
+        inner
     }
 
     /// Emits a separator line.
@@ -772,7 +808,7 @@ mod tests {
     use crate::{IconGraphic, IconLibrary, IconPath};
     use kinetik_ui_core::{
         ActionContext, ActionDescriptor, ActionSource, CursorShape, FrameContext, FrameWarning,
-        IconId, PathElement, PhysicalSize, PlatformRequest, Point, PointerButtonState,
+        IconId, Insets, PathElement, PhysicalSize, PlatformRequest, Point, PointerButtonState,
         PointerInput, Primitive, Rect, ScaleFactor, SemanticRole, Size, TimeInfo, UiInput,
         UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
     };
@@ -996,6 +1032,42 @@ mod tests {
             frame.primitives[frame.primitives.len() - 1],
             Primitive::ClipEnd { .. }
         ));
+    }
+
+    #[test]
+    fn ui_panel_body_emits_balanced_body_clip() {
+        let theme = default_dark_theme();
+        let input = UiInput::default();
+        let mut memory = UiMemory::new();
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+
+        let body = ui.panel_body(
+            "inspector",
+            Rect::new(10.0, 20.0, 120.0, 80.0),
+            Insets::new(8.0, 10.0, 12.0, 14.0),
+            |ui, body| {
+                ui.label(body, "Inside");
+                body
+            },
+        );
+        let frame = ui.finish_output();
+
+        assert_eq!(body, Rect::new(18.0, 32.0, 102.0, 54.0));
+        assert!(
+            frame
+                .primitives
+                .iter()
+                .any(|primitive| matches!(primitive, Primitive::Rect(_)))
+        );
+        assert!(frame.primitives.iter().any(|primitive| matches!(
+            primitive,
+            Primitive::ClipBegin { rect, .. } if *rect == body
+        )));
+        assert!(matches!(
+            frame.primitives.last(),
+            Some(Primitive::ClipEnd { .. })
+        ));
+        assert!(frame.warnings.is_empty());
     }
 
     #[test]
