@@ -398,6 +398,256 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
     }
 }
 
+/// Formats a translated command stream as stable line-oriented snapshot text.
+#[must_use]
+pub fn render_translation_snapshot(translation: &Translation) -> String {
+    let mut lines = Vec::new();
+    lines.push("commands:".to_owned());
+    for (index, command) in translation.commands.iter().enumerate() {
+        lines.push(format!(
+            "  {index}: layer={} transform={} clips={} {}",
+            command.layer.raw(),
+            format_transform(command.transform),
+            format_clips(&command.clips),
+            format_command_kind(&command.kind),
+        ));
+    }
+    lines.push("diagnostics:".to_owned());
+    for diagnostic in &translation.diagnostics {
+        lines.push(format!("  {}", format_diagnostic(diagnostic)));
+    }
+    lines.join("\n")
+}
+
+fn format_command_kind(kind: &RenderCommandKind) -> String {
+    match kind {
+        RenderCommandKind::Rect {
+            rect,
+            fill,
+            stroke,
+            radius,
+        } => format!(
+            "rect rect={} fill={} stroke={} radius={}",
+            format_rect(*rect),
+            format_optional_brush(fill.as_ref()),
+            format_optional_stroke(stroke.as_ref()),
+            format_radius(*radius),
+        ),
+        RenderCommandKind::Line {
+            x0,
+            y0,
+            x1,
+            y1,
+            stroke,
+        } => format!(
+            "line from=({}, {}) to=({}, {}) stroke={}",
+            format_f32(*x0),
+            format_f32(*y0),
+            format_f32(*x1),
+            format_f32(*y1),
+            format_stroke(*stroke),
+        ),
+        RenderCommandKind::Shadow {
+            rect,
+            offset,
+            blur_radius,
+            spread,
+            radius,
+            color,
+        } => format!(
+            "shadow rect={} offset=({}, {}) blur={} spread={} radius={} color={}",
+            format_rect(*rect),
+            format_f32(offset.x),
+            format_f32(offset.y),
+            format_f32(*blur_radius),
+            format_f32(*spread),
+            format_f32(*radius),
+            format_color(*color),
+        ),
+        RenderCommandKind::Path {
+            elements,
+            fill,
+            stroke,
+        } => format!(
+            "path elements={} fill={} stroke={}",
+            format_path_elements(elements),
+            format_optional_brush(fill.as_ref()),
+            format_optional_stroke(stroke.as_ref()),
+        ),
+        RenderCommandKind::Text {
+            layout,
+            origin,
+            text,
+            size,
+            color,
+        } => format!(
+            "text layout={} origin=({}, {}) size={} color={} text={:?}",
+            layout.map_or_else(|| "none".to_owned(), |layout| layout.raw().to_string()),
+            format_f32(origin.x),
+            format_f32(origin.y),
+            format_f32(*size),
+            format_color(*color),
+            text,
+        ),
+        RenderCommandKind::Image { image, rect } => {
+            format!("image#{} rect={}", image.raw(), format_rect(*rect))
+        }
+        RenderCommandKind::Texture { texture, rect } => {
+            format!("texture#{} rect={}", texture.raw(), format_rect(*rect))
+        }
+    }
+}
+
+fn format_clips(clips: &[RenderClip]) -> String {
+    if clips.is_empty() {
+        return "[]".to_owned();
+    }
+    let clips = clips
+        .iter()
+        .map(|clip| {
+            format!(
+                "{{rect={} transform={}}}",
+                format_rect(clip.rect),
+                format_transform(clip.transform)
+            )
+        })
+        .collect::<Vec<_>>();
+    format!("[{}]", clips.join(", "))
+}
+
+fn format_path_elements(elements: &[PathElement]) -> String {
+    let elements = elements
+        .iter()
+        .map(|element| match element {
+            PathElement::MoveTo(point) => {
+                format!("M({}, {})", format_f32(point.x), format_f32(point.y))
+            }
+            PathElement::LineTo(point) => {
+                format!("L({}, {})", format_f32(point.x), format_f32(point.y))
+            }
+            PathElement::QuadTo { ctrl, to } => format!(
+                "Q({}, {}; {}, {})",
+                format_f32(ctrl.x),
+                format_f32(ctrl.y),
+                format_f32(to.x),
+                format_f32(to.y),
+            ),
+            PathElement::CubicTo { ctrl1, ctrl2, to } => format!(
+                "C({}, {}; {}, {}; {}, {})",
+                format_f32(ctrl1.x),
+                format_f32(ctrl1.y),
+                format_f32(ctrl2.x),
+                format_f32(ctrl2.y),
+                format_f32(to.x),
+                format_f32(to.y),
+            ),
+            PathElement::Close => "Z".to_owned(),
+        })
+        .collect::<Vec<_>>();
+    format!("[{}]", elements.join(", "))
+}
+
+fn format_optional_brush(brush: Option<&Brush>) -> String {
+    brush.map_or_else(|| "none".to_owned(), |brush| format_brush(*brush))
+}
+
+fn format_brush(brush: Brush) -> String {
+    match brush {
+        Brush::Solid(color) => format_color(color),
+        Brush::LinearGradient(gradient) => {
+            let stops = gradient
+                .stops()
+                .iter()
+                .map(|stop| format!("{}@{}", format_color(stop.color), format_f32(stop.offset)))
+                .collect::<Vec<_>>();
+            format!(
+                "linear({},{})-({},{})[{}]",
+                format_f32(gradient.start().x),
+                format_f32(gradient.start().y),
+                format_f32(gradient.end().x),
+                format_f32(gradient.end().y),
+                stops.join(",")
+            )
+        }
+    }
+}
+
+fn format_optional_stroke(stroke: Option<&Stroke>) -> String {
+    stroke.map_or_else(|| "none".to_owned(), |stroke| format_stroke(*stroke))
+}
+
+fn format_stroke(stroke: Stroke) -> String {
+    format!(
+        "{} {}",
+        format_f32(stroke.width),
+        format_brush(stroke.brush)
+    )
+}
+
+fn format_rect(rect: Rect) -> String {
+    format!(
+        "({}, {}, {}, {})",
+        format_f32(rect.x),
+        format_f32(rect.y),
+        format_f32(rect.width),
+        format_f32(rect.height),
+    )
+}
+
+fn format_radius(radius: CornerRadius) -> String {
+    format!(
+        "({}, {}, {}, {})",
+        format_f32(radius.top_left),
+        format_f32(radius.top_right),
+        format_f32(radius.bottom_right),
+        format_f32(radius.bottom_left),
+    )
+}
+
+fn format_transform(transform: Transform) -> String {
+    format!(
+        "[{}, {}, {}, {}, {}, {}]",
+        format_f32(transform.m11),
+        format_f32(transform.m12),
+        format_f32(transform.m21),
+        format_f32(transform.m22),
+        format_f32(transform.dx),
+        format_f32(transform.dy),
+    )
+}
+
+fn format_color(color: Color) -> String {
+    format!(
+        "rgba({}, {}, {}, {})",
+        format_f32(color.r),
+        format_f32(color.g),
+        format_f32(color.b),
+        format_f32(color.a),
+    )
+}
+
+fn format_diagnostic(diagnostic: &RenderDiagnostic) -> String {
+    match diagnostic {
+        RenderDiagnostic::MissingTextLayout(id) => format!("missing_text_layout#{}", id.raw()),
+        RenderDiagnostic::MissingImage(id) => format!("missing_image#{}", id.raw()),
+        RenderDiagnostic::MissingImagePixels(id) => {
+            format!("missing_image_pixels#{}", id.raw())
+        }
+        RenderDiagnostic::MissingTexture(id) => format!("missing_texture#{}", id.raw()),
+        RenderDiagnostic::MissingTextureSnapshot(id) => {
+            format!("missing_texture_snapshot#{}", id.raw())
+        }
+        RenderDiagnostic::UnsupportedPrimitive(kind) => format!("unsupported_primitive:{kind}"),
+        RenderDiagnostic::InvalidGeometry(kind) => format!("invalid_geometry:{kind}"),
+    }
+}
+
+fn format_f32(value: f32) -> String {
+    let value = if value.is_finite() { value } else { 0.0 };
+    let value = if value == 0.0 { 0.0 } else { value };
+    format!("{value:.3}")
+}
+
 fn render_command(
     layers: &[LayerId],
     clips: &[(ClipId, RenderClip)],
@@ -1157,7 +1407,7 @@ mod tests {
     use super::{
         ImageResource, RenderCommand, RenderCommandKind, RenderDiagnostic, RenderFrameInput,
         RenderImage, RenderResources, RendererBackend, TextLayoutResource, TextureResource,
-        VelloRenderer, translate_primitives,
+        VelloRenderer, render_translation_snapshot, translate_primitives,
     };
     use kinetik_ui_core::render::TexturePrimitive;
     use kinetik_ui_core::{
@@ -1725,6 +1975,57 @@ mod tests {
         assert_eq!(translation.commands[2].layer, LayerId::from_raw(0));
         assert!(translation.commands[2].clips.is_empty());
         assert_eq!(translation.commands[2].transform, Transform::IDENTITY);
+    }
+
+    #[test]
+    fn render_translation_snapshot_covers_commands_resources_and_diagnostics() {
+        let missing_layout = TextLayoutId::from_raw(7);
+        let primitives = vec![
+            Primitive::LayerBegin {
+                id: LayerId::from_raw(3),
+            },
+            Primitive::ClipBegin {
+                id: ClipId::from_raw(4),
+                rect: Rect::new(0.0, 0.0, 20.0, 12.0),
+            },
+            Primitive::TransformBegin(Transform::translation(Vec2::new(2.0, 3.0))),
+            Primitive::Rect(RectPrimitive {
+                rect: Rect::new(1.0, 1.0, 8.0, 4.0),
+                fill: Some(Brush::Solid(Color::WHITE)),
+                stroke: None,
+                radius: CornerRadius::all(2.0),
+            }),
+            Primitive::TransformEnd,
+            Primitive::ClipEnd {
+                id: ClipId::from_raw(4),
+            },
+            Primitive::LayerEnd {
+                id: LayerId::from_raw(3),
+            },
+            Primitive::Text(TextPrimitive {
+                layout: Some(missing_layout),
+                origin: Point::new(4.0, 16.0),
+                text: "Hi".to_owned(),
+                size: 12.0,
+                brush: Brush::Solid(Color::BLACK),
+            }),
+            Primitive::Image(ImagePrimitive {
+                image: ImageId::from_raw(9),
+                rect: Rect::new(0.0, 20.0, 16.0, 16.0),
+            }),
+            Primitive::Texture(TexturePrimitive {
+                texture: TextureId::from_raw(2),
+                rect: Rect::new(20.0, 20.0, 16.0, 16.0),
+                source_size: Size::new(16.0, 16.0),
+            }),
+        ];
+
+        let translation = translate_primitives(&primitives, &resources());
+
+        assert_eq!(
+            render_translation_snapshot(&translation),
+            "commands:\n  0: layer=3 transform=[1.000, 0.000, 0.000, 1.000, 2.000, 3.000] clips=[{rect=(0.000, 0.000, 20.000, 12.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(1.000, 1.000, 8.000, 4.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(2.000, 2.000, 2.000, 2.000)\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] text layout=7 origin=(4.000, 16.000) size=12.000 color=rgba(0.000, 0.000, 0.000, 1.000) text=\"Hi\"\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#9 rect=(0.000, 20.000, 16.000, 16.000)\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#2 rect=(20.000, 20.000, 16.000, 16.000)\ndiagnostics:\n  missing_text_layout#7\n  missing_image#9"
+        );
     }
 
     #[test]

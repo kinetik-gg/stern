@@ -209,6 +209,191 @@ impl RenderResources {
     pub fn text_layout(&self, layout: TextLayoutId) -> Option<&ShapedTextLayout> {
         self.text_layouts.get(&layout)
     }
+
+    /// Builds a deterministic resource inventory for tests and diagnostics.
+    #[must_use]
+    pub fn snapshot(&self) -> RenderResourceSnapshot {
+        RenderResourceSnapshot::from_resources(self)
+    }
+}
+
+/// Deterministic resource inventory used by renderer snapshot tests.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RenderResourceSnapshot {
+    /// Image resources sorted by handle.
+    pub images: Vec<ImageResourceSnapshot>,
+    /// Texture resources sorted by handle.
+    pub textures: Vec<TextureResourceSnapshot>,
+    /// Shaped text layout resources sorted by handle.
+    pub text_layouts: Vec<TextLayoutResourceSnapshot>,
+}
+
+impl RenderResourceSnapshot {
+    fn from_resources(resources: &RenderResources) -> Self {
+        let mut images = resources
+            .images
+            .values()
+            .map(ImageResourceSnapshot::from_resource)
+            .collect::<Vec<_>>();
+        let mut textures = resources
+            .textures
+            .values()
+            .map(TextureResourceSnapshot::from_resource)
+            .collect::<Vec<_>>();
+        let mut text_layouts = resources
+            .text_layouts
+            .iter()
+            .map(|(id, layout)| TextLayoutResourceSnapshot::from_layout(*id, layout))
+            .collect::<Vec<_>>();
+
+        images.sort_by_key(|resource| resource.id);
+        textures.sort_by_key(|resource| resource.id);
+        text_layouts.sort_by_key(|resource| resource.id);
+
+        Self {
+            images,
+            textures,
+            text_layouts,
+        }
+    }
+
+    /// Renders the resource inventory as stable line-oriented text.
+    #[must_use]
+    pub fn to_text(&self) -> String {
+        let mut lines = Vec::new();
+        lines.push("resources:".to_owned());
+        for image in &self.images {
+            lines.push(format!(
+                "  image#{id} size={width}x{height} pixels={pixels}",
+                id = image.id,
+                width = format_f32(image.width),
+                height = format_f32(image.height),
+                pixels = image.has_pixels,
+            ));
+        }
+        for texture in &self.textures {
+            lines.push(format!(
+                "  texture#{id} size={width}x{height} snapshot={snapshot}",
+                id = texture.id,
+                width = format_f32(texture.width),
+                height = format_f32(texture.height),
+                snapshot = texture.has_snapshot,
+            ));
+        }
+        for layout in &self.text_layouts {
+            lines.push(format!(
+                "  text_layout#{id} size={width}x{height} lines={lines_count} glyphs={glyphs}",
+                id = layout.id,
+                width = format_f32(layout.width),
+                height = format_f32(layout.height),
+                lines_count = layout.line_count,
+                glyphs = layout.glyph_count,
+            ));
+        }
+        lines.join("\n")
+    }
+}
+
+/// Snapshot of one image resource.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImageResourceSnapshot {
+    /// Raw image handle.
+    pub id: u64,
+    /// Image width.
+    pub width: OrderedF32,
+    /// Image height.
+    pub height: OrderedF32,
+    /// Whether drawable pixel data is present.
+    pub has_pixels: bool,
+}
+
+impl ImageResourceSnapshot {
+    fn from_resource(resource: &ImageResource) -> Self {
+        Self {
+            id: resource.id.raw(),
+            width: OrderedF32::new(resource.size.width),
+            height: OrderedF32::new(resource.size.height),
+            has_pixels: resource.pixels.is_some(),
+        }
+    }
+}
+
+/// Snapshot of one texture resource.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextureResourceSnapshot {
+    /// Raw texture handle.
+    pub id: u64,
+    /// Texture width.
+    pub width: OrderedF32,
+    /// Texture height.
+    pub height: OrderedF32,
+    /// Whether a drawable CPU snapshot is present.
+    pub has_snapshot: bool,
+}
+
+impl TextureResourceSnapshot {
+    fn from_resource(resource: &TextureResource) -> Self {
+        Self {
+            id: resource.id.raw(),
+            width: OrderedF32::new(resource.size.width),
+            height: OrderedF32::new(resource.size.height),
+            has_snapshot: resource.snapshot.is_some(),
+        }
+    }
+}
+
+/// Snapshot of one shaped text layout resource.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextLayoutResourceSnapshot {
+    /// Raw text layout handle.
+    pub id: u64,
+    /// Layout width.
+    pub width: OrderedF32,
+    /// Layout height.
+    pub height: OrderedF32,
+    /// Number of visual lines.
+    pub line_count: usize,
+    /// Number of shaped glyphs.
+    pub glyph_count: usize,
+}
+
+impl TextLayoutResourceSnapshot {
+    fn from_layout(id: TextLayoutId, layout: &ShapedTextLayout) -> Self {
+        Self {
+            id: id.raw(),
+            width: OrderedF32::new(layout.size.width),
+            height: OrderedF32::new(layout.size.height),
+            line_count: layout.line_count,
+            glyph_count: layout.glyph_count(),
+        }
+    }
+}
+
+/// Float wrapper with equality based on raw bits after snapshot sanitization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OrderedF32(u32);
+
+impl OrderedF32 {
+    /// Creates a stable float snapshot value.
+    #[must_use]
+    pub fn new(value: f32) -> Self {
+        let value = if value.is_finite() { value } else { 0.0 };
+        Self(normalize_zero(value).to_bits())
+    }
+
+    /// Returns the wrapped finite float.
+    #[must_use]
+    pub fn get(self) -> f32 {
+        f32::from_bits(self.0)
+    }
+}
+
+fn format_f32(value: OrderedF32) -> String {
+    format!("{:.3}", value.get())
+}
+
+fn normalize_zero(value: f32) -> f32 {
+    if value == 0.0 { 0.0 } else { value }
 }
 
 /// Input submitted to a renderer for one frame.
@@ -297,7 +482,7 @@ mod tests {
     use kinetik_ui_core::{
         ImageId, PhysicalSize, ScaleFactor, Size, TextLayoutId, TextureId, ViewportInfo,
     };
-    use kinetik_ui_text::{CosmicTextEngine, TextLayoutKey, TextStyle};
+    use kinetik_ui_text::{CosmicTextEngine, ShapedTextLayout, TextLayoutKey, TextStyle};
 
     #[derive(Default)]
     struct RecordingRenderer {
@@ -367,6 +552,42 @@ mod tests {
         assert!(resources.image(image).is_some());
         assert!(resources.texture(texture).is_some());
         assert!(resources.text_layout(text).is_some());
+    }
+
+    #[test]
+    fn resource_snapshot_is_sorted_and_stable() {
+        let mut resources = RenderResources::new();
+        let layout = ShapedTextLayout {
+            size: Size::new(20.0, 10.0),
+            line_count: 2,
+            lines: Vec::new(),
+            runs: Vec::new(),
+        };
+
+        resources.register_texture(TextureResource {
+            id: TextureId::from_raw(9),
+            size: Size::new(12.0, 8.0),
+            snapshot: None,
+        });
+        resources.register_image(ImageResource {
+            id: ImageId::from_raw(2),
+            size: Size::new(4.0, 3.0),
+            pixels: Some(RenderImage::rgba8(1, 1, vec![255; 4]).expect("valid image")),
+        });
+        resources.register_text_layout(TextLayoutResource {
+            id: TextLayoutId::from_raw(5),
+            layout,
+        });
+        resources.register_image(ImageResource {
+            id: ImageId::from_raw(1),
+            size: Size::new(2.0, 1.0),
+            pixels: None,
+        });
+
+        assert_eq!(
+            resources.snapshot().to_text(),
+            "resources:\n  image#1 size=2.000x1.000 pixels=false\n  image#2 size=4.000x3.000 pixels=true\n  texture#9 size=12.000x8.000 snapshot=false\n  text_layout#5 size=20.000x10.000 lines=2 glyphs=0"
+        );
     }
 
     #[test]

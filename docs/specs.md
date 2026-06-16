@@ -1523,6 +1523,11 @@ let output = run_ui_test(|ui| {
 assert_snapshot!(output.primitives);
 ```
 
+Renderer snapshot tests should prefer deterministic resource inventories and
+backend command streams over pixel images. Backend-neutral resource snapshots
+belong in `kinetik-ui-render`; Vello command snapshots belong in
+`kinetik-ui-vello`. See [render-snapshots.md](render-snapshots.md).
+
 Interaction tests may simulate input:
 
 ```rust
@@ -1905,8 +1910,6 @@ What accessibility adapter should be used first?
 What exact icon format should be preferred?
 How much rich text is needed beyond labels and text fields?
 Should layout eventually include wrap/flex-like behavior?
-What renderer snapshot strategy is stable across platforms?
 ```
 
 Open questions should become focused design notes or issues before implementation reaches the affected subsystem.
-

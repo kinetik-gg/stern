@@ -96,6 +96,7 @@ kinetik-ui-showcase
 ## Documentation
 
 - [Architecture specification](docs/specs.md)
+- [Renderer snapshot strategy](docs/render-snapshots.md)
 - [Release policy](docs/release.md)
 - [Agent workflow](AGENTS.md)
 

@@ -312,6 +312,12 @@ impl ClipId {
     pub const fn from_raw(raw: u64) -> Self {
         Self(raw)
     }
+
+    /// Returns raw ID bits.
+    #[must_use]
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
 }
 
 /// Layer command identity.
@@ -323,6 +329,12 @@ impl LayerId {
     #[must_use]
     pub const fn from_raw(raw: u64) -> Self {
         Self(raw)
+    }
+
+    /// Returns raw ID bits.
+    #[must_use]
+    pub const fn raw(self) -> u64 {
+        self.0
     }
 }
 
