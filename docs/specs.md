@@ -536,9 +536,20 @@ Responsibilities:
 - Support frame insertion/removal.
 - Support frame resizing.
 - Support frame merging/tabbing.
-- Support future drag-to-dock behavior.
+- Support drag-to-dock behavior through explicit tab drag state and drop targets.
 
 `DockArea` controls where frames live and how much space they receive.
+
+Interactive docking remains model-owned and deterministic:
+
+```text
+frame tab drag -> DockTabDrag -> DockDropTarget -> DockArea mutation
+splitter drag -> DockSplitPath + delta -> clamped split ratio
+```
+
+Splitters are addressed by `DockSplitPath`, and drop targets distinguish tab
+merge from split insertion. These operations update the same dock tree that is
+serialized by `DockArea::snapshot`.
 
 ### 12.2 Frame
 
@@ -1918,7 +1929,6 @@ Acceptance criteria
 These questions are intentionally left for later design decisions:
 
 ```text
-How advanced should draggable docking become?
 Should native OS menus ever be supported as an alternate action surface?
 How deep should built-in animation support go?
 How should application-level undo integrate with text-field undo?
