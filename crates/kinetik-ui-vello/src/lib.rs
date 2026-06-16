@@ -362,6 +362,8 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
             Primitive::ClipEnd { id } => {
                 if clips.last().is_some_and(|(open_id, _)| open_id == id) {
                     clips.pop();
+                } else {
+                    diagnostics.push(RenderDiagnostic::InvalidGeometry("clip_stack"));
                 }
             }
             Primitive::LayerBegin { id } => {
@@ -370,15 +372,17 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
             Primitive::LayerEnd { id } => {
                 if layers.len() > 1 && layers.last() == Some(id) {
                     layers.pop();
+                } else {
+                    diagnostics.push(RenderDiagnostic::InvalidGeometry("layer_stack"));
                 }
             }
             Primitive::TransformBegin(next_transform) => {
-                transforms.push(transform);
                 let Some(next_transform) =
                     sanitize_transform(*next_transform, &mut diagnostics, "transform")
                 else {
                     continue;
                 };
+                transforms.push(transform);
                 let next = compose_transform(transform, next_transform);
                 if transform_is_finite(next) {
                     transform = next;
@@ -387,9 +391,23 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                 }
             }
             Primitive::TransformEnd => {
-                transform = transforms.pop().unwrap_or(Transform::IDENTITY);
+                if let Some(previous) = transforms.pop() {
+                    transform = previous;
+                } else {
+                    diagnostics.push(RenderDiagnostic::InvalidGeometry("transform_stack"));
+                    transform = Transform::IDENTITY;
+                }
             }
         }
+    }
+    if !clips.is_empty() {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("clip_stack"));
+    }
+    if layers.len() > 1 {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("layer_stack"));
+    }
+    if !transforms.is_empty() {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("transform_stack"));
     }
 
     Translation {
@@ -1975,6 +1993,55 @@ mod tests {
         assert_eq!(translation.commands[2].layer, LayerId::from_raw(0));
         assert!(translation.commands[2].clips.is_empty());
         assert_eq!(translation.commands[2].transform, Transform::IDENTITY);
+    }
+
+    #[test]
+    fn reports_mismatched_scope_stack_end_primitives() {
+        let primitives = vec![
+            Primitive::ClipEnd {
+                id: ClipId::from_raw(4),
+            },
+            Primitive::LayerEnd {
+                id: LayerId::from_raw(3),
+            },
+            Primitive::TransformEnd,
+        ];
+
+        let translation = translate_primitives(&primitives, &resources());
+
+        assert_eq!(
+            translation.diagnostics,
+            vec![
+                RenderDiagnostic::InvalidGeometry("clip_stack"),
+                RenderDiagnostic::InvalidGeometry("layer_stack"),
+                RenderDiagnostic::InvalidGeometry("transform_stack"),
+            ]
+        );
+    }
+
+    #[test]
+    fn reports_unclosed_scope_stacks_at_end_of_translation() {
+        let primitives = vec![
+            Primitive::LayerBegin {
+                id: LayerId::from_raw(3),
+            },
+            Primitive::ClipBegin {
+                id: ClipId::from_raw(4),
+                rect: Rect::new(0.0, 0.0, 20.0, 20.0),
+            },
+            Primitive::TransformBegin(Transform::translation(Vec2::new(1.0, 2.0))),
+        ];
+
+        let translation = translate_primitives(&primitives, &resources());
+
+        assert_eq!(
+            translation.diagnostics,
+            vec![
+                RenderDiagnostic::InvalidGeometry("clip_stack"),
+                RenderDiagnostic::InvalidGeometry("layer_stack"),
+                RenderDiagnostic::InvalidGeometry("transform_stack"),
+            ]
+        );
     }
 
     #[test]

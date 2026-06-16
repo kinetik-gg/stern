@@ -1364,14 +1364,14 @@ pub fn slider_with_label(
         && (response.state.active || response.clicked)
         && let Some(position) = input.pointer.position
     {
-        let t = ((position.x - rect.x) / rect.width).clamp(0.0, 1.0);
         let start = *range.start();
         let end = *range.end();
-        *value = start + (end - start) * t;
+        let t = slider_position_fraction(position.x, rect);
+        *value = slider_value_from_fraction(start, end, t);
     }
     let start = *range.start();
     let end = *range.end();
-    let t = ((*value - start) / (end - start)).clamp(0.0, 1.0);
+    let t = slider_value_fraction(*value, start, end);
     let fill_rect = Rect::new(rect.x, rect.y, rect.width * t, rect.height);
     let recipe = theme.slider(ComponentState {
         hovered: response.state.hovered,
@@ -1406,6 +1406,34 @@ pub fn slider_with_label(
         &response,
         CursorShape::ResizeHorizontal,
     )
+}
+
+fn slider_position_fraction(position_x: f32, rect: Rect) -> f32 {
+    if !position_x.is_finite() || !rect.x.is_finite() || !rect.width.is_finite() {
+        return 0.0;
+    }
+    if rect.width <= f32::EPSILON {
+        return 0.0;
+    }
+    ((position_x - rect.x) / rect.width).clamp(0.0, 1.0)
+}
+
+fn slider_value_fraction(value: f32, start: f32, end: f32) -> f32 {
+    let span = end - start;
+    if !value.is_finite() || !start.is_finite() || !span.is_finite() {
+        return 0.0;
+    }
+    if span.abs() <= f32::EPSILON {
+        return 0.0;
+    }
+    ((value - start) / span).clamp(0.0, 1.0)
+}
+
+fn slider_value_from_fraction(start: f32, end: f32, fraction: f32) -> f32 {
+    if !start.is_finite() || !end.is_finite() || !fraction.is_finite() {
+        return start;
+    }
+    start + (end - start) * fraction.clamp(0.0, 1.0)
 }
 
 /// Emits a passive panel surface.
@@ -2276,6 +2304,50 @@ mod tests {
         );
 
         assert!((value - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn slider_degenerate_geometry_and_range_stay_finite() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("slider");
+        let mut memory = UiMemory::new();
+        let mut input = input_at(50.0, 6.0);
+        input.pointer.primary = PointerButtonState::new(true, true, false);
+
+        let mut zero_width_value = 15.0;
+        let zero_width = slider(
+            id,
+            Rect::new(0.0, 0.0, 0.0, 12.0),
+            &mut zero_width_value,
+            10.0..=20.0,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+        assert!((zero_width_value - 15.0).abs() < f32::EPSILON);
+        assert!(rect_width(&zero_width.primitives[1]).is_finite());
+
+        let mut equal_range_value = 12.0;
+        let equal_range = slider(
+            WidgetId::from_key("equal_range_slider"),
+            Rect::new(0.0, 0.0, 100.0, 12.0),
+            &mut equal_range_value,
+            4.0..=4.0,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+        assert!((equal_range_value - 4.0).abs() < f32::EPSILON);
+        assert!(rect_width(&equal_range.primitives[1]).abs() < f32::EPSILON);
+    }
+
+    fn rect_width(primitive: &Primitive) -> f32 {
+        match primitive {
+            Primitive::Rect(rect) => rect.rect.width,
+            _ => panic!("expected rect primitive"),
+        }
     }
 
     #[test]

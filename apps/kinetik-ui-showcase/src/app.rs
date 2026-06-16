@@ -6,14 +6,15 @@
 )]
 
 use kinetik_ui::core::{
-    ActionContext, ActionDescriptor, ActionQueue, ActionSource, Axis, Brush, ClipId, Color,
-    CornerRadius, FrameContext, FrameOutput, ImageId, Insets, Key, KeyEvent, KeyState, LayoutItem,
-    LinePrimitive, Measurement, Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput,
-    Primitive, Rect, RectPrimitive, ScaleFactor, Size, SizeRule, Stroke, TextInputEvent,
-    TextPrimitive, TextureId, TexturePrimitive, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo,
-    column_layout, default_dark_theme, inspect_primitives, rect_from_size, row_layout,
-    split_leading,
+    ActionBinding, ActionContext, ActionDescriptor, ActionPriority, ActionQueue, ActionRouter,
+    ActionRoutingContext, ActionSource, Axis, Brush, ClipId, Color, CornerRadius, FrameContext,
+    FrameOutput, ImageId, Insets, Key, KeyEvent, KeyState, LayoutItem, LinePrimitive, Measurement,
+    Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput, Primitive, Rect,
+    RectPrimitive, ScaleFactor, Shortcut, Size, SizeRule, Stroke, TextInputEvent, TextPrimitive,
+    TextureId, TexturePrimitive, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, column_layout,
+    default_dark_theme, inspect_primitives, rect_from_size, row_layout, split_leading,
 };
+use kinetik_ui::render::{ImageResource, RenderImage, RenderResources, TextureResource};
 use kinetik_ui::text::{TextEditState, TextLayoutStore};
 use kinetik_ui::widgets::{
     CommandPalette, Crosshair, DockArea, DockDropTarget, DockNode, DockPlacement, Frame, FrameId,
@@ -223,14 +224,20 @@ impl ShowcaseApp {
         }
 
         let ui_input = self.to_ui_input(input, viewport_changed);
+        let keyboard = ui_input.keyboard.clone();
 
-        if input.enter {
-            self.invoke_action("keyboard.enter", ActionSource::Shortcut);
-        }
-
-        self.output = self.frame(ui_input);
+        self.output = self.frame(frame_context(self.viewport_size, ui_input));
+        self.resolve_shortcuts(&keyboard);
         self.previous_mouse_down = input.mouse_down;
         self.previous_mouse = input.mouse;
+    }
+
+    /// Applies a full toolkit frame context from a platform adapter.
+    pub fn update_with_context(&mut self, context: FrameContext) {
+        self.viewport_size = sanitize_viewport_size(context.viewport.logical_size);
+        let keyboard = context.input.keyboard.clone();
+        self.output = self.frame(context);
+        self.resolve_shortcuts(&keyboard);
     }
 
     /// Builds the current primitive stream.
@@ -245,27 +252,49 @@ impl ShowcaseApp {
         &self.output
     }
 
-    fn redraw_idle(&mut self) {
-        self.output = self.frame(UiInput::default());
+    /// Builds render resources referenced by the current showcase frame.
+    #[must_use]
+    pub fn render_resources(&self) -> RenderResources {
+        let mut resources = RenderResources::new();
+        resources.register_text_layouts(self.text_layouts.layouts());
+        resources.register_image(ImageResource {
+            id: ImageId::from_raw(7),
+            size: Size::new(64.0, 48.0),
+            pixels: Some(thumbnail_image()),
+        });
+        resources.register_image(ImageResource {
+            id: ImageId::from_raw(11),
+            size: Size::new(96.0, 72.0),
+            pixels: Some(primitive_image()),
+        });
+        resources.register_texture(TextureResource {
+            id: TextureId::from_raw(99),
+            size: Size::new(1920.0, 1080.0),
+            snapshot: Some(viewport_texture()),
+        });
+        resources.register_texture(TextureResource {
+            id: TextureId::from_raw(101),
+            size: Size::new(1280.0, 720.0),
+            snapshot: Some(video_texture()),
+        });
+        resources
     }
 
-    fn frame(&mut self, input: UiInput) -> FrameOutput {
+    fn redraw_idle(&mut self) {
+        self.output = self.frame(frame_context(self.viewport_size, UiInput::default()));
+    }
+
+    fn frame(&mut self, context: FrameContext) -> FrameOutput {
         let theme = default_dark_theme();
         let mut memory = std::mem::take(&mut self.memory);
         let mut text_layouts = std::mem::take(&mut self.text_layouts);
         let output = {
-            let context = frame_context(self.viewport_size, input);
             let mut ui =
                 Ui::begin_frame_with_text_layouts(context, &mut memory, &theme, &mut text_layouts);
 
             Self::app_background(&mut ui);
             self.chrome(&mut ui);
-            match self.page {
-                ShowcasePage::Components => self.components_page(&mut ui),
-                ShowcasePage::Layout => self.layout_page(&mut ui),
-                ShowcasePage::Viewport => self.viewport_page(&mut ui),
-                ShowcasePage::Systems => self.systems_page(&mut ui),
-            }
+            self.page_content(&mut ui);
 
             ui.finish_output()
         };
@@ -331,6 +360,26 @@ impl ShowcaseApp {
         self.status = format!("{id} via {source:?} ({})", self.action_count);
     }
 
+    fn resolve_shortcuts(&mut self, keyboard: &kinetik_ui::core::KeyboardInput) {
+        let Some(invocation) =
+            showcase_action_router().resolve_shortcut_in_context(keyboard, self.action_context())
+        else {
+            return;
+        };
+        self.invoke_action(invocation.action_id.as_str(), invocation.source);
+    }
+
+    fn action_context(&self) -> ActionRoutingContext {
+        let Some(focused) = self.memory.focused() else {
+            return ActionRoutingContext::new();
+        };
+        if self.memory.text_input_owner() == Some(focused) {
+            ActionRoutingContext::new().with_text_input(focused)
+        } else {
+            ActionRoutingContext::new().with_focused_widget(focused)
+        }
+    }
+
     fn app_background(ui: &mut Ui<'_>) {
         let viewport = rect_from_size(ui.viewport().logical_size);
         let (_, body) = split_leading(viewport, Axis::Vertical, 52.0);
@@ -353,6 +402,39 @@ impl ShowcaseApp {
             rgb(13, 16, 17),
             None,
         );
+    }
+
+    fn page_content(&mut self, ui: &mut Ui<'_>) {
+        let viewport = rect_from_size(ui.viewport().logical_size);
+        let scroll_bounds = Rect::new(0.0, 52.0, viewport.width, (viewport.height - 52.0).max(1.0));
+        let content_size = Size::new(viewport.width, self.page_content_height(viewport));
+        ui.scroll_area(
+            ("showcase.page-scroll", self.page as u8),
+            scroll_bounds,
+            content_size,
+            false,
+            |ui, _| match self.page {
+                ShowcasePage::Components => self.components_page(ui),
+                ShowcasePage::Layout => self.layout_page(ui),
+                ShowcasePage::Viewport => self.viewport_page(ui),
+                ShowcasePage::Systems => self.systems_page(ui),
+            },
+        );
+    }
+
+    fn page_content_height(&self, viewport: Rect) -> f32 {
+        let page = page_rect(viewport);
+        let height: f32 = match self.page {
+            ShowcasePage::Components | ShowcasePage::Layout if page.width >= 1160.0 => 840.0,
+            ShowcasePage::Components => 1320.0,
+            ShowcasePage::Layout => 1180.0,
+            ShowcasePage::Viewport if page.width >= 1160.0 => 780.0,
+            ShowcasePage::Viewport => 1160.0,
+            ShowcasePage::Systems if page.width >= 1220.0 => 780.0,
+            ShowcasePage::Systems if page.width >= 820.0 => 1120.0,
+            ShowcasePage::Systems => 1340.0,
+        };
+        height.max(viewport.height)
     }
 
     fn chrome(&mut self, ui: &mut Ui<'_>) {
@@ -398,7 +480,7 @@ impl ShowcaseApp {
             );
         }
 
-        for (page, item) in nav_items() {
+        for (page, item) in nav_items(viewport.width) {
             let response = ui.tab_button(
                 ("nav", page as u8),
                 item,
@@ -440,108 +522,50 @@ impl ShowcaseApp {
     }
 
     fn components_page(&mut self, ui: &mut Ui<'_>) {
-        section_title(ui, 40.0, 86.0, "Component Gallery");
-        self.component_controls(ui);
-        self.component_text_inputs(ui);
-        self.collection_preview(ui);
-        self.tabs_preview(ui);
-        Self::primitive_preview(ui);
+        let viewport = rect_from_size(ui.viewport().logical_size);
+        let page = page_rect(viewport);
+        section_title(ui, page.x, 86.0, "Component Gallery");
+
+        if page.width >= 1160.0 {
+            self.component_controls(ui, Rect::new(page.x, page.y, 620.0, 218.0));
+            self.component_text_inputs(ui, Rect::new(page.x + 660.0, page.y, 500.0, 218.0));
+            self.collection_preview(ui, Rect::new(page.x, page.y + 246.0, 560.0, 190.0));
+            self.tabs_preview(ui, Rect::new(page.x + 600.0, page.y + 246.0, 560.0, 190.0));
+            Self::primitive_preview(ui, Rect::new(page.x, page.y + 466.0, 1160.0, 230.0));
+        } else {
+            let width = page.width.min(900.0);
+            self.component_controls(ui, Rect::new(page.x, page.y, width, 218.0));
+            self.component_text_inputs(ui, Rect::new(page.x, page.y + 242.0, width, 218.0));
+            self.collection_preview(ui, Rect::new(page.x, page.y + 484.0, width, 190.0));
+            self.tabs_preview(ui, Rect::new(page.x, page.y + 698.0, width, 190.0));
+            Self::primitive_preview(ui, Rect::new(page.x, page.y + 912.0, width, 230.0));
+        }
     }
 
-    fn component_controls(&mut self, ui: &mut Ui<'_>) {
-        panel_title(ui, Rect::new(40.0, 104.0, 620.0, 218.0), "Controls");
+    fn component_controls(&mut self, ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Controls");
+        let x = panel.x + 20.0;
+        let y = panel.y + 40.0;
+        let compact = panel.width < 560.0;
+        let slider_x = if compact { x } else { x + 300.0 };
+        let slider_y = if compact { y + 88.0 } else { y + 8.0 };
+        let slider_width = if compact {
+            (panel.width - 40.0).max(120.0)
+        } else {
+            (panel.max_x() - slider_x - 60.0).clamp(160.0, 240.0)
+        };
 
-        let run = ui.button(
-            "components.run-action",
-            Rect::new(60.0, 144.0, 128.0, 30.0),
-            "Run Action",
-            false,
-        );
-        if run.clicked {
-            self.invoke_action("components.run", ActionSource::Button);
-        }
-
-        let disabled = ui.button(
-            "components.disabled",
-            Rect::new(204.0, 144.0, 128.0, 30.0),
-            "Disabled",
-            true,
-        );
-        if disabled.clicked {
-            "Disabled button should not invoke".clone_into(&mut self.status);
-        }
-
-        let checkbox = ui.checkbox(
-            "components.checkbox",
-            Rect::new(60.0, 192.0, 22.0, 22.0),
-            self.checkbox,
-            false,
-        );
-        if checkbox.clicked {
-            self.checkbox = !self.checkbox;
-            self.status = format!("Checkbox: {}", self.checkbox);
-        }
-        ui.label(Rect::new(92.0, 190.0, 90.0, 20.0), "Checkbox");
-
-        let toggle = ui.toggle(
-            "components.toggle",
-            Rect::new(204.0, 192.0, 54.0, 24.0),
-            self.toggle,
-            false,
-        );
-        if toggle.clicked {
-            self.toggle = !self.toggle;
-            self.status = format!("Toggle: {}", self.toggle);
-        }
-        ui.label(Rect::new(270.0, 190.0, 70.0, 20.0), "Toggle");
-
-        for (index, x, label) in [(0, 60.0, "Radio A"), (1, 160.0, "Radio B")] {
-            let response = ui.radio_button(
-                ("components.radio", index),
-                Rect::new(x, 238.0, 20.0, 20.0),
-                self.radio == index,
-                false,
-            );
-            if response.clicked {
-                self.radio = index;
-                self.status = format!("Radio: {label}");
-            }
-            ui.label(Rect::new(x + 30.0, 236.0, 70.0, 20.0), label);
-        }
-
-        let before = self.strength;
-        ui.slider(
-            "components.slider",
-            Rect::new(360.0, 152.0, 240.0, 16.0),
-            &mut self.strength,
-            0.0..=1.0,
-            false,
-        );
-        text(
-            ui,
-            360.0,
-            142.0,
-            &format!("Slider: {:.2}", self.strength),
-            10.0,
-            rgb(210, 210, 214),
-        );
-        if (before - self.strength).abs() > f32::EPSILON {
-            self.status = format!("Slider: {:.2}", self.strength);
-        }
-
-        ui.icon_button(
-            "components.icon",
-            Rect::new(360.0, 196.0, 32.0, 32.0),
-            IconId::from_raw(1),
-            false,
-        );
-        ui.label(Rect::new(404.0, 202.0, 90.0, 20.0), "Icon button");
-        ui.image(Rect::new(512.0, 190.0, 54.0, 42.0), ImageId::from_raw(7));
-        ui.label(Rect::new(512.0, 246.0, 120.0, 20.0), "Thumbnail");
-
+        self.component_button_controls(ui, x, y);
+        self.component_selection_controls(ui, x, y);
+        self.component_slider_controls(ui, panel, slider_x, slider_y, slider_width);
         Self::state_strip(
             ui,
-            Rect::new(60.0, 276.0, 540.0, 24.0),
+            Rect::new(
+                x,
+                panel.max_y() - 46.0,
+                (panel.width - 40.0).max(120.0),
+                24.0,
+            ),
             &format!(
                 "checkbox={} toggle={} radio={} selected_row={}",
                 self.checkbox,
@@ -552,13 +576,140 @@ impl ShowcaseApp {
         );
     }
 
-    fn component_text_inputs(&mut self, ui: &mut Ui<'_>) {
-        panel_title(ui, Rect::new(700.0, 104.0, 500.0, 218.0), "Text Input");
+    fn component_button_controls(&mut self, ui: &mut Ui<'_>, x: f32, y: f32) {
+        let run = ui.button(
+            "components.run-action",
+            Rect::new(x, y, 128.0, 30.0),
+            "Run Action",
+            false,
+        );
+        if run.clicked {
+            self.invoke_action("components.run", ActionSource::Button);
+        }
 
-        text(ui, 720.0, 142.0, "Search", 10.0, rgb(190, 190, 194));
+        let disabled = ui.button(
+            "components.disabled",
+            Rect::new(x + 144.0, y, 128.0, 30.0),
+            "Disabled",
+            true,
+        );
+        if disabled.clicked {
+            "Disabled button should not invoke".clone_into(&mut self.status);
+        }
+    }
+
+    fn component_selection_controls(&mut self, ui: &mut Ui<'_>, x: f32, y: f32) {
+        let checkbox = ui.checkbox(
+            "components.checkbox",
+            Rect::new(x, y + 48.0, 22.0, 22.0),
+            self.checkbox,
+            false,
+        );
+        if checkbox.clicked {
+            self.checkbox = !self.checkbox;
+            self.status = format!("Checkbox: {}", self.checkbox);
+        }
+        ui.label(Rect::new(x + 32.0, y + 46.0, 90.0, 20.0), "Checkbox");
+
+        let toggle = ui.toggle(
+            "components.toggle",
+            Rect::new(x + 144.0, y + 48.0, 54.0, 24.0),
+            self.toggle,
+            false,
+        );
+        if toggle.clicked {
+            self.toggle = !self.toggle;
+            self.status = format!("Toggle: {}", self.toggle);
+        }
+        ui.label(Rect::new(x + 210.0, y + 46.0, 70.0, 20.0), "Toggle");
+
+        for (index, radio_x, label) in [(0, x, "Radio A"), (1, x + 100.0, "Radio B")] {
+            let response = ui.radio_button(
+                ("components.radio", index),
+                Rect::new(radio_x, y + 94.0, 20.0, 20.0),
+                self.radio == index,
+                false,
+            );
+            if response.clicked {
+                self.radio = index;
+                self.status = format!("Radio: {label}");
+            }
+            ui.label(Rect::new(radio_x + 30.0, y + 92.0, 70.0, 20.0), label);
+        }
+    }
+
+    fn component_slider_controls(
+        &mut self,
+        ui: &mut Ui<'_>,
+        panel: Rect,
+        slider_x: f32,
+        slider_y: f32,
+        slider_width: f32,
+    ) {
+        let before = self.strength;
+        ui.slider(
+            "components.slider",
+            Rect::new(slider_x, slider_y, slider_width, 16.0),
+            &mut self.strength,
+            0.0..=1.0,
+            false,
+        );
+        text(
+            ui,
+            slider_x,
+            slider_y - 10.0,
+            &format!("Slider: {:.2}", self.strength),
+            10.0,
+            rgb(210, 210, 214),
+        );
+        if (before - self.strength).abs() > f32::EPSILON {
+            self.status = format!("Slider: {:.2}", self.strength);
+        }
+
+        ui.icon_button(
+            "components.icon",
+            Rect::new(slider_x, slider_y + 44.0, 32.0, 32.0),
+            IconId::from_raw(1),
+            false,
+        );
+        ui.label(
+            Rect::new(slider_x + 44.0, slider_y + 50.0, 90.0, 20.0),
+            "Icon button",
+        );
+        if panel.width >= 560.0 {
+            ui.image(
+                Rect::new(slider_x + 152.0, slider_y + 38.0, 54.0, 42.0),
+                ImageId::from_raw(7),
+            );
+            ui.label(
+                Rect::new(slider_x + 152.0, slider_y + 94.0, 120.0, 20.0),
+                "Thumbnail",
+            );
+        }
+    }
+
+    fn component_text_inputs(&mut self, ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Text Input");
+        let x = panel.x + 20.0;
+        let y = panel.y + 46.0;
+        let compact = panel.width < 460.0;
+        let primary_width = if compact {
+            (panel.width - 40.0).max(140.0)
+        } else {
+            (panel.width * 0.46).clamp(190.0, 260.0)
+        };
+        let secondary_x = if compact { x } else { x + primary_width + 50.0 };
+        let secondary_y = y + 64.0;
+        let secondary_width = if compact {
+            primary_width.min(160.0)
+        } else {
+            (panel.max_x() - secondary_x - 20.0).clamp(100.0, 160.0)
+        };
+
+        text(ui, x, y - 8.0, "Search", 10.0, rgb(190, 190, 194));
         let search = ui.search_field(
             "components.search",
-            Rect::new(720.0, 150.0, 230.0, 30.0),
+            Rect::new(x, y, primary_width, 30.0),
             &mut self.search,
             false,
         );
@@ -566,10 +717,10 @@ impl ShowcaseApp {
             self.status = format!("Search: {}", search.query);
         }
 
-        text(ui, 720.0, 206.0, "Text field", 10.0, rgb(190, 190, 194));
+        text(ui, x, y + 56.0, "Text field", 10.0, rgb(190, 190, 194));
         let name = ui.text_field(
             "components.name",
-            Rect::new(720.0, 214.0, 190.0, 30.0),
+            Rect::new(x, y + 64.0, primary_width.min(220.0), 30.0),
             &mut self.name,
             false,
         );
@@ -577,10 +728,17 @@ impl ShowcaseApp {
             self.status = format!("Name: {}", self.name.text);
         }
 
-        text(ui, 960.0, 206.0, "Numeric", 10.0, rgb(190, 190, 194));
+        text(
+            ui,
+            secondary_x,
+            secondary_y - 8.0,
+            "Numeric",
+            10.0,
+            rgb(190, 190, 194),
+        );
         let number = ui.numeric_input(
             "components.number",
-            Rect::new(960.0, 214.0, 120.0, 30.0),
+            Rect::new(secondary_x, secondary_y, secondary_width, 30.0),
             &mut self.number,
             false,
         );
@@ -592,10 +750,11 @@ impl ShowcaseApp {
             };
         }
 
-        text(ui, 720.0, 270.0, "Multi-line", 10.0, rgb(190, 190, 194));
+        let notes_y = if compact { y + 118.0 } else { y + 120.0 };
+        text(ui, x, notes_y - 8.0, "Multi-line", 10.0, rgb(190, 190, 194));
         let notes = ui.multi_line_text_field(
             "components.notes",
-            Rect::new(720.0, 278.0, 360.0, 38.0),
+            Rect::new(x, notes_y, (panel.width - 80.0).max(160.0), 38.0),
             &mut self.notes,
             false,
         );
@@ -603,15 +762,27 @@ impl ShowcaseApp {
             self.status = format!("Notes: {} lines", self.notes.text.lines().count());
         }
 
-        text(ui, 1092.0, 306.0, "Undo stack", 10.0, rgb(160, 160, 164));
+        text(
+            ui,
+            x + (panel.width - 160.0).max(0.0),
+            notes_y + 30.0,
+            "Undo stack",
+            10.0,
+            rgb(160, 160, 164),
+        );
     }
 
-    fn collection_preview(&mut self, ui: &mut Ui<'_>) {
-        panel_title(
-            ui,
-            Rect::new(40.0, 350.0, 560.0, 190.0),
-            "Lists, Grids, Tables",
-        );
+    fn collection_preview(&mut self, ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Lists, Grids, Tables");
+        let x = panel.x + 20.0;
+        let y = panel.y + 40.0;
+        let list_width = (panel.width * 0.45).clamp(220.0, 260.0);
+        let grid_x = if panel.width >= 520.0 {
+            x + list_width + 50.0
+        } else {
+            x
+        };
+        let grid_y = if panel.width >= 520.0 { y } else { y + 124.0 };
 
         let list = ListLayout::new(28.0);
         let labels = [
@@ -620,7 +791,7 @@ impl ShowcaseApp {
             "Row: cached resource",
             "Row: async result",
         ];
-        for row in list.row_rects(Rect::new(60.0, 390.0, 260.0, 112.0), labels.len(), 0..4) {
+        for row in list.row_rects(Rect::new(x, y, list_width, 112.0), labels.len(), 0..4) {
             let response = ui.list_row(
                 ("components.list-row", row.index),
                 row.rect,
@@ -639,26 +810,33 @@ impl ShowcaseApp {
             item_size: Size::new(42.0, 30.0),
             gap: 12.0,
         };
-        for item in grid.item_rects(Rect::new(350.0, 390.0, 220.0, 120.0), 12, 0..12) {
+        for item in grid.item_rects(
+            Rect::new(
+                grid_x,
+                grid_y,
+                (panel.max_x() - grid_x - 20.0).max(180.0),
+                120.0,
+            ),
+            12,
+            0..12,
+        ) {
             rect(ui, item.rect, rgb(36, 38, 42), Some(rgb(70, 70, 74)));
         }
     }
 
-    fn tabs_preview(&mut self, ui: &mut Ui<'_>) {
-        panel_title(
-            ui,
-            Rect::new(640.0, 350.0, 560.0, 190.0),
-            "Reusable Panel States",
-        );
+    fn tabs_preview(&mut self, ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Reusable Panel States");
+        let x = panel.x + 20.0;
+        let y = panel.y + 40.0;
 
-        for (index, x, label) in [
-            (0, 660.0, "Theme"),
-            (1, 780.0, "State"),
-            (2, 900.0, "Actions"),
+        for (index, tab_x, label) in [
+            (0, x, "Theme"),
+            (1, x + 120.0, "State"),
+            (2, x + 240.0, "Actions"),
         ] {
             let response = ui.tab_button(
                 ("components.tab", index),
-                Rect::new(x, 390.0, 108.0, 30.0),
+                Rect::new(tab_x, y, 108.0, 30.0),
                 label,
                 self.selected_tab == index,
                 false,
@@ -676,49 +854,49 @@ impl ShowcaseApp {
         };
         rect(
             ui,
-            Rect::new(660.0, 430.0, 500.0, 82.0),
+            Rect::new(x, y + 40.0, (panel.width - 40.0).max(140.0), 82.0),
             rgb(22, 22, 25),
             Some(rgb(62, 62, 66)),
         );
-        text(ui, 680.0, 462.0, body, 11.0, rgb(224, 224, 226));
+        text(ui, x + 20.0, y + 72.0, body, 11.0, rgb(224, 224, 226));
         text(
             ui,
-            680.0,
-            492.0,
+            x + 20.0,
+            y + 102.0,
             &format!("Actions: {}", self.action_count),
             12.0,
             rgb(144, 184, 255),
         );
     }
 
-    fn primitive_preview(ui: &mut Ui<'_>) {
-        panel_title(
-            ui,
-            Rect::new(40.0, 570.0, 1160.0, 230.0),
-            "Primitive Stream",
-        );
+    fn primitive_preview(ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Primitive Stream");
+        let x = panel.x + 24.0;
+        let y = panel.y + 48.0;
         rect(
             ui,
-            Rect::new(64.0, 618.0, 120.0, 72.0),
+            Rect::new(x, y, 120.0, 72.0),
             rgb(46, 48, 54),
             Some(rgb(120, 120, 126)),
         );
         line(
             ui,
-            Point::new(210.0, 618.0),
-            Point::new(330.0, 690.0),
+            Point::new(x + 146.0, y),
+            Point::new(x + 266.0, y + 72.0),
             rgb(230, 230, 230),
             2.0,
         );
-        ui.image(Rect::new(360.0, 618.0, 96.0, 72.0), ImageId::from_raw(11));
-        text(ui, 500.0, 660.0, "Label", 13.0, rgb(238, 238, 238));
+        ui.image(Rect::new(x + 296.0, y, 96.0, 72.0), ImageId::from_raw(11));
+        text(ui, x + 436.0, y + 42.0, "Label", 13.0, rgb(238, 238, 238));
         rect(
             ui,
-            Rect::new(700.0, 618.0, 140.0, 72.0),
+            Rect::new((x + 636.0).min(panel.max_x() - 160.0), y, 140.0, 72.0),
             rgb(12, 12, 13),
             Some(rgb(92, 132, 240)),
         );
-        ui.separator(Rect::new(880.0, 650.0, 220.0, 12.0));
+        if panel.width >= 900.0 {
+            ui.separator(Rect::new(x + 816.0, y + 32.0, 220.0, 12.0));
+        }
     }
 
     fn state_strip(ui: &mut Ui<'_>, bounds: Rect, value: &str) {
@@ -736,16 +914,16 @@ impl ShowcaseApp {
     fn layout_page(&mut self, ui: &mut Ui<'_>) {
         section_title(ui, 40.0, 86.0, "Layout, Docking, and Data Surfaces");
         let viewport = rect_from_size(ui.viewport().logical_size);
-        let page = kinetik_ui::core::pad_rect(viewport, Insets::new(40.0, 40.0, 104.0, 40.0));
+        let page = page_rect(viewport);
         if page.width >= 1160.0 {
-            Self::layout_solver_preview(ui, Rect::new(page.x, page.y, 560.0, 250.0));
-            self.dock_preview(ui, Rect::new(page.x + 600.0, page.y, 560.0, 250.0));
-            Self::table_preview(ui, Rect::new(page.x, page.y + 286.0, 1160.0, 300.0));
+            Self::layout_solver_preview(ui, Rect::new(page.x, page.y, 560.0, 320.0));
+            self.dock_preview(ui, Rect::new(page.x + 600.0, page.y, 560.0, 320.0));
+            Self::table_preview(ui, Rect::new(page.x, page.y + 356.0, 1160.0, 300.0));
         } else {
             let width = page.width.min(760.0);
-            Self::layout_solver_preview(ui, Rect::new(page.x, page.y, width, 250.0));
-            self.dock_preview(ui, Rect::new(page.x, page.y + 286.0, width, 250.0));
-            Self::table_preview(ui, Rect::new(page.x, page.y + 572.0, width, 300.0));
+            Self::layout_solver_preview(ui, Rect::new(page.x, page.y, width, 320.0));
+            self.dock_preview(ui, Rect::new(page.x, page.y + 356.0, width, 320.0));
+            Self::table_preview(ui, Rect::new(page.x, page.y + 712.0, width, 300.0));
         }
     }
 
@@ -1070,11 +1248,38 @@ impl ShowcaseApp {
     }
 
     fn viewport_page(&mut self, ui: &mut Ui<'_>) {
-        section_title(ui, 40.0, 86.0, "Viewport, Texture, and Overlay Surface");
-        panel_title(
-            ui,
-            Rect::new(40.0, 104.0, 960.0, 620.0),
-            "Pan/Zoom Texture Surface",
+        let viewport = rect_from_size(ui.viewport().logical_size);
+        let page = page_rect(viewport);
+        section_title(ui, page.x, 86.0, "Viewport, Texture, and Overlay Surface");
+
+        if page.width >= 1120.0 {
+            let main = Rect::new(page.x, page.y, 960.0, 620.0);
+            let side_x = main.max_x() + 40.0;
+            self.viewport_surface_panel(ui, main);
+            self.viewport_controls_panel(ui, Rect::new(side_x, page.y, 300.0, 250.0));
+            Self::video_boundary_panel(ui, Rect::new(side_x, page.y + 286.0, 300.0, 230.0));
+        } else {
+            let width = page.width.min(980.0);
+            let surface_height = ((width - 80.0).max(220.0) * 9.0 / 16.0).clamp(180.0, 300.0);
+            let main_height = surface_height + 132.0;
+            let main = Rect::new(page.x, page.y, width, main_height);
+            self.viewport_surface_panel(ui, main);
+            self.viewport_controls_panel(ui, Rect::new(page.x, main.max_y() + 24.0, width, 150.0));
+            Self::video_boundary_panel(ui, Rect::new(page.x, main.max_y() + 198.0, width, 190.0));
+        }
+    }
+
+    fn viewport_surface_panel(&mut self, ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Pan/Zoom Texture Surface");
+        let max_surface_width = (panel.width - 80.0).max(160.0);
+        let max_surface_height = (panel.height - 132.0).max(120.0);
+        let surface_height = (max_surface_width * 9.0 / 16.0).min(max_surface_height);
+        let surface_width = (surface_height * 16.0 / 9.0).min(max_surface_width);
+        let surface = Rect::new(
+            panel.x + (panel.width - surface_width) * 0.5,
+            panel.y + 86.0,
+            surface_width,
+            surface_height,
         );
 
         let mut pan_zoom = PanZoom::default();
@@ -1083,7 +1288,7 @@ impl ShowcaseApp {
             surface: ViewportSurface {
                 texture: TextureId::from_raw(99),
                 source_size: Size::new(1920.0, 1080.0),
-                bounds: Rect::new(80.0, 150.0, 860.0, 486.0),
+                bounds: surface,
                 pan_zoom,
             },
             guides: vec![
@@ -1100,25 +1305,25 @@ impl ShowcaseApp {
             clip: ClipId::from_raw(99),
         };
         ui.extend(composition.primitives());
-
         text(
             ui,
-            80.0,
-            672.0,
+            surface.x,
+            surface.max_y() + 36.0,
             "Surface: 1920x1080 | Guides: 3 | Crosshair: 960,540",
             11.0,
             rgb(190, 190, 194),
         );
+    }
 
-        panel_title(
-            ui,
-            Rect::new(1040.0, 104.0, 300.0, 250.0),
-            "Viewport Controls",
-        );
+    fn viewport_controls_panel(&mut self, ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Viewport Controls");
+        let x = panel.x + 40.0;
+        let y = panel.y + 84.0;
+        let slider_width = (panel.width - 80.0).clamp(160.0, 220.0);
         let before = self.zoom;
         ui.slider(
             "viewport.zoom",
-            Rect::new(1080.0, 190.0, 220.0, 16.0),
+            Rect::new(x, y, slider_width, 16.0),
             &mut self.zoom,
             0.0..=1.0,
             false,
@@ -1128,15 +1333,15 @@ impl ShowcaseApp {
         }
         text(
             ui,
-            1080.0,
-            180.0,
+            x,
+            y - 10.0,
             &format!("Zoom: {:.0}%", 25.0 + self.zoom * 375.0),
             11.0,
             rgb(220, 220, 224),
         );
         let fit = ui.button(
             "viewport.fit",
-            Rect::new(1080.0, 230.0, 90.0, 28.0),
+            Rect::new(x, y + 44.0, 90.0, 28.0),
             "Fit",
             false,
         );
@@ -1146,7 +1351,7 @@ impl ShowcaseApp {
         }
         let actual = ui.button(
             "viewport.actual",
-            Rect::new(1184.0, 230.0, 116.0, 28.0),
+            Rect::new(x + 104.0, y + 44.0, 116.0, 28.0),
             "Actual Size",
             false,
         );
@@ -1154,38 +1359,82 @@ impl ShowcaseApp {
             self.zoom = 0.2;
             "Viewport actual size".clone_into(&mut self.status);
         }
+    }
 
-        panel_title(
-            ui,
-            Rect::new(1040.0, 390.0, 300.0, 230.0),
-            "3D/Video Boundary",
+    fn video_boundary_panel(ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "3D/Video Boundary");
+        let texture_width = (panel.width - 80.0).clamp(180.0, 260.0);
+        let texture_height = texture_width * 9.0 / 16.0;
+        let texture = Rect::new(
+            panel.x + 40.0,
+            panel.y + 54.0,
+            texture_width,
+            texture_height,
         );
         ui.primitive(Primitive::Texture(TexturePrimitive {
             texture: TextureId::from_raw(101),
-            rect: Rect::new(1080.0, 438.0, 220.0, 124.0),
+            rect: texture,
             source_size: Size::new(1280.0, 720.0),
         }));
         text(
             ui,
-            1080.0,
-            594.0,
+            texture.x,
+            texture.max_y() + 34.0,
             "Frame 1280x720",
             11.0,
             rgb(220, 220, 224),
         );
     }
 
-    #[allow(clippy::too_many_lines)]
     fn systems_page(&mut self, ui: &mut Ui<'_>) {
-        section_title(ui, 40.0, 86.0, "Actions, Overlays, Diagnostics, Stress");
+        let viewport = rect_from_size(ui.viewport().logical_size);
+        let page = page_rect(viewport);
+        section_title(ui, page.x, 86.0, "Actions, Overlays, Diagnostics, Stress");
 
-        panel_title(ui, Rect::new(40.0, 104.0, 360.0, 240.0), "Action Router");
         let actions = showcase_actions();
-        let menu = Menu::from_actions(actions.clone());
+        if page.width >= 1220.0 {
+            self.systems_action_panel(ui, Rect::new(page.x, page.y, 360.0, 240.0), &actions);
+            Self::systems_overlay_panel(ui, Rect::new(page.x + 400.0, page.y, 420.0, 240.0));
+            self.systems_palette_panel(
+                ui,
+                Rect::new(page.x + 860.0, page.y, 360.0, 240.0),
+                &actions,
+            );
+            self.systems_stress_panel(ui, Rect::new(page.x, page.y + 286.0, 1220.0, 330.0));
+        } else if page.width >= 820.0 {
+            let column = (page.width - 24.0) * 0.5;
+            self.systems_action_panel(ui, Rect::new(page.x, page.y, column, 240.0), &actions);
+            Self::systems_overlay_panel(
+                ui,
+                Rect::new(page.x + column + 24.0, page.y, column, 240.0),
+            );
+            self.systems_palette_panel(
+                ui,
+                Rect::new(page.x, page.y + 264.0, page.width, 210.0),
+                &actions,
+            );
+            self.systems_stress_panel(ui, Rect::new(page.x, page.y + 498.0, page.width, 360.0));
+        } else {
+            self.systems_action_panel(ui, Rect::new(page.x, page.y, page.width, 220.0), &actions);
+            Self::systems_overlay_panel(ui, Rect::new(page.x, page.y + 244.0, page.width, 240.0));
+            self.systems_palette_panel(
+                ui,
+                Rect::new(page.x, page.y + 508.0, page.width, 210.0),
+                &actions,
+            );
+            self.systems_stress_panel(ui, Rect::new(page.x, page.y + 742.0, page.width, 440.0));
+        }
+    }
+
+    fn systems_action_panel(&mut self, ui: &mut Ui<'_>, panel: Rect, actions: &[ActionDescriptor]) {
+        panel_title(ui, panel, "Action Router");
+        let menu = Menu::from_actions(actions.to_vec());
         let mut queue = ActionQueue::new();
+        let x = panel.x + 20.0;
+        let y = panel.y + 46.0;
         let dispatch = ui.button(
             "systems.dispatch",
-            Rect::new(60.0, 144.0, 140.0, 30.0),
+            Rect::new(x, y, 140.0, 30.0),
             "Dispatch",
             false,
         );
@@ -1194,7 +1443,7 @@ impl ShowcaseApp {
         }
         let menu_item = ui.button(
             "systems.menu-save",
-            Rect::new(60.0, 188.0, 140.0, 28.0),
+            Rect::new(x, y + 44.0, 140.0, 28.0),
             "Menu Save",
             false,
         );
@@ -1203,8 +1452,8 @@ impl ShowcaseApp {
         }
         text(
             ui,
-            220.0,
-            164.0,
+            x + 160.0,
+            y + 20.0,
             &format!("Invocations: {}", self.action_count),
             11.0,
             rgb(144, 184, 255),
@@ -1212,21 +1461,47 @@ impl ShowcaseApp {
         for invocation in queue.drain() {
             text(
                 ui,
-                60.0,
-                256.0,
+                x,
+                y + 112.0,
                 invocation.action_id.as_str(),
                 10.0,
                 rgb(220, 220, 224),
             );
         }
+    }
 
-        panel_title(ui, Rect::new(440.0, 104.0, 420.0, 240.0), "Overlay Stack");
+    fn systems_overlay_panel(ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Overlay Stack");
+        let menu_rect = Rect::new(
+            panel.x + 30.0,
+            panel.y + 62.0,
+            (panel.width - 110.0).clamp(180.0, 260.0),
+            54.0,
+        );
+        let popover_size = Size::new((panel.width - 100.0).clamp(190.0, 230.0), 58.0);
+        let popover_rect = place_popover(
+            PopoverRequest {
+                anchor: Rect::new(menu_rect.x + 30.0, menu_rect.y + 26.0, 120.0, 28.0),
+                size: popover_size,
+                placement: PopoverPlacement::Below,
+                offset: 8.0,
+                fit_viewport: true,
+            },
+            panel,
+        );
+        let palette_width = (panel.width - 80.0).clamp(220.0, 300.0);
+        let palette_rect = Rect::new(
+            (panel.x + panel.width * 0.28).min(panel.max_x() - palette_width - 30.0),
+            panel.y + 132.0,
+            palette_width,
+            64.0,
+        );
         let mut stack = OverlayStack::new();
         stack.open(OverlayEntry {
             id: OverlayId::from_raw(1),
             parent: None,
             kind: OverlayKind::Menu,
-            rect: Rect::new(470.0, 160.0, 220.0, 54.0),
+            rect: menu_rect,
             modal: false,
             dismissal: OverlayDismissal::OutsideClick,
         });
@@ -1234,16 +1509,7 @@ impl ShowcaseApp {
             id: OverlayId::from_raw(2),
             parent: Some(OverlayId::from_raw(1)),
             kind: OverlayKind::Popover,
-            rect: place_popover(
-                PopoverRequest {
-                    anchor: Rect::new(500.0, 186.0, 120.0, 28.0),
-                    size: Size::new(230.0, 58.0),
-                    placement: PopoverPlacement::Below,
-                    offset: 8.0,
-                    fit_viewport: true,
-                },
-                Rect::new(440.0, 104.0, 420.0, 240.0),
-            ),
+            rect: popover_rect,
             modal: false,
             dismissal: OverlayDismissal::OutsideClick,
         });
@@ -1251,7 +1517,7 @@ impl ShowcaseApp {
             id: OverlayId::from_raw(3),
             parent: None,
             kind: OverlayKind::CommandPalette,
-            rect: Rect::new(540.0, 238.0, 260.0, 64.0),
+            rect: palette_rect,
             modal: true,
             dismissal: OverlayDismissal::Manual,
         });
@@ -1281,15 +1547,24 @@ impl ShowcaseApp {
                 rgb(236, 236, 238),
             );
         }
+    }
 
-        panel_title(ui, Rect::new(900.0, 104.0, 360.0, 240.0), "Command Palette");
-        let mut palette = CommandPalette::from_actions(&actions);
+    fn systems_palette_panel(
+        &mut self,
+        ui: &mut Ui<'_>,
+        panel: Rect,
+        actions: &[ActionDescriptor],
+    ) {
+        panel_title(ui, panel, "Command Palette");
+        let mut palette = CommandPalette::from_actions(actions);
         palette.query = String::new();
+        let x = panel.x + 20.0;
+        let row_width = (panel.width - 40.0).max(160.0);
         for (index, entry) in palette.matches().into_iter().take(4).enumerate() {
-            let y = 150.0 + index as f32 * 32.0;
+            let y = panel.y + 50.0 + index as f32 * 32.0;
             let response = ui.list_row(
                 ("systems.palette", index),
-                Rect::new(920.0, y, 300.0, 28.0),
+                Rect::new(x, y, row_width, 28.0),
                 &entry.label,
                 false,
                 false,
@@ -1298,17 +1573,31 @@ impl ShowcaseApp {
                 self.invoke_action(entry.action_id.as_str(), ActionSource::CommandPalette);
             }
         }
+    }
 
-        panel_title(
-            ui,
-            Rect::new(40.0, 390.0, 1220.0, 330.0),
-            "Primitive Stress",
-        );
+    fn systems_stress_panel(&mut self, ui: &mut Ui<'_>, panel: Rect) {
+        panel_title(ui, panel, "Primitive Stress");
+        let origin = Point::new(panel.x + 36.0, panel.y + 70.0);
+        self.systems_stress_slider(ui, panel, origin);
+
+        let wide = panel.width >= 820.0;
+        let snapshot = Self::stress_snapshot_rect(panel, origin, wide);
+        let tile_area = Self::stress_tile_area(panel, origin, snapshot, wide);
+        Self::draw_stress_tiles(ui, tile_area, self.stress);
+        self.draw_runtime_snapshot(ui, snapshot, wide);
+    }
+
+    fn systems_stress_slider(&mut self, ui: &mut Ui<'_>, panel: Rect, origin: Point) {
         let before = self.stress;
         let mut stress_value = (self.stress as f32 - 32.0) / 768.0;
         ui.slider(
             "systems.stress",
-            Rect::new(76.0, 452.0, 260.0, 16.0),
+            Rect::new(
+                origin.x,
+                origin.y,
+                (panel.width - 72.0).clamp(180.0, 260.0),
+                16.0,
+            ),
             &mut stress_value,
             0.0..=1.0,
             false,
@@ -1319,75 +1608,108 @@ impl ShowcaseApp {
         }
         text(
             ui,
-            76.0,
-            440.0,
+            origin.x,
+            origin.y - 12.0,
             &format!("Generated tiles: {}", self.stress),
             11.0,
             rgb(220, 220, 224),
         );
+    }
 
-        let cols = 54;
-        for index in 0..self.stress {
-            let col = index % cols;
-            let row = index / cols;
-            let x = 76.0 + col as f32 * 21.0;
-            let y = 500.0 + row as f32 * 16.0;
-            let shade = 30 + (index % 80) as u8;
-            rect(
-                ui,
-                Rect::new(x, y, 16.0, 10.0),
-                rgb(shade, 48, 70),
-                Some(rgb(60, 70, 90)),
-            );
+    fn stress_snapshot_rect(panel: Rect, origin: Point, wide: bool) -> Rect {
+        let snapshot_width = (panel.width - 72.0).clamp(220.0, 320.0);
+        if wide {
+            Rect::new(
+                panel.max_x() - snapshot_width - 40.0,
+                origin.y,
+                snapshot_width,
+                188.0,
+            )
+        } else {
+            Rect::new(origin.x, panel.max_y() - 154.0, snapshot_width, 132.0)
         }
+    }
 
-        rect(
-            ui,
-            Rect::new(900.0, 452.0, 320.0, 188.0),
-            rgb(18, 18, 20),
-            Some(rgb(58, 58, 62)),
-        );
+    fn stress_tile_area(panel: Rect, origin: Point, snapshot: Rect, wide: bool) -> Rect {
+        if wide {
+            Rect::new(
+                origin.x,
+                origin.y + 56.0,
+                (snapshot.x - origin.x - 40.0).max(120.0),
+                panel.height - 102.0,
+            )
+        } else {
+            Rect::new(
+                origin.x,
+                origin.y + 56.0,
+                (panel.width - 72.0).max(120.0),
+                (snapshot.y - origin.y - 76.0).max(40.0),
+            )
+        }
+    }
+
+    fn draw_stress_tiles(ui: &mut Ui<'_>, tile_area: Rect, stress: usize) {
+        let cols = (tile_area.width / 21.0).floor().max(1.0) as usize;
+        ui.clip_rect("systems.stress.tiles", tile_area, |ui| {
+            for index in 0..stress {
+                let col = index % cols;
+                let row = index / cols;
+                let tile_x = tile_area.x + col as f32 * 21.0;
+                let tile_y = tile_area.y + row as f32 * 16.0;
+                let shade = 30 + (index % 80) as u8;
+                rect(
+                    ui,
+                    Rect::new(tile_x, tile_y, 16.0, 10.0),
+                    rgb(shade, 48, 70),
+                    Some(rgb(60, 70, 90)),
+                );
+            }
+        });
+    }
+
+    fn draw_runtime_snapshot(&self, ui: &mut Ui<'_>, snapshot: Rect, wide: bool) {
+        rect(ui, snapshot, rgb(18, 18, 20), Some(rgb(58, 58, 62)));
         text(
             ui,
-            920.0,
-            480.0,
+            snapshot.x + 20.0,
+            snapshot.y + 28.0,
             "Runtime Snapshot",
             13.0,
             rgb(238, 238, 240),
         );
         text(
             ui,
-            920.0,
-            510.0,
+            snapshot.x + 20.0,
+            snapshot.y + 58.0,
             &format!("Primitive count: {}", self.output.primitives.len()),
             10.0,
             rgb(190, 190, 194),
         );
         text(
             ui,
-            920.0,
-            530.0,
+            snapshot.x + 20.0,
+            snapshot.y + 78.0,
             &format!("Stress tiles: {}", self.stress),
             10.0,
             rgb(190, 190, 194),
         );
         text(
             ui,
-            920.0,
-            550.0,
+            snapshot.x + 20.0,
+            snapshot.y + 98.0,
             &format!("Action invocations: {}", self.action_count),
             10.0,
             rgb(190, 190, 194),
         );
         for (row, primitive) in inspect_primitives(&self.output.primitives)
             .into_iter()
-            .take(4)
+            .take(if wide { 4 } else { 1 })
             .enumerate()
         {
             text(
                 ui,
-                920.0,
-                584.0 + row as f32 * 18.0,
+                snapshot.x + 20.0,
+                snapshot.y + 132.0 + row as f32 * 18.0,
                 &format!("#{} {:?}", primitive.index, primitive.kind),
                 10.0,
                 rgb(144, 184, 255),
@@ -1406,15 +1728,35 @@ fn showcase_actions() -> Vec<ActionDescriptor> {
     vec![save, palette, toggle_grid]
 }
 
-fn nav_items() -> [(ShowcasePage, Rect); 4] {
+fn showcase_action_router() -> ActionRouter {
+    let mut enter = ActionDescriptor::new("keyboard.enter", "Confirm Focused Command");
+    enter.shortcut = Some(Shortcut::new(Modifiers::default(), Key::Enter));
+
+    let mut router = ActionRouter::new();
+    router.bind(ActionBinding::new(
+        enter,
+        ActionContext::Global,
+        ActionPriority::Global,
+    ));
+    router
+}
+
+fn nav_items(viewport_width: f32) -> [(ShowcasePage, Rect); 4] {
+    let (start, widths) = if viewport_width >= 940.0 {
+        (360.0, [132.0, 92.0, 112.0, 112.0])
+    } else {
+        (180.0, [112.0, 82.0, 98.0, 90.0])
+    };
+    let gap = 10.0;
+    let components = Rect::new(start, 12.0, widths[0], 28.0);
+    let layout = Rect::new(components.max_x() + gap, 12.0, widths[1], 28.0);
+    let viewport = Rect::new(layout.max_x() + gap, 12.0, widths[2], 28.0);
+    let systems = Rect::new(viewport.max_x() + gap, 12.0, widths[3], 28.0);
     [
-        (
-            ShowcasePage::Components,
-            Rect::new(360.0, 12.0, 132.0, 28.0),
-        ),
-        (ShowcasePage::Layout, Rect::new(502.0, 12.0, 92.0, 28.0)),
-        (ShowcasePage::Viewport, Rect::new(604.0, 12.0, 112.0, 28.0)),
-        (ShowcasePage::Systems, Rect::new(726.0, 12.0, 112.0, 28.0)),
+        (ShowcasePage::Components, components),
+        (ShowcasePage::Layout, layout),
+        (ShowcasePage::Viewport, viewport),
+        (ShowcasePage::Systems, systems),
     ]
 }
 
@@ -1428,12 +1770,78 @@ fn frame_context(size: Size, input: UiInput) -> FrameContext {
     )
 }
 
+fn page_rect(viewport: Rect) -> Rect {
+    kinetik_ui::core::pad_rect(viewport, Insets::new(40.0, 40.0, 104.0, 40.0))
+}
+
 fn physical_dimension(value: f32) -> u32 {
     if value.is_finite() {
         value.round().max(1.0).min(u32::MAX as f32) as u32
     } else {
         1
     }
+}
+
+fn thumbnail_image() -> RenderImage {
+    rgba_image(64, 48, |x, y| {
+        let active = x > 8 && x < 56 && y > 8 && y < 40;
+        if active {
+            [77, 83, 93, 255]
+        } else {
+            [36, 39, 45, 255]
+        }
+    })
+}
+
+fn primitive_image() -> RenderImage {
+    rgba_image(96, 72, |x, y| {
+        let highlight = y == 8 && (12..84).contains(&x);
+        if highlight {
+            [136, 140, 148, 255]
+        } else if y > 14 && x > 8 && x < 88 {
+            [78, 80, 86, 255]
+        } else {
+            [44, 46, 52, 255]
+        }
+    })
+}
+
+fn viewport_texture() -> RenderImage {
+    rgba_image(384, 216, |x, y| {
+        let stripe = (x / 48) % 2 == 0;
+        let guide = x == 192 || y == 108 || y == 72;
+        if guide {
+            [180, 205, 232, 255]
+        } else if stripe {
+            [28, 35, 44, 255]
+        } else {
+            [23, 29, 37, 255]
+        }
+    })
+}
+
+fn video_texture() -> RenderImage {
+    rgba_image(256, 144, |x, y| {
+        let checker = ((x / 20) + (y / 20)) % 2 == 0;
+        let guide = x == 128 || y == 72;
+        if guide {
+            [96, 138, 184, 255]
+        } else if checker {
+            [29, 36, 46, 255]
+        } else {
+            [22, 27, 35, 255]
+        }
+    })
+}
+
+fn rgba_image(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> RenderImage {
+    let mut data = Vec::with_capacity((width * height * 4) as usize);
+    for y in 0..height {
+        for x in 0..width {
+            data.extend_from_slice(&pixel(x, y));
+        }
+    }
+    RenderImage::rgba8(width, height, data).expect("generated RGBA image has matching byte length")
 }
 
 fn section_title(ui: &mut Ui<'_>, x: f32, baseline: f32, value: &str) {
@@ -1502,7 +1910,11 @@ fn sanitize_viewport_size(size: Size) -> Size {
 #[cfg(test)]
 mod tests {
     use super::{ShowcaseApp, ShowcaseInput, ShowcasePage};
-    use kinetik_ui::core::{Point, Primitive, Rect, Size};
+    use kinetik_ui::{
+        core::{PhysicalSize, Point, Primitive, Rect, ScaleFactor, Size, ViewportInfo},
+        render::RenderFrameInput,
+        render_vello::VelloRenderer,
+    };
 
     fn click(app: &mut ShowcaseApp, point: Point) {
         app.update(&ShowcaseInput {
@@ -1611,6 +2023,7 @@ mod tests {
             typed: vec!['x'],
             ..ShowcaseInput::default()
         });
+        let actions_before_enter = app.action_count();
         app.update(&ShowcaseInput {
             enter: true,
             ..ShowcaseInput::default()
@@ -1618,6 +2031,7 @@ mod tests {
 
         assert!(app.notes().contains('x'));
         assert!(app.notes().ends_with('\n'));
+        assert_eq!(app.action_count(), actions_before_enter);
     }
 
     #[test]
@@ -1707,5 +2121,45 @@ mod tests {
         ] {
             assert!(!source.contains(&marker), "{marker}");
         }
+    }
+
+    #[test]
+    fn showcase_pages_translate_to_vello_without_renderer_diagnostics() {
+        for size in [Size::new(1440.0, 900.0), Size::new(820.0, 640.0)] {
+            for page in [
+                ShowcasePage::Components,
+                ShowcasePage::Layout,
+                ShowcasePage::Viewport,
+                ShowcasePage::Systems,
+            ] {
+                let mut app = ShowcaseApp::new();
+                app.set_viewport_size(size);
+                app.set_page(page);
+                let resources = app.render_resources();
+                let mut renderer = VelloRenderer::new();
+                let output = renderer.submit_frame(RenderFrameInput {
+                    viewport: test_viewport(size),
+                    primitives: &app.output().primitives,
+                    resources: &resources,
+                });
+
+                assert!(
+                    output.diagnostics.is_empty(),
+                    "{page:?} at {size:?}: {:?}",
+                    output.diagnostics
+                );
+            }
+        }
+    }
+
+    fn test_viewport(size: Size) -> ViewportInfo {
+        ViewportInfo::new(
+            size,
+            PhysicalSize::new(
+                size.width.round().max(1.0) as u32,
+                size.height.round().max(1.0) as u32,
+            ),
+            ScaleFactor::ONE,
+        )
     }
 }
