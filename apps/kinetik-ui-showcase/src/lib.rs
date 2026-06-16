@@ -3,12 +3,12 @@
 pub mod app;
 pub mod raster;
 
-use kinetik_ui_core::{
+use kinetik_ui::core::{
     ClipId, Color, ImageId, Point, Primitive, Rect, TextureId, Theme, UiInput, UiMemory, WidgetId,
     default_dark_theme,
 };
-use kinetik_ui_text::TextEditState;
-use kinetik_ui_widgets::{
+use kinetik_ui::text::TextEditState;
+use kinetik_ui::widgets::{
     Crosshair, Guide, PanZoom, ViewportComposition, ViewportSurface, button, checkbox, image,
     label, numeric_input, search_field, slider, text_field, toggle,
 };
@@ -159,7 +159,7 @@ pub fn viewport_scenario() -> ShowcaseScenario {
     let viewport = ViewportComposition {
         surface: ViewportSurface {
             texture: TextureId::from_raw(9),
-            source_size: kinetik_ui_core::Size::new(1920.0, 1080.0),
+            source_size: kinetik_ui::core::Size::new(1920.0, 1080.0),
             bounds: Rect::new(0.0, 0.0, 640.0, 360.0),
             pan_zoom: PanZoom::default(),
         },
@@ -189,7 +189,7 @@ pub fn all_scenarios() -> Vec<ShowcaseScenario> {
 #[cfg(test)]
 mod tests {
     use super::{all_scenarios, component_gallery, viewport_scenario};
-    use kinetik_ui_core::Primitive;
+    use kinetik_ui::core::Primitive;
 
     #[test]
     fn scenarios_have_primitives() {

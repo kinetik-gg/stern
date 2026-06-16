@@ -10,7 +10,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use ab_glyph::{Font, FontArc, Glyph, PxScale, ScaleFont, point};
-use kinetik_ui_core::{
+use kinetik_ui::core::{
     Brush, Color, LinePrimitive, LinearGradient, PathElement, PathPrimitive, Point, Primitive,
     Rect, RectPrimitive, ShadowPrimitive, Stroke, TextPrimitive, TexturePrimitive,
 };

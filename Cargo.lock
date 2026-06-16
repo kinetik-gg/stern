@@ -949,9 +949,7 @@ name = "kinetik-ui-showcase"
 version = "0.1.0"
 dependencies = [
  "ab_glyph",
- "kinetik-ui-core",
- "kinetik-ui-text",
- "kinetik-ui-widgets",
+ "kinetik-ui",
  "minifb",
 ]
 

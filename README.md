@@ -126,6 +126,7 @@ crate to `kinetik-ui-vello` and the old `kinetik-ui-platform-winit` crate to
 - [Crate split migration](docs/crate-migration.md)
 - [Docking interactions](docs/docking-interactions.md)
 - [Renderer snapshot strategy](docs/render-snapshots.md)
+- [Showcase app plan](docs/showcase-plan.md)
 - [Release policy](docs/release.md)
 - [Agent workflow](AGENTS.md)
 

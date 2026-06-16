@@ -7,9 +7,7 @@ repository.workspace = true
 
 [dependencies]
 ab_glyph = "0.2.32"
-kinetik-ui-core = { path = "../../crates/kinetik-ui-core" }
-kinetik-ui-text = { path = "../../crates/kinetik-ui-text" }
-kinetik-ui-widgets = { path = "../../crates/kinetik-ui-widgets" }
+kinetik-ui = { path = "../../crates/kinetik-ui" }
 minifb = "0.27.0"
 
 [lints]
