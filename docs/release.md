@@ -110,6 +110,20 @@ Each release entry should include:
 - breaking changes, if any
 - migration notes, if needed
 
+Migration notes are required when a release changes public crate boundaries,
+renames crates, removes facade exports, or moves a subsystem behind a different
+feature flag. They should include:
+
+- old crate or import path
+- new crate or import path
+- the intended audience for each crate
+- dependency snippets for common application use and lower-level integration use
+- any feature flags required to restore prior behavior
+
+The crate consolidation introduced in `ef7c2f9` is documented in
+[`docs/crate-migration.md`](crate-migration.md). Keep that document updated if
+the public crate graph changes again.
+
 ## Release Checklist
 
 Before tagging a release:
@@ -142,4 +156,3 @@ Automation should preserve:
 - changelog generation or validation.
 - `vX.Y.Z` tags.
 - CI checks before release.
-

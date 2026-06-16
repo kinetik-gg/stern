@@ -93,10 +93,37 @@ kinetik-ui-showcase
 
 `kinetik-ui-core` must remain independent of renderer, windowing, and operating-system APIs.
 
+For application code, depend on the facade crate:
+
+```toml
+[dependencies]
+kinetik-ui = { version = "0.1", features = ["platform-winit", "render-vello"] }
+```
+
+Then start from the prelude:
+
+```rust
+use kinetik_ui::prelude::*;
+```
+
+Use lower-level crates for integration boundaries:
+
+```toml
+[dependencies]
+kinetik-ui-render = "0.1" # custom renderer contracts
+kinetik-ui-vello = "0.1"  # Vello backend
+kinetik-ui-winit = "0.1"  # winit platform adapter
+```
+
+The `ef7c2f9` crate consolidation renamed the old `kinetik-ui-render-vello`
+crate to `kinetik-ui-vello` and the old `kinetik-ui-platform-winit` crate to
+`kinetik-ui-winit`. See [crate migration notes](docs/crate-migration.md).
+
 ## Documentation
 
 - [Architecture specification](docs/specs.md)
 - [Accessibility adapter boundary](docs/accessibility-adapters.md)
+- [Crate split migration](docs/crate-migration.md)
 - [Docking interactions](docs/docking-interactions.md)
 - [Renderer snapshot strategy](docs/render-snapshots.md)
 - [Release policy](docs/release.md)

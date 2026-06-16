@@ -1,0 +1,72 @@
+# Crate Split Migration
+
+Commit `ef7c2f9` consolidated the toolkit into the current crate graph and
+introduced the application-facing `kinetik-ui` facade crate. This was a
+breaking crate-boundary change.
+
+## Which Crate To Depend On
+
+Most applications should depend on the facade:
+
+```toml
+[dependencies]
+kinetik-ui = { version = "0.1", features = ["platform-winit", "render-vello"] }
+```
+
+The facade re-exports the common application stack through
+`kinetik_ui::prelude::*` and namespaced modules:
+
+```rust
+use kinetik_ui::prelude::*;
+```
+
+Use lower-level crates only when building an integration boundary or a custom
+backend:
+
+```toml
+[dependencies]
+kinetik-ui-core = "0.1"
+kinetik-ui-widgets = "0.1"
+kinetik-ui-render = "0.1"
+kinetik-ui-vello = "0.1"
+kinetik-ui-winit = "0.1"
+```
+
+## Migration Map
+
+| Before `ef7c2f9` | After `ef7c2f9` | Use for |
+| --- | --- | --- |
+| application code importing several toolkit crates directly | `kinetik-ui` | Normal app code, examples, and common prelude imports |
+| `kinetik-ui-core` | `kinetik-ui-core` | Platform-independent runtime, input, layout, IDs, actions, semantics, theme, and render primitives |
+| `kinetik-ui-widgets` | `kinetik-ui-widgets` | Reusable widgets, editor models, overlays, collections, docking, and viewport helpers |
+| renderer contracts inside lower-level code | `kinetik-ui-render` | Backend-neutral renderer traits, diagnostics, frame contracts, and resource payloads |
+| `kinetik-ui-render-vello` | `kinetik-ui-vello` | Vello renderer backend and primitive translation |
+| `kinetik-ui-platform-winit` | `kinetik-ui-winit` | winit input normalization, platform requests, DPI, cursor, IME, redraw, and accessibility handoff data |
+| `kinetik-ui-text` | `kinetik-ui-text` | Text editing, shaping, measurement, hit testing, and layout cache |
+
+## Import Changes
+
+Prefer facade imports in application code:
+
+```rust
+use kinetik_ui::prelude::*;
+```
+
+When a boundary needs a specific layer, import that layer directly:
+
+```rust
+use kinetik_ui_render::{RenderFrameInput, RenderResources, RendererBackend};
+use kinetik_ui_vello::VelloRenderer;
+use kinetik_ui_winit::{WinitInputAdapter, frame_context_from_winit};
+```
+
+## Boundary Rules
+
+- `kinetik-ui-core` remains free of winit, Vello, wgpu, OS APIs, and renderer
+  backend types.
+- Custom renderers should depend on `kinetik-ui-render`, not widget crates.
+- Vello-specific code should depend on `kinetik-ui-vello`.
+- winit shells should depend on `kinetik-ui-winit` or enable the facade's
+  `platform-winit` feature.
+- Applications that want the full default stack can use the facade default
+  features.

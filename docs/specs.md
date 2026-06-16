@@ -162,6 +162,12 @@ The UI runtime must not depend directly on Vello, wgpu, winit, or OS APIs.
 
 Renderer backends must not know about component types such as `Button`, `Tabs`, or `PropertyGrid`. They should only consume render primitives and resources.
 
+Application code should normally depend on the `kinetik-ui` facade crate. Custom
+renderers should depend on `kinetik-ui-render`, Vello integrations on
+`kinetik-ui-vello`, and winit shells on `kinetik-ui-winit`. Breaking crate graph
+changes require migration notes; the `ef7c2f9` consolidation is documented in
+[`crate-migration.md`](crate-migration.md).
+
 ## 5. Terminology
 
 Use consistent terms throughout the codebase.
