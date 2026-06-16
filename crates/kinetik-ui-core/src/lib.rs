@@ -34,7 +34,7 @@ pub use debug::{
 pub use geometry::{Point, Rect, Size, Vec2};
 pub use identity::{DuplicateWidgetId, IdStack, WidgetId};
 pub use input::{
-    Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PhysicalKey,
+    ClipboardText, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PhysicalKey,
     PointerButtonState, PointerInput, TextInputEvent, TextRange, UiInput,
 };
 pub use interaction::{

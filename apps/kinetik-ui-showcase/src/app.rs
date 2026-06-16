@@ -305,6 +305,7 @@ impl ShowcaseApp {
                 events,
             },
             text_events,
+            clipboard_text: Vec::new(),
             window_focused: true,
         }
     }

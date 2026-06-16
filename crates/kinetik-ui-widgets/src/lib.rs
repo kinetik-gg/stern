@@ -236,6 +236,87 @@ fn single_line_text_events(events: &[TextInputEvent]) -> Vec<TextInputEvent> {
         .collect()
 }
 
+fn text_events_for_text_field(
+    id: WidgetId,
+    input: &UiInput,
+    multiline: bool,
+) -> Vec<TextInputEvent> {
+    let mut events = if multiline {
+        input.text_events.clone()
+    } else {
+        single_line_text_events(&input.text_events)
+    };
+    events.extend(
+        input
+            .clipboard_text
+            .iter()
+            .filter(|clipboard| clipboard.target == id)
+            .filter_map(|clipboard| clipboard_text_event(&clipboard.text, multiline)),
+    );
+    events
+}
+
+fn clipboard_text_event(text: &str, multiline: bool) -> Option<TextInputEvent> {
+    let text = if multiline {
+        text.replace("\r\n", "\n").replace('\r', "\n")
+    } else {
+        text.replace(['\r', '\n'], "")
+    };
+    (!text.is_empty()).then_some(TextInputEvent::Commit(text))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClipboardShortcut {
+    Copy,
+    Cut,
+    Paste,
+}
+
+fn apply_clipboard_shortcuts(
+    id: WidgetId,
+    state: &mut TextEditState,
+    input: &UiInput,
+    platform_requests: &mut Vec<PlatformRequest>,
+) {
+    for event in &input.keyboard.events {
+        match clipboard_shortcut(event) {
+            Some(ClipboardShortcut::Copy) => {
+                if let Some(selected) = state.selected_text() {
+                    platform_requests.push(PlatformRequest::CopyToClipboard(selected.to_owned()));
+                }
+            }
+            Some(ClipboardShortcut::Cut) => {
+                if let Some(selected) = state.cut_selection() {
+                    platform_requests.push(PlatformRequest::CopyToClipboard(selected));
+                }
+            }
+            Some(ClipboardShortcut::Paste) => {
+                platform_requests.push(PlatformRequest::RequestClipboardText { target: id });
+            }
+            None => {}
+        }
+    }
+}
+
+fn clipboard_shortcut(event: &kinetik_ui_core::KeyEvent) -> Option<ClipboardShortcut> {
+    if event.state != KeyState::Pressed
+        || event.repeat
+        || event.modifiers.alt
+        || !(event.modifiers.ctrl || event.modifiers.super_key)
+    {
+        return None;
+    }
+    let Key::Character(character) = &event.key else {
+        return None;
+    };
+    match character.to_ascii_lowercase().as_str() {
+        "c" => Some(ClipboardShortcut::Copy),
+        "x" => Some(ClipboardShortcut::Cut),
+        "v" => Some(ClipboardShortcut::Paste),
+        _ => None,
+    }
+}
+
 fn display_text_with_composition(
     state: &TextEditState,
 ) -> (String, usize, Option<core::ops::Range<usize>>) {
@@ -1596,12 +1677,11 @@ pub fn text_field_with_text_layouts(
         memory.focus(id);
         response.state.focused = true;
     }
-    let platform_requests = text_input_platform_requests(id, rect, &response, memory);
+    let mut platform_requests = text_input_platform_requests(id, rect, &response, memory);
     if response.state.focused && !disabled {
-        state.apply_input(
-            &single_line_text_events(&input.text_events),
-            &input.keyboard.events,
-        );
+        apply_clipboard_shortcuts(id, state, input, &mut platform_requests);
+        let text_events = text_events_for_text_field(id, input, false);
+        state.apply_input(&text_events, &input.keyboard.events);
     }
     let recipe = theme.text_field(ComponentState {
         hovered: response.state.hovered,
@@ -1710,9 +1790,10 @@ pub fn multi_line_text_field_with_text_layouts(
         memory.focus(id);
         response.state.focused = true;
     }
-    let platform_requests = text_input_platform_requests(id, rect, &response, memory);
+    let mut platform_requests = text_input_platform_requests(id, rect, &response, memory);
     if response.state.focused && !disabled {
-        let mut text_events = input.text_events.clone();
+        apply_clipboard_shortcuts(id, state, input, &mut platform_requests);
+        let mut text_events = text_events_for_text_field(id, input, true);
         if input.keyboard.events.iter().any(|event| {
             event.state == KeyState::Pressed
                 && event.key == Key::Enter
@@ -1890,17 +1971,34 @@ mod tests {
     };
     use crate::{IconGraphic, IconLibrary, IconPath};
     use kinetik_ui_core::{
-        ImageId, Key, KeyEvent, KeyState, Modifiers, PathElement, Point, PointerButtonState,
-        PointerInput, Primitive, Rect, SemanticActionKind, SemanticRole, SemanticValue, UiInput,
-        UiMemory, WidgetId, default_dark_theme,
+        ClipboardText, ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PathElement,
+        PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect,
+        SemanticActionKind, SemanticRole, SemanticValue, UiInput, UiMemory, WidgetId,
+        default_dark_theme,
     };
-    use kinetik_ui_text::{TextEditState, TextLayoutStore};
+    use kinetik_ui_text::{TextEditState, TextLayoutStore, TextSelection};
 
     fn input_at(x: f32, y: f32) -> UiInput {
         UiInput {
             pointer: PointerInput {
                 position: Some(Point::new(x, y)),
                 ..PointerInput::default()
+            },
+            ..UiInput::default()
+        }
+    }
+
+    fn shortcut_input(character: &str) -> UiInput {
+        let modifiers = Modifiers::new(false, true, false, false);
+        UiInput {
+            keyboard: KeyboardInput {
+                modifiers,
+                events: vec![KeyEvent::new(
+                    Key::Character(character.to_owned()),
+                    KeyState::Pressed,
+                    modifiers,
+                    false,
+                )],
             },
             ..UiInput::default()
         }
@@ -2184,6 +2282,122 @@ mod tests {
         );
 
         assert!(output.changed);
+        assert_eq!(state.text, "a");
+    }
+
+    #[test]
+    fn text_field_copies_selected_text_through_platform_request() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("text");
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let mut state = TextEditState::new("abcd");
+        state.set_selection(TextSelection::new(1, 3));
+        let input = shortcut_input("c");
+
+        let output = text_field(
+            id,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(!output.changed);
+        assert_eq!(state.text, "abcd");
+        assert!(output.widget.platform_requests.iter().any(|request| {
+            matches!(request, PlatformRequest::CopyToClipboard(text) if text == "bc")
+        }));
+    }
+
+    #[test]
+    fn text_field_cuts_selected_text_through_platform_request_and_undo() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("text");
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let mut state = TextEditState::new("abcd");
+        state.set_selection(TextSelection::new(1, 3));
+        let input = shortcut_input("x");
+
+        let output = text_field(
+            id,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(output.changed);
+        assert_eq!(state.text, "ad");
+        assert!(output.widget.platform_requests.iter().any(|request| {
+            matches!(request, PlatformRequest::CopyToClipboard(text) if text == "bc")
+        }));
+        assert!(state.undo());
+        assert_eq!(state.text, "abcd");
+    }
+
+    #[test]
+    fn text_field_requests_targeted_clipboard_text_on_paste() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("text");
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let mut state = TextEditState::new("abcd");
+        state.set_caret(2);
+        let input = shortcut_input("v");
+
+        let output = text_field(
+            id,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(!output.changed);
+        assert_eq!(state.text, "abcd");
+        assert!(output.widget.platform_requests.iter().any(|request| {
+            matches!(request, PlatformRequest::RequestClipboardText { target } if *target == id)
+        }));
+    }
+
+    #[test]
+    fn text_field_applies_only_targeted_clipboard_text() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("text");
+        let other = WidgetId::from_key("other");
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let mut state = TextEditState::new("a");
+        state.set_caret(1);
+        let input = UiInput {
+            clipboard_text: vec![
+                ClipboardText::new(other, "wrong"),
+                ClipboardText::new(id, "b\nc"),
+            ],
+            ..UiInput::default()
+        };
+
+        let output = text_field(
+            id,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(output.changed);
+        assert_eq!(state.text, "abc");
+        assert!(state.undo());
         assert_eq!(state.text, "a");
     }
 
