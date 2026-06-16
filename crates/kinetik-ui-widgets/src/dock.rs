@@ -2,7 +2,12 @@
 
 use std::collections::BTreeSet;
 
-use kinetik_ui_core::{Axis, Rect};
+use kinetik_ui_core::{Axis, Point, Rect, Vec2};
+
+const DEFAULT_SPLIT_RATIO: f32 = 0.5;
+const DEFAULT_SPLIT_MINIMUM: f32 = 100.0;
+const DEFAULT_SPLITTER_THICKNESS: f32 = 6.0;
+const DROP_EDGE_FRACTION: f32 = 0.25;
 
 /// Stable panel identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -38,6 +43,172 @@ impl FrameId {
     pub const fn raw(self) -> u64 {
         self.0
     }
+}
+
+/// Address of a split node inside a dock tree.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct DockSplitPath(Vec<DockPathElement>);
+
+impl DockSplitPath {
+    /// Returns the root split path.
+    #[must_use]
+    pub const fn root() -> Self {
+        Self(Vec::new())
+    }
+
+    /// Creates a path from child traversal elements.
+    #[must_use]
+    pub fn new(elements: impl IntoIterator<Item = DockPathElement>) -> Self {
+        Self(elements.into_iter().collect())
+    }
+
+    /// Returns a child path under this split.
+    #[must_use]
+    pub fn child(&self, element: DockPathElement) -> Self {
+        let mut path = self.clone();
+        path.0.push(element);
+        path
+    }
+
+    /// Returns the traversal elements.
+    #[must_use]
+    pub fn elements(&self) -> &[DockPathElement] {
+        &self.0
+    }
+}
+
+/// Traversal element for a [`DockSplitPath`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DockPathElement {
+    /// Descend into the first split child.
+    First,
+    /// Descend into the second split child.
+    Second,
+}
+
+/// Dock placement used when splitting a frame with a dragged tab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DockPlacement {
+    /// Insert a new frame to the left of the target frame.
+    Left,
+    /// Insert a new frame to the right of the target frame.
+    Right,
+    /// Insert a new frame above the target frame.
+    Top,
+    /// Insert a new frame below the target frame.
+    Bottom,
+}
+
+impl DockPlacement {
+    const fn axis(self) -> Axis {
+        match self {
+            Self::Left | Self::Right => Axis::Horizontal,
+            Self::Top | Self::Bottom => Axis::Vertical,
+        }
+    }
+
+    const fn insert_before_target(self) -> bool {
+        matches!(self, Self::Left | Self::Top)
+    }
+}
+
+/// Resolved dock drop zone inside a frame rectangle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DockDropZone {
+    /// Merge the dragged tab into the target frame.
+    Center,
+    /// Split to the target frame's left.
+    Left,
+    /// Split to the target frame's right.
+    Right,
+    /// Split above the target frame.
+    Top,
+    /// Split below the target frame.
+    Bottom,
+}
+
+impl DockDropZone {
+    const fn placement(self) -> Option<DockPlacement> {
+        match self {
+            Self::Center => None,
+            Self::Left => Some(DockPlacement::Left),
+            Self::Right => Some(DockPlacement::Right),
+            Self::Top => Some(DockPlacement::Top),
+            Self::Bottom => Some(DockPlacement::Bottom),
+        }
+    }
+}
+
+/// Tab drag state emitted by frame chrome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DockTabDrag {
+    /// Source frame that owns the dragged tab.
+    pub source_frame: FrameId,
+    /// Dragged panel tab.
+    pub panel: PanelId,
+}
+
+/// Explicit target for dropping a dragged frame tab.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DockDropTarget {
+    /// Merge the panel into an existing frame tab group.
+    Tab {
+        /// Target frame.
+        frame: FrameId,
+    },
+    /// Insert the panel as a new frame split adjacent to an existing frame.
+    Split {
+        /// Existing frame to split around.
+        frame: FrameId,
+        /// Placement of the new frame relative to the target frame.
+        placement: DockPlacement,
+        /// Frame ID for the newly inserted frame.
+        new_frame: FrameId,
+        /// Initial split ratio.
+        ratio: f32,
+        /// Minimum first child size.
+        min_first: f32,
+        /// Minimum second child size.
+        min_second: f32,
+    },
+}
+
+impl DockDropTarget {
+    /// Creates a tab merge target.
+    #[must_use]
+    pub const fn tab(frame: FrameId) -> Self {
+        Self::Tab { frame }
+    }
+
+    /// Creates a split insertion target with editor-friendly defaults.
+    #[must_use]
+    pub const fn split(frame: FrameId, placement: DockPlacement, new_frame: FrameId) -> Self {
+        Self::Split {
+            frame,
+            placement,
+            new_frame,
+            ratio: DEFAULT_SPLIT_RATIO,
+            min_first: DEFAULT_SPLIT_MINIMUM,
+            min_second: DEFAULT_SPLIT_MINIMUM,
+        }
+    }
+}
+
+/// Resolved splitter hit target.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DockSplitter {
+    /// Split path addressed by this splitter.
+    pub path: DockSplitPath,
+    /// Split axis.
+    pub axis: Axis,
+    /// Splitter interaction rectangle.
+    pub rect: Rect,
+    /// Current split ratio.
+    pub ratio: f32,
+    /// Minimum first child size.
+    pub min_first: f32,
+    /// Minimum second child size.
+    pub min_second: f32,
 }
 
 /// Passive panel metadata.
@@ -253,6 +424,94 @@ impl DockArea {
         true
     }
 
+    /// Starts a tab drag when the frame owns the panel.
+    #[must_use]
+    pub fn begin_tab_drag(&self, source_frame: FrameId, panel: PanelId) -> Option<DockTabDrag> {
+        self.frame(source_frame)
+            .filter(|frame| frame.panels.iter().any(|item| item.id == panel))
+            .map(|_| DockTabDrag {
+                source_frame,
+                panel,
+            })
+    }
+
+    /// Applies a dragged tab to an explicit dock target.
+    pub fn drop_tab(&mut self, drag: DockTabDrag, target: DockDropTarget) -> bool {
+        match target {
+            DockDropTarget::Tab { frame } => {
+                if drag.source_frame == frame {
+                    return self.select_panel(frame, drag.panel);
+                }
+                self.move_panel(drag.source_frame, frame, drag.panel)
+            }
+            DockDropTarget::Split {
+                frame,
+                placement,
+                new_frame,
+                ratio,
+                min_first,
+                min_second,
+            } => self.split_panel(
+                drag.source_frame,
+                drag.panel,
+                DockSplitInsertion {
+                    target_frame: frame,
+                    placement,
+                    new_frame,
+                    ratio,
+                    min_first,
+                    min_second,
+                },
+            ),
+        }
+    }
+
+    /// Inserts one panel as a new frame split adjacent to an existing frame.
+    pub fn split_panel(
+        &mut self,
+        source_frame: FrameId,
+        panel: PanelId,
+        insertion: DockSplitInsertion,
+    ) -> bool {
+        if self.frame(insertion.target_frame).is_none()
+            || self.frame(insertion.new_frame).is_some()
+            || !insertion.ratio.is_finite()
+            || !(0.0..=1.0).contains(&insertion.ratio)
+            || !insertion.min_first.is_finite()
+            || insertion.min_first < 0.0
+            || !insertion.min_second.is_finite()
+            || insertion.min_second < 0.0
+        {
+            return false;
+        }
+
+        if source_frame == insertion.target_frame
+            && self
+                .frame(source_frame)
+                .is_none_or(|frame| frame.panels.len() <= 1)
+        {
+            return false;
+        }
+
+        let Some((panel, dismissible)) = self
+            .frame_mut(source_frame)
+            .and_then(|frame| frame.remove_panel_with_policy(panel))
+        else {
+            return false;
+        };
+
+        let mut inserted = Frame::new(insertion.new_frame, vec![panel]);
+        inserted.set_panel_dismissible(inserted.panels[0].id, dismissible);
+        prune_empty_frames(&mut self.root);
+
+        insert_frame_split(&mut self.root, insertion, inserted)
+    }
+
+    /// Resizes a split addressed by path using a drag delta in logical units.
+    pub fn resize_split(&mut self, path: &DockSplitPath, bounds: Rect, delta: Vec2) -> bool {
+        resize_split_at_path(&mut self.root, path.elements(), bounds, delta)
+    }
+
     /// Creates a snapshot for persistence.
     #[must_use]
     pub fn snapshot(&self) -> DockSnapshot {
@@ -273,6 +532,38 @@ impl DockArea {
         Ok(Self {
             root: restore_node(snapshot.root),
         })
+    }
+}
+
+/// Request for splitting a dragged panel into a new frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DockSplitInsertion {
+    /// Existing frame to split around.
+    pub target_frame: FrameId,
+    /// Placement of the new frame relative to the target frame.
+    pub placement: DockPlacement,
+    /// Frame ID for the newly inserted frame.
+    pub new_frame: FrameId,
+    /// Initial split ratio.
+    pub ratio: f32,
+    /// Minimum first child size.
+    pub min_first: f32,
+    /// Minimum second child size.
+    pub min_second: f32,
+}
+
+impl DockSplitInsertion {
+    /// Creates a split insertion request with editor-friendly defaults.
+    #[must_use]
+    pub const fn new(target_frame: FrameId, placement: DockPlacement, new_frame: FrameId) -> Self {
+        Self {
+            target_frame,
+            placement,
+            new_frame,
+            ratio: DEFAULT_SPLIT_RATIO,
+            min_first: DEFAULT_SPLIT_MINIMUM,
+            min_second: DEFAULT_SPLIT_MINIMUM,
+        }
     }
 }
 
@@ -328,6 +619,65 @@ fn prune_empty_frames(node: &mut DockNode) -> bool {
     }
 }
 
+fn insert_frame_split(node: &mut DockNode, insertion: DockSplitInsertion, inserted: Frame) -> bool {
+    match node {
+        DockNode::Frame(frame) if frame.id == insertion.target_frame => {
+            let target = DockNode::Frame(frame.clone());
+            let inserted = DockNode::Frame(inserted);
+            let (first, second) = if insertion.placement.insert_before_target() {
+                (inserted, target)
+            } else {
+                (target, inserted)
+            };
+            *node = DockNode::Split {
+                axis: insertion.placement.axis(),
+                ratio: insertion.ratio,
+                min_first: insertion.min_first,
+                min_second: insertion.min_second,
+                first: Box::new(first),
+                second: Box::new(second),
+            };
+            true
+        }
+        DockNode::Frame(_) => false,
+        DockNode::Split { first, second, .. } => {
+            insert_frame_split(first, insertion, inserted.clone())
+                || insert_frame_split(second, insertion, inserted)
+        }
+    }
+}
+
+fn resize_split_at_path(
+    node: &mut DockNode,
+    path: &[DockPathElement],
+    bounds: Rect,
+    delta: Vec2,
+) -> bool {
+    let DockNode::Split {
+        axis,
+        ratio,
+        min_first,
+        min_second,
+        first,
+        second,
+    } = node
+    else {
+        return false;
+    };
+
+    if path.is_empty() {
+        *ratio = split_ratio_from_drag(*axis, bounds, *ratio, *min_first, *min_second, delta);
+        return true;
+    }
+
+    let (first_rect, second_rect) =
+        split_child_rects(*axis, bounds, *ratio, *min_first, *min_second);
+    match path[0] {
+        DockPathElement::First => resize_split_at_path(first, &path[1..], first_rect, delta),
+        DockPathElement::Second => resize_split_at_path(second, &path[1..], second_rect, delta),
+    }
+}
+
 /// Resolved frame rectangle.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FrameLayout {
@@ -345,6 +695,65 @@ pub fn solve_dock_layout(area: &DockArea, bounds: Rect) -> Vec<FrameLayout> {
     frames
 }
 
+/// Resolves splitter interaction rectangles for a dock tree.
+#[must_use]
+pub fn solve_dock_splitters(area: &DockArea, bounds: Rect, thickness: f32) -> Vec<DockSplitter> {
+    let mut splitters = Vec::new();
+    solve_splitters(
+        &area.root,
+        bounds,
+        splitter_thickness(thickness),
+        &DockSplitPath::root(),
+        &mut splitters,
+    );
+    splitters
+}
+
+fn solve_splitters(
+    node: &DockNode,
+    bounds: Rect,
+    thickness: f32,
+    path: &DockSplitPath,
+    splitters: &mut Vec<DockSplitter>,
+) {
+    let DockNode::Split {
+        axis,
+        ratio,
+        min_first,
+        min_second,
+        first,
+        second,
+    } = node
+    else {
+        return;
+    };
+
+    let (first_rect, second_rect) =
+        split_child_rects(*axis, bounds, *ratio, *min_first, *min_second);
+    splitters.push(DockSplitter {
+        path: path.clone(),
+        axis: *axis,
+        rect: splitter_rect(*axis, first_rect, bounds, thickness),
+        ratio: finite_ratio(*ratio),
+        min_first: finite_non_negative(*min_first),
+        min_second: finite_non_negative(*min_second),
+    });
+    solve_splitters(
+        first,
+        first_rect,
+        thickness,
+        &path.child(DockPathElement::First),
+        splitters,
+    );
+    solve_splitters(
+        second,
+        second_rect,
+        thickness,
+        &path.child(DockPathElement::Second),
+        splitters,
+    );
+}
+
 fn solve_node(node: &DockNode, bounds: Rect, frames: &mut Vec<FrameLayout>) {
     match node {
         DockNode::Frame(frame) => frames.push(FrameLayout {
@@ -359,34 +768,142 @@ fn solve_node(node: &DockNode, bounds: Rect, frames: &mut Vec<FrameLayout>) {
             first,
             second,
         } => {
-            let total = match axis {
-                Axis::Horizontal => bounds.width,
-                Axis::Vertical => bounds.height,
-            };
-            let total = finite_non_negative(total);
-            let min_first = finite_non_negative(*min_first);
-            let min_second = finite_non_negative(*min_second);
-            let desired = total * finite_ratio(*ratio);
-            let first_size = if total >= min_first + min_second {
-                desired.clamp(min_first, total - min_second)
-            } else {
-                desired.max(min_first.min(total)).min(total)
-            };
-            let second_size = (total - first_size).max(0.0);
-            let (first_rect, second_rect) = match axis {
-                Axis::Horizontal => (
-                    Rect::new(bounds.x, bounds.y, first_size, bounds.height),
-                    Rect::new(bounds.x + first_size, bounds.y, second_size, bounds.height),
-                ),
-                Axis::Vertical => (
-                    Rect::new(bounds.x, bounds.y, bounds.width, first_size),
-                    Rect::new(bounds.x, bounds.y + first_size, bounds.width, second_size),
-                ),
-            };
+            let (first_rect, second_rect) =
+                split_child_rects(*axis, bounds, *ratio, *min_first, *min_second);
             solve_node(first, first_rect, frames);
             solve_node(second, second_rect, frames);
         }
     }
+}
+
+fn split_child_rects(
+    axis: Axis,
+    bounds: Rect,
+    ratio: f32,
+    min_first: f32,
+    min_second: f32,
+) -> (Rect, Rect) {
+    let total = split_total(axis, bounds);
+    let first_size = split_first_size(total, ratio, min_first, min_second);
+    let second_size = (total - first_size).max(0.0);
+    match axis {
+        Axis::Horizontal => (
+            Rect::new(bounds.x, bounds.y, first_size, bounds.height),
+            Rect::new(bounds.x + first_size, bounds.y, second_size, bounds.height),
+        ),
+        Axis::Vertical => (
+            Rect::new(bounds.x, bounds.y, bounds.width, first_size),
+            Rect::new(bounds.x, bounds.y + first_size, bounds.width, second_size),
+        ),
+    }
+}
+
+fn split_total(axis: Axis, bounds: Rect) -> f32 {
+    match axis {
+        Axis::Horizontal => finite_non_negative(bounds.width),
+        Axis::Vertical => finite_non_negative(bounds.height),
+    }
+}
+
+fn split_first_size(total: f32, ratio: f32, min_first: f32, min_second: f32) -> f32 {
+    let total = finite_non_negative(total);
+    let min_first = finite_non_negative(min_first);
+    let min_second = finite_non_negative(min_second);
+    let desired = total * finite_ratio(ratio);
+    if total >= min_first + min_second {
+        desired.clamp(min_first, total - min_second)
+    } else {
+        desired.max(min_first.min(total)).min(total)
+    }
+}
+
+fn splitter_rect(axis: Axis, first_rect: Rect, bounds: Rect, thickness: f32) -> Rect {
+    let half = thickness * 0.5;
+    match axis {
+        Axis::Horizontal => Rect::new(
+            first_rect.max_x() - half,
+            bounds.y,
+            thickness,
+            bounds.height,
+        ),
+        Axis::Vertical => Rect::new(bounds.x, first_rect.max_y() - half, bounds.width, thickness),
+    }
+}
+
+fn splitter_thickness(thickness: f32) -> f32 {
+    if thickness.is_finite() && thickness > 0.0 {
+        thickness
+    } else {
+        DEFAULT_SPLITTER_THICKNESS
+    }
+}
+
+/// Maps a splitter drag delta to a clamped split ratio.
+#[must_use]
+pub fn split_ratio_from_drag(
+    axis: Axis,
+    bounds: Rect,
+    ratio: f32,
+    min_first: f32,
+    min_second: f32,
+    delta: Vec2,
+) -> f32 {
+    let total = split_total(axis, bounds);
+    if total <= 0.0 {
+        return finite_ratio(ratio);
+    }
+    let delta = match axis {
+        Axis::Horizontal => delta.x,
+        Axis::Vertical => delta.y,
+    };
+    let current = split_first_size(total, ratio, min_first, min_second);
+    let desired = current + if delta.is_finite() { delta } else { 0.0 };
+    split_first_size(total, desired / total, min_first, min_second) / total
+}
+
+/// Resolves a frame-local drop zone for a pointer position.
+#[must_use]
+pub fn resolve_frame_drop_zone(rect: Rect, point: Point) -> Option<DockDropZone> {
+    if !rect.contains_point(point) {
+        return None;
+    }
+
+    let left = (point.x - rect.min_x()).max(0.0);
+    let right = (rect.max_x() - point.x).max(0.0);
+    let top = (point.y - rect.min_y()).max(0.0);
+    let bottom = (rect.max_y() - point.y).max(0.0);
+    let edge_x = finite_non_negative(rect.width) * DROP_EDGE_FRACTION;
+    let edge_y = finite_non_negative(rect.height) * DROP_EDGE_FRACTION;
+
+    let mut best = (DockDropZone::Center, f32::INFINITY);
+    for (zone, distance, limit) in [
+        (DockDropZone::Left, left, edge_x),
+        (DockDropZone::Right, right, edge_x),
+        (DockDropZone::Top, top, edge_y),
+        (DockDropZone::Bottom, bottom, edge_y),
+    ] {
+        if distance <= limit && distance < best.1 {
+            best = (zone, distance);
+        }
+    }
+
+    Some(best.0)
+}
+
+/// Resolves a dock drop target from frame layout and a pointer position.
+#[must_use]
+pub fn resolve_dock_drop_target(
+    frames: &[FrameLayout],
+    point: Point,
+    new_frame: FrameId,
+) -> Option<DockDropTarget> {
+    frames.iter().find_map(|layout| {
+        let zone = resolve_frame_drop_zone(layout.rect, point)?;
+        Some(match zone.placement() {
+            Some(placement) => DockDropTarget::split(layout.frame, placement, new_frame),
+            None => DockDropTarget::tab(layout.frame),
+        })
+    })
 }
 
 fn finite_ratio(value: f32) -> f32 {
@@ -625,10 +1142,12 @@ fn validate_snapshot_node(
 #[cfg(test)]
 mod tests {
     use super::{
-        DockArea, DockNode, DockRestoreError, DockSnapshot, DockSnapshotNode, Frame, FrameId,
-        Panel, PanelId, frame_tabs, solve_dock_layout,
+        DockArea, DockDropTarget, DockDropZone, DockNode, DockPathElement, DockPlacement,
+        DockRestoreError, DockSnapshot, DockSnapshotNode, DockSplitInsertion, DockSplitPath, Frame,
+        FrameId, Panel, PanelId, frame_tabs, resolve_dock_drop_target, resolve_frame_drop_zone,
+        solve_dock_layout, solve_dock_splitters, split_ratio_from_drag,
     };
-    use kinetik_ui_core::{Axis, Rect};
+    use kinetik_ui_core::{Axis, Point, Rect, Vec2};
 
     fn panel(id: u64, title: &str) -> Panel {
         Panel::new(PanelId::from_raw(id), title)
@@ -855,6 +1374,102 @@ mod tests {
     }
 
     #[test]
+    fn splitter_drag_maps_delta_to_clamped_ratio() {
+        let bounds = Rect::new(0.0, 0.0, 500.0, 200.0);
+
+        let ratio = split_ratio_from_drag(
+            Axis::Horizontal,
+            bounds,
+            0.5,
+            100.0,
+            100.0,
+            Vec2::new(75.0, 0.0),
+        );
+        assert!((ratio - 0.65).abs() < f32::EPSILON);
+
+        let clamped = split_ratio_from_drag(
+            Axis::Horizontal,
+            bounds,
+            0.5,
+            100.0,
+            100.0,
+            Vec2::new(-500.0, 0.0),
+        );
+        assert!((clamped - 0.2).abs() < f32::EPSILON);
+
+        let vertical = split_ratio_from_drag(
+            Axis::Vertical,
+            bounds,
+            0.5,
+            50.0,
+            50.0,
+            Vec2::new(1000.0, 25.0),
+        );
+        assert!((vertical - 0.625).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn dock_area_resizes_root_and_nested_splits() {
+        let mut area = DockArea::new(DockNode::Split {
+            axis: Axis::Horizontal,
+            ratio: 0.5,
+            min_first: 100.0,
+            min_second: 100.0,
+            first: Box::new(DockNode::Frame(frame(1, vec![panel(1, "A")]))),
+            second: Box::new(DockNode::Split {
+                axis: Axis::Vertical,
+                ratio: 0.5,
+                min_first: 50.0,
+                min_second: 50.0,
+                first: Box::new(DockNode::Frame(frame(2, vec![panel(2, "B")]))),
+                second: Box::new(DockNode::Frame(frame(3, vec![panel(3, "C")]))),
+            }),
+        });
+        let bounds = Rect::new(0.0, 0.0, 600.0, 400.0);
+
+        assert!(area.resize_split(&DockSplitPath::root(), bounds, Vec2::new(60.0, 0.0)));
+        assert!(area.resize_split(
+            &DockSplitPath::new([DockPathElement::Second]),
+            bounds,
+            Vec2::new(0.0, -75.0)
+        ));
+        let layout = solve_dock_layout(&area, bounds);
+
+        assert!((layout[0].rect.width - 360.0).abs() < f32::EPSILON);
+        assert!((layout[1].rect.height - 125.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn dock_splitters_expose_paths_and_hit_rects() {
+        let area = DockArea::new(DockNode::Split {
+            axis: Axis::Horizontal,
+            ratio: 0.5,
+            min_first: 100.0,
+            min_second: 100.0,
+            first: Box::new(DockNode::Frame(frame(1, vec![panel(1, "A")]))),
+            second: Box::new(DockNode::Split {
+                axis: Axis::Vertical,
+                ratio: 0.25,
+                min_first: 50.0,
+                min_second: 50.0,
+                first: Box::new(DockNode::Frame(frame(2, vec![panel(2, "B")]))),
+                second: Box::new(DockNode::Frame(frame(3, vec![panel(3, "C")]))),
+            }),
+        });
+
+        let splitters = solve_dock_splitters(&area, Rect::new(0.0, 0.0, 600.0, 400.0), 8.0);
+
+        assert_eq!(splitters.len(), 2);
+        assert_eq!(splitters[0].path, DockSplitPath::root());
+        assert_eq!(splitters[0].rect, Rect::new(296.0, 0.0, 8.0, 400.0));
+        assert_eq!(
+            splitters[1].path,
+            DockSplitPath::new([DockPathElement::Second])
+        );
+        assert_eq!(splitters[1].axis, Axis::Vertical);
+    }
+
+    #[test]
     fn frame_tabs_expose_presentation_state() {
         let mut frame = frame(1, vec![panel(1, "A"), panel(2, "B")]);
         frame.select_panel(PanelId::from_raw(2));
@@ -867,6 +1482,169 @@ mod tests {
         assert!(tabs[1].active);
         assert!(tabs[1].close_visible);
         assert!(tabs[1].draggable);
+    }
+
+    #[test]
+    fn tab_drag_starts_only_for_panels_owned_by_the_frame() {
+        let area = dock_area();
+
+        assert_eq!(
+            area.begin_tab_drag(FrameId::from_raw(2), PanelId::from_raw(3)),
+            Some(super::DockTabDrag {
+                source_frame: FrameId::from_raw(2),
+                panel: PanelId::from_raw(3),
+            })
+        );
+        assert_eq!(
+            area.begin_tab_drag(FrameId::from_raw(1), PanelId::from_raw(3)),
+            None
+        );
+    }
+
+    #[test]
+    fn drop_zone_resolution_prefers_edges_over_center() {
+        let rect = Rect::new(10.0, 20.0, 200.0, 100.0);
+
+        assert_eq!(
+            resolve_frame_drop_zone(rect, Point::new(12.0, 70.0)),
+            Some(DockDropZone::Left)
+        );
+        assert_eq!(
+            resolve_frame_drop_zone(rect, Point::new(205.0, 70.0)),
+            Some(DockDropZone::Right)
+        );
+        assert_eq!(
+            resolve_frame_drop_zone(rect, Point::new(100.0, 23.0)),
+            Some(DockDropZone::Top)
+        );
+        assert_eq!(
+            resolve_frame_drop_zone(rect, Point::new(100.0, 116.0)),
+            Some(DockDropZone::Bottom)
+        );
+        assert_eq!(
+            resolve_frame_drop_zone(rect, Point::new(100.0, 70.0)),
+            Some(DockDropZone::Center)
+        );
+        assert_eq!(resolve_frame_drop_zone(rect, Point::new(0.0, 0.0)), None);
+    }
+
+    #[test]
+    fn dock_drop_target_resolution_returns_merge_or_split_targets() {
+        let area = dock_area();
+        let layout = solve_dock_layout(&area, Rect::new(0.0, 0.0, 1000.0, 500.0));
+        let new_frame = FrameId::from_raw(9);
+
+        assert_eq!(
+            resolve_dock_drop_target(&layout, Point::new(500.0, 250.0), new_frame),
+            Some(DockDropTarget::tab(FrameId::from_raw(2)))
+        );
+        assert_eq!(
+            resolve_dock_drop_target(&layout, Point::new(995.0, 250.0), new_frame),
+            Some(DockDropTarget::split(
+                FrameId::from_raw(2),
+                DockPlacement::Right,
+                new_frame
+            ))
+        );
+    }
+
+    #[test]
+    fn dropping_tab_on_frame_merges_and_selects_panel() {
+        let mut area = dock_area();
+        let drag = area
+            .begin_tab_drag(FrameId::from_raw(2), PanelId::from_raw(3))
+            .expect("drag");
+
+        assert!(area.drop_tab(drag, DockDropTarget::tab(FrameId::from_raw(1))));
+
+        let target = area.frame(FrameId::from_raw(1)).expect("target");
+        assert_eq!(target.panels.len(), 2);
+        assert_eq!(
+            target.active_panel().expect("active").id,
+            PanelId::from_raw(3)
+        );
+        assert_eq!(
+            area.frame(FrameId::from_raw(2))
+                .expect("source")
+                .panels
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn dropping_tab_on_split_edge_inserts_new_frame_and_round_trips() {
+        let mut area = dock_area();
+        let drag = area
+            .begin_tab_drag(FrameId::from_raw(2), PanelId::from_raw(3))
+            .expect("drag");
+        let insertion = DockSplitInsertion {
+            target_frame: FrameId::from_raw(1),
+            placement: DockPlacement::Left,
+            new_frame: FrameId::from_raw(9),
+            ratio: 0.3,
+            min_first: 80.0,
+            min_second: 120.0,
+        };
+
+        assert!(area.drop_tab(
+            drag,
+            DockDropTarget::Split {
+                frame: insertion.target_frame,
+                placement: insertion.placement,
+                new_frame: insertion.new_frame,
+                ratio: insertion.ratio,
+                min_first: insertion.min_first,
+                min_second: insertion.min_second,
+            }
+        ));
+
+        let frames = area.frames();
+        assert_eq!(frames.len(), 3);
+        assert_eq!(
+            area.frame(FrameId::from_raw(9))
+                .expect("inserted")
+                .active_panel()
+                .expect("panel")
+                .id,
+            PanelId::from_raw(3)
+        );
+        let restored = DockArea::restore(area.snapshot()).expect("restore");
+        assert_eq!(restored.frames().len(), 3);
+        assert_eq!(
+            restored
+                .frame(FrameId::from_raw(9))
+                .expect("inserted")
+                .active_panel()
+                .expect("panel")
+                .id,
+            PanelId::from_raw(3)
+        );
+    }
+
+    #[test]
+    fn invalid_split_drop_does_not_remove_panel() {
+        let mut area = dock_area();
+        let drag = area
+            .begin_tab_drag(FrameId::from_raw(2), PanelId::from_raw(3))
+            .expect("drag");
+
+        assert!(!area.drop_tab(
+            drag,
+            DockDropTarget::split(
+                FrameId::from_raw(99),
+                DockPlacement::Left,
+                FrameId::from_raw(9)
+            )
+        ));
+
+        assert!(
+            area.frame(FrameId::from_raw(2))
+                .expect("source")
+                .panels
+                .iter()
+                .any(|panel| panel.id == PanelId::from_raw(3))
+        );
     }
 
     #[test]

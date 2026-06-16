@@ -97,6 +97,7 @@ kinetik-ui-showcase
 
 - [Architecture specification](docs/specs.md)
 - [Accessibility adapter boundary](docs/accessibility-adapters.md)
+- [Docking interactions](docs/docking-interactions.md)
 - [Renderer snapshot strategy](docs/render-snapshots.md)
 - [Release policy](docs/release.md)
 - [Agent workflow](AGENTS.md)
