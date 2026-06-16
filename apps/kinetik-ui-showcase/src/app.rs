@@ -5,7 +5,7 @@
     clippy::cast_sign_loss
 )]
 
-use kinetik_ui_core::{
+use kinetik_ui::core::{
     ActionContext, ActionDescriptor, ActionQueue, ActionSource, Axis, Brush, ClipId, Color,
     CornerRadius, ImageId, Key, KeyEvent, KeyState, LayoutItem, LinePrimitive, LinearGradient,
     Measurement, Modifiers, PathElement, Point, PointerButtonState, PointerInput, Primitive, Rect,
@@ -13,13 +13,13 @@ use kinetik_ui_core::{
     TextureId, TexturePrimitive, Transform, UiInput, UiMemory, Vec2, column_layout,
     default_dark_theme, inspect_primitives, row_layout,
 };
-use kinetik_ui_text::TextEditState;
-use kinetik_ui_widgets::{
-    CommandPalette, Crosshair, DockArea, DockNode, Frame, FrameId, GridColumns, GridLayout, Guide,
-    IconId, ItemId, ListLayout, Menu, OverlayDismissal, OverlayEntry, OverlayId, OverlayKind,
-    OverlayStack, PanZoom, Panel, PanelId, PopoverPlacement, PopoverRequest, TableColumn,
-    TableLayout, Ui, ViewportComposition, ViewportSurface, frame_tabs, place_popover,
-    solve_dock_layout,
+use kinetik_ui::text::TextEditState;
+use kinetik_ui::widgets::{
+    CommandPalette, Crosshair, DockArea, DockDropTarget, DockNode, DockPlacement, Frame, FrameId,
+    GridColumns, GridLayout, Guide, IconId, ItemId, ListLayout, Menu, OverlayDismissal,
+    OverlayEntry, OverlayId, OverlayKind, OverlayStack, PanZoom, Panel, PanelId, PopoverPlacement,
+    PopoverRequest, TableColumn, TableLayout, Ui, ViewportComposition, ViewportSurface, frame_tabs,
+    place_popover, solve_dock_layout, solve_dock_splitters,
 };
 
 const BASE_WIDTH: f32 = 1440.0;
@@ -38,6 +38,13 @@ pub enum ShowcasePage {
     Viewport,
     /// Actions, overlays, diagnostics, and stress.
     Systems,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum DockSplitDemoState {
+    #[default]
+    Base,
+    Inserted,
 }
 
 impl ShowcasePage {
@@ -83,6 +90,8 @@ pub struct ShowcaseApp {
     toggle: bool,
     radio: usize,
     strength: f32,
+    dock_ratio: f32,
+    dock_split_demo: DockSplitDemoState,
     zoom: f32,
     stress: usize,
     name: TextEditState,
@@ -108,6 +117,8 @@ impl Default for ShowcaseApp {
             toggle: false,
             radio: 0,
             strength: 0.62,
+            dock_ratio: 0.42,
+            dock_split_demo: DockSplitDemoState::Base,
             zoom: 0.48,
             stress: 128,
             name: TextEditState::new("Workspace"),
@@ -247,7 +258,7 @@ impl ShowcaseApp {
             self.chrome(&mut ui);
             match self.page {
                 ShowcasePage::Components => self.components_page(&mut ui),
-                ShowcasePage::Layout => Self::layout_page(&mut ui),
+                ShowcasePage::Layout => self.layout_page(&mut ui),
                 ShowcasePage::Viewport => self.viewport_page(&mut ui),
                 ShowcasePage::Systems => self.systems_page(&mut ui),
             }
@@ -300,7 +311,7 @@ impl ShowcaseApp {
                 primary: PointerButtonState::new(input.mouse_down, pressed, released),
                 ..PointerInput::default()
             },
-            keyboard: kinetik_ui_core::KeyboardInput {
+            keyboard: kinetik_ui::core::KeyboardInput {
                 modifiers: Modifiers::default(),
                 events,
             },
@@ -337,7 +348,19 @@ impl ShowcaseApp {
         rect(
             ui,
             Rect::new(0.0, 0.0, BASE_WIDTH, BASE_HEIGHT),
-            rgb(12, 12, 13),
+            rgb(11, 12, 13),
+            None,
+        );
+        rect(
+            ui,
+            Rect::new(0.0, 52.0, BASE_WIDTH, 1.0),
+            rgb(65, 72, 84),
+            None,
+        );
+        rect(
+            ui,
+            Rect::new(0.0, 760.0, BASE_WIDTH, 140.0),
+            rgb(13, 16, 17),
             None,
         );
     }
@@ -346,18 +369,34 @@ impl ShowcaseApp {
         rect(
             ui,
             Rect::new(0.0, 0.0, BASE_WIDTH, 52.0),
-            rgb(20, 20, 22),
-            Some(rgb(58, 58, 62)),
+            rgb(19, 21, 23),
+            Some(rgb(58, 64, 72)),
         );
+        rect(ui, Rect::new(0.0, 0.0, 6.0, 52.0), rgb(82, 150, 132), None);
         text(
             ui,
             20.0,
-            32.0,
+            24.0,
             "Kinetik UI Showcase",
-            14.0,
+            15.0,
             rgb(238, 238, 238),
         );
-        text(ui, 1080.0, 32.0, &self.status, 11.0, rgb(160, 160, 164));
+        text(ui, 20.0, 40.0, "Workbench", 10.0, rgb(150, 160, 164));
+        Self::status_badge(
+            ui,
+            Rect::new(1006.0, 12.0, 128.0, 28.0),
+            "Primitives",
+            &self.primitives.len().to_string(),
+            rgb(82, 150, 132),
+        );
+        Self::status_badge(
+            ui,
+            Rect::new(1146.0, 12.0, 108.0, 28.0),
+            "Actions",
+            &self.action_count.to_string(),
+            rgb(144, 184, 255),
+        );
+        text(ui, 1270.0, 31.0, &self.status, 10.0, rgb(178, 182, 188));
 
         for (page, item) in nav_items() {
             let response = ui.tab_button(
@@ -372,6 +411,32 @@ impl ShowcaseApp {
                 self.status = format!("Page: {}", page.label());
             }
         }
+    }
+
+    fn status_badge(ui: &mut Ui<'_>, rect_value: Rect, label: &str, value: &str, accent: Color) {
+        rect(ui, rect_value, rgb(26, 28, 31), Some(rgb(62, 68, 76)));
+        rect(
+            ui,
+            Rect::new(rect_value.x, rect_value.y, 3.0, rect_value.height),
+            accent,
+            None,
+        );
+        text(
+            ui,
+            rect_value.x + 10.0,
+            rect_value.y + 11.0,
+            label,
+            8.0,
+            rgb(142, 148, 156),
+        );
+        text(
+            ui,
+            rect_value.x + 76.0,
+            rect_value.y + 19.0,
+            value,
+            11.0,
+            rgb(232, 234, 238),
+        );
     }
 
     fn components_page(&mut self, ui: &mut Ui<'_>) {
@@ -472,7 +537,7 @@ impl ShowcaseApp {
         );
         ui.label(Rect::new(404.0, 202.0, 90.0, 20.0), "Icon button");
         ui.image(Rect::new(512.0, 190.0, 54.0, 42.0), ImageId::from_raw(7));
-        ui.label(Rect::new(512.0, 246.0, 120.0, 20.0), "Image primitive");
+        ui.label(Rect::new(512.0, 246.0, 120.0, 20.0), "Thumbnail");
 
         Self::state_strip(
             ui,
@@ -538,14 +603,7 @@ impl ShowcaseApp {
             self.status = format!("Notes: {} lines", self.notes.text.lines().count());
         }
 
-        text(
-            ui,
-            1092.0,
-            306.0,
-            "Local undo state",
-            10.0,
-            rgb(160, 160, 164),
-        );
+        text(ui, 1092.0, 306.0, "Undo stack", 10.0, rgb(160, 160, 164));
     }
 
     fn collection_preview(&mut self, ui: &mut Ui<'_>) {
@@ -612,9 +670,9 @@ impl ShowcaseApp {
         }
 
         let body = match self.selected_tab {
-            0 => "Theme tokens drive controls, panels, borders, text, and selection colors.",
-            1 => "Every visible control mutates showcase state through widget responses.",
-            _ => "Actions should resolve from buttons, shortcuts, menus, and palettes.",
+            0 => "Palette: graphite, cyan, steel, signal blue.",
+            1 => "State: focus, hover, active, selected, disabled.",
+            _ => "Actions: toolbar, menu, palette, shortcut.",
         };
         rect(
             ui,
@@ -653,7 +711,7 @@ impl ShowcaseApp {
             2.0,
         );
         ui.image(Rect::new(360.0, 618.0, 96.0, 72.0), ImageId::from_raw(11));
-        text(ui, 500.0, 660.0, "Text primitive", 13.0, rgb(238, 238, 238));
+        text(ui, 500.0, 660.0, "Label", 13.0, rgb(238, 238, 238));
         rect(
             ui,
             Rect::new(700.0, 618.0, 140.0, 72.0),
@@ -675,10 +733,10 @@ impl ShowcaseApp {
         );
     }
 
-    fn layout_page(ui: &mut Ui<'_>) {
+    fn layout_page(&mut self, ui: &mut Ui<'_>) {
         section_title(ui, 40.0, 86.0, "Layout, Docking, and Data Surfaces");
         Self::layout_solver_preview(ui);
-        Self::dock_preview(ui);
+        self.dock_preview(ui);
         Self::table_preview(ui);
     }
 
@@ -752,15 +810,21 @@ impl ShowcaseApp {
         }
     }
 
-    fn dock_preview(ui: &mut Ui<'_>) {
+    fn dock_preview(&mut self, ui: &mut Ui<'_>) {
         panel_title(
             ui,
             Rect::new(640.0, 104.0, 560.0, 250.0),
-            "DockArea -> Frames -> Panels",
+            "Interactive Dock Model",
         );
-        let area = DockArea::new(DockNode::Split {
+        let area = self.dock_area_preview();
+        self.dock_preview_controls(ui);
+        Self::draw_dock_preview(ui, &area);
+    }
+
+    fn dock_area_preview(&self) -> DockArea {
+        let mut area = DockArea::new(DockNode::Split {
             axis: Axis::Horizontal,
-            ratio: 0.42,
+            ratio: self.dock_ratio,
             min_first: 140.0,
             min_second: 220.0,
             first: Box::new(DockNode::Frame(Frame::new(
@@ -788,7 +852,70 @@ impl ShowcaseApp {
                 ))),
             }),
         });
-        for frame in solve_dock_layout(&area, Rect::new(660.0, 150.0, 500.0, 180.0)) {
+
+        if self.dock_split_demo == DockSplitDemoState::Inserted {
+            let drag = area
+                .begin_tab_drag(FrameId::from_raw(2), PanelId::from_raw(3))
+                .expect("demo panel exists");
+            area.drop_tab(
+                drag,
+                DockDropTarget::split(
+                    FrameId::from_raw(1),
+                    DockPlacement::Bottom,
+                    FrameId::from_raw(9),
+                ),
+            );
+        }
+
+        area
+    }
+
+    fn dock_preview_controls(&mut self, ui: &mut Ui<'_>) {
+        let before = self.dock_ratio;
+        ui.slider(
+            "layout.dock-ratio",
+            Rect::new(876.0, 128.0, 170.0, 14.0),
+            &mut self.dock_ratio,
+            0.25..=0.75,
+            false,
+        );
+        if (before - self.dock_ratio).abs() > f32::EPSILON {
+            self.status = format!("Dock split: {:.0}%", self.dock_ratio * 100.0);
+        }
+        text(
+            ui,
+            1060.0,
+            138.0,
+            &format!("{:.0}%", self.dock_ratio * 100.0),
+            10.0,
+            rgb(190, 190, 194),
+        );
+
+        let split = ui.button(
+            "layout.split-demo",
+            Rect::new(672.0, 120.0, 132.0, 28.0),
+            if self.dock_split_demo == DockSplitDemoState::Inserted {
+                "Reset Dock"
+            } else {
+                "Split Tab"
+            },
+            false,
+        );
+        if split.clicked {
+            self.dock_split_demo = match self.dock_split_demo {
+                DockSplitDemoState::Base => DockSplitDemoState::Inserted,
+                DockSplitDemoState::Inserted => DockSplitDemoState::Base,
+            };
+            self.status = match self.dock_split_demo {
+                DockSplitDemoState::Base => "Dock split reset".to_owned(),
+                DockSplitDemoState::Inserted => "Dock tab split inserted".to_owned(),
+            };
+        }
+    }
+
+    fn draw_dock_preview(ui: &mut Ui<'_>, area: &DockArea) {
+        let dock_bounds = Rect::new(660.0, 158.0, 500.0, 170.0);
+        for frame in solve_dock_layout(area, dock_bounds) {
             rect(ui, frame.rect, rgb(22, 22, 25), Some(rgb(70, 70, 76)));
             text(
                 ui,
@@ -799,10 +926,18 @@ impl ShowcaseApp {
                 rgb(180, 180, 184),
             );
         }
+        for splitter in solve_dock_splitters(area, dock_bounds, 6.0) {
+            rect(
+                ui,
+                splitter.rect,
+                rgb(82, 94, 118),
+                Some(rgb(116, 132, 160)),
+            );
+        }
         for frame in area.frames() {
             let tabs = frame_tabs(frame);
             let mut x = 672.0;
-            let y = 302.0 + frame.id.raw() as f32 * 0.0;
+            let y = 306.0 + frame.id.raw() as f32 * 0.0;
             for tab in tabs {
                 let width = 74.0;
                 rect(
@@ -819,6 +954,14 @@ impl ShowcaseApp {
                 x += width + 4.0;
             }
         }
+        text(
+            ui,
+            672.0,
+            342.0,
+            &format!("Frames: {} | Snapshot: valid", area.frames().len()),
+            10.0,
+            rgb(160, 160, 164),
+        );
     }
 
     fn table_preview(ui: &mut Ui<'_>) {
@@ -897,7 +1040,7 @@ impl ShowcaseApp {
             ui,
             800.0,
             470.0,
-            "This page uses layout, docking, list, grid, and table models from the toolkit.",
+            "Rows: 7 | Columns: 4 | Overscan: 0",
             11.0,
             rgb(190, 190, 194),
         );
@@ -939,7 +1082,7 @@ impl ShowcaseApp {
             ui,
             80.0,
             672.0,
-            "Texture primitives are UI-adjacent surfaces: video/3D upload belongs to renderer/runtime resources.",
+            "Surface: 1920x1080 | Guides: 3 | Crosshair: 960,540",
             11.0,
             rgb(190, 190, 194),
         );
@@ -1003,7 +1146,7 @@ impl ShowcaseApp {
             ui,
             1080.0,
             594.0,
-            "Dynamic frame placeholder",
+            "Frame 1280x720",
             11.0,
             rgb(220, 220, 224),
         );
@@ -1459,7 +1602,7 @@ fn scale_transform(transform: Transform, scale_x: f32, scale_y: f32) -> Transfor
 #[cfg(test)]
 mod tests {
     use super::{ShowcaseApp, ShowcaseInput, ShowcasePage};
-    use kinetik_ui_core::{Point, Primitive, Rect, Size};
+    use kinetik_ui::core::{Point, Primitive, Rect, Size};
 
     fn click(app: &mut ShowcaseApp, point: Point) {
         app.update(&ShowcaseInput {
@@ -1583,6 +1726,18 @@ mod tests {
 
         click(&mut app, Point::new(1200.0, 240.0));
         assert!((app.zoom() - 0.2).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn layout_page_split_demo_changes_dock_preview() {
+        let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Layout);
+
+        click(&mut app, Point::new(700.0, 132.0));
+
+        assert!(app.primitives().iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text.contains("Frames: 3"))
+        }));
     }
 
     #[test]

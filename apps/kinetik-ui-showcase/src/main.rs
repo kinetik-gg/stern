@@ -1,6 +1,6 @@
 //! Windowed Kinetik UI showcase entry point.
 
-use kinetik_ui_core::{Point, Size};
+use kinetik_ui::core::{Point, Size};
 use kinetik_ui_showcase::{
     app::{ShowcaseApp, ShowcaseInput},
     raster::{rasterize, write_bmp},
