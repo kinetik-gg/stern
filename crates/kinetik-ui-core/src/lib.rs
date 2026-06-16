@@ -19,8 +19,9 @@ pub mod theme;
 pub mod units;
 
 pub use accessibility::{
-    AccessibilityAdapter, FocusTraversal, SemanticAction, SemanticActionKind, SemanticNode,
-    SemanticRole, SemanticState, SemanticTree, SemanticTreeError, SemanticValue,
+    AccessibilityAdapter, AccessibilityNode, AccessibilitySnapshot, FocusTraversal, SemanticAction,
+    SemanticActionKind, SemanticNode, SemanticRole, SemanticState, SemanticTree, SemanticTreeError,
+    SemanticValue,
 };
 pub use actions::{
     ActionBinding, ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation,

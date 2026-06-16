@@ -3,10 +3,11 @@
 use std::time::Duration;
 
 use kinetik_ui_core::{
-    ClipboardText, CursorShape, FrameContext, FrameOutput, Key, KeyEvent, KeyState, KeyboardInput,
-    Modifiers, MouseButton as CoreMouseButton, PhysicalKey, PhysicalSize, PlatformRequest, Point,
-    PointerButtonState, PointerInput, Rect, RepaintRequest, ScaleFactor, Size, TextInputEvent,
-    TextRange, TimeInfo, UiInput, Vec2, ViewportInfo, WidgetId,
+    AccessibilitySnapshot, ClipboardText, CursorShape, FrameContext, FrameOutput, Key, KeyEvent,
+    KeyState, KeyboardInput, Modifiers, MouseButton as CoreMouseButton, PhysicalKey, PhysicalSize,
+    PlatformRequest, Point, PointerButtonState, PointerInput, Rect, RepaintRequest, ScaleFactor,
+    SemanticTreeError, Size, TextInputEvent, TextRange, TimeInfo, UiInput, Vec2, ViewportInfo,
+    WidgetId,
 };
 use winit::dpi::{
     LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize as WinitPhysicalSize,
@@ -202,6 +203,33 @@ impl WinitPlatformRequests {
         }
 
         shell
+    }
+}
+
+/// Accessibility update ready for a winit-hosted platform adapter.
+///
+/// This type is intentionally free of OS accessibility APIs. Application shells
+/// can translate the snapshot into Windows, macOS, Linux, or test adapters.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WinitAccessibilityUpdate {
+    /// Validated accessibility snapshot exported from the core frame.
+    pub snapshot: AccessibilitySnapshot,
+}
+
+impl WinitAccessibilityUpdate {
+    /// Translates core frame output into winit-facing accessibility data.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SemanticTreeError`] when the frame's semantic tree is
+    /// structurally invalid.
+    pub fn from_frame_output(
+        output: &FrameOutput,
+        focused: Option<WidgetId>,
+    ) -> Result<Self, SemanticTreeError> {
+        output
+            .accessibility_snapshot(focused)
+            .map(|snapshot| Self { snapshot })
     }
 }
 
@@ -703,15 +731,16 @@ fn sanitize_rect_for_platform(rect: Rect) -> Rect {
 #[allow(clippy::float_cmp)]
 mod tests {
     use super::{
-        WinitFrameClock, WinitInputAdapter, WinitPlatformRequests, WinitTextInputRequest,
-        WinitWindowOps, cursor_to_winit, frame_context_from_winit, key_from_winit,
-        modifiers_from_winit, physical_key_from_winit, scale_factor_from_winit,
+        WinitAccessibilityUpdate, WinitFrameClock, WinitInputAdapter, WinitPlatformRequests,
+        WinitTextInputRequest, WinitWindowOps, cursor_to_winit, frame_context_from_winit,
+        key_from_winit, modifiers_from_winit, physical_key_from_winit, scale_factor_from_winit,
         viewport_from_winit,
     };
     use kinetik_ui_core::{
         ClipboardText, CursorShape, FrameOutput, Key, KeyState, Modifiers,
         MouseButton as CoreMouseButton, PhysicalKey, PlatformRequest, Rect, RepaintRequest,
-        ScaleFactor, TextInputEvent, TextRange, TimeInfo, UiInput, WidgetId,
+        ScaleFactor, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
+        SemanticTreeError, SemanticValue, TextInputEvent, TextRange, TimeInfo, UiInput, WidgetId,
     };
     use winit::dpi::{PhysicalPosition, PhysicalSize};
     use winit::event::{ElementState, Ime, MouseButton as WinitMouseButton, MouseScrollDelta};
@@ -1044,6 +1073,98 @@ mod tests {
         );
         assert_eq!(requests.window_title, Some("Kinetik".to_owned()));
         assert_eq!(requests.open_urls, vec!["https://example.com".to_owned()]);
+    }
+
+    #[test]
+    fn frame_output_accessibility_update_preserves_semantic_data() {
+        let mut output = FrameOutput::new();
+        let root = WidgetId::from_key("root");
+        let button = WidgetId::from_key("button");
+        let slider = WidgetId::from_key("slider");
+        output.push_semantic_node(
+            SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([button, slider]),
+        );
+        output.push_semantic_node(
+            SemanticNode::new(
+                button,
+                SemanticRole::Button,
+                Rect::new(0.0, 0.0, 80.0, 28.0),
+            )
+            .focusable(true)
+            .with_label("Run")
+            .with_action(SemanticAction::new(SemanticActionKind::Invoke, "Run")),
+        );
+        let mut slider_node = SemanticNode::new(
+            slider,
+            SemanticRole::Slider,
+            Rect::new(0.0, 32.0, 120.0, 18.0),
+        )
+        .focusable(true)
+        .with_label("Opacity")
+        .with_action(SemanticAction::new(
+            SemanticActionKind::Increment,
+            "Increase",
+        ));
+        slider_node.state.value = Some(SemanticValue::Number {
+            current: 0.5,
+            min: 0.0,
+            max: 1.0,
+        });
+        output.push_semantic_node(slider_node);
+
+        let update =
+            WinitAccessibilityUpdate::from_frame_output(&output, Some(button)).expect("update");
+        let snapshot = update.snapshot;
+
+        assert_eq!(snapshot.root, Some(root));
+        assert_eq!(
+            snapshot
+                .nodes
+                .iter()
+                .map(|node| node.id)
+                .collect::<Vec<_>>(),
+            vec![root, button, slider]
+        );
+        assert_eq!(snapshot.focus_order, vec![button, slider]);
+        assert_eq!(snapshot.focused, Some(button));
+        assert_eq!(
+            snapshot.node(button).expect("button").label.as_deref(),
+            Some("Run")
+        );
+        assert_eq!(
+            snapshot.node(slider).expect("slider").state.value,
+            Some(SemanticValue::Number {
+                current: 0.5,
+                min: 0.0,
+                max: 1.0,
+            })
+        );
+        assert!(
+            snapshot
+                .node(slider)
+                .expect("slider")
+                .actions
+                .iter()
+                .any(|action| action.kind == SemanticActionKind::Increment)
+        );
+    }
+
+    #[test]
+    fn frame_output_accessibility_update_reports_invalid_semantics_without_os_services() {
+        let mut output = FrameOutput::new();
+        let root = WidgetId::from_key("root");
+        let missing = WidgetId::from_key("missing");
+        output.push_semantic_node(
+            SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([missing]),
+        );
+
+        assert_eq!(
+            WinitAccessibilityUpdate::from_frame_output(&output, None).expect_err("error"),
+            SemanticTreeError::UnknownChild {
+                parent: root,
+                child: missing,
+            }
+        );
     }
 
     #[test]

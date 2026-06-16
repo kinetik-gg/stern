@@ -327,6 +327,19 @@ impl SemanticTree {
             .collect()
     }
 
+    /// Exports a validated accessibility snapshot for platform adapters.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SemanticTreeError`] when the semantic tree is structurally
+    /// invalid.
+    pub fn accessibility_snapshot(
+        &self,
+        focused: Option<WidgetId>,
+    ) -> Result<AccessibilitySnapshot, SemanticTreeError> {
+        AccessibilitySnapshot::from_tree(self, focused)
+    }
+
     /// Validates structural semantic-tree invariants.
     ///
     /// Empty trees are valid. Non-empty trees must have a root that points at
@@ -465,6 +478,103 @@ pub enum SemanticTreeError {
     },
 }
 
+/// Semantic node data exported to platform accessibility adapters.
+///
+/// This is the stable, backend-neutral data contract for adapters. It is
+/// derived from a validated [`SemanticTree`] and does not carry render
+/// primitive or platform API state.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AccessibilityNode {
+    /// Stable widget identity.
+    pub id: WidgetId,
+    /// Parent node ID, if the node is nested in another semantic node.
+    pub parent: Option<WidgetId>,
+    /// Semantic role.
+    pub role: SemanticRole,
+    /// Logical bounds.
+    pub bounds: Rect,
+    /// Accessible name.
+    pub label: Option<String>,
+    /// Longer accessible description.
+    pub description: Option<String>,
+    /// Runtime state.
+    pub state: SemanticState,
+    /// Supported semantic actions.
+    pub actions: Vec<SemanticAction>,
+    /// Ordered child node IDs.
+    pub children: Vec<WidgetId>,
+    /// Whether the node participates in focus traversal.
+    pub focusable: bool,
+}
+
+impl AccessibilityNode {
+    fn from_semantic(node: &SemanticNode, parent: Option<WidgetId>) -> Self {
+        Self {
+            id: node.id,
+            parent,
+            role: node.role.clone(),
+            bounds: node.bounds,
+            label: node.label.clone(),
+            description: node.description.clone(),
+            state: node.state.clone(),
+            actions: node.actions.clone(),
+            children: node.children.clone(),
+            focusable: node.focusable,
+        }
+    }
+}
+
+/// Validated accessibility snapshot exported for platform adapters.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AccessibilitySnapshot {
+    /// Root node ID, if the frame emitted semantic content.
+    pub root: Option<WidgetId>,
+    /// Nodes in deterministic semantic traversal order.
+    pub nodes: Vec<AccessibilityNode>,
+    /// Focusable nodes in deterministic traversal order.
+    pub focus_order: Vec<WidgetId>,
+    /// Focused widget when it is present in `focus_order`.
+    pub focused: Option<WidgetId>,
+}
+
+impl AccessibilitySnapshot {
+    /// Builds a snapshot from a semantic tree after validating structure.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SemanticTreeError`] when the semantic tree is structurally
+    /// invalid.
+    pub fn from_tree(
+        tree: &SemanticTree,
+        focused: Option<WidgetId>,
+    ) -> Result<Self, SemanticTreeError> {
+        tree.validate()?;
+
+        let focus = FocusTraversal::from_tree(tree, focused);
+        let nodes = tree
+            .traversal_order()
+            .into_iter()
+            .filter_map(|id| {
+                tree.get(id)
+                    .map(|node| AccessibilityNode::from_semantic(node, tree.parent_of(id)))
+            })
+            .collect();
+
+        Ok(Self {
+            root: tree.root(),
+            nodes,
+            focus_order: focus.order,
+            focused: focus.focused,
+        })
+    }
+
+    /// Finds an exported node by ID.
+    #[must_use]
+    pub fn node(&self, id: WidgetId) -> Option<&AccessibilityNode> {
+        self.nodes.iter().find(|node| node.id == id)
+    }
+}
+
 fn validate_semantic_cycles(
     id: WidgetId,
     children_by_parent: &BTreeMap<WidgetId, Vec<WidgetId>>,
@@ -550,12 +660,12 @@ pub trait AccessibilityAdapter {
     /// Adapter error type.
     type Error;
 
-    /// Synchronizes the platform accessibility tree with the current semantic tree.
+    /// Synchronizes the platform accessibility tree with the current snapshot.
     ///
     /// # Errors
     ///
     /// Returns an adapter-specific error when platform synchronization fails.
-    fn synchronize(&mut self, tree: &SemanticTree) -> Result<(), Self::Error>;
+    fn synchronize(&mut self, snapshot: &AccessibilitySnapshot) -> Result<(), Self::Error>;
 
     /// Notifies the platform that focus moved.
     ///
@@ -578,11 +688,44 @@ pub trait AccessibilityAdapter {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::Infallible;
+
     use super::{
-        FocusTraversal, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
-        SemanticState, SemanticTree, SemanticTreeError, SemanticValue,
+        AccessibilityAdapter, AccessibilitySnapshot, FocusTraversal, SemanticAction,
+        SemanticActionKind, SemanticNode, SemanticRole, SemanticState, SemanticTree,
+        SemanticTreeError, SemanticValue,
     };
     use crate::{ActionDescriptor, Rect, WidgetId};
+
+    #[derive(Debug, Default)]
+    struct RecordingAdapter {
+        synchronized: Vec<AccessibilitySnapshot>,
+        focused: Vec<WidgetId>,
+        actions: Vec<(WidgetId, SemanticActionKind)>,
+    }
+
+    impl AccessibilityAdapter for RecordingAdapter {
+        type Error = Infallible;
+
+        fn synchronize(&mut self, snapshot: &AccessibilitySnapshot) -> Result<(), Self::Error> {
+            self.synchronized.push(snapshot.clone());
+            Ok(())
+        }
+
+        fn focus(&mut self, node: WidgetId) -> Result<(), Self::Error> {
+            self.focused.push(node);
+            Ok(())
+        }
+
+        fn perform_action(
+            &mut self,
+            node: WidgetId,
+            action: &SemanticActionKind,
+        ) -> Result<(), Self::Error> {
+            self.actions.push((node, action.clone()));
+            Ok(())
+        }
+    }
 
     #[test]
     fn semantic_tree_preserves_nodes_and_focus_order() {
@@ -675,6 +818,122 @@ mod tests {
         assert_eq!(tree.focus_order(), vec![second, first]);
         assert_eq!(tree.parent_of(first), Some(root));
         assert!(tree.validate().is_ok());
+    }
+
+    #[test]
+    fn accessibility_snapshot_exports_validated_semantics_in_traversal_order() {
+        let root = WidgetId::from_key("root");
+        let button = WidgetId::from_key("button");
+        let slider = WidgetId::from_key("slider");
+        let unparented = WidgetId::from_key("unparented");
+        let mut tree = SemanticTree::new();
+        tree.push(
+            SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([slider, button]),
+        );
+        tree.push(
+            SemanticNode::new(
+                button,
+                SemanticRole::Button,
+                Rect::new(0.0, 0.0, 80.0, 28.0),
+            )
+            .focusable(true)
+            .with_label("Run")
+            .with_action(SemanticAction::new(SemanticActionKind::Invoke, "Run")),
+        );
+        let mut slider_node = SemanticNode::new(
+            slider,
+            SemanticRole::Slider,
+            Rect::new(0.0, 32.0, 120.0, 18.0),
+        )
+        .focusable(true)
+        .with_label("Opacity")
+        .with_action(SemanticAction::new(
+            SemanticActionKind::Increment,
+            "Increase",
+        ));
+        slider_node.state.value = Some(SemanticValue::Number {
+            current: 0.5,
+            min: 0.0,
+            max: 1.0,
+        });
+        tree.push(slider_node);
+        tree.push(SemanticNode::new(
+            unparented,
+            SemanticRole::Label,
+            Rect::new(0.0, 56.0, 100.0, 18.0),
+        ));
+
+        let snapshot = tree.accessibility_snapshot(Some(button)).expect("snapshot");
+
+        assert_eq!(snapshot.root, Some(root));
+        assert_eq!(
+            snapshot
+                .nodes
+                .iter()
+                .map(|node| node.id)
+                .collect::<Vec<_>>(),
+            vec![root, slider, button, unparented]
+        );
+        assert_eq!(snapshot.focus_order, vec![slider, button]);
+        assert_eq!(snapshot.focused, Some(button));
+        assert_eq!(snapshot.node(slider).expect("slider").parent, Some(root));
+        assert_eq!(
+            snapshot.node(button).expect("button").label.as_deref(),
+            Some("Run")
+        );
+        assert_eq!(
+            snapshot.node(slider).expect("slider").state.value,
+            Some(SemanticValue::Number {
+                current: 0.5,
+                min: 0.0,
+                max: 1.0,
+            })
+        );
+        assert!(
+            snapshot
+                .node(slider)
+                .expect("slider")
+                .actions
+                .iter()
+                .any(|action| action.kind == SemanticActionKind::Increment)
+        );
+    }
+
+    #[test]
+    fn accessibility_snapshot_rejects_invalid_semantic_trees() {
+        let root = WidgetId::from_key("root");
+        let missing = WidgetId::from_key("missing");
+        let mut tree = SemanticTree::new();
+        tree.push(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([missing]));
+
+        assert_eq!(
+            tree.accessibility_snapshot(None).expect_err("error"),
+            SemanticTreeError::UnknownChild {
+                parent: root,
+                child: missing,
+            }
+        );
+    }
+
+    #[test]
+    fn accessibility_adapter_synchronizes_snapshots_and_actions() {
+        let root = WidgetId::from_key("root");
+        let button = WidgetId::from_key("button");
+        let mut tree = SemanticTree::new();
+        tree.push(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([button]));
+        tree.push(SemanticNode::new(button, SemanticRole::Button, Rect::ZERO).focusable(true));
+        let snapshot = tree.accessibility_snapshot(Some(button)).expect("snapshot");
+        let mut adapter = RecordingAdapter::default();
+
+        adapter.synchronize(&snapshot).expect("sync");
+        adapter.focus(button).expect("focus");
+        adapter
+            .perform_action(button, &SemanticActionKind::Invoke)
+            .expect("action");
+
+        assert_eq!(adapter.synchronized, vec![snapshot]);
+        assert_eq!(adapter.focused, vec![button]);
+        assert_eq!(adapter.actions, vec![(button, SemanticActionKind::Invoke)]);
     }
 
     #[test]

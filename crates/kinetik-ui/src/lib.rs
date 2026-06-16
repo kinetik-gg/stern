@@ -136,17 +136,18 @@ impl Default for UiState {
 pub mod prelude {
     pub use crate::UiState;
     pub use crate::core::{
-        ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation, ActionPriority,
-        ActionQueue, ActionRouter, ActionRoutingContext, ActionSource, ActionState, Brush, Color,
-        CursorShape, FrameContext, FrameOutput, FrameWarning, IconId, ImageId, Key, Modifiers,
-        PathElement, PathPrimitive, PhysicalSize, PlatformRequest, Point, Primitive, Rect,
-        RepaintRequest, ScaleFactor, SemanticTreeError, Shortcut, Size, TextureId, Theme, TimeInfo,
-        UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+        AccessibilityAdapter, AccessibilityNode, AccessibilitySnapshot, ActionContext,
+        ActionDescriptor, ActionIcon, ActionId, ActionInvocation, ActionPriority, ActionQueue,
+        ActionRouter, ActionRoutingContext, ActionSource, ActionState, Brush, Color, CursorShape,
+        FrameContext, FrameOutput, FrameWarning, IconId, ImageId, Key, Modifiers, PathElement,
+        PathPrimitive, PhysicalSize, PlatformRequest, Point, Primitive, Rect, RepaintRequest,
+        ScaleFactor, SemanticTreeError, Shortcut, Size, TextureId, Theme, TimeInfo, UiInput,
+        UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
     };
     #[cfg(feature = "platform-winit")]
     pub use crate::platform_winit::{
-        WinitFrameClock, WinitInputAdapter, WinitPlatformRequests, frame_context_from_winit,
-        viewport_from_winit,
+        WinitAccessibilityUpdate, WinitFrameClock, WinitInputAdapter, WinitPlatformRequests,
+        frame_context_from_winit, viewport_from_winit,
     };
     pub use crate::render::{
         ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput, RenderImage,
@@ -198,6 +199,15 @@ mod tests {
                 error: prelude::SemanticTreeError::MissingRoot
             }
         ));
+    }
+
+    #[test]
+    fn facade_prelude_exposes_accessibility_snapshot_types() {
+        let snapshot = prelude::AccessibilitySnapshot::default();
+        let _node: Option<&prelude::AccessibilityNode> =
+            snapshot.node(prelude::WidgetId::from_key("missing"));
+
+        assert!(snapshot.nodes.is_empty());
     }
 
     #[test]
@@ -299,8 +309,12 @@ mod tests {
     fn facade_reexports_winit_platform_feature() {
         let mut clock = prelude::WinitFrameClock::new();
         let time = clock.tick(std::time::Duration::from_millis(16));
+        let output = prelude::FrameOutput::new();
+        let update = prelude::WinitAccessibilityUpdate::from_frame_output(&output, None)
+            .expect("empty semantic tree is valid");
 
         assert_eq!(time.frame_index, 0);
+        assert!(update.snapshot.nodes.is_empty());
     }
 
     #[cfg(feature = "render-vello")]

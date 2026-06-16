@@ -7,8 +7,8 @@ use crate::input::UiInput;
 use crate::memory::UiMemory;
 use crate::render::{ClipId, LayerId, Primitive};
 use crate::{
-    ActionContext, ActionId, ActionInvocation, ActionQueue, ActionSource, PhysicalSize, Rect,
-    ScaleFactor, SemanticNode, SemanticTree, SemanticTreeError, Size, WidgetId,
+    AccessibilitySnapshot, ActionContext, ActionId, ActionInvocation, ActionQueue, ActionSource,
+    PhysicalSize, Rect, ScaleFactor, SemanticNode, SemanticTree, SemanticTreeError, Size, WidgetId,
 };
 use crate::{IdStack, Transform};
 
@@ -294,6 +294,19 @@ impl FrameOutput {
     /// Appends one runtime warning.
     pub fn push_warning(&mut self, warning: FrameWarning) {
         self.warnings.push(warning);
+    }
+
+    /// Exports a validated accessibility snapshot for platform adapters.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SemanticTreeError`] when the frame's semantic tree is
+    /// structurally invalid.
+    pub fn accessibility_snapshot(
+        &self,
+        focused: Option<WidgetId>,
+    ) -> Result<AccessibilitySnapshot, SemanticTreeError> {
+        self.semantics.accessibility_snapshot(focused)
     }
 }
 
@@ -659,6 +672,49 @@ mod tests {
         assert_eq!(
             output.platform_requests,
             vec![PlatformRequest::SetCursor(CursorShape::PointingHand)]
+        );
+    }
+
+    #[test]
+    fn frame_output_exports_accessibility_snapshot_independent_from_painting() {
+        let mut output = FrameOutput::new();
+        let root = WidgetId::from_key("root");
+        let button = WidgetId::from_key("button");
+        let rect = Rect::new(1.0, 2.0, 30.0, 20.0);
+
+        output.push_primitive(Primitive::Rect(RectPrimitive {
+            rect,
+            fill: Some(Brush::Solid(Color::WHITE)),
+            stroke: None,
+            radius: CornerRadius::all(2.0),
+        }));
+        output.push_semantic_node(
+            SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([button]),
+        );
+        output.push_semantic_node(
+            SemanticNode::new(button, SemanticRole::Button, rect)
+                .focusable(true)
+                .with_label("Run"),
+        );
+
+        let snapshot = output
+            .accessibility_snapshot(Some(button))
+            .expect("snapshot");
+
+        assert_eq!(output.primitives.len(), 1);
+        assert_eq!(
+            snapshot
+                .nodes
+                .iter()
+                .map(|node| node.id)
+                .collect::<Vec<_>>(),
+            vec![root, button]
+        );
+        assert_eq!(snapshot.focus_order, vec![button]);
+        assert_eq!(snapshot.focused, Some(button));
+        assert_eq!(
+            snapshot.node(button).expect("button").label.as_deref(),
+            Some("Run")
         );
     }
 

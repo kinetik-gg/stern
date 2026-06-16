@@ -1404,6 +1404,22 @@ Viewport
 
 The accessibility implementation may be phased, but the architecture should not require retrofitting semantics into visual primitives.
 
+Accessibility export uses a validated, backend-neutral snapshot:
+
+```text
+SemanticTree -> AccessibilitySnapshot -> platform accessibility adapter
+```
+
+The snapshot preserves semantic traversal order, parent/child relationships,
+focus order, focused widget identity, roles, labels, descriptions, values,
+states, bounds, and action affordances. It is independent from render
+primitives, renderer resources, and OS accessibility APIs.
+
+`kinetik-ui-winit` exposes `WinitAccessibilityUpdate` as the platform handoff
+point for future native accessibility backends. The handoff remains free of OS
+accessibility services so tests can prove semantic preservation without a
+window, GPU, or platform accessibility daemon.
+
 ## 27. Asset And Resource Model
 
 Resources should be referenced by stable handles.
@@ -1906,7 +1922,7 @@ How advanced should draggable docking become?
 Should native OS menus ever be supported as an alternate action surface?
 How deep should built-in animation support go?
 How should application-level undo integrate with text-field undo?
-What accessibility adapter should be used first?
+Which native accessibility backend should the winit handoff translate to first?
 What exact icon format should be preferred?
 How much rich text is needed beyond labels and text fields?
 Should layout eventually include wrap/flex-like behavior?
