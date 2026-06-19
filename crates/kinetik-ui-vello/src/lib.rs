@@ -1,5 +1,10 @@
 //! Vello renderer boundary for Kinetik UI render primitives.
 
+use std::{
+    collections::HashMap,
+    hash::{Hash, Hasher},
+};
+
 use kinetik_ui_core::{
     Brush, ClipId, Color, CornerRadius, ImageId, LayerId, LinearGradient, PathElement, Point,
     Primitive, Rect, ShadowPrimitive, Size, Stroke, TextLayoutId, TextureId, Transform, Vec2,
@@ -134,6 +139,7 @@ pub enum RenderCommandKind {
 pub struct VelloRenderer {
     scene: Scene,
     text_engine: CosmicTextEngine,
+    image_cache: ImageDataCache,
 }
 
 impl VelloRenderer {
@@ -143,6 +149,7 @@ impl VelloRenderer {
         Self {
             scene: Scene::new(),
             text_engine: CosmicTextEngine::new(),
+            image_cache: ImageDataCache::default(),
         }
     }
 
@@ -150,6 +157,11 @@ impl VelloRenderer {
     #[must_use]
     pub const fn scene(&self) -> &Scene {
         &self.scene
+    }
+
+    #[cfg(test)]
+    fn cached_image_count(&self) -> usize {
+        self.image_cache.len()
     }
 
     /// Submits a frame for translation.
@@ -161,12 +173,81 @@ impl VelloRenderer {
             &translated.commands,
             input.resources,
             &mut self.text_engine,
+            &mut self.image_cache,
             viewport_device_scale(input.viewport),
         );
         RenderFrameOutput {
             primitive_count: input.primitives.len(),
             diagnostics: translated.diagnostics,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CachedImageData {
+    signature: ImageSignature,
+    data: ImageData,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ImageSignature {
+    width: u32,
+    height: u32,
+    format: RenderImageFormat,
+    alpha: RenderImageAlpha,
+    data_hash: u64,
+}
+
+#[derive(Debug, Default)]
+struct ImageDataCache {
+    images: HashMap<ImageId, CachedImageData>,
+}
+
+impl ImageDataCache {
+    fn image_data(&mut self, id: ImageId, image: &RenderImage) -> ImageData {
+        let signature = image_signature(image);
+        if let Some(cached) = self.images.get(&id)
+            && cached.signature == signature
+        {
+            return cached.data.clone();
+        }
+
+        let data = image_data_from_render_image(image);
+        self.images.insert(
+            id,
+            CachedImageData {
+                signature,
+                data: data.clone(),
+            },
+        );
+        data
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.images.len()
+    }
+}
+
+fn image_signature(image: &RenderImage) -> ImageSignature {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    image.data.hash(&mut hasher);
+    ImageSignature {
+        width: image.width,
+        height: image.height,
+        format: image.format,
+        alpha: image.alpha,
+        data_hash: hasher.finish(),
+    }
+}
+
+fn image_data_from_render_image(image: &RenderImage) -> ImageData {
+    ImageData {
+        data: Blob::from(image.data.clone()),
+        format: image_format(image.format),
+        alpha_type: image_alpha(image.alpha),
+        width: image.width,
+        height: image.height,
     }
 }
 
@@ -1085,6 +1166,7 @@ fn encode_scene(
     commands: &[RenderCommand],
     resources: &RenderResources,
     text_engine: &mut CosmicTextEngine,
+    image_cache: &mut ImageDataCache,
     device_scale: f64,
 ) {
     let root_transform = root_transform(device_scale);
@@ -1097,7 +1179,14 @@ fn encode_scene(
             );
         }
 
-        encode_command(scene, command, resources, text_engine, device_scale);
+        encode_command(
+            scene,
+            command,
+            resources,
+            text_engine,
+            image_cache,
+            device_scale,
+        );
 
         for _ in &command.clips {
             scene.pop_layer();
@@ -1110,6 +1199,7 @@ fn encode_command(
     command: &RenderCommand,
     resources: &RenderResources,
     text_engine: &mut CosmicTextEngine,
+    image_cache: &mut ImageDataCache,
     device_scale: f64,
 ) {
     let transform = snap_axis_aligned_translation(
@@ -1121,19 +1211,15 @@ fn encode_command(
             fill,
             stroke,
             radius,
-        } => {
-            if let Some(fill) = fill {
-                let shape = rounded_rect(snap_rect_to_device(*rect, device_scale), *radius);
-                fill_shape(scene, transform, fill, &shape);
-            }
-            if let Some(stroke) = stroke {
-                let shape = rounded_rect(
-                    snap_stroked_rect_to_device(*rect, stroke.width, device_scale),
-                    *radius,
-                );
-                stroke_shape(scene, transform, stroke, &shape, device_scale);
-            }
-        }
+        } => encode_rect_command(
+            scene,
+            transform,
+            *rect,
+            *fill,
+            *stroke,
+            *radius,
+            device_scale,
+        ),
         RenderCommandKind::Line {
             x0,
             y0,
@@ -1193,7 +1279,15 @@ fn encode_command(
             device_scale,
         ),
         RenderCommandKind::Image { image, rect } => {
-            encode_image_command(scene, transform, resources, *image, *rect, device_scale);
+            encode_image_command(
+                scene,
+                transform,
+                resources,
+                image_cache,
+                *image,
+                *rect,
+                device_scale,
+            );
         }
         RenderCommandKind::Texture {
             texture,
@@ -1210,6 +1304,28 @@ fn encode_command(
                 device_scale,
             );
         }
+    }
+}
+
+fn encode_rect_command(
+    scene: &mut Scene,
+    transform: Affine,
+    rect: Rect,
+    fill: Option<Brush>,
+    stroke: Option<Stroke>,
+    radius: CornerRadius,
+    device_scale: f64,
+) {
+    if let Some(fill) = fill {
+        let shape = rounded_rect(snap_rect_to_device(rect, device_scale), radius);
+        fill_shape(scene, transform, &fill, &shape);
+    }
+    if let Some(stroke) = stroke {
+        let shape = rounded_rect(
+            snap_stroked_rect_to_device(rect, stroke.width, device_scale),
+            radius,
+        );
+        stroke_shape(scene, transform, &stroke, &shape, device_scale);
     }
 }
 
@@ -1259,13 +1375,14 @@ fn encode_image_command(
     scene: &mut Scene,
     transform: Affine,
     resources: &RenderResources,
+    image_cache: &mut ImageDataCache,
     image: ImageId,
     rect: Rect,
     device_scale: f64,
 ) {
     let rect = snap_rect_to_device(rect, device_scale);
-    if let Some((pixels, source, sampling)) = resolve_image_draw(resources, image) {
-        encode_image_region(scene, transform, rect, pixels, source, sampling);
+    if let Some(draw) = resolve_image_draw(resources, image) {
+        encode_image_region(scene, transform, rect, image_cache, draw);
     } else {
         encode_resource_placeholder(
             scene,
@@ -1305,22 +1422,36 @@ fn encode_texture_command(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ResolvedImageDraw<'a> {
+    payload: ImageId,
+    pixels: &'a RenderImage,
+    source: Rect,
+    sampling: RenderImageSampling,
+}
+
 fn resolve_image_draw(
     resources: &RenderResources,
     image: ImageId,
-) -> Option<(&RenderImage, Rect, RenderImageSampling)> {
+) -> Option<ResolvedImageDraw<'_>> {
     let resource = resources.image(image)?;
     if let Some(pixels) = resource.pixels.as_ref() {
-        return Some((pixels, full_image_source(pixels), resource.sampling));
+        return Some(ResolvedImageDraw {
+            payload: image,
+            pixels,
+            source: full_image_source(pixels),
+            sampling: resource.sampling,
+        });
     }
     let region = resource.atlas_region?;
     let atlas = resources.image(region.atlas)?;
     let pixels = atlas.pixels.as_ref()?;
-    atlas_source_fits_image(region.source, pixels).then_some((
+    atlas_source_fits_image(region.source, pixels).then_some(ResolvedImageDraw {
+        payload: region.atlas,
         pixels,
-        region.source,
-        resource.sampling,
-    ))
+        source: region.source,
+        sampling: resource.sampling,
+    })
 }
 
 fn encode_shadow(scene: &mut Scene, transform: Affine, shadow: ShadowPrimitive) {
@@ -1578,7 +1709,7 @@ fn encode_shaped_text_device_space(
     color: Color,
     scale: f64,
 ) {
-    let origin = Point::new(origin.x.round(), origin.y.round());
+    let origin = snap_text_origin_to_device(origin);
     for run in &layout.runs {
         scene
             .draw_glyphs(&run.font)
@@ -1594,6 +1725,10 @@ fn encode_shaped_text_device_space(
                 }),
             );
     }
+}
+
+fn snap_text_origin_to_device(origin: Point) -> Point {
+    Point::new(origin.x, origin.y.round())
 }
 
 fn uniform_axis_aligned_scale(transform: Affine) -> Option<f64> {
@@ -1637,12 +1772,20 @@ fn encode_image(
     image: &RenderImage,
     sampling: RenderImageSampling,
 ) {
-    encode_image_region(
+    let source = full_image_source(image);
+    if image.width == 0 || image.height == 0 || rect.width <= 0.0 || rect.height <= 0.0 {
+        return;
+    }
+    if !atlas_source_is_finite_positive(source) || !atlas_source_fits_image(source, image) {
+        return;
+    }
+
+    fill_image_region(
         scene,
         transform,
         rect,
-        image,
-        full_image_source(image),
+        image_data_from_render_image(image),
+        source,
         sampling,
     );
 }
@@ -1651,10 +1794,11 @@ fn encode_image_region(
     scene: &mut Scene,
     transform: Affine,
     rect: Rect,
-    image: &RenderImage,
-    source: Rect,
-    sampling: RenderImageSampling,
+    image_cache: &mut ImageDataCache,
+    draw: ResolvedImageDraw<'_>,
 ) {
+    let image = draw.pixels;
+    let source = draw.source;
     if image.width == 0 || image.height == 0 || rect.width <= 0.0 || rect.height <= 0.0 {
         return;
     }
@@ -1662,13 +1806,24 @@ fn encode_image_region(
         return;
     }
 
-    let image_data = ImageData {
-        data: Blob::from(image.data.clone()),
-        format: image_format(image.format),
-        alpha_type: image_alpha(image.alpha),
-        width: image.width,
-        height: image.height,
-    };
+    fill_image_region(
+        scene,
+        transform,
+        rect,
+        image_cache.image_data(draw.payload, image),
+        source,
+        draw.sampling,
+    );
+}
+
+fn fill_image_region(
+    scene: &mut Scene,
+    transform: Affine,
+    rect: Rect,
+    image_data: ImageData,
+    source: Rect,
+    sampling: RenderImageSampling,
+) {
     let brush = ImageBrush::new(image_data).with_quality(image_quality(sampling));
     let scale_x = f64::from(rect.width) / f64::from(source.width);
     let scale_y = f64::from(rect.height) / f64::from(source.height);
@@ -1987,7 +2142,7 @@ mod tests {
         physical_text_layout_for_key, quantize_stroke_width_to_device, render_translation_snapshot,
         root_transform, snap_axis_aligned_translation, snap_point_to_device, snap_rect_to_device,
         snap_stroke_center_to_device, snap_stroked_line_to_device, snap_stroked_rect_to_device,
-        translate_primitives, viewport_device_scale,
+        snap_text_origin_to_device, translate_primitives, viewport_device_scale,
     };
     use kinetik_ui_core::render::TexturePrimitive;
     use kinetik_ui_core::{
@@ -2054,6 +2209,16 @@ mod tests {
             atlas_region: Some(ImageAtlasRegion {
                 atlas: ImageId::from_raw(1),
                 source: Rect::new(1.0, 0.0, 1.0, 1.0),
+            }),
+        });
+        resources.register_image(ImageResource {
+            id: ImageId::from_raw(4),
+            size: Size::new(1.0, 1.0),
+            sampling: RenderImageSampling::default(),
+            pixels: None,
+            atlas_region: Some(ImageAtlasRegion {
+                atlas: ImageId::from_raw(1),
+                source: Rect::new(0.0, 1.0, 1.0, 1.0),
             }),
         });
         resources
@@ -2751,7 +2916,7 @@ mod tests {
     fn invalid_atlas_source_is_diagnosed() {
         let mut resources = atlas_resources();
         resources.register_image(ImageResource {
-            id: ImageId::from_raw(4),
+            id: ImageId::from_raw(5),
             size: Size::new(4.0, 4.0),
             sampling: RenderImageSampling::default(),
             pixels: None,
@@ -2761,7 +2926,7 @@ mod tests {
             }),
         });
         let primitives = vec![Primitive::Image(ImagePrimitive {
-            image: ImageId::from_raw(4),
+            image: ImageId::from_raw(5),
             rect: Rect::new(0.0, 0.0, 16.0, 16.0),
         })];
 
@@ -3006,6 +3171,35 @@ mod tests {
     }
 
     #[test]
+    fn frame_submission_reuses_cached_atlas_payload_for_regions() {
+        let mut renderer = VelloRenderer::new();
+        let resources = atlas_resources();
+        let primitives = vec![
+            Primitive::Image(ImagePrimitive {
+                image: ImageId::from_raw(3),
+                rect: Rect::new(4.0, 4.0, 16.0, 16.0),
+            }),
+            Primitive::Image(ImagePrimitive {
+                image: ImageId::from_raw(4),
+                rect: Rect::new(24.0, 4.0, 16.0, 16.0),
+            }),
+        ];
+
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: ViewportInfo::new(
+                Size::new(100.0, 100.0),
+                kinetik_ui_core::PhysicalSize::new(100, 100),
+                ScaleFactor::ONE,
+            ),
+            primitives: &primitives,
+            resources: &resources,
+        });
+
+        assert!(output.diagnostics.is_empty());
+        assert_eq!(renderer.cached_image_count(), 1);
+    }
+
+    #[test]
     fn frame_submission_encodes_vello_geometry() {
         let mut renderer = VelloRenderer::new();
         let primitives = vec![
@@ -3125,6 +3319,50 @@ mod tests {
         assert!(output.diagnostics.is_empty());
         assert_approx(glyph_run.font_size, 24.0);
         assert!(glyph_run.hint);
+    }
+
+    #[test]
+    fn text_origin_snapping_preserves_x_and_rounds_baseline_y() {
+        let origin = snap_text_origin_to_device(Point::new(5.375, 20.5));
+
+        assert_approx(origin.x, 5.375);
+        assert_approx(origin.y, 21.0);
+    }
+
+    #[test]
+    fn physical_text_snaps_baseline_without_rounding_horizontal_origin() {
+        let mut renderer = VelloRenderer::new();
+        let resources = RenderResources::new();
+        let primitives = vec![Primitive::Text(TextPrimitive {
+            layout: None,
+            origin: Point::new(4.3, 16.4),
+            text: "Label".to_owned(),
+            family: "sans-serif".to_owned(),
+            size: 12.0,
+            line_height: 16.0,
+            brush: Brush::Solid(Color::WHITE),
+        })];
+
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: ViewportInfo::new(
+                Size::new(100.0, 100.0),
+                kinetik_ui_core::PhysicalSize::new(125, 125),
+                ScaleFactor::new(1.25),
+            ),
+            primitives: &primitives,
+            resources: &resources,
+        });
+        let glyph = renderer
+            .scene()
+            .encoding()
+            .resources
+            .glyphs
+            .first()
+            .expect("glyph");
+
+        assert!(output.diagnostics.is_empty());
+        assert_approx(glyph.x, 5.375);
+        assert_approx(glyph.y, 21.0);
     }
 
     #[test]

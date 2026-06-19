@@ -118,7 +118,7 @@ impl RenderImage {
 }
 
 /// CPU image pixel format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RenderImageFormat {
     /// 32-bit RGBA with 8-bit channels.
     Rgba8,
@@ -137,7 +137,7 @@ impl RenderImageFormat {
 }
 
 /// CPU image alpha representation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RenderImageAlpha {
     /// Straight alpha.
     Alpha,

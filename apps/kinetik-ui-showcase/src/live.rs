@@ -294,6 +294,10 @@ impl LiveVelloRenderer {
         resources: &RenderResources,
         viewport: ViewportInfo,
     ) -> Result<(), LiveRenderError> {
+        self.resize(PhysicalSize::new(
+            viewport.physical_size.width,
+            viewport.physical_size.height,
+        ));
         let output = self.toolkit.submit_frame(RenderFrameInput {
             viewport,
             primitives: &frame.primitives,
@@ -306,8 +310,6 @@ impl LiveVelloRenderer {
         let device_handle = &self.context.devices[self.surface.dev_id];
         let width = self.surface.config.width;
         let height = self.surface.config.height;
-        debug_assert_eq!(viewport.physical_size.width, width);
-        debug_assert_eq!(viewport.physical_size.height, height);
         self.renderer.render_to_texture(
             &device_handle.device,
             &device_handle.queue,
