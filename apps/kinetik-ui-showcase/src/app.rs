@@ -2552,6 +2552,39 @@ mod tests {
     }
 
     #[test]
+    fn showcase_text_primitives_have_registered_layouts() {
+        for page in [
+            ShowcasePage::Editor,
+            ShowcasePage::Components,
+            ShowcasePage::Layout,
+            ShowcasePage::Viewport,
+            ShowcasePage::Systems,
+        ] {
+            let mut app = ShowcaseApp::new();
+            app.set_page(page);
+            let resources = app.render_resources();
+            let mut text_count = 0;
+
+            for primitive in app.primitives() {
+                let Primitive::Text(text) = primitive else {
+                    continue;
+                };
+                text_count += 1;
+                let layout = text
+                    .layout
+                    .unwrap_or_else(|| panic!("{page:?} text {:?} missing layout", text.text));
+                assert!(
+                    resources.has_text_layout(layout),
+                    "{page:?} text {:?} references missing layout {layout:?}",
+                    text.text
+                );
+            }
+
+            assert!(text_count > 0, "{page:?} emitted no text primitives");
+        }
+    }
+
+    #[test]
     fn showcase_pages_translate_to_vello_without_renderer_diagnostics() {
         for size in [Size::new(1440.0, 900.0), Size::new(820.0, 640.0)] {
             for page in [
