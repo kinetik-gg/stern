@@ -284,13 +284,13 @@ impl ShowcaseApp {
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(99),
-            size: Size::new(1920.0, 1080.0),
+            size: Size::new(384.0, 216.0),
             sampling: RenderImageSampling::default(),
             snapshot: Some(viewport_texture()),
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(101),
-            size: Size::new(1280.0, 720.0),
+            size: Size::new(256.0, 144.0),
             sampling: RenderImageSampling::default(),
             snapshot: Some(video_texture()),
         });
@@ -1319,19 +1319,19 @@ impl ShowcaseApp {
         let composition = ViewportComposition {
             surface: ViewportSurface {
                 texture: TextureId::from_raw(99),
-                source_size: Size::new(1920.0, 1080.0),
+                source_size: Size::new(384.0, 216.0),
                 bounds: surface,
                 pan_zoom,
             },
             guides: vec![
-                Guide::Horizontal(540.0),
-                Guide::Vertical(960.0),
-                Guide::Horizontal(360.0),
+                Guide::Horizontal(108.0),
+                Guide::Vertical(192.0),
+                Guide::Horizontal(72.0),
             ],
             crosshair: Some(Crosshair {
                 visible: true,
-                position: Point::new(960.0, 540.0),
-                label: Some("960, 540".to_owned()),
+                position: Point::new(192.0, 108.0),
+                label: Some("192, 108".to_owned()),
                 color: rgb(240, 240, 240),
             }),
             clip: ClipId::from_raw(99),
@@ -1341,7 +1341,7 @@ impl ShowcaseApp {
             ui,
             surface.x,
             surface.max_y() + 36.0,
-            "Surface: 1920x1080 | Guides: 3 | Crosshair: 960,540",
+            "Surface: 384x216 | Guides: 3 | Crosshair: 192,108",
             11.0,
             rgb(190, 190, 194),
         );
@@ -1406,13 +1406,13 @@ impl ShowcaseApp {
         ui.primitive(Primitive::Texture(TexturePrimitive {
             texture: TextureId::from_raw(101),
             rect: texture,
-            source_size: Size::new(1280.0, 720.0),
+            source_size: Size::new(256.0, 144.0),
         }));
         text(
             ui,
             texture.x,
             texture.max_y() + 34.0,
-            "Frame 1280x720",
+            "Frame 256x144",
             11.0,
             rgb(220, 220, 224),
         );

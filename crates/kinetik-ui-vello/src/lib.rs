@@ -436,6 +436,15 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                     Some(resource) if resource.snapshot.is_none() => {
                         diagnostics.push(RenderDiagnostic::MissingTextureSnapshot(texture.texture));
                     }
+                    Some(resource)
+                        if resource.snapshot.as_ref().is_some_and(|snapshot| {
+                            !logical_size_matches_snapshot(resource.size, snapshot)
+                        }) =>
+                    {
+                        diagnostics
+                            .push(RenderDiagnostic::InvalidGeometry("texture_snapshot_size"));
+                        continue;
+                    }
                     Some(_) => {}
                 }
                 commands.push(render_command(
@@ -1879,6 +1888,11 @@ fn source_size_matches_snapshot(source_size: Size, image: &RenderImage) -> bool 
         && (f64::from(source_size.height) - f64::from(image.height)).abs() <= f64::EPSILON
 }
 
+#[allow(clippy::cast_precision_loss)]
+fn logical_size_matches_snapshot(size: Size, image: &RenderImage) -> bool {
+    logical_size_matches(size, Size::new(image.width as f32, image.height as f32))
+}
+
 fn image_quality(sampling: RenderImageSampling) -> ImageQuality {
     match sampling {
         RenderImageSampling::Pixelated => ImageQuality::Low,
@@ -2244,6 +2258,10 @@ mod tests {
             ],
         )
         .expect("valid tiny image")
+    }
+
+    fn one_pixel_image() -> RenderImage {
+        RenderImage::rgba8(1, 1, vec![255, 255, 255, 255]).expect("valid one pixel image")
     }
 
     fn text_layout_resource(id: TextLayoutId, text: &str) -> TextLayoutResource {
@@ -2962,6 +2980,30 @@ mod tests {
         assert_eq!(
             translation.diagnostics,
             vec![RenderDiagnostic::InvalidGeometry("texture_source_size")]
+        );
+        assert!(translation.commands.is_empty());
+    }
+
+    #[test]
+    fn texture_snapshot_size_mismatch_is_diagnosed_and_dropped() {
+        let mut resources = RenderResources::new();
+        resources.register_texture(TextureResource {
+            id: TextureId::from_raw(8),
+            size: Size::new(2.0, 2.0),
+            sampling: RenderImageSampling::default(),
+            snapshot: Some(one_pixel_image()),
+        });
+        let primitives = vec![Primitive::Texture(TexturePrimitive {
+            texture: TextureId::from_raw(8),
+            rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+            source_size: Size::new(2.0, 2.0),
+        })];
+
+        let translation = translate_primitives(&primitives, &resources);
+
+        assert_eq!(
+            translation.diagnostics,
+            vec![RenderDiagnostic::InvalidGeometry("texture_snapshot_size")]
         );
         assert!(translation.commands.is_empty());
     }
