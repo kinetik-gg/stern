@@ -515,15 +515,15 @@ impl ShowcaseApp {
         }
 
         for (page, item) in nav_items(viewport.width) {
-            let response = ui.tab_button(
+            let response = ui.tab_button_value(
                 ("nav", page as u8),
                 item,
                 page.label(),
-                self.page == page,
+                &mut self.page,
+                page,
                 false,
             );
             if response.clicked {
-                self.page = page;
                 self.status = format!("Page: {}", page.label());
             }
         }
@@ -824,15 +824,15 @@ impl ShowcaseApp {
             "Row: async result",
         ];
         for row in list.row_rects(Rect::new(x, y, list_width, 112.0), labels.len(), 0..4) {
-            let response = ui.list_row(
+            let response = ui.list_row_value(
                 ("components.list-row", row.index),
                 row.rect,
                 labels[row.index],
-                self.selected_row == row.index,
+                &mut self.selected_row,
+                row.index,
                 false,
             );
             if response.clicked {
-                self.selected_row = row.index;
                 self.status = format!("Selected row {}", row.index + 1);
             }
         }
@@ -866,15 +866,15 @@ impl ShowcaseApp {
             (1, x + 120.0, "State"),
             (2, x + 240.0, "Actions"),
         ] {
-            let response = ui.tab_button(
+            let response = ui.tab_button_value(
                 ("components.tab", index),
                 Rect::new(tab_x, y, 108.0, 30.0),
                 label,
-                self.selected_tab == index,
+                &mut self.selected_tab,
+                index,
                 false,
             );
             if response.clicked {
-                self.selected_tab = index;
                 self.status = format!("Tab: {label}");
             }
         }

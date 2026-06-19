@@ -949,16 +949,15 @@ impl EditorShowcase {
             |ui, _| {
                 for row_rect in layout.visible_row_rects(scroll, &rows, 0.0, 2) {
                     let row = row_rect.row;
-                    let selected = row.id == self.selected_node;
-                    let response = ui.list_row(
+                    let response = ui.list_row_value(
                         ("editor.scene.row", row.id.raw()),
                         row_rect.rect,
                         "",
-                        selected,
+                        &mut self.selected_node,
+                        row.id,
                         false,
                     );
                     if response.clicked {
-                        self.selected_node = row.id;
                         self.status = format!("Selected {}", scene_label(row.id));
                     }
                     let twisty = Rect::new(
@@ -1041,9 +1040,14 @@ impl EditorShowcase {
             |ui, _| {
                 for item in layout.item_rects(grid_bounds, ASSETS.len(), 0..ASSETS.len()) {
                     let asset = &ASSETS[item.index];
-                    let selected = item.index == self.selected_asset;
-                    let response =
-                        ui.selectable(("editor.asset", item.index), item.rect, selected, false);
+                    let response = ui.selectable_value(
+                        ("editor.asset", item.index),
+                        item.rect,
+                        &mut self.selected_asset,
+                        item.index,
+                        false,
+                    );
+                    let selected = response.state.selected;
                     rect(
                         ui,
                         item.rect,
@@ -1061,7 +1065,6 @@ impl EditorShowcase {
                         }),
                     );
                     if response.clicked {
-                        self.selected_asset = item.index;
                         self.status = format!("Asset selected: {}", asset.name);
                     }
                     ui.image(

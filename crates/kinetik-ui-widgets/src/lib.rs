@@ -810,7 +810,9 @@ pub fn tab_button(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    let response = selectable(id, rect, input, memory, selected, disabled);
+    let mut response = selectable(id, rect, input, memory, selected, disabled);
+    let selected = clicked_select_state(selected, response.clicked);
+    response.state.selected = selected;
     let recipe = theme.tab(ComponentState {
         hovered: response.state.hovered,
         pressed: response.state.pressed,
@@ -877,7 +879,9 @@ pub fn list_row(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    let response = selectable(id, rect, input, memory, selected, disabled);
+    let mut response = selectable(id, rect, input, memory, selected, disabled);
+    let selected = clicked_select_state(selected, response.clicked);
+    response.state.selected = selected;
     let recipe = theme.row(ComponentState {
         hovered: response.state.hovered,
         pressed: response.state.pressed,
@@ -1300,11 +1304,13 @@ pub fn radio_button_with_label(
     disabled: bool,
 ) -> WidgetOutput {
     let mut output = checkbox_with_label(id, rect, label, selected, input, memory, theme, disabled);
-    let display_selected = selected
-        || output
+    let display_selected = clicked_select_state(
+        selected,
+        output
             .response
             .as_ref()
-            .is_some_and(|response| response.clicked);
+            .is_some_and(|response| response.clicked),
+    );
     if let Some(response) = output.response.as_mut() {
         response.state.selected = display_selected;
     }
@@ -1410,6 +1416,10 @@ pub fn toggle_with_label(
 
 fn clicked_toggle_state(selected: bool, clicked: bool) -> bool {
     if clicked { !selected } else { selected }
+}
+
+fn clicked_select_state(selected: bool, clicked: bool) -> bool {
+    selected || clicked
 }
 
 /// Emits a slider and updates its value while active.
@@ -2298,6 +2308,74 @@ mod tests {
         assert!(tab.response.expect("tab response").state.selected);
         assert!(row.response.expect("row response").state.selected);
         assert_ne!(tab.primitives.len(), row.primitives.len());
+    }
+
+    #[test]
+    fn tab_and_row_reflect_clicked_selection_same_frame() {
+        let theme = default_dark_theme();
+        let mut tab_memory = UiMemory::new();
+        let tab_id = WidgetId::from_key("tab");
+        let tab_rect = Rect::new(0.0, 0.0, 90.0, 28.0);
+        let mut input = input_at(4.0, 4.0);
+        input.pointer.primary = PointerButtonState::new(true, true, false);
+        tab_button(
+            tab_id,
+            tab_rect,
+            "Tab",
+            false,
+            &input,
+            &mut tab_memory,
+            &theme,
+            false,
+        );
+        input.pointer.primary = PointerButtonState::new(false, false, true);
+        let tab = tab_button(
+            tab_id,
+            tab_rect,
+            "Tab",
+            false,
+            &input,
+            &mut tab_memory,
+            &theme,
+            false,
+        );
+
+        let tab_response = tab.response.expect("tab response");
+        assert!(tab_response.clicked);
+        assert!(tab_response.state.selected);
+        assert!(tab.semantics[0].state.selected);
+
+        let mut row_memory = UiMemory::new();
+        let row_id = WidgetId::from_key("row");
+        let row_rect = Rect::new(0.0, 32.0, 140.0, 26.0);
+        let mut input = input_at(4.0, 36.0);
+        input.pointer.primary = PointerButtonState::new(true, true, false);
+        list_row(
+            row_id,
+            row_rect,
+            "Row",
+            false,
+            &input,
+            &mut row_memory,
+            &theme,
+            false,
+        );
+        input.pointer.primary = PointerButtonState::new(false, false, true);
+        let row = list_row(
+            row_id,
+            row_rect,
+            "Row",
+            false,
+            &input,
+            &mut row_memory,
+            &theme,
+            false,
+        );
+
+        let row_response = row.response.expect("row response");
+        assert!(row_response.clicked);
+        assert!(row_response.state.selected);
+        assert!(row.semantics[0].state.selected);
     }
 
     #[test]

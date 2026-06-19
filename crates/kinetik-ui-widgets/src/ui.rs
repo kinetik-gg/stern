@@ -344,6 +344,24 @@ impl<'a> Ui<'a> {
         selectable(id, rect, input, memory, selected, disabled)
     }
 
+    /// Resolves neutral selectable behavior and assigns the value when clicked.
+    pub fn selectable_value<T: Copy + Eq>(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        selected: &mut T,
+        value: T,
+        disabled: bool,
+    ) -> Response {
+        let mut response = self.selectable(key, rect, *selected == value, disabled);
+        if response.clicked {
+            *selected = value;
+            response.state.selected = true;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        response
+    }
+
     /// Resolves neutral draggable behavior without painting.
     pub fn draggable(&mut self, key: impl Hash, rect: Rect, disabled: bool) -> Response {
         let id = self.id(key);
@@ -502,6 +520,24 @@ impl<'a> Ui<'a> {
         self.push_interactive(output)
     }
 
+    /// Emits a tab header and assigns the value when clicked.
+    pub fn tab_button_value<T: Copy + Eq>(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        text: impl Into<String>,
+        selected: &mut T,
+        value: T,
+        disabled: bool,
+    ) -> Response {
+        let response = self.tab_button(key, rect, text, *selected == value, disabled);
+        if response.clicked {
+            *selected = value;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        response
+    }
+
     /// Emits a selectable list row and returns its interaction response.
     pub fn list_row(
         &mut self,
@@ -516,6 +552,24 @@ impl<'a> Ui<'a> {
         let (input, memory) = self.runtime.input_and_memory_mut();
         let output = list_row_widget(id, rect, text, selected, input, memory, theme, disabled);
         self.push_interactive(output)
+    }
+
+    /// Emits a selectable list row and assigns the value when clicked.
+    pub fn list_row_value<T: Copy + Eq>(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        text: impl Into<String>,
+        selected: &mut T,
+        value: T,
+        disabled: bool,
+    ) -> Response {
+        let response = self.list_row(key, rect, text, *selected == value, disabled);
+        if response.clicked {
+            *selected = value;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        response
     }
 
     /// Emits a checkbox and returns its interaction response.
@@ -1350,6 +1404,58 @@ mod tests {
         assert!(clicked.clicked);
         assert!(clicked.state.selected);
         assert!(value);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
+    }
+
+    #[test]
+    fn ui_selection_value_helpers_mutate_and_reflect_clicked_state_same_frame() {
+        let theme = default_dark_theme();
+        let mut selected = 0_usize;
+
+        let mut memory = UiMemory::new();
+        let rect = Rect::new(0.0, 0.0, 120.0, 28.0);
+        let input = pressed_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.list_row_value("row", rect, "Row", &mut selected, 1, false);
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::None);
+
+        let input = released_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let row = ui.list_row_value("row", rect, "Row", &mut selected, 1, false);
+        let output = ui.finish_output();
+        assert!(row.clicked);
+        assert!(row.state.selected);
+        assert_eq!(selected, 1);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+        let mut memory = UiMemory::new();
+        let input = pressed_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.tab_button_value("tab", rect, "Tab", &mut selected, 2, false);
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::None);
+
+        let input = released_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let tab = ui.tab_button_value("tab", rect, "Tab", &mut selected, 2, false);
+        let output = ui.finish_output();
+        assert!(tab.clicked);
+        assert!(tab.state.selected);
+        assert_eq!(selected, 2);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+        let mut memory = UiMemory::new();
+        let input = pressed_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.selectable_value("asset", rect, &mut selected, 3, false);
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::None);
+
+        let input = released_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let asset = ui.selectable_value("asset", rect, &mut selected, 3, false);
+        let output = ui.finish_output();
+        assert!(asset.clicked);
+        assert!(asset.state.selected);
+        assert_eq!(selected, 3);
         assert_eq!(output.repaint, RepaintRequest::NextFrame);
     }
 
