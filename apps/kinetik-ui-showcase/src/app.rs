@@ -2116,7 +2116,7 @@ mod tests {
     fn editor_toolbar_action_requests_follow_up_repaint() {
         let mut app = ShowcaseApp::new();
 
-        click(&mut app, Point::new(166.0, 46.0));
+        click(&mut app, Point::new(197.0, 49.0));
 
         assert_eq!(app.action_count(), 1);
         assert_eq!(app.output().repaint, RepaintRequest::NextFrame);
