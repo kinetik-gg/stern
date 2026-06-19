@@ -235,11 +235,14 @@ impl ViewportSurface {
     pub fn content_rect_to_screen_at(self, rect: Rect, scale_factor: ScaleFactor) -> Option<Rect> {
         let scale = finite_positive(self.content_scale_at(scale_factor))?;
         let origin = self.content_to_screen_at(rect.origin(), scale_factor)?;
-        Some(Rect::new(
-            origin.x,
-            origin.y,
-            finite_non_negative(rect.width) * scale,
-            finite_non_negative(rect.height) * scale,
+        Some(snap_rect_to_scale(
+            Rect::new(
+                origin.x,
+                origin.y,
+                finite_non_negative(rect.width) * scale,
+                finite_non_negative(rect.height) * scale,
+            ),
+            scale_factor,
         ))
     }
 
@@ -862,6 +865,33 @@ mod tests {
         assert_approx(line.to.y, texture.rect.max_y());
         assert!(line.from.x >= texture.rect.x);
         assert!(line.from.x <= texture.rect.max_x());
+    }
+
+    #[test]
+    fn scale_aware_content_rect_overlays_snap_to_physical_pixels() {
+        let mut surface = surface();
+        surface.bounds = Rect::new(0.25, 0.25, 201.0, 201.0);
+        surface.pan_zoom.actual_size();
+        let scale_factor = ScaleFactor::new(1.25);
+
+        let overlay = surface
+            .content_rect_to_screen_at(Rect::new(23.0, 17.0, 41.0, 19.0), scale_factor)
+            .expect("overlay rect");
+
+        for value in [
+            overlay.x,
+            overlay.y,
+            overlay.width,
+            overlay.height,
+            overlay.max_x(),
+            overlay.max_y(),
+        ] {
+            let physical = f64::from(value) * scale_factor.value();
+            assert!(
+                (physical - physical.round()).abs() <= 0.001,
+                "{value} -> {physical}"
+            );
+        }
     }
 
     #[test]

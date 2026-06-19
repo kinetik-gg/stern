@@ -1390,9 +1390,10 @@ impl EditorShowcase {
             }
         }
 
-        if let Some(selection) =
-            surface.content_rect_to_screen(Rect::new(720.0, 210.0, 210.0, 280.0))
-        {
+        if let Some(selection) = surface.content_rect_to_screen_at(
+            Rect::new(720.0, 210.0, 210.0, 280.0),
+            ui.viewport().scale_factor,
+        ) {
             rect(
                 ui,
                 selection,
@@ -2088,10 +2089,11 @@ fn run_toolbar_buttons(
 #[allow(clippy::float_cmp, clippy::items_after_test_module)]
 mod tests {
     use super::{
-        EditorMenuKind, EditorShowcase, EditorTool, FRAME_BOTTOM, ICON_ASSETS, ICON_ATLAS,
-        ICON_ATLAS_CELL_SIZE, ICON_ATLAS_PADDING, ICON_CROSSHAIR, ICON_SIZE, PANEL_JOBS,
-        TOOLBAR_BUTTON_SIZE, TOOLBAR_STRIDE, TOOLBAR_Y, WORKSPACE_TOP, frame_tab_rects,
-        icon_atlas_image, inspector_label_width, item_id, register_resources, rgb,
+        EditorMenuKind, EditorShowcase, EditorTool, FRAME_BOTTOM, FRAME_VIEWPORT, ICON_ASSETS,
+        ICON_ATLAS, ICON_ATLAS_CELL_SIZE, ICON_ATLAS_PADDING, ICON_CROSSHAIR, ICON_SIZE,
+        PANEL_JOBS, TOOLBAR_BUTTON_SIZE, TOOLBAR_STRIDE, TOOLBAR_Y, VIEWPORT_SIZE, WORKSPACE_TOP,
+        frame_tab_rects, icon_atlas_image, inspector_label_width, item_id, register_resources, rgb,
+        rgba,
     };
     use kinetik_ui::core::{
         Brush, CursorShape, FrameContext, PathElement, PhysicalSize, PlatformRequest, Point,
@@ -2099,7 +2101,7 @@ mod tests {
         SemanticRole, Size, TimeInfo, UiInput, UiMemory, ViewportInfo, default_dark_theme,
     };
     use kinetik_ui::render::RenderResources;
-    use kinetik_ui::widgets::{Ui, solve_dock_layout};
+    use kinetik_ui::widgets::{Ui, ViewportSurface, solve_dock_layout};
 
     #[test]
     fn inspector_label_width_preserves_value_space_at_narrow_widths() {
@@ -2249,6 +2251,58 @@ mod tests {
         assert!(!output.primitives.iter().any(|primitive| {
             matches!(primitive, Primitive::Text(text) if text.text == "Message")
         }));
+    }
+
+    #[test]
+    fn viewport_selection_overlay_uses_scaled_content_mapping() {
+        let mut editor = EditorShowcase::new();
+        let mut memory = UiMemory::new();
+        let theme = default_dark_theme();
+        let viewport_frame = editor_frame_rect(&editor, FRAME_VIEWPORT);
+        let viewport_body = frame_body_rect(viewport_frame);
+        let surface_bounds = Rect::new(
+            viewport_body.x + 8.0,
+            viewport_body.y + 36.0,
+            (viewport_body.width - 16.0).max(1.0),
+            (viewport_body.height - 66.0).max(1.0),
+        );
+        let surface = ViewportSurface {
+            texture: super::VIEWPORT_TEXTURE,
+            source_size: VIEWPORT_SIZE,
+            bounds: surface_bounds,
+            pan_zoom: editor.viewport_pan_zoom,
+        };
+        let scale = ScaleFactor::new(1.25);
+        let expected = surface
+            .content_rect_to_screen_at(Rect::new(720.0, 210.0, 210.0, 280.0), scale)
+            .expect("selection rect");
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context_scaled(UiInput::default(), scale),
+            &mut memory,
+            &theme,
+        );
+        editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+        let selection_fill = rgba(78, 142, 245, 0.12);
+        let selection = output
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Rect(rect)
+                    if matches!(&rect.fill, Some(Brush::Solid(color)) if *color == selection_fill) =>
+                {
+                    Some(rect.rect)
+                }
+                _ => None,
+            })
+            .expect("selection overlay rect");
+
+        assert_eq!(selection, expected);
+        let physical_x = f64::from(selection.x) * scale.value();
+        let physical_width = f64::from(selection.width) * scale.value();
+        assert!((physical_x - physical_x.round()).abs() < 0.001);
+        assert!((physical_width - physical_width.round()).abs() < 0.001);
     }
 
     #[test]
@@ -2487,11 +2541,18 @@ mod tests {
     }
 
     fn editor_test_context(input: UiInput) -> FrameContext {
+        editor_test_context_scaled(input, ScaleFactor::ONE)
+    }
+
+    fn editor_test_context_scaled(input: UiInput, scale_factor: ScaleFactor) -> FrameContext {
         FrameContext::new(
             ViewportInfo::new(
                 Size::new(1440.0, 900.0),
-                PhysicalSize::new(1440, 900),
-                ScaleFactor::ONE,
+                PhysicalSize::new(
+                    (1440.0 * scale_factor.value()).round() as u32,
+                    (900.0 * scale_factor.value()).round() as u32,
+                ),
+                scale_factor,
             ),
             input,
             TimeInfo::default(),
@@ -2499,6 +2560,10 @@ mod tests {
     }
 
     fn bottom_frame_rect(editor: &EditorShowcase) -> Rect {
+        editor_frame_rect(editor, FRAME_BOTTOM)
+    }
+
+    fn editor_frame_rect(editor: &EditorShowcase, frame: super::FrameId) -> Rect {
         let viewport = Rect::new(0.0, 0.0, 1440.0, 900.0);
         let bounds = Rect::new(
             4.0,
@@ -2508,9 +2573,19 @@ mod tests {
         );
         solve_dock_layout(&editor.dock, bounds)
             .into_iter()
-            .find(|layout| layout.frame == FRAME_BOTTOM)
+            .find(|layout| layout.frame == frame)
             .map(|layout| layout.rect.inset(2.0))
-            .expect("bottom frame")
+            .expect("editor frame")
+    }
+
+    fn frame_body_rect(frame_rect: Rect) -> Rect {
+        let tab_height = 26.0;
+        Rect::new(
+            frame_rect.x + 1.0,
+            frame_rect.y + tab_height + 2.0,
+            (frame_rect.width - 2.0).max(0.0),
+            (frame_rect.height - tab_height - 3.0).max(0.0),
+        )
     }
 
     fn point_is_in_toolbar(point: Point) -> bool {
