@@ -2004,7 +2004,7 @@ fn encode_shaped_text_axis_aligned_device_space(
     origin: Point,
     layout: &ShapedTextLayout,
     color: Color,
-    _scale_x: f64,
+    scale_x: f64,
     scale_y: f64,
 ) {
     let origin = snap_text_origin_to_device(origin);
@@ -2015,25 +2015,44 @@ fn encode_shaped_text_axis_aligned_device_space(
         } else {
             scale_y
         };
-        // Keep transformed UI text hinted; horizontal outline scaling tends to soften stems.
-        scene
+        let glyph_transform = non_uniform_axis_aligned_glyph_transform(scale_x, effective_y_scale);
+        let mut glyph_run = scene
             .draw_glyphs(&run.font)
             .font_size(font_size)
             .hint(true)
-            .brush(vello_color(color))
-            .draw(
-                Fill::NonZero,
-                run.glyphs.iter().map(|glyph| Glyph {
-                    id: glyph.id,
-                    x: snap_text_glyph_position_to_device(
-                        origin.x + (f64::from(glyph.x) * effective_y_scale) as f32,
-                    ),
-                    y: snap_text_glyph_baseline_to_device(
-                        origin.y + (f64::from(glyph.y) * effective_y_scale) as f32,
-                    ),
-                }),
-            );
+            .brush(vello_color(color));
+        if let Some(glyph_transform) = glyph_transform {
+            glyph_run = glyph_run.glyph_transform(Some(glyph_transform));
+        }
+        glyph_run.draw(
+            Fill::NonZero,
+            run.glyphs.iter().map(|glyph| Glyph {
+                id: glyph.id,
+                x: snap_text_glyph_position_to_device(
+                    origin.x + (f64::from(glyph.x) * scale_x) as f32,
+                ),
+                y: snap_text_glyph_baseline_to_device(
+                    origin.y + (f64::from(glyph.y) * effective_y_scale) as f32,
+                ),
+            }),
+        );
     }
+}
+
+fn non_uniform_axis_aligned_glyph_transform(
+    scale_x: f64,
+    effective_y_scale: f64,
+) -> Option<Affine> {
+    if !scale_x.is_finite()
+        || !effective_y_scale.is_finite()
+        || scale_x <= 0.0
+        || effective_y_scale <= 0.0
+    {
+        return None;
+    }
+
+    let x_ratio = scale_x / effective_y_scale;
+    ((x_ratio - 1.0).abs() > f64::EPSILON).then(|| Affine::scale_non_uniform(x_ratio, 1.0))
 }
 
 fn snap_text_origin_to_device(origin: Point) -> Point {
@@ -2580,9 +2599,10 @@ mod tests {
         snap_image_rect_to_device, snap_point_to_device, snap_radius_to_device,
         snap_rect_to_device, snap_stroke_center_to_device, snap_stroked_line_to_device,
         snap_stroked_path_elements_to_device, snap_stroked_rect_to_device,
-        snap_text_glyph_baseline_to_device, snap_text_origin_to_device,
-        snap_text_transform_origin_to_device, snapped_image_region_transform, transform_point,
-        translate_primitives, viewport_device_scale, viewport_size_device_scale,
+        snap_text_glyph_baseline_to_device, snap_text_glyph_position_to_device,
+        snap_text_origin_to_device, snap_text_transform_origin_to_device,
+        snapped_image_region_transform, transform_point, translate_primitives,
+        viewport_device_scale, viewport_size_device_scale,
     };
     use kinetik_ui_core::render::TexturePrimitive;
     use kinetik_ui_core::{
@@ -4417,9 +4437,13 @@ mod tests {
     }
 
     #[test]
-    fn axis_aligned_non_uniform_text_prefers_hinted_unscaled_glyphs() {
+    fn axis_aligned_non_uniform_text_preserves_x_scale_with_glyph_transform() {
         let mut renderer = VelloRenderer::new();
         let resources = RenderResources::new();
+        let text = "Kinetik";
+        let origin = Point::new(4.3, 16.4);
+        let font_size = 13.0;
+        let line_height = 18.0;
         let primitives = vec![
             Primitive::TransformBegin(Transform {
                 m11: 1.25,
@@ -4430,11 +4454,11 @@ mod tests {
             }),
             Primitive::Text(TextPrimitive {
                 layout: None,
-                origin: Point::new(4.3, 16.4),
-                text: "Kinetik".to_owned(),
+                origin,
+                text: text.to_owned(),
                 family: "sans-serif".to_owned(),
-                size: 13.0,
-                line_height: 18.0,
+                size: font_size,
+                line_height,
                 brush: Brush::Solid(Color::WHITE),
             }),
             Primitive::TransformEnd,
@@ -4462,8 +4486,34 @@ mod tests {
         assert_approx(glyph_run.transform.matrix[3], 1.0);
         assert_approx(glyph_run.transform.translation[0], 0.0);
         assert_approx(glyph_run.transform.translation[1], 0.0);
-        assert!(glyph_run.glyph_transform.is_none());
+        let glyph_transform = glyph_run.glyph_transform.expect("x glyph transform");
+        assert_approx(glyph_transform.matrix[0], 0.8125);
+        assert_approx(glyph_transform.matrix[1], 0.0);
+        assert_approx(glyph_transform.matrix[2], 0.0);
+        assert_approx(glyph_transform.matrix[3], 1.0);
         assert!(glyphs.len() > 1);
+        let mut engine = CosmicTextEngine::new();
+        let layout = engine.shape_text(&TextLayoutKey::new(
+            text,
+            TextStyle::new("sans-serif", font_size, line_height),
+            0.0,
+            false,
+        ));
+        let logical_second_glyph = layout
+            .runs
+            .first()
+            .and_then(|run| run.glyphs.iter().find(|glyph| glyph.x > 0.0))
+            .expect("second logical glyph");
+        let encoded_second_glyph = glyphs
+            .iter()
+            .find(|glyph| glyph.x > glyphs[0].x)
+            .expect("second encoded glyph");
+        let snapped_origin =
+            snap_text_origin_to_device(Point::new(2.0 + origin.x * 1.25, 3.0 + origin.y * 1.5));
+        assert_approx(
+            encoded_second_glyph.x,
+            snap_text_glyph_position_to_device(snapped_origin.x + logical_second_glyph.x * 1.25),
+        );
         assert!(
             glyphs
                 .iter()
