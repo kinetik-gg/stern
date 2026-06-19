@@ -10,7 +10,9 @@ use kinetik_ui_core::{
     WidgetId, context_menu_trigger, draggable, drop_target, focusable, pressable, scrollable,
     selectable, tooltip_trigger,
 };
-use kinetik_ui_text::{TextEditState, TextLayoutKey, TextLayoutStore, TextStyle};
+use kinetik_ui_text::{
+    TextComposition, TextEditState, TextLayoutKey, TextLayoutStore, TextSelection, TextStyle,
+};
 
 use crate::{
     IconId, IconLibrary, MultiLineTextFieldOutput, NumericInputOutput, PanelFrame,
@@ -987,6 +989,7 @@ impl<'a> Ui<'a> {
         let id = self.id(key);
         let theme = self.theme;
         let text_layouts = self.text_layouts.as_deref_mut();
+        let before = TextVisualState::from_state(state);
         let (input, memory) = self.runtime.input_and_memory_mut();
         let output = text_field_widget(
             id,
@@ -999,9 +1002,7 @@ impl<'a> Ui<'a> {
             text_layouts,
         );
         self.push_widget_output(&output.widget);
-        if output.changed {
-            self.request_repaint(RepaintRequest::NextFrame);
-        }
+        self.request_repaint_if_text_visual_changed(&before, state);
         output
     }
 
@@ -1016,6 +1017,7 @@ impl<'a> Ui<'a> {
         let id = self.id(key);
         let theme = self.theme;
         let text_layouts = self.text_layouts.as_deref_mut();
+        let before = TextVisualState::from_state(state);
         let (input, memory) = self.runtime.input_and_memory_mut();
         let output = multi_line_text_field_widget(
             id,
@@ -1028,9 +1030,7 @@ impl<'a> Ui<'a> {
             text_layouts,
         );
         self.push_widget_output(&output.widget);
-        if output.changed {
-            self.request_repaint(RepaintRequest::NextFrame);
-        }
+        self.request_repaint_if_text_visual_changed(&before, state);
         output
     }
 
@@ -1045,6 +1045,7 @@ impl<'a> Ui<'a> {
         let id = self.id(key);
         let theme = self.theme;
         let text_layouts = self.text_layouts.as_deref_mut();
+        let before = TextVisualState::from_state(state);
         let (input, memory) = self.runtime.input_and_memory_mut();
         let output = numeric_input_widget(
             id,
@@ -1057,9 +1058,7 @@ impl<'a> Ui<'a> {
             text_layouts,
         );
         self.push_widget_output(&output.field.widget);
-        if output.field.changed {
-            self.request_repaint(RepaintRequest::NextFrame);
-        }
+        self.request_repaint_if_text_visual_changed(&before, state);
         output
     }
 
@@ -1074,6 +1073,7 @@ impl<'a> Ui<'a> {
         let id = self.id(key);
         let theme = self.theme;
         let text_layouts = self.text_layouts.as_deref_mut();
+        let before = TextVisualState::from_state(state);
         let (input, memory) = self.runtime.input_and_memory_mut();
         let output = search_field_widget(
             id,
@@ -1086,9 +1086,7 @@ impl<'a> Ui<'a> {
             text_layouts,
         );
         self.push_widget_output(&output.field.widget);
-        if output.field.changed {
-            self.request_repaint(RepaintRequest::NextFrame);
-        }
+        self.request_repaint_if_text_visual_changed(&before, state);
         output
     }
 
@@ -1122,6 +1120,16 @@ impl<'a> Ui<'a> {
         response
     }
 
+    fn request_repaint_if_text_visual_changed(
+        &mut self,
+        before: &TextVisualState,
+        state: &TextEditState,
+    ) {
+        if *before != TextVisualState::from_state(state) {
+            self.runtime.request_repaint(RepaintRequest::NextFrame);
+        }
+    }
+
     fn attach_text_layout(&mut self, primitive: &mut Primitive) {
         let Some(text_layouts) = self.text_layouts.as_deref_mut() else {
             return;
@@ -1134,6 +1142,23 @@ impl<'a> Ui<'a> {
         }
 
         text.layout = Some(text_layouts.layout_id(text_layout_key(text)));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TextVisualState {
+    text: String,
+    selection: TextSelection,
+    composition: Option<TextComposition>,
+}
+
+impl TextVisualState {
+    fn from_state(state: &TextEditState) -> Self {
+        Self {
+            text: state.text.clone(),
+            selection: state.selection,
+            composition: state.composition.clone(),
+        }
     }
 }
 
@@ -1163,10 +1188,11 @@ mod tests {
     use crate::{IconGraphic, IconLibrary, IconPath};
     use kinetik_ui_core::{
         ActionContext, ActionDescriptor, ActionSource, Brush, Color, CursorShape, FrameContext,
-        FrameWarning, IconId, ImageId, Insets, PathElement, PhysicalSize, PlatformRequest, Point,
-        PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest, ScaleFactor,
-        SemanticNode, SemanticRole, Size, TextInputEvent, TextPrimitive, TimeInfo, UiInput,
-        UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+        FrameWarning, IconId, ImageId, Insets, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
+        PathElement, PhysicalSize, PlatformRequest, Point, PointerButtonState, PointerInput,
+        Primitive, Rect, RepaintRequest, ScaleFactor, SemanticNode, SemanticRole, Size,
+        TextInputEvent, TextPrimitive, TextRange, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo,
+        WidgetId, default_dark_theme,
     };
     use kinetik_ui_text::{TextEditState, TextLayoutKey, TextLayoutStore, TextStyle};
 
@@ -1231,6 +1257,21 @@ mod tests {
     fn committed_text(text: &str) -> UiInput {
         UiInput {
             text_events: vec![TextInputEvent::Commit(text.to_owned())],
+            ..UiInput::default()
+        }
+    }
+
+    fn pressed_key(key: Key) -> UiInput {
+        UiInput {
+            keyboard: KeyboardInput {
+                modifiers: Modifiers::default(),
+                events: vec![KeyEvent::new(
+                    key,
+                    KeyState::Pressed,
+                    Modifiers::default(),
+                    false,
+                )],
+            },
             ..UiInput::default()
         }
     }
@@ -2169,6 +2210,47 @@ mod tests {
 
         assert!(output.changed);
         assert_eq!(state.text, "dabc");
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
+    }
+
+    #[test]
+    fn ui_text_field_caret_motion_requests_followup_repaint() {
+        let theme = default_dark_theme();
+        let mut memory = UiMemory::new();
+        let mut state = TextEditState::new("abc");
+        let field = WidgetId::from_key("root").child("field");
+        memory.focus(field);
+        let input = pressed_key(Key::ArrowLeft);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+
+        let output = ui.text_field("field", Rect::new(0.0, 0.0, 120.0, 24.0), &mut state, false);
+
+        assert!(!output.changed);
+        assert_eq!(state.caret(), 2);
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
+    }
+
+    #[test]
+    fn ui_text_field_composition_requests_followup_repaint() {
+        let theme = default_dark_theme();
+        let mut memory = UiMemory::new();
+        let mut state = TextEditState::new("abc");
+        let field = WidgetId::from_key("root").child("field");
+        memory.focus(field);
+        let input = UiInput {
+            text_events: vec![TextInputEvent::Composition {
+                text: "pre".to_owned(),
+                selection: Some(TextRange::new(1, 2)),
+            }],
+            ..UiInput::default()
+        };
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+
+        let output = ui.text_field("field", Rect::new(0.0, 0.0, 120.0, 24.0), &mut state, false);
+
+        assert!(!output.changed);
+        assert_eq!(state.text, "abc");
+        assert!(state.composition.is_some());
         assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
     }
 
