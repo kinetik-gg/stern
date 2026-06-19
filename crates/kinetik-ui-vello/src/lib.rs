@@ -3922,6 +3922,63 @@ mod tests {
     }
 
     #[test]
+    fn physical_text_policy_holds_across_common_dpi_scales() {
+        let resources = RenderResources::new();
+        let origin = Point::new(4.3, 16.4);
+        let font_size = 13.0;
+        let primitives = vec![Primitive::Text(TextPrimitive {
+            layout: None,
+            origin,
+            text: "Kinetik".to_owned(),
+            family: "sans-serif".to_owned(),
+            size: font_size,
+            line_height: 18.0,
+            brush: Brush::Solid(Color::WHITE),
+        })];
+
+        for (scale, physical_size, expected_font_size, expected_x) in [
+            (1.0, 100, 13.0, 4.0),
+            (1.25, 125, 16.0, 5.0),
+            (1.5, 150, 20.0, 6.0),
+            (2.0, 200, 26.0, 9.0),
+        ] {
+            let mut renderer = VelloRenderer::new();
+            let output = renderer.submit_frame(RenderFrameInput {
+                viewport: ViewportInfo::new(
+                    Size::new(100.0, 100.0),
+                    kinetik_ui_core::PhysicalSize::new(physical_size, physical_size),
+                    ScaleFactor::new(scale),
+                ),
+                primitives: &primitives,
+                resources: &resources,
+            });
+            let encoding = renderer.scene().encoding();
+            let glyphs = &encoding.resources.glyphs;
+            let glyph_run = encoding.resources.glyph_runs.first().expect("glyph run");
+            let first_glyph = glyphs.first().expect("glyph");
+
+            assert!(output.diagnostics.is_empty());
+            assert_approx(glyph_run.font_size, expected_font_size);
+            assert!(glyph_run.hint);
+            assert_approx(first_glyph.x, expected_x);
+            assert!((first_glyph.x - first_glyph.x.round()).abs() <= 0.001);
+            assert!(
+                glyphs
+                    .iter()
+                    .skip(1)
+                    .any(|glyph| glyph.x.fract().abs() > 0.001),
+                "scale {scale} should keep shaped fractional advances"
+            );
+            assert!(
+                glyphs
+                    .iter()
+                    .all(|glyph| (glyph.y - glyph.y.round()).abs() <= 0.001),
+                "scale {scale} should snap glyph baselines"
+            );
+        }
+    }
+
+    #[test]
     fn physical_text_layout_shapes_at_device_font_size() {
         let mut engine = CosmicTextEngine::new();
         let mut cache = ShapedTextCache::default();
