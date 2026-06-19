@@ -2509,35 +2509,52 @@ mod tests {
     }
 
     #[test]
-    fn showcase_pages_emit_text_at_fractional_dpi_without_renderer_diagnostics() {
-        let size = Size::new(1440.0, 900.0);
-        for page in [
-            ShowcasePage::Editor,
-            ShowcasePage::Components,
-            ShowcasePage::Layout,
-            ShowcasePage::Viewport,
-            ShowcasePage::Systems,
+    fn showcase_pages_snap_text_to_physical_pixels_at_fractional_dpi() {
+        for (size, scale_factor) in [
+            (Size::new(1151.2, 719.2), 1.25),
+            (Size::new(960.7, 602.0), 1.5),
         ] {
-            let mut app = ShowcaseApp::new();
-            app.set_viewport_size(size);
-            app.set_page(page);
-            let resources = app.render_resources();
-            let mut renderer = VelloRenderer::new();
-            let output = renderer.submit_frame(RenderFrameInput {
-                viewport: test_viewport_scaled(size, 1.25),
-                primitives: &app.output().primitives,
-                resources: &resources,
-            });
+            for page in [
+                ShowcasePage::Editor,
+                ShowcasePage::Components,
+                ShowcasePage::Layout,
+                ShowcasePage::Viewport,
+                ShowcasePage::Systems,
+            ] {
+                let mut app = ShowcaseApp::new();
+                app.set_viewport_size(size);
+                app.set_page(page);
+                let resources = app.render_resources();
+                let mut renderer = VelloRenderer::new();
+                let output = renderer.submit_frame(RenderFrameInput {
+                    viewport: test_viewport_scaled(size, scale_factor),
+                    primitives: &app.output().primitives,
+                    resources: &resources,
+                });
+                let glyphs = &renderer.scene().encoding().resources.glyphs;
 
-            assert!(
-                output.diagnostics.is_empty(),
-                "{page:?}: {:?}",
-                output.diagnostics
-            );
-            assert!(
-                !renderer.scene().encoding().resources.glyph_runs.is_empty(),
-                "{page:?} emitted no glyph runs at fractional DPI"
-            );
+                assert!(
+                    output.diagnostics.is_empty(),
+                    "{page:?} at {size:?}: {:?}",
+                    output.diagnostics
+                );
+                assert!(
+                    !glyphs.is_empty(),
+                    "{page:?} at {size:?} emitted no glyphs at fractional DPI"
+                );
+                assert!(
+                    glyphs
+                        .iter()
+                        .all(|glyph| (glyph.x - glyph.x.round()).abs() <= 0.001),
+                    "{page:?} at {size:?} emitted fractional glyph x positions"
+                );
+                assert!(
+                    glyphs
+                        .iter()
+                        .all(|glyph| (glyph.y - glyph.y.round()).abs() <= 0.001),
+                    "{page:?} at {size:?} emitted fractional glyph baselines"
+                );
+            }
         }
     }
 
