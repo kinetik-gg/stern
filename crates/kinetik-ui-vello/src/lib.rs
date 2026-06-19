@@ -2003,7 +2003,7 @@ fn encode_shaped_text_axis_aligned_device_space(
     origin: Point,
     layout: &ShapedTextLayout,
     color: Color,
-    scale_x: f64,
+    _scale_x: f64,
     scale_y: f64,
 ) {
     let origin = snap_text_origin_to_device(origin);
@@ -2014,12 +2014,9 @@ fn encode_shaped_text_axis_aligned_device_space(
         } else {
             scale_y
         };
-        let glyph_scale = scale_x / effective_y_scale;
-        let glyph_transform = ((glyph_scale - 1.0).abs() > f64::EPSILON)
-            .then(|| Affine::scale_non_uniform(glyph_scale, 1.0));
+        // Keep transformed UI text hinted; horizontal outline scaling tends to soften stems.
         scene
             .draw_glyphs(&run.font)
-            .glyph_transform(glyph_transform)
             .font_size(font_size)
             .hint(true)
             .brush(vello_color(color))
@@ -2028,7 +2025,7 @@ fn encode_shaped_text_axis_aligned_device_space(
                 run.glyphs.iter().map(|glyph| Glyph {
                     id: glyph.id,
                     x: snap_text_glyph_position_to_device(
-                        origin.x + (f64::from(glyph.x) * scale_x) as f32,
+                        origin.x + (f64::from(glyph.x) * effective_y_scale) as f32,
                     ),
                     y: snap_text_glyph_baseline_to_device(
                         origin.y + (f64::from(glyph.y) * effective_y_scale) as f32,
@@ -4320,7 +4317,7 @@ mod tests {
     }
 
     #[test]
-    fn axis_aligned_non_uniform_text_flattens_to_snapped_device_glyphs() {
+    fn axis_aligned_non_uniform_text_prefers_hinted_unscaled_glyphs() {
         let mut renderer = VelloRenderer::new();
         let resources = RenderResources::new();
         let primitives = vec![
@@ -4365,9 +4362,7 @@ mod tests {
         assert_approx(glyph_run.transform.matrix[3], 1.0);
         assert_approx(glyph_run.transform.translation[0], 0.0);
         assert_approx(glyph_run.transform.translation[1], 0.0);
-        let glyph_transform = glyph_run.glyph_transform.expect("horizontal glyph scale");
-        assert_approx(glyph_transform.matrix[0], 0.8125);
-        assert_approx(glyph_transform.matrix[3], 1.0);
+        assert!(glyph_run.glyph_transform.is_none());
         assert!(glyphs.len() > 1);
         assert!(
             glyphs
