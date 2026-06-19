@@ -503,7 +503,7 @@ impl EditorShowcase {
         );
     }
 
-    fn dismiss_menu_for_input(&mut self, ui: &Ui<'_>, viewport: Rect) {
+    fn dismiss_menu_for_input(&mut self, ui: &mut Ui<'_>, viewport: Rect) {
         let Some(kind) = self.open_menu else {
             return;
         };
@@ -523,6 +523,7 @@ impl EditorShowcase {
             .is_empty()
         {
             self.open_menu = None;
+            ui.request_repaint(RepaintRequest::NextFrame);
         }
     }
 
@@ -1945,7 +1946,7 @@ fn inspector_label_width(grid_width: f32) -> f32 {
 #[allow(clippy::float_cmp, clippy::items_after_test_module)]
 mod tests {
     use super::{
-        EditorShowcase, EditorTool, ICON_ASSETS, ICON_ATLAS, ICON_ATLAS_CELL_SIZE,
+        EditorMenuKind, EditorShowcase, EditorTool, ICON_ASSETS, ICON_ATLAS, ICON_ATLAS_CELL_SIZE,
         ICON_ATLAS_PADDING, ICON_CROSSHAIR, ICON_SIZE, TOOLBAR_BUTTON_SIZE, TOOLBAR_Y,
         icon_atlas_image, inspector_label_width, item_id, register_resources,
     };
@@ -2050,6 +2051,25 @@ mod tests {
                 matches!(primitive, Primitive::Text(text) if text.text == ">")
             })
         );
+    }
+
+    #[test]
+    fn outside_click_dismisses_menu_and_requests_repaint() {
+        let mut editor = EditorShowcase::new();
+        editor.open_menu = Some(EditorMenuKind::File);
+        let mut memory = UiMemory::new();
+        let theme = default_dark_theme();
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(900.0, 700.0, false, false, true)),
+            &mut memory,
+            &theme,
+        );
+        editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+
+        assert_eq!(editor.open_menu, None);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
     }
 
     #[test]
