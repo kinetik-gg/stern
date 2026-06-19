@@ -1802,14 +1802,14 @@ fn static_render_resources() -> RenderResources {
     resources.register_image(ImageResource {
         id: ImageId::from_raw(7),
         size: Size::new(64.0, 48.0),
-        sampling: RenderImageSampling::Smooth,
+        sampling: RenderImageSampling::Pixelated,
         pixels: Some(thumbnail_image()),
         atlas_region: None,
     });
     resources.register_image(ImageResource {
         id: ImageId::from_raw(11),
         size: Size::new(96.0, 72.0),
-        sampling: RenderImageSampling::Smooth,
+        sampling: RenderImageSampling::Pixelated,
         pixels: Some(primitive_image()),
         atlas_region: None,
     });
@@ -2161,8 +2161,16 @@ mod tests {
     }
 
     #[test]
-    fn generated_showcase_textures_use_pixel_snapped_sampling() {
+    fn generated_showcase_media_uses_pixel_snapped_sampling() {
         let resources = static_render_resources();
+
+        for image in [ImageId::from_raw(7), ImageId::from_raw(11)] {
+            assert_eq!(
+                resources.image(image).map(|resource| resource.sampling),
+                Some(RenderImageSampling::Pixelated),
+                "{image:?}"
+            );
+        }
 
         for texture in [
             TextureId::from_raw(99),
