@@ -1561,7 +1561,7 @@ pub fn register_resources(resources: &mut RenderResources) {
         resources.register_texture(TextureResource {
             id: VIEWPORT_TEXTURE,
             size: VIEWPORT_SIZE,
-            sampling: RenderImageSampling::Pixelated,
+            sampling: RenderImageSampling::Smooth,
             snapshot: Some(snapshot),
         });
     }

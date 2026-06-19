@@ -2153,7 +2153,7 @@ mod tests {
         assert!(resources.texture(texture).is_some());
         assert_eq!(
             resources.texture(texture).map(|resource| resource.sampling),
-            Some(RenderImageSampling::Pixelated)
+            Some(RenderImageSampling::Smooth)
         );
         assert!(
             resources
@@ -2212,7 +2212,7 @@ mod tests {
             resources
                 .texture(TextureId::from_raw(9_001))
                 .map(|resource| resource.sampling),
-            Some(RenderImageSampling::Pixelated)
+            Some(RenderImageSampling::Smooth)
         );
 
         for texture in [TextureId::from_raw(99), TextureId::from_raw(101)] {
