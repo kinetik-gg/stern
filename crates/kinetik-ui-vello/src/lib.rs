@@ -1400,10 +1400,11 @@ fn encode_image_command(
     rect: Rect,
     device_scale: f64,
 ) {
-    let rect = snap_rect_to_device(rect, device_scale);
     if let Some(draw) = resolve_image_draw(resources, image) {
+        let rect = snap_image_rect_to_device(rect, draw.sampling, device_scale);
         encode_image_region(scene, transform, rect, image_cache, draw);
     } else {
+        let rect = snap_rect_to_device(rect, device_scale);
         encode_resource_placeholder(
             scene,
             transform,
@@ -1424,13 +1425,14 @@ fn encode_texture_command(
     source_size: Size,
     device_scale: f64,
 ) {
-    let rect = snap_rect_to_device(rect, device_scale);
     if let Some(resource) = resources.texture(texture)
         && let Some(snapshot) = resource.snapshot.as_ref()
         && source_size_matches_snapshot(source_size, snapshot)
     {
+        let rect = snap_image_rect_to_device(rect, resource.sampling, device_scale);
         encode_image(scene, transform, rect, snapshot, resource.sampling);
     } else {
+        let rect = snap_rect_to_device(rect, device_scale);
         encode_resource_placeholder(
             scene,
             transform,
@@ -2012,6 +2014,18 @@ fn snap_rect_to_device(rect: Rect, device_scale: f64) -> Rect {
     )
 }
 
+fn snap_image_rect_to_device(rect: Rect, sampling: RenderImageSampling, device_scale: f64) -> Rect {
+    match sampling {
+        RenderImageSampling::Pixelated | RenderImageSampling::UiIcon => {
+            snap_rect_to_device(rect, device_scale)
+        }
+        RenderImageSampling::Smooth | RenderImageSampling::HighQuality => {
+            let origin = snap_point_to_device(rect.origin(), device_scale);
+            Rect::new(origin.x, origin.y, rect.width, rect.height)
+        }
+    }
+}
+
 #[allow(clippy::cast_possible_truncation)]
 fn snap_stroked_rect_to_device(rect: Rect, stroke_width: f32, device_scale: f64) -> Rect {
     if !rect.x.is_finite()
@@ -2166,9 +2180,10 @@ mod tests {
         RenderFrameInput, RenderImage, RenderImageSampling, RenderResources, RendererBackend,
         TextLayoutResource, TextureResource, VelloRenderer, image_quality, physical_text_layout,
         physical_text_layout_for_key, quantize_stroke_width_to_device, render_translation_snapshot,
-        root_transform, snap_axis_aligned_translation, snap_point_to_device, snap_rect_to_device,
-        snap_stroke_center_to_device, snap_stroked_line_to_device, snap_stroked_rect_to_device,
-        snap_text_origin_to_device, translate_primitives, viewport_device_scale,
+        root_transform, snap_axis_aligned_translation, snap_image_rect_to_device,
+        snap_point_to_device, snap_rect_to_device, snap_stroke_center_to_device,
+        snap_stroked_line_to_device, snap_stroked_rect_to_device, snap_text_origin_to_device,
+        translate_primitives, viewport_device_scale,
     };
     use kinetik_ui_core::render::TexturePrimitive;
     use kinetik_ui_core::{
@@ -3149,6 +3164,21 @@ mod tests {
 
         assert_eq!(point, Point::new(10.0, 20.5));
         assert_eq!(rect, Rect::new(1.0, 2.0, 9.5, 10.5));
+    }
+
+    #[test]
+    fn image_rect_snapping_respects_sampling_intent() {
+        let rect = Rect::new(3.2, 4.2, 14.0, 14.0);
+        let icon = snap_image_rect_to_device(rect, RenderImageSampling::UiIcon, 1.25);
+        let high_quality = snap_image_rect_to_device(rect, RenderImageSampling::HighQuality, 1.25);
+
+        assert_approx(icon.x, 3.2);
+        assert_approx(icon.y, 4.0);
+        assert!((icon.width - 14.4).abs() < 0.000_01);
+        assert!((icon.height - 14.4).abs() < 0.000_01);
+        assert_eq!(high_quality, Rect::new(3.2, 4.0, 14.0, 14.0));
+        assert!((icon.width * 1.25 - 18.0).abs() < 0.000_01);
+        assert_approx(high_quality.width, 14.0);
     }
 
     #[test]
