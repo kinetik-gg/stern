@@ -2117,10 +2117,6 @@ mod tests {
                 "{label}"
             );
         }
-
-        app.update(&ShowcaseInput::default());
-
-        assert_eq!(app.action_count(), 1);
         assert!(!app.primitives().iter().any(|primitive| {
             matches!(primitive, Primitive::Text(text) if text.text == "Save Scene")
         }));

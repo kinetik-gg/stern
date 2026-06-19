@@ -565,6 +565,9 @@ impl EditorShowcase {
         };
         let entry = Self::menu_overlay_entry(kind, viewport);
         let menu = self.menu_model(kind);
+        if self.menu_overlay_interactions(ui, kind, &entry, &menu, invocations) {
+            return;
+        }
         let visible_items = menu.visible_items();
         rect_fill(
             ui,
@@ -650,15 +653,48 @@ impl EditorShowcase {
                             },
                         );
                     }
+                    y += 24.0;
+                }
+            }
+        }
+    }
+
+    fn menu_overlay_interactions(
+        &mut self,
+        ui: &mut Ui<'_>,
+        kind: EditorMenuKind,
+        entry: &OverlayEntry,
+        menu: &Menu,
+        invocations: &mut Vec<EditorInvocation>,
+    ) -> bool {
+        let mut y = entry.rect.y + 6.0;
+        for (index, item) in menu.visible_items().into_iter().enumerate() {
+            match item {
+                MenuItem::Label(_) => {
+                    y += 22.0;
+                }
+                MenuItem::Separator => {
+                    y += 9.0;
+                }
+                MenuItem::Action(action) => {
+                    let row = Rect::new(entry.rect.x + 4.0, y, entry.rect.width - 8.0, 24.0);
+                    let enabled = action.can_invoke();
+                    let response = ui.pressable(
+                        ("editor.menu-row.prepass", kind, index, action.id.as_str()),
+                        row,
+                        !enabled,
+                    );
                     if response.clicked && enabled {
                         self.trigger_menu_action(invocations, action.id.as_str());
                         self.open_menu = None;
                         ui.request_repaint(RepaintRequest::NextFrame);
+                        return true;
                     }
                     y += 24.0;
                 }
             }
         }
+        false
     }
 
     fn menu_overlay_entry(kind: EditorMenuKind, viewport: Rect) -> OverlayEntry {
