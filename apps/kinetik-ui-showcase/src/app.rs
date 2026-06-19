@@ -694,7 +694,7 @@ impl ShowcaseApp {
                 ImageId::from_raw(7),
             );
             ui.label(
-                Rect::new(slider_x + 152.0, slider_y + 94.0, 120.0, 20.0),
+                Rect::new(slider_x + 152.0, slider_y + 96.0, 120.0, 20.0),
                 "Thumbnail",
             );
         }
@@ -2213,9 +2213,18 @@ mod tests {
                 _ => None,
             })
             .expect("thumbnail image");
+        let label = app
+            .primitives()
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Text(text) if text.text == "Thumbnail" => Some(text.origin),
+                _ => None,
+            })
+            .expect("thumbnail label");
 
         assert!((thumbnail.width - 64.0).abs() < f32::EPSILON);
         assert!((thumbnail.height - 48.0).abs() < f32::EPSILON);
+        assert!(label.y > thumbnail.max_y());
     }
 
     #[test]
