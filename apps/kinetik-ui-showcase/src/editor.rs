@@ -18,12 +18,12 @@ use kinetik_ui::render::{
 };
 use kinetik_ui::text::TextEditState;
 use kinetik_ui::widgets::{
-    DockArea, DockNode, Frame, FrameId, GridColumns, GridLayout, Guide, ItemId, ListLayout, Menu,
-    MenuItem, OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayStack, PanZoom, Panel,
-    PanelId, PopoverPlacement, PopoverRequest, PropertyGridLayout, PropertyGridRow, TableColumn,
-    TableLayout, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui, ViewportComposition,
-    ViewportFit, ViewportSurface, frame_tabs, icon_button_semantics, place_popover,
-    solve_dock_layout, solve_dock_splitters,
+    DockArea, DockNode, Frame, FrameId, FrameTab, GridColumns, GridLayout, Guide, ItemId,
+    ListLayout, Menu, MenuItem, OverlayDismissal, OverlayEntry, OverlayId, OverlayKind,
+    OverlayStack, PanZoom, Panel, PanelId, PopoverPlacement, PopoverRequest, PropertyGridLayout,
+    PropertyGridRow, TableColumn, TableLayout, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
+    ViewportComposition, ViewportFit, ViewportSurface, frame_tabs, icon_button_semantics,
+    place_popover, solve_dock_layout, solve_dock_splitters,
 };
 
 /// Saves the current editor project.
@@ -1008,22 +1008,18 @@ impl EditorShowcase {
             return;
         };
         let tab_height = 26.0;
-        let mut tab_x = frame_rect.x + 1.0;
-        for tab in frame_tabs(&frame_snapshot) {
-            let width = (tab.title.len() as f32 * 7.0 + 42.0).clamp(82.0, 146.0);
-            let tab_rect = Rect::new(tab_x, frame_rect.y + 1.0, width, tab_height);
-            let response = ui.tab_button(
+        self.frame_tab_interactions(ui, frame_id, frame_rect, tab_height, &frame_snapshot);
+        let Some(frame_snapshot) = self.dock.frame(frame_id).cloned() else {
+            return;
+        };
+        for (tab, tab_rect) in frame_tab_rects(&frame_snapshot, frame_rect, tab_height) {
+            ui.tab_button(
                 ("editor.frame-tab", frame_id.raw(), tab.panel.raw()),
                 tab_rect,
                 tab.title,
                 tab.active,
                 false,
             );
-            if response.clicked {
-                self.dock.select_panel(frame_id, tab.panel);
-                ui.request_repaint(RepaintRequest::NextFrame);
-            }
-            tab_x += width + 1.0;
         }
         rect(
             ui,
@@ -1061,6 +1057,27 @@ impl EditorShowcase {
                 _ => {}
             },
         );
+    }
+
+    fn frame_tab_interactions(
+        &mut self,
+        ui: &mut Ui<'_>,
+        frame_id: FrameId,
+        frame_rect: Rect,
+        tab_height: f32,
+        frame: &Frame,
+    ) {
+        for (tab, tab_rect) in frame_tab_rects(frame, frame_rect, tab_height) {
+            let response = ui.pressable(
+                ("editor.frame-tab.prepass", frame_id.raw(), tab.panel.raw()),
+                tab_rect,
+                false,
+            );
+            if response.clicked {
+                self.dock.select_panel(frame_id, tab.panel);
+                ui.request_repaint(RepaintRequest::NextFrame);
+            }
+        }
     }
 
     fn scene_graph(&mut self, ui: &mut Ui<'_>, body: Rect) {
@@ -1994,13 +2011,27 @@ fn inspector_label_width(grid_width: f32) -> f32 {
     (grid_width * 0.42).clamp(52.0, 96.0)
 }
 
+fn frame_tab_rects(frame: &Frame, frame_rect: Rect, tab_height: f32) -> Vec<(FrameTab, Rect)> {
+    let mut tab_x = frame_rect.x + 1.0;
+    frame_tabs(frame)
+        .into_iter()
+        .map(|tab| {
+            let width = (tab.title.len() as f32 * 7.0 + 42.0).clamp(82.0, 146.0);
+            let tab_rect = Rect::new(tab_x, frame_rect.y + 1.0, width, tab_height);
+            tab_x += width + 1.0;
+            (tab, tab_rect)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 #[allow(clippy::float_cmp, clippy::items_after_test_module)]
 mod tests {
     use super::{
-        EditorMenuKind, EditorShowcase, EditorTool, ICON_ASSETS, ICON_ATLAS, ICON_ATLAS_CELL_SIZE,
-        ICON_ATLAS_PADDING, ICON_CROSSHAIR, ICON_SIZE, TOOLBAR_BUTTON_SIZE, TOOLBAR_STRIDE,
-        TOOLBAR_Y, icon_atlas_image, inspector_label_width, item_id, register_resources, rgb,
+        EditorMenuKind, EditorShowcase, EditorTool, FRAME_BOTTOM, ICON_ASSETS, ICON_ATLAS,
+        ICON_ATLAS_CELL_SIZE, ICON_ATLAS_PADDING, ICON_CROSSHAIR, ICON_SIZE, PANEL_JOBS,
+        TOOLBAR_BUTTON_SIZE, TOOLBAR_STRIDE, TOOLBAR_Y, WORKSPACE_TOP, frame_tab_rects,
+        icon_atlas_image, inspector_label_width, item_id, register_resources, rgb,
     };
     use kinetik_ui::core::{
         Brush, CursorShape, FrameContext, PathElement, PhysicalSize, PlatformRequest, Point,
@@ -2008,7 +2039,7 @@ mod tests {
         SemanticRole, Size, TimeInfo, UiInput, UiMemory, ViewportInfo, default_dark_theme,
     };
     use kinetik_ui::render::RenderResources;
-    use kinetik_ui::widgets::Ui;
+    use kinetik_ui::widgets::{Ui, solve_dock_layout};
 
     #[test]
     fn inspector_label_width_preserves_value_space_at_narrow_widths() {
@@ -2116,6 +2147,48 @@ mod tests {
 
         assert_eq!(editor.selected_tool, EditorTool::Rotate);
         assert_eq!(selected_toolbar_buttons, 1);
+    }
+
+    #[test]
+    fn frame_tab_click_updates_body_same_frame() {
+        let mut editor = EditorShowcase::new();
+        let mut memory = UiMemory::new();
+        let theme = default_dark_theme();
+        let bottom = bottom_frame_rect(&editor);
+        let jobs = editor
+            .dock
+            .frame(FRAME_BOTTOM)
+            .and_then(|frame| {
+                frame_tab_rects(frame, bottom, 26.0)
+                    .into_iter()
+                    .find(|(tab, _rect)| tab.panel == PANEL_JOBS)
+                    .map(|(_tab, rect)| rect)
+            })
+            .expect("jobs tab");
+        let point = Point::new(jobs.x + jobs.width * 0.5, jobs.y + jobs.height * 0.5);
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(point.x, point.y, true, true, false)),
+            &mut memory,
+            &theme,
+        );
+        editor.render(&mut ui, 0);
+        let _ = ui.finish_output();
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(point.x, point.y, false, false, true)),
+            &mut memory,
+            &theme,
+        );
+        editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+
+        assert!(output.primitives.iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "Bake global illumination")
+        }));
+        assert!(!output.primitives.iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "Message")
+        }));
     }
 
     #[test]
@@ -2363,6 +2436,21 @@ mod tests {
             input,
             TimeInfo::default(),
         )
+    }
+
+    fn bottom_frame_rect(editor: &EditorShowcase) -> Rect {
+        let viewport = Rect::new(0.0, 0.0, 1440.0, 900.0);
+        let bounds = Rect::new(
+            4.0,
+            WORKSPACE_TOP,
+            viewport.width - 8.0,
+            viewport.height - WORKSPACE_TOP - 28.0,
+        );
+        solve_dock_layout(&editor.dock, bounds)
+            .into_iter()
+            .find(|layout| layout.frame == FRAME_BOTTOM)
+            .map(|layout| layout.rect.inset(2.0))
+            .expect("bottom frame")
     }
 
     fn point_is_in_toolbar(point: Point) -> bool {
