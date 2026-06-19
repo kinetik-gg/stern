@@ -1267,16 +1267,16 @@ impl ShowcaseApp {
         if page.width >= 1120.0 {
             let main = Rect::new(page.x, page.y, 960.0, 620.0);
             let side_x = main.max_x() + 40.0;
-            self.viewport_surface_panel(ui, main);
             self.viewport_controls_panel(ui, Rect::new(side_x, page.y, 300.0, 250.0));
+            self.viewport_surface_panel(ui, main);
             Self::video_boundary_panel(ui, Rect::new(side_x, page.y + 286.0, 300.0, 230.0));
         } else {
             let width = page.width.min(980.0);
             let surface_height = ((width - 80.0).max(220.0) * 9.0 / 16.0).clamp(180.0, 300.0);
             let main_height = surface_height + 132.0;
             let main = Rect::new(page.x, page.y, width, main_height);
-            self.viewport_surface_panel(ui, main);
             self.viewport_controls_panel(ui, Rect::new(page.x, main.max_y() + 24.0, width, 150.0));
+            self.viewport_surface_panel(ui, main);
             Self::video_boundary_panel(ui, Rect::new(page.x, main.max_y() + 198.0, width, 190.0));
         }
     }
@@ -1343,14 +1343,6 @@ impl ShowcaseApp {
         if (before - self.zoom).abs() > f32::EPSILON {
             self.status = format!("Viewport zoom {:.0}%", 25.0 + self.zoom * 375.0);
         }
-        text(
-            ui,
-            x,
-            y - 10.0,
-            &format!("Zoom: {:.0}%", 25.0 + self.zoom * 375.0),
-            11.0,
-            rgb(220, 220, 224),
-        );
         let fit = ui.button(
             "viewport.fit",
             Rect::new(x, y + 44.0, 90.0, 28.0),
@@ -1371,6 +1363,14 @@ impl ShowcaseApp {
             self.zoom = 0.2;
             "Viewport actual size".clone_into(&mut self.status);
         }
+        text(
+            ui,
+            x,
+            y - 10.0,
+            &format!("Zoom: {:.0}%", 25.0 + self.zoom * 375.0),
+            11.0,
+            rgb(220, 220, 224),
+        );
     }
 
     fn video_boundary_panel(ui: &mut Ui<'_>, panel: Rect) {
@@ -2002,6 +2002,24 @@ mod tests {
         });
     }
 
+    fn has_text(app: &ShowcaseApp, value: &str) -> bool {
+        app.primitives()
+            .iter()
+            .any(|primitive| matches!(primitive, Primitive::Text(text) if text.text == value))
+    }
+
+    fn viewport_texture_rect(app: &ShowcaseApp) -> Rect {
+        app.primitives()
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Texture(texture) if texture.texture == TextureId::from_raw(99) => {
+                    Some(texture.rect)
+                }
+                _ => None,
+            })
+            .expect("viewport texture")
+    }
+
     #[test]
     fn clicking_button_changes_action_state() {
         let mut app = ShowcaseApp::new();
@@ -2426,9 +2444,13 @@ mod tests {
 
         click(&mut app, Point::new(1090.0, 240.0));
         assert!(app.zoom().abs() < f32::EPSILON);
+        assert!(has_text(&app, "Zoom: 25%"));
+        assert!((viewport_texture_rect(&app).width - 96.0).abs() < f32::EPSILON);
 
         click(&mut app, Point::new(1200.0, 240.0));
         assert!((app.zoom() - 0.2).abs() < f32::EPSILON);
+        assert!(has_text(&app, "Zoom: 100%"));
+        assert!((viewport_texture_rect(&app).width - 384.0).abs() < f32::EPSILON);
     }
 
     #[test]
