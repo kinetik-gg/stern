@@ -14,7 +14,9 @@ use kinetik_ui::core::{
     TextureId, TexturePrimitive, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, column_layout,
     default_dark_theme, inspect_primitives, rect_from_size, row_layout, split_leading,
 };
-use kinetik_ui::render::{ImageResource, RenderImage, RenderResources, TextureResource};
+use kinetik_ui::render::{
+    ImageResource, RenderImage, RenderImageSampling, RenderResources, TextureResource,
+};
 use kinetik_ui::text::{TextEditState, TextLayoutStore};
 use kinetik_ui::widgets::{
     CommandPalette, Crosshair, DockArea, DockDropTarget, DockNode, DockPlacement, Frame, FrameId,
@@ -24,12 +26,16 @@ use kinetik_ui::widgets::{
     place_popover, solve_dock_layout, solve_dock_splitters,
 };
 
+use crate::editor::{self as editor_showcase, EditorShowcase};
+
 const MIN_VIEWPORT_WIDTH: f32 = 1.0;
 const MIN_VIEWPORT_HEIGHT: f32 = 1.0;
 
 /// Available showcase pages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShowcasePage {
+    /// DCC/game-engine editor workbench.
+    Editor,
     /// Component gallery and controls.
     Components,
     /// Layout, docking, and collection primitives.
@@ -50,6 +56,7 @@ enum DockSplitDemoState {
 impl ShowcasePage {
     fn label(self) -> &'static str {
         match self {
+            Self::Editor => "Editor",
             Self::Components => "Components",
             Self::Layout => "Layout",
             Self::Viewport => "Viewport",
@@ -100,12 +107,13 @@ pub struct ShowcaseApp {
     notes: TextEditState,
     status: String,
     output: FrameOutput,
+    editor: EditorShowcase,
 }
 
 impl Default for ShowcaseApp {
     fn default() -> Self {
         let mut app = Self {
-            page: ShowcasePage::Components,
+            page: ShowcasePage::Editor,
             memory: UiMemory::new(),
             text_layouts: TextLayoutStore::new(),
             previous_mouse_down: false,
@@ -128,6 +136,7 @@ impl Default for ShowcaseApp {
             notes: TextEditState::new("First line\nSecond line"),
             status: "Ready".to_owned(),
             output: FrameOutput::new(),
+            editor: EditorShowcase::new(),
         };
         app.redraw_idle();
         app
@@ -158,6 +167,7 @@ impl ShowcaseApp {
     #[must_use]
     pub fn page_from_name(name: &str) -> Option<ShowcasePage> {
         match name.trim().to_ascii_lowercase().as_str() {
+            "editor" | "engine" | "dcc" | "workbench" => Some(ShowcasePage::Editor),
             "components" | "component" => Some(ShowcasePage::Components),
             "layout" | "layouts" => Some(ShowcasePage::Layout),
             "viewport" | "viewports" => Some(ShowcasePage::Viewport),
@@ -226,8 +236,8 @@ impl ShowcaseApp {
         let ui_input = self.to_ui_input(input, viewport_changed);
         let keyboard = ui_input.keyboard.clone();
 
-        self.output = self.frame(frame_context(self.viewport_size, ui_input));
         self.resolve_shortcuts(&keyboard);
+        self.output = self.frame(frame_context(self.viewport_size, ui_input));
         self.previous_mouse_down = input.mouse_down;
         self.previous_mouse = input.mouse;
     }
@@ -236,8 +246,8 @@ impl ShowcaseApp {
     pub fn update_with_context(&mut self, context: FrameContext) {
         self.viewport_size = sanitize_viewport_size(context.viewport.logical_size);
         let keyboard = context.input.keyboard.clone();
-        self.output = self.frame(context);
         self.resolve_shortcuts(&keyboard);
+        self.output = self.frame(context);
     }
 
     /// Builds the current primitive stream.
@@ -257,24 +267,29 @@ impl ShowcaseApp {
     pub fn render_resources(&self) -> RenderResources {
         let mut resources = RenderResources::new();
         resources.register_text_layouts(self.text_layouts.layouts());
+        editor_showcase::register_resources(&mut resources);
         resources.register_image(ImageResource {
             id: ImageId::from_raw(7),
             size: Size::new(64.0, 48.0),
+            sampling: RenderImageSampling::default(),
             pixels: Some(thumbnail_image()),
         });
         resources.register_image(ImageResource {
             id: ImageId::from_raw(11),
             size: Size::new(96.0, 72.0),
+            sampling: RenderImageSampling::default(),
             pixels: Some(primitive_image()),
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(99),
             size: Size::new(1920.0, 1080.0),
+            sampling: RenderImageSampling::default(),
             snapshot: Some(viewport_texture()),
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(101),
             size: Size::new(1280.0, 720.0),
+            sampling: RenderImageSampling::default(),
             snapshot: Some(video_texture()),
         });
         resources
@@ -288,16 +303,24 @@ impl ShowcaseApp {
         let theme = default_dark_theme();
         let mut memory = std::mem::take(&mut self.memory);
         let mut text_layouts = std::mem::take(&mut self.text_layouts);
+        let mut editor_invocations = Vec::new();
         let output = {
             let mut ui =
                 Ui::begin_frame_with_text_layouts(context, &mut memory, &theme, &mut text_layouts);
 
-            Self::app_background(&mut ui);
-            self.chrome(&mut ui);
-            self.page_content(&mut ui);
+            if self.page == ShowcasePage::Editor {
+                editor_invocations = self.editor.render(&mut ui, self.action_count);
+            } else {
+                Self::app_background(&mut ui);
+                self.chrome(&mut ui);
+                self.page_content(&mut ui);
+            }
 
             ui.finish_output()
         };
+        for invocation in editor_invocations {
+            self.record_action(invocation.action_id, invocation.source);
+        }
         self.memory = memory;
         self.text_layouts = text_layouts;
         output
@@ -356,8 +379,13 @@ impl ShowcaseApp {
     }
 
     fn invoke_action(&mut self, id: &str, source: ActionSource) {
+        self.editor.apply_action(id);
+        self.record_action(id, source);
+    }
+
+    fn record_action(&mut self, action_id: &str, source: ActionSource) {
         self.action_count += 1;
-        self.status = format!("{id} via {source:?} ({})", self.action_count);
+        self.status = format!("{} via {:?} ({})", action_id, source, self.action_count);
     }
 
     fn resolve_shortcuts(&mut self, keyboard: &kinetik_ui::core::KeyboardInput) {
@@ -414,6 +442,9 @@ impl ShowcaseApp {
             content_size,
             false,
             |ui, _| match self.page {
+                ShowcasePage::Editor => {
+                    let _ = ui;
+                }
                 ShowcasePage::Components => self.components_page(ui),
                 ShowcasePage::Layout => self.layout_page(ui),
                 ShowcasePage::Viewport => self.viewport_page(ui),
@@ -425,6 +456,7 @@ impl ShowcaseApp {
     fn page_content_height(&self, viewport: Rect) -> f32 {
         let page = page_rect(viewport);
         let height: f32 = match self.page {
+            ShowcasePage::Editor => viewport.height,
             ShowcasePage::Components | ShowcasePage::Layout if page.width >= 1160.0 => 840.0,
             ShowcasePage::Components => 1320.0,
             ShowcasePage::Layout => 1180.0,
@@ -1731,13 +1763,37 @@ fn showcase_actions() -> Vec<ActionDescriptor> {
 fn showcase_action_router() -> ActionRouter {
     let mut enter = ActionDescriptor::new("keyboard.enter", "Confirm Focused Command");
     enter.shortcut = Some(Shortcut::new(Modifiers::default(), Key::Enter));
+    let mut save = ActionDescriptor::new(editor_showcase::ACTION_SAVE, "Save Project");
+    save.shortcut = Some(Shortcut::new(
+        Modifiers::new(false, true, false, false),
+        Key::Character("s".to_owned()),
+    ));
+    let mut play = ActionDescriptor::new(editor_showcase::ACTION_PLAY, "Play");
+    play.shortcut = Some(Shortcut::new(Modifiers::default(), Key::Function(5)));
+    let mut grid = ActionDescriptor::new(editor_showcase::ACTION_GRID, "Toggle Grid");
+    grid.shortcut = Some(Shortcut::new(
+        Modifiers::default(),
+        Key::Character("g".to_owned()),
+    ));
+    let mut build = ActionDescriptor::new(editor_showcase::ACTION_BUILD, "Build");
+    build.shortcut = Some(Shortcut::new(
+        Modifiers::new(false, true, false, false),
+        Key::Character("b".to_owned()),
+    ));
+    let mut palette = ActionDescriptor::new(editor_showcase::ACTION_PALETTE, "Command Palette");
+    palette.shortcut = Some(Shortcut::new(
+        Modifiers::new(false, true, false, false),
+        Key::Character("p".to_owned()),
+    ));
 
     let mut router = ActionRouter::new();
-    router.bind(ActionBinding::new(
-        enter,
-        ActionContext::Global,
-        ActionPriority::Global,
-    ));
+    for action in [enter, save, play, grid, build, palette] {
+        router.bind(ActionBinding::new(
+            action,
+            ActionContext::Global,
+            ActionPriority::Global,
+        ));
+    }
     router
 }
 
@@ -1909,9 +1965,12 @@ fn sanitize_viewport_size(size: Size) -> Size {
 
 #[cfg(test)]
 mod tests {
-    use super::{ShowcaseApp, ShowcaseInput, ShowcasePage};
+    use super::{ShowcaseApp, ShowcaseInput, ShowcasePage, frame_context};
     use kinetik_ui::{
-        core::{PhysicalSize, Point, Primitive, Rect, ScaleFactor, Size, ViewportInfo},
+        core::{
+            Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, Primitive,
+            Rect, ScaleFactor, Size, UiInput, ViewportInfo,
+        },
         render::RenderFrameInput,
         render_vello::VelloRenderer,
     };
@@ -1932,6 +1991,7 @@ mod tests {
     #[test]
     fn clicking_button_changes_action_state() {
         let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Components);
 
         click(&mut app, Point::new(70.0, 154.0));
 
@@ -1939,8 +1999,110 @@ mod tests {
     }
 
     #[test]
+    fn default_page_is_engine_editor_surface() {
+        let app = ShowcaseApp::new();
+
+        assert_eq!(app.page(), ShowcasePage::Editor);
+        for label in ["Kinetik Forge", "Scene", "Viewport", "Inspector", "Console"] {
+            assert!(
+                app.primitives().iter().any(|primitive| {
+                    matches!(primitive, Primitive::Text(text) if text.text == label)
+                }),
+                "{label}"
+            );
+        }
+    }
+
+    #[test]
+    fn editor_file_menu_opens_dropdown_and_invokes_action() {
+        let mut app = ShowcaseApp::new();
+
+        click(&mut app, Point::new(145.0, 14.0));
+
+        for label in ["New Scene", "Save Scene", "Export Build"] {
+            assert!(
+                app.primitives().iter().any(|primitive| {
+                    matches!(primitive, Primitive::Text(text) if text.text == label)
+                }),
+                "{label}"
+            );
+        }
+
+        click(&mut app, Point::new(170.0, 93.0));
+        app.update(&ShowcaseInput::default());
+
+        assert_eq!(app.action_count(), 1);
+        assert!(!app.primitives().iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "Save Scene")
+        }));
+    }
+
+    #[test]
+    fn editor_shortcut_updates_visible_action_count_same_frame() {
+        let mut app = ShowcaseApp::new();
+        app.update_with_context(frame_context(
+            Size::new(1440.0, 900.0),
+            UiInput {
+                keyboard: KeyboardInput {
+                    modifiers: Modifiers::new(false, true, false, false),
+                    events: vec![KeyEvent::new(
+                        Key::Character("s".to_owned()),
+                        KeyState::Pressed,
+                        Modifiers::new(false, true, false, false),
+                        false,
+                    )],
+                },
+                ..UiInput::default()
+            },
+        ));
+
+        assert_eq!(app.action_count(), 1);
+        assert!(app.primitives().iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "Actions: 1")
+        }));
+    }
+
+    #[test]
+    fn editor_resources_match_emitted_images_and_textures() {
+        let app = ShowcaseApp::new();
+        let resources = app.render_resources();
+
+        let texture = app
+            .primitives()
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Texture(texture) => Some(texture.texture),
+                _ => None,
+            })
+            .expect("editor emits viewport texture");
+        let image = app
+            .primitives()
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Image(image) => Some(image.image),
+                _ => None,
+            })
+            .expect("editor emits icon images");
+
+        assert!(resources.texture(texture).is_some());
+        assert!(
+            resources
+                .texture(texture)
+                .and_then(|resource| resource.snapshot.as_ref())
+                .is_some_and(|snapshot| snapshot.width == 1280 && snapshot.height == 720)
+        );
+        assert!(
+            resources
+                .image(image)
+                .and_then(|resource| resource.pixels.as_ref())
+                .is_some_and(|pixels| pixels.data.chunks_exact(4).any(|rgba| rgba[3] == 0))
+        );
+    }
+
+    #[test]
     fn clicking_navigation_changes_page() {
         let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Components);
 
         click(&mut app, Point::new(620.0, 20.0));
 
@@ -1964,6 +2126,7 @@ mod tests {
     #[test]
     fn resized_hit_testing_uses_logical_coordinates() {
         let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Components);
         app.set_viewport_size(Size::new(720.0, 450.0));
 
         click(&mut app, Point::new(35.0, 77.0));
@@ -1986,6 +2149,7 @@ mod tests {
     #[test]
     fn slider_drag_updates_value() {
         let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Components);
 
         app.update(&ShowcaseInput {
             mouse: Some(Point::new(360.0, 160.0)),
@@ -2004,6 +2168,7 @@ mod tests {
     #[test]
     fn focused_search_accepts_keyboard_input() {
         let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Components);
 
         click(&mut app, Point::new(940.0, 160.0));
         app.update(&ShowcaseInput {
@@ -2017,6 +2182,7 @@ mod tests {
     #[test]
     fn focused_multi_line_field_accepts_text_and_enter() {
         let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Components);
 
         click(&mut app, Point::new(1070.0, 306.0));
         app.update(&ShowcaseInput {
@@ -2127,6 +2293,7 @@ mod tests {
     fn showcase_pages_translate_to_vello_without_renderer_diagnostics() {
         for size in [Size::new(1440.0, 900.0), Size::new(820.0, 640.0)] {
             for page in [
+                ShowcasePage::Editor,
                 ShowcasePage::Components,
                 ShowcasePage::Layout,
                 ShowcasePage::Viewport,
@@ -2150,6 +2317,21 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn editor_open_menu_translates_to_vello_without_renderer_diagnostics() {
+        let mut app = ShowcaseApp::new();
+        click(&mut app, Point::new(145.0, 14.0));
+        let resources = app.render_resources();
+        let mut renderer = VelloRenderer::new();
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: test_viewport(Size::new(1440.0, 900.0)),
+            primitives: &app.output().primitives,
+            resources: &resources,
+        });
+
+        assert!(output.diagnostics.is_empty(), "{:?}", output.diagnostics);
     }
 
     fn test_viewport(size: Size) -> ViewportInfo {

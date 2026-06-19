@@ -17,6 +17,8 @@ pub struct ImageResource {
     pub id: ImageId,
     /// Image size in physical pixels.
     pub size: Size,
+    /// Sampling hint to use when drawing the image.
+    pub sampling: RenderImageSampling,
     /// Optional CPU pixel data to draw.
     pub pixels: Option<RenderImage>,
 }
@@ -28,8 +30,20 @@ pub struct TextureResource {
     pub id: TextureId,
     /// Texture size in physical pixels.
     pub size: Size,
+    /// Sampling hint to use when drawing texture snapshots.
+    pub sampling: RenderImageSampling,
     /// Optional CPU snapshot for renderers that consume image data.
     pub snapshot: Option<RenderImage>,
+}
+
+/// Sampling intent for image-like renderer resources.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RenderImageSampling {
+    /// Preserve crisp texels. Best for icons, UI snapshots, and editor/game surfaces.
+    #[default]
+    Pixelated,
+    /// Smooth resampling for photographic or heavily scaled content.
+    Smooth,
 }
 
 /// CPU image data accepted by renderer boundaries.
@@ -477,7 +491,7 @@ mod tests {
 
     use super::{
         ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput, RenderImage,
-        RenderResources, RendererBackend, TextLayoutResource, TextureResource,
+        RenderImageSampling, RenderResources, RendererBackend, TextLayoutResource, TextureResource,
     };
     use kinetik_ui_core::{
         ImageId, PhysicalSize, ScaleFactor, Size, TextLayoutId, TextureId, ViewportInfo,
@@ -537,11 +551,13 @@ mod tests {
         resources.register_image(ImageResource {
             id: image,
             size: Size::new(1.0, 1.0),
+            sampling: RenderImageSampling::default(),
             pixels: None,
         });
         resources.register_texture(TextureResource {
             id: texture,
             size: Size::new(1.0, 1.0),
+            sampling: RenderImageSampling::default(),
             snapshot: None,
         });
         resources.register_text_layout(TextLayoutResource { id: text, layout });
@@ -567,11 +583,13 @@ mod tests {
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(9),
             size: Size::new(12.0, 8.0),
+            sampling: RenderImageSampling::default(),
             snapshot: None,
         });
         resources.register_image(ImageResource {
             id: ImageId::from_raw(2),
             size: Size::new(4.0, 3.0),
+            sampling: RenderImageSampling::default(),
             pixels: Some(RenderImage::rgba8(1, 1, vec![255; 4]).expect("valid image")),
         });
         resources.register_text_layout(TextLayoutResource {
@@ -581,6 +599,7 @@ mod tests {
         resources.register_image(ImageResource {
             id: ImageId::from_raw(1),
             size: Size::new(2.0, 1.0),
+            sampling: RenderImageSampling::default(),
             pixels: None,
         });
 

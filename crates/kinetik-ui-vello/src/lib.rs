@@ -3,11 +3,12 @@
 use kinetik_ui_core::{
     Brush, ClipId, Color, CornerRadius, ImageId, LayerId, LinearGradient, PathElement, Point,
     Primitive, Rect, ShadowPrimitive, Size, Stroke, TextLayoutId, TextureId, Transform, Vec2,
+    ViewportInfo,
 };
 pub use kinetik_ui_render::{
     ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput, RenderImage,
-    RenderImageAlpha, RenderImageFormat, RenderResources, RendererBackend, TextLayoutResource,
-    TextureResource, Translation as RenderTranslation,
+    RenderImageAlpha, RenderImageFormat, RenderImageSampling, RenderResources, RendererBackend,
+    TextLayoutResource, TextureResource, Translation as RenderTranslation,
 };
 use kinetik_ui_text::{CosmicTextEngine, ShapedTextLayout, TextLayoutKey, TextStyle};
 use vello::{
@@ -17,6 +18,7 @@ use vello::{
     },
     peniko::{
         Blob, Fill, Gradient as PenikoGradient, ImageAlphaType, ImageBrush, ImageData, ImageFormat,
+        ImageQuality,
     },
 };
 
@@ -119,6 +121,8 @@ pub enum RenderCommandKind {
         texture: TextureId,
         /// Destination rectangle.
         rect: Rect,
+        /// Source size in texture pixels.
+        source_size: Size,
     },
 }
 
@@ -153,6 +157,7 @@ impl VelloRenderer {
             &translated.commands,
             input.resources,
             &mut self.text_engine,
+            viewport_device_scale(input.viewport),
         );
         RenderFrameOutput {
             primitive_count: input.primitives.len(),
@@ -333,11 +338,16 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                 let Some(rect) = sanitize_rect(texture.rect, &mut diagnostics, "texture") else {
                     continue;
                 };
-                if sanitize_size(texture.source_size).is_none() {
+                let Some(source_size) = sanitize_size(texture.source_size) else {
                     diagnostics.push(RenderDiagnostic::InvalidGeometry("texture_source_size"));
-                }
+                    continue;
+                };
                 match resources.texture(texture.texture) {
                     None => diagnostics.push(RenderDiagnostic::MissingTexture(texture.texture)),
+                    Some(resource) if !logical_size_matches(source_size, resource.size) => {
+                        diagnostics.push(RenderDiagnostic::InvalidGeometry("texture_source_size"));
+                        continue;
+                    }
                     Some(resource) if resource.snapshot.is_none() => {
                         diagnostics.push(RenderDiagnostic::MissingTextureSnapshot(texture.texture));
                     }
@@ -350,6 +360,7 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                     RenderCommandKind::Texture {
                         texture: texture.texture,
                         rect,
+                        source_size,
                     },
                 ));
             }
@@ -510,8 +521,17 @@ fn format_command_kind(kind: &RenderCommandKind) -> String {
         RenderCommandKind::Image { image, rect } => {
             format!("image#{} rect={}", image.raw(), format_rect(*rect))
         }
-        RenderCommandKind::Texture { texture, rect } => {
-            format!("texture#{} rect={}", texture.raw(), format_rect(*rect))
+        RenderCommandKind::Texture {
+            texture,
+            rect,
+            source_size,
+        } => {
+            format!(
+                "texture#{} rect={} source_size={}",
+                texture.raw(),
+                format_rect(*rect),
+                format_size(*source_size)
+            )
         }
     }
 }
@@ -610,6 +630,10 @@ fn format_rect(rect: Rect) -> String {
         format_f32(rect.width),
         format_f32(rect.height),
     )
+}
+
+fn format_size(size: Size) -> String {
+    format!("{}x{}", format_f32(size.width), format_f32(size.height))
 }
 
 fn format_radius(radius: CornerRadius) -> String {
@@ -1020,17 +1044,19 @@ fn encode_scene(
     commands: &[RenderCommand],
     resources: &RenderResources,
     text_engine: &mut CosmicTextEngine,
+    device_scale: f64,
 ) {
+    let root_transform = root_transform(device_scale);
     for command in commands {
         for clip in &command.clips {
             scene.push_clip_layer(
                 Fill::NonZero,
-                transform_to_affine(clip.transform),
-                &kurbo_rect(clip.rect),
+                snap_axis_aligned_translation(root_transform * transform_to_affine(clip.transform)),
+                &kurbo_rect(snap_rect_to_device(clip.rect, device_scale)),
             );
         }
 
-        encode_command(scene, command, resources, text_engine);
+        encode_command(scene, command, resources, text_engine, device_scale);
 
         for _ in &command.clips {
             scene.pop_layer();
@@ -1043,8 +1069,11 @@ fn encode_command(
     command: &RenderCommand,
     resources: &RenderResources,
     text_engine: &mut CosmicTextEngine,
+    device_scale: f64,
 ) {
-    let transform = transform_to_affine(command.transform);
+    let transform = snap_axis_aligned_translation(
+        root_transform(device_scale) * transform_to_affine(command.transform),
+    );
     match &command.kind {
         RenderCommandKind::Rect {
             rect,
@@ -1052,12 +1081,16 @@ fn encode_command(
             stroke,
             radius,
         } => {
-            let shape = rounded_rect(*rect, *radius);
             if let Some(fill) = fill {
+                let shape = rounded_rect(snap_rect_to_device(*rect, device_scale), *radius);
                 fill_shape(scene, transform, fill, &shape);
             }
             if let Some(stroke) = stroke {
-                stroke_shape(scene, transform, stroke, &shape);
+                let shape = rounded_rect(
+                    snap_stroked_rect_to_device(*rect, stroke.width, device_scale),
+                    *radius,
+                );
+                stroke_shape(scene, transform, stroke, &shape, device_scale);
             }
         }
         RenderCommandKind::Line {
@@ -1067,11 +1100,17 @@ fn encode_command(
             y1,
             stroke,
         } => {
-            let line = KurboLine::new(
-                (f64::from(*x0), f64::from(*y0)),
-                (f64::from(*x1), f64::from(*y1)),
+            let (from, to) = snap_stroked_line_to_device(
+                Point::new(*x0, *y0),
+                Point::new(*x1, *y1),
+                stroke.width,
+                device_scale,
             );
-            stroke_shape(scene, transform, stroke, &line);
+            let line = KurboLine::new(
+                (f64::from(from.x), f64::from(from.y)),
+                (f64::from(to.x), f64::from(to.y)),
+            );
+            stroke_shape(scene, transform, stroke, &line, device_scale);
         }
         RenderCommandKind::Shadow {
             rect,
@@ -1089,53 +1128,134 @@ fn encode_command(
             elements,
             fill,
             stroke,
-        } => encode_path(scene, transform, elements, *fill, *stroke),
+        } => encode_path(scene, transform, elements, *fill, *stroke, device_scale),
         RenderCommandKind::Text {
             layout,
             origin,
             text,
             size,
             color,
-        } => {
-            if let Some(layout) = layout.and_then(|id| resources.text_layout(id)) {
-                encode_shaped_text(scene, transform, *origin, layout, *color);
-            } else {
-                let layout = shape_fallback_text(text_engine, text, *size);
-                encode_shaped_text(scene, transform, *origin, &layout, *color);
-            }
-        }
+        } => encode_text_command(
+            scene,
+            transform,
+            resources,
+            text_engine,
+            *layout,
+            *origin,
+            text,
+            *size,
+            *color,
+            device_scale,
+        ),
         RenderCommandKind::Image { image, rect } => {
-            if let Some(pixels) = resources
-                .image(*image)
-                .and_then(|resource| resource.pixels.as_ref())
-            {
-                encode_image(scene, transform, *rect, pixels);
-            } else {
-                encode_resource_placeholder(
-                    scene,
-                    transform,
-                    *rect,
-                    Color::rgba(0.24, 0.32, 0.42, 0.35),
-                    Color::rgba(0.62, 0.72, 0.86, 0.75),
-                );
-            }
+            encode_image_command(scene, transform, resources, *image, *rect, device_scale);
         }
-        RenderCommandKind::Texture { texture, rect } => {
-            if let Some(snapshot) = resources
-                .texture(*texture)
-                .and_then(|resource| resource.snapshot.as_ref())
-            {
-                encode_image(scene, transform, *rect, snapshot);
-            } else {
-                encode_resource_placeholder(
-                    scene,
-                    transform,
-                    *rect,
-                    Color::rgba(0.20, 0.34, 0.24, 0.35),
-                    Color::rgba(0.60, 0.84, 0.62, 0.75),
-                );
-            }
+        RenderCommandKind::Texture {
+            texture,
+            rect,
+            source_size,
+        } => {
+            encode_texture_command(
+                scene,
+                transform,
+                resources,
+                *texture,
+                *rect,
+                *source_size,
+                device_scale,
+            );
         }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn encode_text_command(
+    scene: &mut Scene,
+    transform: Affine,
+    resources: &RenderResources,
+    text_engine: &mut CosmicTextEngine,
+    layout: Option<TextLayoutId>,
+    origin: Point,
+    text: &str,
+    size: f32,
+    color: Color,
+    device_scale: f64,
+) {
+    if let Some(layout) = layout.and_then(|id| resources.text_layout(id)) {
+        let physical_layout = physical_text_layout(text_engine, transform, text, size);
+        encode_text_layout(
+            scene,
+            transform,
+            origin,
+            layout,
+            physical_layout.as_ref(),
+            color,
+            device_scale,
+        );
+    } else {
+        let layout = shape_fallback_text(text_engine, text, size);
+        let physical_layout = physical_text_layout(text_engine, transform, text, size);
+        encode_text_layout(
+            scene,
+            transform,
+            origin,
+            &layout,
+            physical_layout.as_ref(),
+            color,
+            device_scale,
+        );
+    }
+}
+
+fn encode_image_command(
+    scene: &mut Scene,
+    transform: Affine,
+    resources: &RenderResources,
+    image: ImageId,
+    rect: Rect,
+    device_scale: f64,
+) {
+    let rect = snap_rect_to_device(rect, device_scale);
+    if let Some(resource) = resources.image(image)
+        && let Some(pixels) = resource.pixels.as_ref()
+    {
+        encode_image(scene, transform, rect, pixels, resource.sampling);
+    } else {
+        encode_resource_placeholder(
+            scene,
+            transform,
+            rect,
+            device_scale,
+            Color::rgba(0.24, 0.32, 0.42, 0.35),
+            Color::rgba(0.62, 0.72, 0.86, 0.75),
+        );
+    }
+}
+
+fn encode_texture_command(
+    scene: &mut Scene,
+    transform: Affine,
+    resources: &RenderResources,
+    texture: TextureId,
+    rect: Rect,
+    source_size: Size,
+    device_scale: f64,
+) {
+    let rect = snap_rect_to_device(rect, device_scale);
+    if let Some(resource) = resources.texture(texture)
+        && let Some(snapshot) = resource.snapshot.as_ref()
+        && source_size_matches_snapshot(source_size, snapshot)
+    {
+        encode_image(scene, transform, rect, snapshot, resource.sampling);
+    } else {
+        encode_resource_placeholder(
+            scene,
+            transform,
+            rect,
+            device_scale,
+            Color::rgba(0.20, 0.34, 0.24, 0.35),
+            Color::rgba(0.60, 0.84, 0.62, 0.75),
+        );
     }
 }
 
@@ -1180,8 +1300,17 @@ fn fill_shape(scene: &mut Scene, transform: Affine, brush: &Brush, shape: &impl 
     }
 }
 
-fn stroke_shape(scene: &mut Scene, transform: Affine, stroke: &Stroke, shape: &impl Shape) {
-    let style = vello::kurbo::Stroke::new(f64::from(stroke.width));
+fn stroke_shape(
+    scene: &mut Scene,
+    transform: Affine,
+    stroke: &Stroke,
+    shape: &impl Shape,
+    device_scale: f64,
+) {
+    let style = vello::kurbo::Stroke::new(f64::from(quantize_stroke_width_to_device(
+        stroke.width,
+        device_scale,
+    )));
     match stroke.brush {
         Brush::Solid(color) => {
             scene.stroke(&style, transform, vello_color(color), None, shape);
@@ -1199,13 +1328,14 @@ fn encode_path(
     elements: &[PathElement],
     fill: Option<Brush>,
     stroke: Option<Stroke>,
+    device_scale: f64,
 ) {
     let path = bez_path(elements);
     if let Some(fill) = fill {
         fill_shape(scene, transform, &fill, &path);
     }
     if let Some(stroke) = stroke {
-        stroke_shape(scene, transform, &stroke, &path);
+        stroke_shape(scene, transform, &stroke, &path, device_scale);
     }
 }
 
@@ -1243,12 +1373,57 @@ fn shape_fallback_text(
     text: &str,
     size: f32,
 ) -> ShapedTextLayout {
+    shape_text_with_metrics(text_engine, text, size, size + 5.0)
+}
+
+fn shape_text_with_metrics(
+    text_engine: &mut CosmicTextEngine,
+    text: &str,
+    size: f32,
+    line_height: f32,
+) -> ShapedTextLayout {
     text_engine.shape_text(&TextLayoutKey::new(
         text,
-        TextStyle::new("sans-serif", size, size + 5.0),
+        TextStyle::new("sans-serif", size, line_height),
         0.0,
         false,
     ))
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+fn physical_text_layout(
+    text_engine: &mut CosmicTextEngine,
+    transform: Affine,
+    text: &str,
+    size: f32,
+) -> Option<ShapedTextLayout> {
+    let scale = uniform_axis_aligned_scale(transform)?;
+    let physical_size = (f64::from(size) * scale) as f32;
+    let physical_line_height = (f64::from(size + 5.0) * scale) as f32;
+    (physical_size.is_finite() && physical_size > 0.0)
+        .then(|| shape_text_with_metrics(text_engine, text, physical_size, physical_line_height))
+}
+
+fn encode_text_layout(
+    scene: &mut Scene,
+    transform: Affine,
+    origin: Point,
+    layout: &ShapedTextLayout,
+    physical_layout: Option<&ShapedTextLayout>,
+    color: Color,
+    device_scale: f64,
+) {
+    if let Some(scale) = uniform_axis_aligned_scale(transform) {
+        let origin = transform_point(transform, origin);
+        if let Some(physical_layout) = physical_layout {
+            encode_shaped_text_device_space(scene, origin, physical_layout, color, 1.0);
+        } else {
+            encode_shaped_text_device_space(scene, origin, layout, color, scale);
+        }
+    } else {
+        let origin = snap_point_to_device(origin, device_scale);
+        encode_shaped_text(scene, transform, origin, layout, color);
+    }
 }
 
 fn encode_shaped_text(
@@ -1275,7 +1450,73 @@ fn encode_shaped_text(
     }
 }
 
-fn encode_image(scene: &mut Scene, transform: Affine, rect: Rect, image: &RenderImage) {
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+fn encode_shaped_text_device_space(
+    scene: &mut Scene,
+    origin: Point,
+    layout: &ShapedTextLayout,
+    color: Color,
+    scale: f64,
+) {
+    let origin = Point::new(origin.x.round(), origin.y.round());
+    for run in &layout.runs {
+        scene
+            .draw_glyphs(&run.font)
+            .font_size(run.font_size * scale as f32)
+            .hint(true)
+            .brush(vello_color(color))
+            .draw(
+                Fill::NonZero,
+                run.glyphs.iter().map(|glyph| Glyph {
+                    id: glyph.id,
+                    x: origin.x + glyph.x * scale as f32,
+                    y: origin.y + glyph.y * scale as f32,
+                }),
+            );
+    }
+}
+
+fn uniform_axis_aligned_scale(transform: Affine) -> Option<f64> {
+    let coeffs = transform.as_coeffs();
+    let scale_x = coeffs[0];
+    let skew_y = coeffs[1];
+    let skew_x = coeffs[2];
+    let scale_y = coeffs[3];
+    if skew_y.abs() <= f64::EPSILON
+        && skew_x.abs() <= f64::EPSILON
+        && scale_x.is_finite()
+        && scale_y.is_finite()
+        && scale_x > 0.0
+        && (scale_x - scale_y).abs() <= f64::EPSILON
+    {
+        Some(scale_x)
+    } else {
+        None
+    }
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+fn transform_point(transform: Affine, point: Point) -> Point {
+    let coeffs = transform.as_coeffs();
+    Point::new(
+        (coeffs[0].mul_add(
+            f64::from(point.x),
+            coeffs[2].mul_add(f64::from(point.y), coeffs[4]),
+        )) as f32,
+        (coeffs[1].mul_add(
+            f64::from(point.x),
+            coeffs[3].mul_add(f64::from(point.y), coeffs[5]),
+        )) as f32,
+    )
+}
+
+fn encode_image(
+    scene: &mut Scene,
+    transform: Affine,
+    rect: Rect,
+    image: &RenderImage,
+    sampling: RenderImageSampling,
+) {
     if image.width == 0 || image.height == 0 || rect.width <= 0.0 || rect.height <= 0.0 {
         return;
     }
@@ -1287,13 +1528,39 @@ fn encode_image(scene: &mut Scene, transform: Affine, rect: Rect, image: &Render
         width: image.width,
         height: image.height,
     };
-    let brush = ImageBrush::new(image_data);
+    let brush = ImageBrush::new(image_data).with_quality(image_quality(sampling));
     let scale_x = f64::from(rect.width) / f64::from(image.width);
     let scale_y = f64::from(rect.height) / f64::from(image.height);
     let image_transform = transform
         * Affine::translate((f64::from(rect.x), f64::from(rect.y)))
         * Affine::scale_non_uniform(scale_x, scale_y);
     scene.draw_image(brush.as_ref(), image_transform);
+}
+
+fn source_size_matches_snapshot(source_size: Size, image: &RenderImage) -> bool {
+    (f64::from(source_size.width) - f64::from(image.width)).abs() <= f64::EPSILON
+        && (f64::from(source_size.height) - f64::from(image.height)).abs() <= f64::EPSILON
+}
+
+fn image_quality(sampling: RenderImageSampling) -> ImageQuality {
+    match sampling {
+        RenderImageSampling::Pixelated => ImageQuality::Low,
+        RenderImageSampling::Smooth => ImageQuality::Medium,
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn quantize_stroke_width_to_device(width: f32, device_scale: f64) -> f32 {
+    if width <= 0.0 || !width.is_finite() || !device_scale.is_finite() || device_scale <= 0.0 {
+        return width;
+    }
+
+    let physical_width = (f64::from(width) * device_scale).round().max(1.0);
+    (physical_width / device_scale) as f32
+}
+
+fn logical_size_matches(lhs: Size, rhs: Size) -> bool {
+    (lhs.width - rhs.width).abs() <= f32::EPSILON && (lhs.height - rhs.height).abs() <= f32::EPSILON
 }
 
 fn image_format(format: RenderImageFormat) -> ImageFormat {
@@ -1314,18 +1581,17 @@ fn encode_resource_placeholder(
     scene: &mut Scene,
     transform: Affine,
     rect: Rect,
+    device_scale: f64,
     fill: Color,
     stroke: Color,
 ) {
     let shape = rounded_rect(rect, CornerRadius::all(2.0));
     scene.fill(Fill::NonZero, transform, vello_color(fill), None, &shape);
-    scene.stroke(
-        &vello::kurbo::Stroke::new(1.0),
-        transform,
-        vello_color(stroke),
-        None,
-        &shape,
-    );
+    let stroke_style = vello::kurbo::Stroke::new(f64::from(quantize_stroke_width_to_device(
+        1.0,
+        device_scale,
+    )));
+    scene.stroke(&stroke_style, transform, vello_color(stroke), None, &shape);
     let first = KurboLine::new(
         (f64::from(rect.min_x()), f64::from(rect.min_y())),
         (f64::from(rect.max_x()), f64::from(rect.max_y())),
@@ -1335,14 +1601,14 @@ fn encode_resource_placeholder(
         (f64::from(rect.min_x()), f64::from(rect.max_y())),
     );
     scene.stroke(
-        &vello::kurbo::Stroke::new(1.0),
+        &stroke_style,
         transform,
         vello_color(stroke.with_alpha(0.45)),
         None,
         &first,
     );
     scene.stroke(
-        &vello::kurbo::Stroke::new(1.0),
+        &stroke_style,
         transform,
         vello_color(stroke.with_alpha(0.45)),
         None,
@@ -1359,6 +1625,127 @@ fn transform_to_affine(transform: Transform) -> Affine {
         f64::from(transform.dx),
         f64::from(transform.dy),
     ])
+}
+
+fn viewport_device_scale(viewport: ViewportInfo) -> f64 {
+    let scale = viewport.scale_factor.value();
+    if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    }
+}
+
+fn root_transform(device_scale: f64) -> Affine {
+    Affine::scale(device_scale.max(f64::EPSILON))
+}
+
+fn snap_axis_aligned_translation(transform: Affine) -> Affine {
+    let mut coeffs = transform.as_coeffs();
+    if coeffs[1].abs() <= f64::EPSILON && coeffs[2].abs() <= f64::EPSILON {
+        coeffs[4] = coeffs[4].round();
+        coeffs[5] = coeffs[5].round();
+    }
+    Affine::new(coeffs)
+}
+
+fn snap_rect_to_device(rect: Rect, device_scale: f64) -> Rect {
+    let min = snap_point_to_device(Point::new(rect.x, rect.y), device_scale);
+    let max = snap_point_to_device(Point::new(rect.max_x(), rect.max_y()), device_scale);
+    Rect::new(
+        min.x,
+        min.y,
+        (max.x - min.x).max(0.0),
+        (max.y - min.y).max(0.0),
+    )
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn snap_stroked_rect_to_device(rect: Rect, stroke_width: f32, device_scale: f64) -> Rect {
+    if !rect.x.is_finite()
+        || !rect.y.is_finite()
+        || !rect.width.is_finite()
+        || !rect.height.is_finite()
+        || stroke_width <= 0.0
+        || !stroke_width.is_finite()
+        || !device_scale.is_finite()
+        || device_scale <= 0.0
+    {
+        return rect;
+    }
+    let half_width = f64::from(stroke_width) * device_scale * 0.5;
+    let left = (f64::from(rect.min_x()) * device_scale).round() + half_width;
+    let top = (f64::from(rect.min_y()) * device_scale).round() + half_width;
+    let right = (f64::from(rect.max_x()) * device_scale).round() - half_width;
+    let bottom = (f64::from(rect.max_y()) * device_scale).round() - half_width;
+
+    let min_x = left.min(right);
+    let min_y = top.min(bottom);
+    let max_x = left.max(right);
+    let max_y = top.max(bottom);
+    Rect::new(
+        (min_x / device_scale) as f32,
+        (min_y / device_scale) as f32,
+        ((max_x - min_x) / device_scale) as f32,
+        ((max_y - min_y) / device_scale) as f32,
+    )
+}
+
+fn snap_stroked_line_to_device(
+    from: Point,
+    to: Point,
+    stroke_width: f32,
+    device_scale: f64,
+) -> (Point, Point) {
+    if (from.y - to.y).abs() <= f32::EPSILON {
+        let y = snap_stroke_center_to_device(from.y, stroke_width, device_scale);
+        (
+            Point::new(snap_scalar_to_device(from.x, device_scale), y),
+            Point::new(snap_scalar_to_device(to.x, device_scale), y),
+        )
+    } else if (from.x - to.x).abs() <= f32::EPSILON {
+        let x = snap_stroke_center_to_device(from.x, stroke_width, device_scale);
+        (
+            Point::new(x, snap_scalar_to_device(from.y, device_scale)),
+            Point::new(x, snap_scalar_to_device(to.y, device_scale)),
+        )
+    } else {
+        (
+            snap_point_to_device(from, device_scale),
+            snap_point_to_device(to, device_scale),
+        )
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn snap_stroke_center_to_device(value: f32, stroke_width: f32, device_scale: f64) -> f32 {
+    if !value.is_finite()
+        || stroke_width <= 0.0
+        || !stroke_width.is_finite()
+        || !device_scale.is_finite()
+        || device_scale <= 0.0
+    {
+        return value;
+    }
+    let physical_width = f64::from(stroke_width) * device_scale;
+    let physical = f64::from(value) * device_scale;
+    let snapped = ((physical - physical_width * 0.5).round() + physical_width * 0.5) / device_scale;
+    snapped as f32
+}
+
+fn snap_point_to_device(point: Point, device_scale: f64) -> Point {
+    Point::new(
+        snap_scalar_to_device(point.x, device_scale),
+        snap_scalar_to_device(point.y, device_scale),
+    )
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn snap_scalar_to_device(value: f32, device_scale: f64) -> f32 {
+    if !value.is_finite() || !device_scale.is_finite() || device_scale <= 0.0 {
+        return value;
+    }
+    ((f64::from(value) * device_scale).round() / device_scale) as f32
 }
 
 fn compose_transform(parent: Transform, child: Transform) -> Transform {
@@ -1424,8 +1811,12 @@ fn vello_gradient(gradient: &LinearGradient) -> PenikoGradient {
 mod tests {
     use super::{
         ImageResource, RenderCommand, RenderCommandKind, RenderDiagnostic, RenderFrameInput,
-        RenderImage, RenderResources, RendererBackend, TextLayoutResource, TextureResource,
-        VelloRenderer, render_translation_snapshot, translate_primitives,
+        RenderImage, RenderImageSampling, RenderResources, RendererBackend, TextLayoutResource,
+        TextureResource, VelloRenderer, image_quality, physical_text_layout,
+        quantize_stroke_width_to_device, render_translation_snapshot, root_transform,
+        snap_axis_aligned_translation, snap_point_to_device, snap_rect_to_device,
+        snap_stroke_center_to_device, snap_stroked_line_to_device, snap_stroked_rect_to_device,
+        translate_primitives, viewport_device_scale,
     };
     use kinetik_ui_core::render::TexturePrimitive;
     use kinetik_ui_core::{
@@ -1437,17 +1828,20 @@ mod tests {
     use kinetik_ui_text::{
         CosmicTextEngine, ShapedTextLayout, TextLayoutKey, TextLayoutStore, TextStyle,
     };
+    use vello::{kurbo::Affine, peniko::ImageQuality};
 
     fn resources() -> RenderResources {
         let mut resources = RenderResources::new();
         resources.register_image(ImageResource {
             id: ImageId::from_raw(1),
             size: Size::new(64.0, 64.0),
+            sampling: RenderImageSampling::default(),
             pixels: Some(tiny_image()),
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(2),
-            size: Size::new(128.0, 128.0),
+            size: Size::new(2.0, 2.0),
+            sampling: RenderImageSampling::default(),
             snapshot: Some(tiny_image()),
         });
         resources
@@ -1458,11 +1852,13 @@ mod tests {
         resources.register_image(ImageResource {
             id: ImageId::from_raw(1),
             size: Size::new(64.0, 64.0),
+            sampling: RenderImageSampling::default(),
             pixels: None,
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(2),
-            size: Size::new(128.0, 128.0),
+            size: Size::new(2.0, 2.0),
+            sampling: RenderImageSampling::default(),
             snapshot: None,
         });
         resources
@@ -1501,6 +1897,13 @@ mod tests {
     fn assert_approx(actual: f32, expected: f32) {
         assert!(
             (actual - expected).abs() < f32::EPSILON,
+            "expected {actual} to equal {expected}"
+        );
+    }
+
+    fn assert_approx64(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < f64::EPSILON,
             "expected {actual} to equal {expected}"
         );
     }
@@ -1860,7 +2263,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_texture_source_size_is_diagnosed_without_dropping_rect() {
+    fn invalid_texture_source_size_is_diagnosed_and_dropped() {
         let primitives = vec![Primitive::Texture(TexturePrimitive {
             texture: TextureId::from_raw(2),
             rect: Rect::new(0.0, 0.0, 10.0, 10.0),
@@ -1873,7 +2276,7 @@ mod tests {
             translation.diagnostics,
             vec![RenderDiagnostic::InvalidGeometry("texture_source_size")]
         );
-        assert_eq!(translation.commands.len(), 1);
+        assert!(translation.commands.is_empty());
     }
 
     #[test]
@@ -2083,7 +2486,7 @@ mod tests {
             Primitive::Texture(TexturePrimitive {
                 texture: TextureId::from_raw(2),
                 rect: Rect::new(20.0, 20.0, 16.0, 16.0),
-                source_size: Size::new(16.0, 16.0),
+                source_size: Size::new(2.0, 2.0),
             }),
         ];
 
@@ -2091,7 +2494,7 @@ mod tests {
 
         assert_eq!(
             render_translation_snapshot(&translation),
-            "commands:\n  0: layer=3 transform=[1.000, 0.000, 0.000, 1.000, 2.000, 3.000] clips=[{rect=(0.000, 0.000, 20.000, 12.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(1.000, 1.000, 8.000, 4.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(2.000, 2.000, 2.000, 2.000)\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] text layout=7 origin=(4.000, 16.000) size=12.000 color=rgba(0.000, 0.000, 0.000, 1.000) text=\"Hi\"\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#9 rect=(0.000, 20.000, 16.000, 16.000)\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#2 rect=(20.000, 20.000, 16.000, 16.000)\ndiagnostics:\n  missing_text_layout#7\n  missing_image#9"
+            "commands:\n  0: layer=3 transform=[1.000, 0.000, 0.000, 1.000, 2.000, 3.000] clips=[{rect=(0.000, 0.000, 20.000, 12.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(1.000, 1.000, 8.000, 4.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(2.000, 2.000, 2.000, 2.000)\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] text layout=7 origin=(4.000, 16.000) size=12.000 color=rgba(0.000, 0.000, 0.000, 1.000) text=\"Hi\"\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#9 rect=(0.000, 20.000, 16.000, 16.000)\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#2 rect=(20.000, 20.000, 16.000, 16.000) source_size=2.000x2.000\ndiagnostics:\n  missing_text_layout#7\n  missing_image#9"
         );
     }
 
@@ -2130,13 +2533,30 @@ mod tests {
             Primitive::Texture(TexturePrimitive {
                 texture: TextureId::from_raw(2),
                 rect: Rect::new(0.0, 0.0, 10.0, 10.0),
-                source_size: Size::new(10.0, 10.0),
+                source_size: Size::new(2.0, 2.0),
             }),
         ];
 
         let translation = translate_primitives(&primitives, &resources());
 
         assert!(translation.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn texture_source_size_mismatch_is_diagnosed_and_dropped() {
+        let primitives = vec![Primitive::Texture(TexturePrimitive {
+            texture: TextureId::from_raw(2),
+            rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+            source_size: Size::new(3.0, 2.0),
+        })];
+
+        let translation = translate_primitives(&primitives, &resources());
+
+        assert_eq!(
+            translation.diagnostics,
+            vec![RenderDiagnostic::InvalidGeometry("texture_source_size")]
+        );
+        assert!(translation.commands.is_empty());
     }
 
     #[test]
@@ -2149,7 +2569,7 @@ mod tests {
             Primitive::Texture(TexturePrimitive {
                 texture: TextureId::from_raw(2),
                 rect: Rect::new(0.0, 0.0, 10.0, 10.0),
-                source_size: Size::new(10.0, 10.0),
+                source_size: Size::new(2.0, 2.0),
             }),
         ];
 
@@ -2258,6 +2678,75 @@ mod tests {
     }
 
     #[test]
+    fn viewport_device_scale_uses_frame_scale_factor() {
+        let viewport = ViewportInfo::new(
+            Size::new(800.0, 600.0),
+            kinetik_ui_core::PhysicalSize::new(1200, 900),
+            ScaleFactor::new(1.5),
+        );
+
+        assert!((viewport_device_scale(viewport) - 1.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn renderer_snaps_geometry_to_device_pixel_grid() {
+        let point = snap_point_to_device(Point::new(10.2, 20.6), 2.0);
+        let rect = snap_rect_to_device(Rect::new(1.2, 2.2, 9.1, 10.1), 2.0);
+
+        assert_eq!(point, Point::new(10.0, 20.5));
+        assert_eq!(rect, Rect::new(1.0, 2.0, 9.5, 10.5));
+    }
+
+    #[test]
+    fn renderer_snaps_stroke_centers_to_physical_pixel_coverage() {
+        let one_px = snap_stroke_center_to_device(10.0, 1.0, 1.0);
+        let two_px = snap_stroke_center_to_device(10.0, 1.0, 2.0);
+        let horizontal =
+            snap_stroked_line_to_device(Point::new(0.2, 10.0), Point::new(20.2, 10.0), 1.0, 1.0);
+        let rect = snap_stroked_rect_to_device(Rect::new(0.1, 0.1, 20.2, 12.2), 1.0, 1.0);
+
+        assert_approx(one_px, 10.5);
+        assert_approx(two_px, 10.0);
+        assert_eq!(horizontal.0, Point::new(0.0, 10.5));
+        assert_eq!(horizontal.1, Point::new(20.0, 10.5));
+        assert_eq!(rect, Rect::new(0.5, 0.5, 19.0, 11.0));
+    }
+
+    #[test]
+    fn renderer_quantizes_stroke_widths_to_physical_pixels() {
+        assert_approx(quantize_stroke_width_to_device(1.0, 1.0), 1.0);
+        assert_approx(quantize_stroke_width_to_device(1.0, 1.25), 0.8);
+        assert_approx(quantize_stroke_width_to_device(1.0, 1.5), 1.333_333_4);
+        assert_approx(quantize_stroke_width_to_device(2.0, 1.25), 2.4);
+    }
+
+    #[test]
+    fn renderer_snaps_axis_aligned_transform_translation_to_device_pixels() {
+        let transform =
+            snap_axis_aligned_translation(root_transform(2.0) * Affine::translate((0.25, 0.25)));
+
+        let coeffs = transform.as_coeffs();
+        assert_approx64(coeffs[0], 2.0);
+        assert_approx64(coeffs[1], 0.0);
+        assert_approx64(coeffs[2], 0.0);
+        assert_approx64(coeffs[3], 2.0);
+        assert_approx64(coeffs[4], 1.0);
+        assert_approx64(coeffs[5], 1.0);
+    }
+
+    #[test]
+    fn image_sampling_maps_to_vello_quality() {
+        assert_eq!(
+            image_quality(RenderImageSampling::Pixelated),
+            ImageQuality::Low
+        );
+        assert_eq!(
+            image_quality(RenderImageSampling::Smooth),
+            ImageQuality::Medium
+        );
+    }
+
+    #[test]
     fn frame_submission_encodes_vello_geometry() {
         let mut renderer = VelloRenderer::new();
         let primitives = vec![
@@ -2319,7 +2808,7 @@ mod tests {
             Primitive::Texture(TexturePrimitive {
                 texture: TextureId::from_raw(2),
                 rect: Rect::new(40.0, 24.0, 32.0, 24.0),
-                source_size: Size::new(32.0, 24.0),
+                source_size: Size::new(2.0, 2.0),
             }),
         ];
 
@@ -2338,6 +2827,55 @@ mod tests {
         assert!(!renderer.scene().encoding().resources.glyph_runs.is_empty());
         assert!(!renderer.scene().encoding().resources.glyphs.is_empty());
         assert!(renderer.scene().encoding().resources.patches.len() >= 2);
+    }
+
+    #[test]
+    fn frame_submission_encodes_axis_aligned_text_at_physical_font_size() {
+        let mut renderer = VelloRenderer::new();
+        let resources = RenderResources::new();
+        let primitives = vec![Primitive::Text(TextPrimitive {
+            layout: None,
+            origin: Point::new(4.0, 16.0),
+            text: "Label".to_owned(),
+            size: 12.0,
+            brush: Brush::Solid(Color::WHITE),
+        })];
+
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: ViewportInfo::new(
+                Size::new(100.0, 100.0),
+                kinetik_ui_core::PhysicalSize::new(200, 200),
+                ScaleFactor::new(2.0),
+            ),
+            primitives: &primitives,
+            resources: &resources,
+        });
+
+        let glyph_run = renderer
+            .scene()
+            .encoding()
+            .resources
+            .glyph_runs
+            .first()
+            .expect("glyph run");
+
+        assert!(output.diagnostics.is_empty());
+        assert_approx(glyph_run.font_size, 24.0);
+        assert!(glyph_run.hint);
+    }
+
+    #[test]
+    fn physical_text_layout_shapes_at_device_font_size() {
+        let mut engine = CosmicTextEngine::new();
+        let layout = physical_text_layout(&mut engine, root_transform(1.5), "Label", 12.0)
+            .expect("axis-aligned physical layout");
+
+        assert!(
+            layout
+                .runs
+                .iter()
+                .all(|run| (run.font_size - 18.0).abs() < f32::EPSILON)
+        );
     }
 
     #[test]
@@ -2367,6 +2905,42 @@ mod tests {
         assert!(output.diagnostics.is_empty());
         assert!(!renderer.scene().encoding().resources.glyph_runs.is_empty());
         assert!(!renderer.scene().encoding().resources.glyphs.is_empty());
+    }
+
+    #[test]
+    fn registered_text_layout_renders_with_fractional_scale_physical_shape() {
+        let layout = TextLayoutId::from_raw(45);
+        let mut resources = RenderResources::new();
+        resources.register_text_layout(text_layout_resource(layout, "Label"));
+        let primitives = vec![Primitive::Text(TextPrimitive {
+            layout: Some(layout),
+            origin: Point::new(4.0, 16.0),
+            text: "Label".to_owned(),
+            size: 12.0,
+            brush: Brush::Solid(Color::WHITE),
+        })];
+        let mut renderer = VelloRenderer::new();
+
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: ViewportInfo::new(
+                Size::new(100.0, 100.0),
+                kinetik_ui_core::PhysicalSize::new(125, 125),
+                ScaleFactor::new(1.25),
+            ),
+            primitives: &primitives,
+            resources: &resources,
+        });
+        let glyph_run = renderer
+            .scene()
+            .encoding()
+            .resources
+            .glyph_runs
+            .first()
+            .expect("glyph run");
+
+        assert!(output.diagnostics.is_empty());
+        assert_approx(glyph_run.font_size, 15.0);
+        assert!(glyph_run.hint);
     }
 
     #[test]

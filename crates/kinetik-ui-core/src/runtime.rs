@@ -274,6 +274,7 @@ impl FrameOutput {
     /// Adds an action invocation to the frame output.
     pub fn push_action(&mut self, invocation: ActionInvocation) {
         self.actions.push(invocation);
+        self.request_repaint(RepaintRequest::NextFrame);
     }
 
     /// Adds an action invocation from simple parts.
@@ -284,6 +285,7 @@ impl FrameOutput {
         context: ActionContext,
     ) {
         self.actions.invoke(action_id, source, context);
+        self.request_repaint(RepaintRequest::NextFrame);
     }
 
     /// Appends one platform request.
@@ -641,6 +643,7 @@ mod tests {
         );
 
         assert_eq!(output.actions.len(), 1);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
         assert_eq!(
             output.actions.pop_front().expect("action").action_id,
             ActionId::new("file.save")

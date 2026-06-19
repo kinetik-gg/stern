@@ -109,7 +109,7 @@ pub fn pressable(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> Response {
-    let hovered = !disabled && hit_test(rect, input);
+    let hovered = !disabled && routed_hit_test(id, rect, input, memory);
 
     if hovered {
         memory.set_hovered(id);
@@ -134,7 +134,8 @@ pub fn pressable(
     let secondary_clicked =
         !disabled && hovered && memory.is_secondary_pressed(id) && input.pointer.secondary.released;
 
-    if active && input.pointer.primary.released {
+    let released_active_primary = active && input.pointer.primary.released;
+    if released_active_primary {
         memory.finish_drag(id);
         memory.clear_interaction();
     }
@@ -154,8 +155,8 @@ pub fn pressable(
             InteractionState {
                 hovered,
                 focused: memory.is_focused(id),
-                active,
-                pressed,
+                active: active && !released_active_primary,
+                pressed: pressed && !released_active_primary,
                 disabled,
                 selected: false,
             },
@@ -195,7 +196,7 @@ pub fn scrollable(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> ScrollResponse {
-    let hovered = !disabled && hit_test(rect, input);
+    let hovered = !disabled && routed_hit_test(id, rect, input, memory);
     if hovered {
         memory.set_hovered(id);
     }
@@ -262,7 +263,7 @@ pub fn tooltip_trigger(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> Response {
-    let hovered = !disabled && hit_test(rect, input);
+    let hovered = !disabled && routed_hit_test(id, rect, input, memory);
     if hovered {
         memory.set_hovered(id);
     }
@@ -294,14 +295,20 @@ pub fn drop_target(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> DropTargetResponse {
-    let hovered = !disabled && hit_test(rect, input);
-    if hovered {
-        memory.set_hovered(id);
-    }
     let source = memory
         .released_drag_source()
         .or_else(|| memory.drag_source())
         .filter(|source| *source != id);
+    let release_drop_hit = input.pointer.primary.released && source.is_some();
+    let hovered = !disabled
+        && if release_drop_hit {
+            hit_test(rect, input)
+        } else {
+            routed_hit_test(id, rect, input, memory)
+        };
+    if hovered {
+        memory.set_hovered(id);
+    }
     let dropped = !disabled && hovered && input.pointer.primary.released && source.is_some();
     let response = Response::new(
         id,
@@ -353,6 +360,13 @@ fn keyboard_activation_pressed(id: WidgetId, input: &UiInput, memory: &UiMemory)
                 && event.modifiers.is_empty()
                 && matches!(event.key, Key::Enter | Key::Space)
         })
+}
+
+fn routed_hit_test(id: WidgetId, rect: Rect, input: &UiInput, memory: &UiMemory) -> bool {
+    memory
+        .pointer_capture()
+        .is_none_or(|captured| captured == id)
+        && hit_test(rect, input)
 }
 
 fn keyboard_context_requested(id: WidgetId, input: &UiInput, memory: &UiMemory) -> bool {
@@ -457,6 +471,8 @@ mod tests {
         input.pointer.primary = PointerButtonState::new(false, false, true);
         let response = pressable(id, rect, &input, &mut memory, false);
         assert!(response.clicked);
+        assert!(!response.state.active);
+        assert!(!response.state.pressed);
         assert_eq!(memory.active(), None);
         assert_eq!(memory.pointer_capture(), None);
     }
@@ -485,6 +501,30 @@ mod tests {
         input.pointer.secondary = PointerButtonState::new(false, false, true);
         let response = pressable(id, rect, &input, &mut memory, false);
         assert!(response.secondary_clicked);
+    }
+
+    #[test]
+    fn pointer_capture_suppresses_hover_on_other_widgets() {
+        let owner = WidgetId::from_key("owner");
+        let other = WidgetId::from_key("other");
+        let owner_rect = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let other_rect = Rect::new(20.0, 0.0, 10.0, 10.0);
+        let mut memory = UiMemory::new();
+        let mut input = input_at(5.0, 5.0);
+
+        input.pointer.primary = PointerButtonState::new(true, true, false);
+        let owner_press = pressable(owner, owner_rect, &input, &mut memory, false);
+        assert!(owner_press.state.hovered);
+        assert!(memory.has_pointer_capture(owner));
+
+        memory.begin_frame();
+        input.pointer.position = Some(Point::new(25.0, 5.0));
+        input.pointer.primary = PointerButtonState::new(true, false, false);
+        let other_response = pressable(other, other_rect, &input, &mut memory, false);
+
+        assert!(!other_response.state.hovered);
+        assert_eq!(memory.hovered(), None);
+        assert_eq!(memory.pointer_capture(), Some(owner));
     }
 
     #[test]

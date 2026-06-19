@@ -5,9 +5,9 @@ use std::hash::Hash;
 use kinetik_ui_core::{
     ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionSource, ClipId,
     DropTargetResponse, FrameContext, FrameOutput, ImageId, Insets, PhysicalSize, Primitive, Rect,
-    Response, ScaleFactor, ScrollResponse, Size, TextPrimitive, Theme, TimeInfo, Transform,
-    Ui as CoreUi, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, context_menu_trigger, draggable,
-    drop_target, focusable, pressable, scrollable, selectable, tooltip_trigger,
+    RepaintRequest, Response, ScaleFactor, ScrollResponse, Size, TextPrimitive, Theme, TimeInfo,
+    Transform, Ui as CoreUi, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, context_menu_trigger,
+    draggable, drop_target, focusable, pressable, scrollable, selectable, tooltip_trigger,
 };
 use kinetik_ui_text::{TextEditState, TextLayoutKey, TextLayoutStore, TextStyle};
 
@@ -18,7 +18,8 @@ use crate::{
     icon_button as fallback_icon_button_widget,
     icon_button_with_label as fallback_icon_button_with_label_widget,
     icon_button_with_library as icon_button_with_library_widget, image as image_widget,
-    image_semantics, label as label_widget, label_semantics, list_row as list_row_widget,
+    image_icon_button as image_icon_button_widget, image_semantics, label as label_widget,
+    label_semantics, list_row as list_row_widget,
     multi_line_text_field_with_text_layouts as multi_line_text_field_widget,
     numeric_input_with_text_layouts as numeric_input_widget, panel as panel_widget,
     panel_semantics, radio_button as radio_button_widget,
@@ -463,6 +464,23 @@ impl<'a> Ui<'a> {
         self.push_interactive(output)
     }
 
+    /// Emits a bitmap-backed icon button with an accessible label.
+    pub fn image_icon_button(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        image: ImageId,
+        label: impl Into<String>,
+        disabled: bool,
+    ) -> Response {
+        let id = self.id(key);
+        let theme = self.theme;
+        let (input, memory) = self.runtime.input_and_memory_mut();
+        let output =
+            image_icon_button_widget(id, rect, image, label, input, memory, theme, disabled);
+        self.push_interactive(output)
+    }
+
     /// Emits a tab header and returns its interaction response.
     pub fn tab_button(
         &mut self,
@@ -766,6 +784,9 @@ impl<'a> Ui<'a> {
 
     fn push_interactive(&mut self, output: WidgetOutput) -> Response {
         let response = output.response.expect("interactive widget response");
+        if response_requests_followup_repaint(response) {
+            self.runtime.request_repaint(RepaintRequest::NextFrame);
+        }
         self.extend(output.primitives);
         for node in output.semantics {
             self.runtime.push_semantic_node(node);
@@ -791,6 +812,14 @@ impl<'a> Ui<'a> {
     }
 }
 
+fn response_requests_followup_repaint(response: Response) -> bool {
+    response.clicked
+        || response.secondary_clicked
+        || response.dragged
+        || response.keyboard_activated
+        || response.context_requested
+}
+
 fn text_layout_key(text: &TextPrimitive) -> TextLayoutKey {
     TextLayoutKey::new(
         text.text.clone(),
@@ -808,9 +837,10 @@ mod tests {
     use crate::{IconGraphic, IconLibrary, IconPath};
     use kinetik_ui_core::{
         ActionContext, ActionDescriptor, ActionSource, CursorShape, FrameContext, FrameWarning,
-        IconId, Insets, PathElement, PhysicalSize, PlatformRequest, Point, PointerButtonState,
-        PointerInput, Primitive, Rect, ScaleFactor, SemanticRole, Size, TimeInfo, UiInput,
-        UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+        IconId, ImageId, Insets, PathElement, PhysicalSize, PlatformRequest, Point,
+        PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest, ScaleFactor,
+        SemanticRole, Size, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId,
+        default_dark_theme,
     };
     use kinetik_ui_text::{TextEditState, TextLayoutStore};
 
@@ -1106,6 +1136,7 @@ mod tests {
         let mut output = ui.finish_output();
 
         assert!(clicked.clicked);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
         assert_eq!(output.actions.len(), 1);
         let invocation = output.actions.pop_front().expect("queued action");
         assert_eq!(invocation.action_id, action.id);
@@ -1154,24 +1185,51 @@ mod tests {
 
         let output = ui.finish_output();
         assert_eq!(output.actions.len(), 1);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
+    }
+
+    #[test]
+    fn ui_interactive_click_requests_followup_repaint() {
+        let theme = default_dark_theme();
+        let rect = Rect::new(0.0, 0.0, 80.0, 28.0);
+        let mut memory = UiMemory::new();
+
+        let input = pressed_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.button("run", rect, "Run", false);
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::None);
+
+        let input = released_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let response = ui.button("run", rect, "Run", false);
+        let output = ui.finish_output();
+
+        assert!(response.clicked);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
     }
 
     #[test]
     fn ui_exposes_neutral_behavior_primitives() {
         let theme = default_dark_theme();
-        let mut memory = UiMemory::new();
         let input = pressed_at(4.0, 4.0);
+
+        let mut memory = UiMemory::new();
         let mut ui = Ui::new(&input, &mut memory, &theme);
-
         let pressed = ui.pressable("pressable", Rect::new(0.0, 0.0, 20.0, 20.0), false);
-        let selected = ui.selectable("selectable", Rect::new(0.0, 0.0, 20.0, 20.0), true, false);
-        let dragged = ui.draggable("draggable", Rect::new(0.0, 0.0, 20.0, 20.0), false);
-        let output = ui.finish_output();
-
         assert!(pressed.state.pressed);
+        assert!(ui.finish_output().primitives.is_empty());
+
+        let mut memory = UiMemory::new();
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let selected = ui.selectable("selectable", Rect::new(0.0, 0.0, 20.0, 20.0), true, false);
         assert!(selected.state.selected);
+        assert!(ui.finish_output().primitives.is_empty());
+
+        let mut memory = UiMemory::new();
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let dragged = ui.draggable("draggable", Rect::new(0.0, 0.0, 20.0, 20.0), false);
         assert!(dragged.state.active);
-        assert!(output.primitives.is_empty());
+        assert!(ui.finish_output().primitives.is_empty());
     }
 
     #[test]
@@ -1324,6 +1382,33 @@ mod tests {
         assert!(matches!(output.primitives[1], Primitive::Path(_)));
         assert!(output.semantics.nodes().iter().any(|node| {
             node.role == SemanticRole::IconButton && node.label.as_deref() == Some("Apply")
+        }));
+    }
+
+    #[test]
+    fn ui_image_icon_button_uses_bitmap_icon_widget() {
+        let theme = default_dark_theme();
+        let input = UiInput::default();
+        let mut memory = UiMemory::new();
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+
+        ui.image_icon_button(
+            "save",
+            Rect::new(0.0, 0.0, 24.0, 24.0),
+            ImageId::from_raw(7),
+            "Save project",
+            false,
+        );
+        let output = ui.finish_output();
+
+        assert!(
+            output
+                .primitives
+                .iter()
+                .any(|primitive| matches!(primitive, Primitive::Image(_)))
+        );
+        assert!(output.semantics.nodes().iter().any(|node| {
+            node.role == SemanticRole::IconButton && node.label.as_deref() == Some("Save project")
         }));
     }
 

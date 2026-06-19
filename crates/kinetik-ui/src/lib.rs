@@ -151,8 +151,8 @@ pub mod prelude {
     };
     pub use crate::render::{
         ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput, RenderImage,
-        RenderImageAlpha, RenderImageFormat, RenderResources, RendererBackend, TextLayoutResource,
-        TextureResource,
+        RenderImageAlpha, RenderImageFormat, RenderImageSampling, RenderResources, RendererBackend,
+        TextLayoutResource, TextureResource,
     };
     #[cfg(feature = "render-vello")]
     pub use crate::render_vello::{VelloRenderer, translate_primitives};

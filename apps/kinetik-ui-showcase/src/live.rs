@@ -10,7 +10,7 @@ use kinetik_ui::{
         WinitFrameClock, WinitInputAdapter, WinitPlatformRequests, frame_context_from_winit,
         scale_factor_from_winit,
     },
-    render::{RenderDiagnostic, RenderFrameInput, RenderResources},
+    render::{RenderFrameInput, RenderResources},
     render_vello::VelloRenderer,
 };
 use kinetik_ui_showcase::app::{ShowcaseApp, ShowcasePage};
@@ -23,9 +23,9 @@ use vello::{
 use winit::{
     application::ApplicationHandler,
     dpi::{LogicalSize, PhysicalSize},
-    event::{ElementState, WindowEvent},
+    event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    keyboard::{Key, ModifiersState, NamedKey},
+    keyboard::ModifiersState,
     window::{Window, WindowId},
 };
 
@@ -35,7 +35,13 @@ const MIN_WIDTH: u32 = 1;
 const MIN_HEIGHT: u32 = 1;
 
 pub(crate) fn run(page: Option<ShowcasePage>) -> Result<(), winit::error::EventLoopError> {
-    let event_loop = EventLoop::new()?;
+    let mut event_loop_builder = EventLoop::builder();
+    #[cfg(target_os = "windows")]
+    {
+        use winit::platform::windows::EventLoopBuilderExtWindows;
+        event_loop_builder.with_dpi_aware(true);
+    }
+    let event_loop = event_loop_builder.build()?;
     let mut app = LiveShowcase::new(page);
     event_loop.run_app(&mut app)
 }
@@ -90,6 +96,7 @@ impl LiveShowcase {
         };
 
         let size = sanitize_physical_size(window.inner_size());
+        renderer.resize(size);
         let scale_factor = window.scale_factor();
         self.input
             .set_scale_factor(scale_factor_from_winit(scale_factor));
@@ -103,19 +110,22 @@ impl LiveShowcase {
 
         self.app.update_with_context(context);
         let resources = self.app.render_resources();
-        let requests = WinitPlatformRequests::from_frame_output(self.app.output());
+        let repaint = self.app.output().repaint;
+        let mut requests = WinitPlatformRequests::from_frame_output(self.app.output());
+        requests.repaint = RepaintRequest::None;
         let shell = requests.apply_to_window(window);
-        self.next_redraw_at = schedule_shell_repaint(
-            event_loop,
-            window,
-            self.app.output().repaint,
-            shell.repaint_after,
-            shell.continuous_repaint,
-        );
 
         window.pre_present_notify();
         match renderer.render(self.app.output(), &resources, viewport) {
-            Ok(()) => {}
+            Ok(()) => {
+                self.next_redraw_at = schedule_shell_repaint(
+                    event_loop,
+                    window,
+                    repaint,
+                    shell.repaint_after,
+                    shell.continuous_repaint,
+                );
+            }
             Err(LiveRenderError::Surface(status)) => {
                 handle_surface_status(status, renderer, size);
                 window.request_redraw();
@@ -135,7 +145,7 @@ impl ApplicationHandler for LiveShowcase {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.accepting_input = false;
         let attributes = Window::default_attributes()
-            .with_title("Kinetik UI Showcase")
+            .with_title("Kinetik Forge - Kinetik UI")
             .with_inner_size(LogicalSize::new(DEFAULT_WIDTH, DEFAULT_HEIGHT))
             .with_min_inner_size(LogicalSize::new(720.0, 480.0));
         let window = match event_loop.create_window(attributes) {
@@ -194,9 +204,6 @@ impl ApplicationHandler for LiveShowcase {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.input
                     .set_scale_factor(scale_factor_from_winit(scale_factor));
-                if let Some(window) = &self.window {
-                    self.resize_renderer(window.inner_size());
-                }
                 self.request_redraw();
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -215,12 +222,6 @@ impl ApplicationHandler for LiveShowcase {
                 self.modifiers = modifiers.state();
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if event.state == ElementState::Pressed
-                    && matches!(event.logical_key.as_ref(), Key::Named(NamedKey::Escape))
-                {
-                    event_loop.exit();
-                    return;
-                }
                 self.input.keyboard_event_with_physical_key(
                     &event.logical_key,
                     &event.physical_key,
@@ -299,12 +300,14 @@ impl LiveVelloRenderer {
             resources,
         });
         if !output.diagnostics.is_empty() {
-            return Err(LiveRenderError::Diagnostics(output.diagnostics));
+            eprintln!("showcase renderer diagnostics: {:?}", output.diagnostics);
         }
 
         let device_handle = &self.context.devices[self.surface.dev_id];
         let width = self.surface.config.width;
         let height = self.surface.config.height;
+        debug_assert_eq!(viewport.physical_size.width, width);
+        debug_assert_eq!(viewport.physical_size.height, height);
         self.renderer.render_to_texture(
             &device_handle.device,
             &device_handle.queue,
@@ -318,9 +321,13 @@ impl LiveVelloRenderer {
             },
         )?;
 
+        let mut surface_is_suboptimal = false;
         let surface_texture = match self.surface.surface.get_current_texture() {
-            CurrentSurfaceTexture::Success(texture)
-            | CurrentSurfaceTexture::Suboptimal(texture) => texture,
+            CurrentSurfaceTexture::Success(texture) => texture,
+            CurrentSurfaceTexture::Suboptimal(texture) => {
+                surface_is_suboptimal = true;
+                texture
+            }
             CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => return Ok(()),
             CurrentSurfaceTexture::Outdated => {
                 return Err(LiveRenderError::Surface(SurfaceStatus::Outdated));
@@ -349,6 +356,9 @@ impl LiveVelloRenderer {
         );
         device_handle.queue.submit([encoder.finish()]);
         surface_texture.present();
+        if surface_is_suboptimal {
+            return Err(LiveRenderError::Surface(SurfaceStatus::Outdated));
+        }
         Ok(())
     }
 }
@@ -364,7 +374,6 @@ enum SurfaceStatus {
 enum LiveRenderError {
     Render(vello::Error),
     Surface(SurfaceStatus),
-    Diagnostics(Vec<RenderDiagnostic>),
 }
 
 impl fmt::Display for LiveRenderError {
@@ -372,9 +381,6 @@ impl fmt::Display for LiveRenderError {
         match self {
             Self::Render(error) => write!(formatter, "{error}"),
             Self::Surface(status) => write!(formatter, "surface status: {status:?}"),
-            Self::Diagnostics(diagnostics) => {
-                write!(formatter, "renderer diagnostics: {diagnostics:?}")
-            }
         }
     }
 }
@@ -416,7 +422,9 @@ fn schedule_shell_repaint(
     let mut next_redraw_at = delay.map(|delay| Instant::now() + delay);
     match repaint {
         RepaintRequest::None => {}
-        RepaintRequest::NextFrame => window.request_redraw(),
+        RepaintRequest::NextFrame => {
+            next_redraw_at = Some(Instant::now());
+        }
         RepaintRequest::After(delay) => {
             next_redraw_at = Some(Instant::now() + delay);
         }

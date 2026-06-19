@@ -970,6 +970,58 @@ pub fn icon_button_with_library(
     )
 }
 
+/// Emits an icon button backed by a bitmap image resource.
+#[allow(clippy::too_many_arguments)]
+pub fn image_icon_button(
+    id: WidgetId,
+    rect: Rect,
+    image: ImageId,
+    label: impl Into<String>,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    disabled: bool,
+) -> WidgetOutput {
+    let response = focusable(id, rect, input, memory, disabled);
+    let recipe = theme.button(ComponentState {
+        hovered: response.state.hovered,
+        pressed: response.state.pressed,
+        focused: response.state.focused,
+        disabled,
+        selected: false,
+    });
+    let icon_rect = fit_box(
+        rect,
+        kinetik_ui_core::Size::new(theme.controls.icon_size, theme.controls.icon_size),
+        kinetik_ui_core::Alignment::Center,
+        kinetik_ui_core::Alignment::Center,
+    );
+
+    with_hover_cursor(
+        WidgetOutput::new(
+            Some(response),
+            vec![
+                Primitive::Rect(RectPrimitive {
+                    rect,
+                    fill: Some(recipe.background),
+                    stroke: Some(recipe.border),
+                    radius: recipe.radius,
+                }),
+                Primitive::Image(ImagePrimitive {
+                    image,
+                    rect: icon_rect,
+                }),
+            ],
+        )
+        .with_semantic(with_response_state(
+            icon_button_semantics(id, rect, label, disabled),
+            &response,
+        )),
+        &response,
+        CursorShape::PointingHand,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn icon_button_with_optional_library(
     id: WidgetId,
@@ -2012,10 +2064,11 @@ mod tests {
     use super::{
         IconId, PanelFrame, button, button_semantics, checkbox, checkbox_semantics,
         checkbox_with_label, icon_button, icon_button_with_label, icon_button_with_library, image,
-        label, list_row, multi_line_text_field, multi_line_text_field_with_text_layouts,
-        numeric_input, panel, panel_semantics, radio_button_with_label, search_field,
-        search_field_semantics, slider, slider_semantics, slider_with_label, tab_button,
-        text_field, text_field_semantics, text_field_with_text_layouts, toggle, toggle_with_label,
+        image_icon_button, label, list_row, multi_line_text_field,
+        multi_line_text_field_with_text_layouts, numeric_input, panel, panel_semantics,
+        radio_button_with_label, search_field, search_field_semantics, slider, slider_semantics,
+        slider_with_label, tab_button, text_field, text_field_semantics,
+        text_field_with_text_layouts, toggle, toggle_with_label,
     };
     use crate::{IconGraphic, IconLibrary, IconPath};
     use kinetik_ui_core::{
@@ -2137,6 +2190,26 @@ mod tests {
             false,
         );
 
+        assert_eq!(output.semantics[0].role, SemanticRole::IconButton);
+        assert_eq!(output.semantics[0].label.as_deref(), Some("Save project"));
+    }
+
+    #[test]
+    fn image_icon_button_emits_button_surface_and_image() {
+        let output = image_icon_button(
+            WidgetId::from_key("bitmap-icon"),
+            Rect::new(0.0, 0.0, 24.0, 24.0),
+            ImageId::from_raw(99),
+            "Save project",
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            &default_dark_theme(),
+            false,
+        );
+
+        assert_eq!(output.primitives.len(), 2);
+        assert!(matches!(output.primitives[0], Primitive::Rect(_)));
+        assert!(matches!(output.primitives[1], Primitive::Image(_)));
         assert_eq!(output.semantics[0].role, SemanticRole::IconButton);
         assert_eq!(output.semantics[0].label.as_deref(), Some("Save project"));
     }
