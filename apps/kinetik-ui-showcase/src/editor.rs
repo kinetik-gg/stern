@@ -1378,15 +1378,12 @@ impl EditorShowcase {
                 );
             }
             11 => {
-                let response = ui.toggle(
+                ui.toggle_value(
                     "editor.inspector.snap",
                     Rect::new(rect_value.x, rect_value.y + 2.0, 42.0, 18.0),
-                    self.snap_enabled,
+                    &mut self.snap_enabled,
                     false,
                 );
-                if response.clicked {
-                    self.snap_enabled = !self.snap_enabled;
-                }
             }
             13 => {
                 ui.numeric_input("editor.inspector.mass", rect_value, &mut self.mass, false);
@@ -1839,8 +1836,8 @@ mod tests {
         ICON_CROSSHAIR, ICON_SIZE, icon_atlas_image, inspector_label_width, register_resources,
     };
     use kinetik_ui::core::{
-        FrameContext, PhysicalSize, Primitive, Rect, ScaleFactor, Size, TimeInfo, UiInput,
-        UiMemory, ViewportInfo, default_dark_theme,
+        FrameContext, PhysicalSize, Point, PointerButtonState, PointerInput, Primitive, Rect,
+        ScaleFactor, Size, TimeInfo, UiInput, UiMemory, ViewportInfo, default_dark_theme,
     };
     use kinetik_ui::render::RenderResources;
     use kinetik_ui::widgets::Ui;
@@ -1851,6 +1848,34 @@ mod tests {
         assert!((inspector_label_width(180.0) - 75.6).abs() < f32::EPSILON);
         assert_eq!(inspector_label_width(400.0), 96.0);
         assert_eq!(inspector_label_width(f32::NAN), 72.0);
+    }
+
+    #[test]
+    fn inspector_snap_toggle_updates_status_same_frame() {
+        let mut editor = EditorShowcase::new();
+        let mut memory = UiMemory::new();
+        let theme = default_dark_theme();
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(1290.0, 410.0, true, true, false)),
+            &mut memory,
+            &theme,
+        );
+        editor.render(&mut ui, 0);
+        let _ = ui.finish_output();
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(1290.0, 410.0, false, false, true)),
+            &mut memory,
+            &theme,
+        );
+        editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+
+        assert!(!editor.snap_enabled);
+        assert!(output.primitives.iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "Snap off")
+        }));
     }
 
     #[test]
@@ -1909,15 +1934,7 @@ mod tests {
     fn editor_icon_destinations_land_on_common_physical_pixels() {
         let theme = default_dark_theme();
         let mut memory = UiMemory::new();
-        let context = FrameContext::new(
-            ViewportInfo::new(
-                Size::new(1440.0, 900.0),
-                PhysicalSize::new(1440, 900),
-                ScaleFactor::ONE,
-            ),
-            UiInput::default(),
-            TimeInfo::default(),
-        );
+        let context = editor_test_context(UiInput::default());
         let mut ui = Ui::begin_frame(context, &mut memory, &theme);
         let mut editor = EditorShowcase::new();
 
@@ -1943,6 +1960,29 @@ mod tests {
                     "icon rect {rect:?} is fractional at {scale}x"
                 );
             }
+        }
+    }
+
+    fn editor_test_context(input: UiInput) -> FrameContext {
+        FrameContext::new(
+            ViewportInfo::new(
+                Size::new(1440.0, 900.0),
+                PhysicalSize::new(1440, 900),
+                ScaleFactor::ONE,
+            ),
+            input,
+            TimeInfo::default(),
+        )
+    }
+
+    fn pointer_input_at(x: f32, y: f32, down: bool, pressed: bool, released: bool) -> UiInput {
+        UiInput {
+            pointer: PointerInput {
+                position: Some(Point::new(x, y)),
+                primary: PointerButtonState::new(down, pressed, released),
+                ..PointerInput::default()
+            },
+            ..UiInput::default()
         }
     }
 
