@@ -513,7 +513,7 @@ impl ShowcaseApp {
     fn nav_interactions(&mut self, ui: &mut Ui<'_>) {
         let viewport = rect_from_size(ui.viewport().logical_size);
         for (page, item) in nav_items(viewport.width) {
-            let response = ui.pressable(("nav", page as u8), item, false);
+            let response = ui.pressable(("nav.prepass", page as u8), item, false);
             if response.clicked {
                 self.page = page;
                 self.status = format!("Page: {}", page.label());

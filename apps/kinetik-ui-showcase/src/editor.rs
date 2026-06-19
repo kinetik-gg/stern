@@ -198,6 +198,33 @@ enum ToolbarIcon {
     Box,
 }
 
+const EDITOR_TOOL_BUTTONS: [(EditorTool, ToolbarIcon, &str, &str); 4] = [
+    (
+        EditorTool::Select,
+        ToolbarIcon::Select,
+        "Select",
+        ACTION_TOOL_SELECT,
+    ),
+    (
+        EditorTool::Move,
+        ToolbarIcon::Move,
+        "Move",
+        ACTION_TOOL_MOVE,
+    ),
+    (
+        EditorTool::Rotate,
+        ToolbarIcon::Rotate,
+        "Rotate",
+        ACTION_TOOL_ROTATE,
+    ),
+    (
+        EditorTool::Scale,
+        ToolbarIcon::Scale,
+        "Scale",
+        ACTION_TOOL_SCALE,
+    ),
+];
+
 impl ToolbarIcon {
     const fn raw(self) -> u64 {
         match self {
@@ -800,35 +827,11 @@ impl EditorShowcase {
         viewport: Rect,
         invocations: &mut Vec<EditorInvocation>,
     ) {
+        self.tool_bar_tool_interactions(ui, invocations);
         let mut x = 10.0;
-        for (tool, icon, label, action) in [
-            (
-                EditorTool::Select,
-                ToolbarIcon::Select,
-                "Select",
-                ACTION_TOOL_SELECT,
-            ),
-            (
-                EditorTool::Move,
-                ToolbarIcon::Move,
-                "Move",
-                ACTION_TOOL_MOVE,
-            ),
-            (
-                EditorTool::Rotate,
-                ToolbarIcon::Rotate,
-                "Rotate",
-                ACTION_TOOL_ROTATE,
-            ),
-            (
-                EditorTool::Scale,
-                ToolbarIcon::Scale,
-                "Scale",
-                ACTION_TOOL_SCALE,
-            ),
-        ] {
+        for (tool, icon, label, action) in EDITOR_TOOL_BUTTONS {
             let button = Rect::new(x, TOOLBAR_Y, TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE);
-            let response = toolbar_icon_button(
+            toolbar_icon_button(
                 ui,
                 ("editor.tool", action),
                 button,
@@ -837,21 +840,6 @@ impl EditorShowcase {
                 self.selected_tool == tool,
                 false,
             );
-            if response.clicked {
-                self.selected_tool = tool;
-                ui.request_repaint(RepaintRequest::NextFrame);
-                let status = match tool {
-                    EditorTool::Select => "Select tool active",
-                    EditorTool::Move => "Move tool active",
-                    EditorTool::Rotate => "Rotate tool active",
-                    EditorTool::Scale => "Scale tool active",
-                };
-                status.clone_into(&mut self.status);
-                invocations.push(EditorInvocation {
-                    action_id: action,
-                    source: ActionSource::Button,
-                });
-            }
             x += TOOLBAR_STRIDE;
         }
 
@@ -910,6 +898,34 @@ impl EditorShowcase {
             if response.clicked {
                 self.trigger(invocations, action, ActionSource::Button);
             }
+        }
+    }
+
+    fn tool_bar_tool_interactions(
+        &mut self,
+        ui: &mut Ui<'_>,
+        invocations: &mut Vec<EditorInvocation>,
+    ) {
+        let mut x = 10.0;
+        for (tool, _icon, _label, action) in EDITOR_TOOL_BUTTONS {
+            let button = Rect::new(x, TOOLBAR_Y, TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE);
+            let response = ui.pressable(("editor.tool.prepass", action), button, false);
+            if response.clicked {
+                self.selected_tool = tool;
+                ui.request_repaint(RepaintRequest::NextFrame);
+                let status = match tool {
+                    EditorTool::Select => "Select tool active",
+                    EditorTool::Move => "Move tool active",
+                    EditorTool::Rotate => "Rotate tool active",
+                    EditorTool::Scale => "Scale tool active",
+                };
+                status.clone_into(&mut self.status);
+                invocations.push(EditorInvocation {
+                    action_id: action,
+                    source: ActionSource::Button,
+                });
+            }
+            x += TOOLBAR_STRIDE;
         }
     }
 
@@ -1947,11 +1963,11 @@ fn inspector_label_width(grid_width: f32) -> f32 {
 mod tests {
     use super::{
         EditorMenuKind, EditorShowcase, EditorTool, ICON_ASSETS, ICON_ATLAS, ICON_ATLAS_CELL_SIZE,
-        ICON_ATLAS_PADDING, ICON_CROSSHAIR, ICON_SIZE, TOOLBAR_BUTTON_SIZE, TOOLBAR_Y,
-        icon_atlas_image, inspector_label_width, item_id, register_resources,
+        ICON_ATLAS_PADDING, ICON_CROSSHAIR, ICON_SIZE, TOOLBAR_BUTTON_SIZE, TOOLBAR_STRIDE,
+        TOOLBAR_Y, icon_atlas_image, inspector_label_width, item_id, register_resources, rgb,
     };
     use kinetik_ui::core::{
-        CursorShape, FrameContext, PathElement, PhysicalSize, PlatformRequest, Point,
+        Brush, CursorShape, FrameContext, PathElement, PhysicalSize, PlatformRequest, Point,
         PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest, ScaleFactor,
         SemanticRole, Size, TimeInfo, UiInput, UiMemory, ViewportInfo, default_dark_theme,
     };
@@ -2020,6 +2036,50 @@ mod tests {
         assert!(output.primitives.iter().any(|primitive| {
             matches!(primitive, Primitive::Text(text) if text.text == "Select tool active")
         }));
+    }
+
+    #[test]
+    fn toolbar_tool_click_has_single_same_frame_selection_visual() {
+        let mut editor = EditorShowcase::new();
+        let mut memory = UiMemory::new();
+        let theme = default_dark_theme();
+        let rotate = Point::new(
+            10.0 + 2.0 * TOOLBAR_STRIDE + TOOLBAR_BUTTON_SIZE * 0.5,
+            TOOLBAR_Y + TOOLBAR_BUTTON_SIZE * 0.5,
+        );
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(rotate.x, rotate.y, true, true, false)),
+            &mut memory,
+            &theme,
+        );
+        editor.render(&mut ui, 0);
+        let _ = ui.finish_output();
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(rotate.x, rotate.y, false, false, true)),
+            &mut memory,
+            &theme,
+        );
+        editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+        let selected_fill = rgb(39, 69, 122);
+        let selected_toolbar_buttons = output
+            .primitives
+            .iter()
+            .filter(|primitive| match primitive {
+                Primitive::Rect(rect) => {
+                    rect.rect.y == TOOLBAR_Y
+                        && rect.rect.width == TOOLBAR_BUTTON_SIZE
+                        && rect.rect.height == TOOLBAR_BUTTON_SIZE
+                        && matches!(&rect.fill, Some(Brush::Solid(color)) if *color == selected_fill)
+                }
+                _ => false,
+            })
+            .count();
+
+        assert_eq!(editor.selected_tool, EditorTool::Rotate);
+        assert_eq!(selected_toolbar_buttons, 1);
     }
 
     #[test]
