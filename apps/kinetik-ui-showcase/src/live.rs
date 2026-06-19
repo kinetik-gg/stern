@@ -413,35 +413,102 @@ fn schedule_shell_repaint(
     delay: Option<Duration>,
     continuous: bool,
 ) -> Option<Instant> {
-    if continuous {
-        event_loop.set_control_flow(ControlFlow::Poll);
-        window.request_redraw();
-        return None;
-    }
-
-    let mut next_redraw_at = delay.map(|delay| Instant::now() + delay);
-    match repaint {
-        RepaintRequest::None => {}
-        RepaintRequest::NextFrame => {
-            next_redraw_at = Some(Instant::now());
+    match resolve_repaint_schedule(repaint, delay, continuous, Instant::now()) {
+        RepaintSchedule::Idle => {
+            event_loop.set_control_flow(ControlFlow::Wait);
+            None
         }
-        RepaintRequest::After(delay) => {
-            next_redraw_at = Some(Instant::now() + delay);
+        RepaintSchedule::Immediate => {
+            event_loop.set_control_flow(ControlFlow::Wait);
+            window.request_redraw();
+            None
         }
-        RepaintRequest::Continuous => {
+        RepaintSchedule::At(deadline) => {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
+            Some(deadline)
+        }
+        RepaintSchedule::Continuous => {
             event_loop.set_control_flow(ControlFlow::Poll);
             window.request_redraw();
-            return None;
+            None
         }
     }
-    if let Some(deadline) = next_redraw_at {
-        event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
-    } else {
-        event_loop.set_control_flow(ControlFlow::Wait);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RepaintSchedule {
+    Idle,
+    Immediate,
+    At(Instant),
+    Continuous,
+}
+
+fn resolve_repaint_schedule(
+    repaint: RepaintRequest,
+    delay: Option<Duration>,
+    continuous: bool,
+    now: Instant,
+) -> RepaintSchedule {
+    if continuous || repaint == RepaintRequest::Continuous {
+        return RepaintSchedule::Continuous;
     }
-    next_redraw_at
+    match repaint {
+        RepaintRequest::NextFrame => RepaintSchedule::Immediate,
+        RepaintRequest::After(delay) => RepaintSchedule::At(now + delay),
+        RepaintRequest::None => delay.map_or(RepaintSchedule::Idle, |delay| {
+            RepaintSchedule::At(now + delay)
+        }),
+        RepaintRequest::Continuous => RepaintSchedule::Continuous,
+    }
 }
 
 fn sanitize_physical_size(size: PhysicalSize<u32>) -> PhysicalSize<u32> {
     PhysicalSize::new(size.width.max(MIN_WIDTH), size.height.max(MIN_HEIGHT))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RepaintSchedule, resolve_repaint_schedule};
+    use kinetik_ui::core::RepaintRequest;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn next_frame_repaint_requests_immediate_redraw() {
+        let now = Instant::now();
+
+        assert_eq!(
+            resolve_repaint_schedule(RepaintRequest::NextFrame, None, false, now),
+            RepaintSchedule::Immediate
+        );
+    }
+
+    #[test]
+    fn delayed_shell_repaint_preserves_deadline() {
+        let now = Instant::now();
+
+        assert_eq!(
+            resolve_repaint_schedule(
+                RepaintRequest::None,
+                Some(Duration::from_millis(12)),
+                false,
+                now,
+            ),
+            RepaintSchedule::At(now + Duration::from_millis(12))
+        );
+    }
+
+    #[test]
+    fn continuous_shell_repaint_polls() {
+        let now = Instant::now();
+
+        assert_eq!(
+            resolve_repaint_schedule(
+                RepaintRequest::After(Duration::from_secs(1)),
+                None,
+                true,
+                now
+            ),
+            RepaintSchedule::Continuous
+        );
+    }
 }
