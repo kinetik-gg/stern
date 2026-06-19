@@ -274,7 +274,7 @@ impl ApplicationHandler for LiveShowcase {
         if Instant::now() >= deadline {
             self.next_redraw_at = None;
             self.request_redraw();
-            event_loop.set_control_flow(ControlFlow::Wait);
+            event_loop.set_control_flow(immediate_redraw_control_flow());
         } else {
             event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
         }
@@ -489,22 +489,16 @@ fn schedule_shell_repaint(
     delay: Option<Duration>,
     continuous: bool,
 ) -> Option<Instant> {
-    match resolve_repaint_schedule(repaint, delay, continuous, Instant::now()) {
-        RepaintSchedule::Idle => {
-            event_loop.set_control_flow(ControlFlow::Wait);
-            None
-        }
+    let schedule = resolve_repaint_schedule(repaint, delay, continuous, Instant::now());
+    event_loop.set_control_flow(control_flow_for_repaint_schedule(schedule));
+    match schedule {
+        RepaintSchedule::Idle => None,
         RepaintSchedule::Immediate => {
-            event_loop.set_control_flow(ControlFlow::Wait);
             window.request_redraw();
             Some(Instant::now())
         }
-        RepaintSchedule::At(deadline) => {
-            event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
-            Some(deadline)
-        }
+        RepaintSchedule::At(deadline) => Some(deadline),
         RepaintSchedule::Continuous => {
-            event_loop.set_control_flow(ControlFlow::Poll);
             window.request_redraw();
             None
         }
@@ -536,6 +530,18 @@ fn resolve_repaint_schedule(
         }),
         RepaintRequest::Continuous => RepaintSchedule::Continuous,
     }
+}
+
+fn control_flow_for_repaint_schedule(schedule: RepaintSchedule) -> ControlFlow {
+    match schedule {
+        RepaintSchedule::Idle => ControlFlow::Wait,
+        RepaintSchedule::Immediate | RepaintSchedule::Continuous => immediate_redraw_control_flow(),
+        RepaintSchedule::At(deadline) => ControlFlow::WaitUntil(deadline),
+    }
+}
+
+fn immediate_redraw_control_flow() -> ControlFlow {
+    ControlFlow::Poll
 }
 
 fn sanitize_physical_size(size: PhysicalSize<u32>) -> PhysicalSize<u32> {
@@ -586,7 +592,8 @@ fn live_present_mode() -> PresentMode {
 mod tests {
     use super::{
         LiveShowcase, PresentMode, RepaintSchedule, SurfaceResizeMode, SurfaceStatus,
-        blit_extents_match, live_antialiasing_method, live_present_mode, resolve_repaint_schedule,
+        blit_extents_match, control_flow_for_repaint_schedule, immediate_redraw_control_flow,
+        live_antialiasing_method, live_present_mode, resolve_repaint_schedule,
         surface_resize_required, surface_status_forces_reconfigure, surface_status_requests_redraw,
         viewport_surface_extents_match,
     };
@@ -595,6 +602,7 @@ mod tests {
     use vello::AaConfig;
     use winit::dpi::PhysicalSize;
     use winit::event::{ElementState, MouseButton as WinitMouseButton};
+    use winit::event_loop::ControlFlow;
 
     #[test]
     fn next_frame_repaint_requests_immediate_redraw() {
@@ -634,6 +642,29 @@ mod tests {
             ),
             RepaintSchedule::Continuous
         );
+    }
+
+    #[test]
+    fn immediate_repaint_keeps_event_loop_polling_until_redraw() {
+        let now = Instant::now();
+
+        assert!(matches!(immediate_redraw_control_flow(), ControlFlow::Poll));
+        assert!(matches!(
+            control_flow_for_repaint_schedule(RepaintSchedule::Immediate),
+            ControlFlow::Poll
+        ));
+        assert!(matches!(
+            control_flow_for_repaint_schedule(RepaintSchedule::Continuous),
+            ControlFlow::Poll
+        ));
+        assert!(matches!(
+            control_flow_for_repaint_schedule(RepaintSchedule::Idle),
+            ControlFlow::Wait
+        ));
+        assert!(matches!(
+            control_flow_for_repaint_schedule(RepaintSchedule::At(now)),
+            ControlFlow::WaitUntil(deadline) if deadline == now
+        ));
     }
 
     #[test]
