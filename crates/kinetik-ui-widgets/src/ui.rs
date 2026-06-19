@@ -996,6 +996,9 @@ impl<'a> Ui<'a> {
             text_layouts,
         );
         self.push_widget_output(&output.widget);
+        if output.changed {
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
         output
     }
 
@@ -1022,6 +1025,9 @@ impl<'a> Ui<'a> {
             text_layouts,
         );
         self.push_widget_output(&output.widget);
+        if output.changed {
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
         output
     }
 
@@ -1048,6 +1054,9 @@ impl<'a> Ui<'a> {
             text_layouts,
         );
         self.push_widget_output(&output.field.widget);
+        if output.field.changed {
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
         output
     }
 
@@ -1074,10 +1083,18 @@ impl<'a> Ui<'a> {
             text_layouts,
         );
         self.push_widget_output(&output.field.widget);
+        if output.field.changed {
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
         output
     }
 
     fn push_widget_output(&mut self, output: &WidgetOutput) {
+        if let Some(response) = output.response
+            && response_requests_followup_repaint(response, self.runtime.input())
+        {
+            self.runtime.request_repaint(RepaintRequest::NextFrame);
+        }
         self.extend(output.primitives.clone());
         for node in &output.semantics {
             self.runtime.push_semantic_node(node.clone());
@@ -1145,8 +1162,8 @@ mod tests {
         ActionContext, ActionDescriptor, ActionSource, Brush, Color, CursorShape, FrameContext,
         FrameWarning, IconId, ImageId, Insets, PathElement, PhysicalSize, PlatformRequest, Point,
         PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest, ScaleFactor,
-        SemanticNode, SemanticRole, Size, TextPrimitive, TimeInfo, UiInput, UiMemory, Vec2,
-        ViewportInfo, WidgetId, default_dark_theme,
+        SemanticNode, SemanticRole, Size, TextInputEvent, TextPrimitive, TimeInfo, UiInput,
+        UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
     };
     use kinetik_ui_text::{TextEditState, TextLayoutKey, TextLayoutStore, TextStyle};
 
@@ -1204,6 +1221,13 @@ mod tests {
                 wheel_delta,
                 ..PointerInput::default()
             },
+            ..UiInput::default()
+        }
+    }
+
+    fn committed_text(text: &str) -> UiInput {
+        UiInput {
+            text_events: vec![TextInputEvent::Commit(text.to_owned())],
             ..UiInput::default()
         }
     }
@@ -2097,6 +2121,51 @@ mod tests {
                 } if *rect == Rect::new(0.0, 0.0, 120.0, 24.0)
             )
         }));
+    }
+
+    #[test]
+    fn ui_text_field_interaction_requests_followup_repaint() {
+        let theme = default_dark_theme();
+        let mut memory = UiMemory::new();
+        let mut state = TextEditState::new("abc");
+        let rect = Rect::new(0.0, 0.0, 120.0, 24.0);
+
+        let input = pressed_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.text_field("field", rect, &mut state, false);
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
+
+        let input = released_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let output = ui.text_field("field", rect, &mut state, false);
+        assert!(output.widget.response.expect("text field response").clicked);
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
+    }
+
+    #[test]
+    fn ui_text_field_changes_request_followup_repaint() {
+        let theme = default_dark_theme();
+        let mut memory = UiMemory::new();
+        let mut state = TextEditState::new("abc");
+        let rect = Rect::new(0.0, 0.0, 120.0, 24.0);
+
+        let input = pressed_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.text_field("field", rect, &mut state, false);
+        let _ = ui.finish_output();
+
+        let input = released_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.text_field("field", rect, &mut state, false);
+        let _ = ui.finish_output();
+
+        let input = committed_text("d");
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let output = ui.text_field("field", rect, &mut state, false);
+
+        assert!(output.changed);
+        assert_eq!(state.text, "dabc");
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
     }
 
     #[test]
