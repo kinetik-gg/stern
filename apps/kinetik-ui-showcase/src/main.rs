@@ -3,6 +3,7 @@
 mod live;
 
 use std::fmt;
+use std::sync::mpsc;
 
 use kinetik_ui::{
     core::{PhysicalSize, ScaleFactor, Size, ViewportInfo},
@@ -11,7 +12,18 @@ use kinetik_ui::{
 };
 use kinetik_ui_showcase::{
     app::ShowcaseApp,
-    raster::{rasterize, write_bmp},
+    raster::{Pixel, RasterFrame, write_bmp},
+};
+use vello::{
+    AaConfig, RenderParams, Renderer, RendererOptions,
+    peniko::Color as VelloColor,
+    util::RenderContext,
+    wgpu::{
+        BufferDescriptor, BufferUsages, COPY_BYTES_PER_ROW_ALIGNMENT, CommandEncoderDescriptor,
+        Device, Extent3d, MapMode, Origin3d, PollType, Queue, TexelCopyBufferInfo,
+        TexelCopyBufferLayout, TexelCopyTextureInfo, Texture, TextureAspect, TextureDescriptor,
+        TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
+    },
 };
 
 const DEFAULT_WIDTH: usize = 1440;
@@ -40,10 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             app.set_page(page);
         }
 
-        submit_render_once_to_vello(&app, width, height, scale_factor)?;
-        // The BMP preview writer is a lightweight diagnostic fallback; Vello
-        // submission above keeps render-once aligned with the live text path.
-        let frame = rasterize(&app.primitives(), width, height);
+        let frame = pollster::block_on(render_once_vello_frame(&app, width, height, scale_factor))?;
         write_bmp(&frame, path)?;
         return Ok(());
     }
@@ -79,7 +88,7 @@ fn submit_render_once_to_vello(
     width: usize,
     height: usize,
     scale_factor: f64,
-) -> Result<VelloRenderer, RenderOnceVelloError> {
+) -> Result<(VelloRenderer, ViewportInfo), RenderOnceVelloError> {
     let viewport = render_once_viewport(app, width, height, scale_factor)?;
     let resources = app.render_resources();
     let mut renderer = VelloRenderer::new();
@@ -90,10 +99,183 @@ fn submit_render_once_to_vello(
     });
 
     if output.diagnostics.is_empty() {
-        Ok(renderer)
+        Ok((renderer, viewport))
     } else {
         Err(RenderOnceVelloError::Diagnostics(output.diagnostics))
     }
+}
+
+async fn render_once_vello_frame(
+    app: &ShowcaseApp,
+    width: usize,
+    height: usize,
+    scale_factor: f64,
+) -> Result<RasterFrame, RenderOnceVelloError> {
+    let (toolkit, viewport) = submit_render_once_to_vello(app, width, height, scale_factor)?;
+    let width = viewport.physical_size.width;
+    let height = viewport.physical_size.height;
+    let mut context = RenderContext::new();
+    let device_id = context
+        .device(None)
+        .await
+        .ok_or(RenderOnceVelloError::NoCompatibleDevice)?;
+    let device_handle = &context.devices[device_id];
+    let (texture, texture_view) = create_render_once_texture(&device_handle.device, width, height);
+    render_scene_to_texture(
+        &device_handle.device,
+        &device_handle.queue,
+        toolkit.scene(),
+        &texture_view,
+        width,
+        height,
+    )?;
+    read_texture_to_frame(
+        &device_handle.device,
+        &device_handle.queue,
+        &texture,
+        width,
+        height,
+    )
+}
+
+fn create_render_once_texture(device: &Device, width: u32, height: u32) -> (Texture, TextureView) {
+    let texture = device.create_texture(&TextureDescriptor {
+        label: Some("kinetik-ui-showcase-render-once"),
+        size: Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        format: TextureFormat::Rgba8Unorm,
+        usage: TextureUsages::COPY_SRC
+            | TextureUsages::STORAGE_BINDING
+            | TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let texture_view = texture.create_view(&TextureViewDescriptor::default());
+    (texture, texture_view)
+}
+
+fn render_scene_to_texture(
+    device: &Device,
+    queue: &Queue,
+    scene: &vello::Scene,
+    texture_view: &TextureView,
+    width: u32,
+    height: u32,
+) -> Result<(), RenderOnceVelloError> {
+    let mut renderer = Renderer::new(device, RendererOptions::default())?;
+    renderer.render_to_texture(
+        device,
+        queue,
+        scene,
+        texture_view,
+        &RenderParams {
+            base_color: VelloColor::from_rgb8(11, 12, 13),
+            width,
+            height,
+            antialiasing_method: AaConfig::Area,
+        },
+    )?;
+    Ok(())
+}
+
+fn read_texture_to_frame(
+    device: &Device,
+    queue: &Queue,
+    texture: &Texture,
+    width: u32,
+    height: u32,
+) -> Result<RasterFrame, RenderOnceVelloError> {
+    let bytes_per_pixel = 4_u32;
+    let unpadded_bytes_per_row = width.saturating_mul(bytes_per_pixel);
+    let padded_bytes_per_row = align_to(unpadded_bytes_per_row, COPY_BYTES_PER_ROW_ALIGNMENT);
+    let buffer_size = u64::from(padded_bytes_per_row).saturating_mul(u64::from(height));
+    let buffer = device.create_buffer(&BufferDescriptor {
+        label: Some("kinetik-ui-showcase-render-once-readback"),
+        size: buffer_size,
+        usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+        label: Some("kinetik-ui-showcase-render-once-copy"),
+    });
+    encoder.copy_texture_to_buffer(
+        TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: TextureAspect::All,
+        },
+        TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded_bytes_per_row),
+                rows_per_image: Some(height),
+            },
+        },
+        Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    queue.submit([encoder.finish()]);
+
+    let buffer_slice = buffer.slice(..);
+    let (sender, receiver) = mpsc::channel();
+    buffer_slice.map_async(MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    device
+        .poll(PollType::wait_indefinitely())
+        .map_err(|error| RenderOnceVelloError::Readback(error.to_string()))?;
+    receiver
+        .recv()
+        .map_err(|error| RenderOnceVelloError::Readback(error.to_string()))?
+        .map_err(|error| RenderOnceVelloError::Readback(error.to_string()))?;
+
+    let mapped = buffer_slice.get_mapped_range();
+    let width = usize::try_from(width).unwrap_or(usize::MAX);
+    let height = usize::try_from(height).unwrap_or(usize::MAX);
+    let padded_bytes_per_row = usize::try_from(padded_bytes_per_row).unwrap_or(usize::MAX);
+    let unpadded_bytes_per_row = usize::try_from(unpadded_bytes_per_row).unwrap_or(usize::MAX);
+    let pixels = read_rgb_pixels(
+        &mapped,
+        width,
+        height,
+        padded_bytes_per_row,
+        unpadded_bytes_per_row,
+    );
+    drop(mapped);
+    buffer.unmap();
+
+    Ok(RasterFrame {
+        width,
+        height,
+        pixels,
+    })
+}
+
+fn read_rgb_pixels(
+    mapped: &[u8],
+    width: usize,
+    height: usize,
+    padded_bytes_per_row: usize,
+    unpadded_bytes_per_row: usize,
+) -> Vec<Pixel> {
+    let mut pixels = Vec::<Pixel>::with_capacity(width.saturating_mul(height));
+    for row in mapped.chunks(padded_bytes_per_row).take(height) {
+        for rgba in row[..unpadded_bytes_per_row].chunks_exact(4) {
+            pixels
+                .push((u32::from(rgba[0]) << 16) | (u32::from(rgba[1]) << 8) | u32::from(rgba[2]));
+        }
+    }
+    pixels
 }
 
 fn render_once_viewport(
@@ -133,30 +315,46 @@ fn pixel_to_u32(value: usize) -> u32 {
     u32::try_from(value).unwrap_or(u32::MAX)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+fn align_to(value: u32, alignment: u32) -> u32 {
+    value.div_ceil(alignment) * alignment
+}
+
+#[derive(Debug)]
 enum RenderOnceVelloError {
     InvalidScaleFactor,
+    NoCompatibleDevice,
     Diagnostics(Vec<RenderDiagnostic>),
+    Render(vello::Error),
+    Readback(String),
 }
 
 impl fmt::Display for RenderOnceVelloError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidScaleFactor => write!(formatter, "invalid render-once scale factor"),
+            Self::NoCompatibleDevice => write!(formatter, "no compatible Vello render device"),
             Self::Diagnostics(diagnostics) => {
                 write!(formatter, "render-once Vello diagnostics: {diagnostics:?}")
             }
+            Self::Render(error) => write!(formatter, "render-once Vello render failed: {error}"),
+            Self::Readback(error) => write!(formatter, "render-once readback failed: {error}"),
         }
     }
 }
 
 impl std::error::Error for RenderOnceVelloError {}
 
+impl From<vello::Error> for RenderOnceVelloError {
+    fn from(error: vello::Error) -> Self {
+        Self::Render(error)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        f64_arg, logical_size_from_pixels, render_once_viewport, submit_render_once_to_vello,
-        usize_arg,
+        align_to, f64_arg, logical_size_from_pixels, render_once_viewport,
+        submit_render_once_to_vello, usize_arg,
     };
     use kinetik_ui_showcase::app::ShowcaseApp;
 
@@ -205,7 +403,7 @@ mod tests {
         let mut app = ShowcaseApp::new();
         app.set_viewport_size(logical_size_from_pixels(1440, 900, 1.25));
 
-        let renderer =
+        let (renderer, _) =
             submit_render_once_to_vello(&app, 1440, 900, 1.25).expect("vello submission");
         let encoding = renderer.scene().encoding();
         let glyph_runs = &encoding.resources.glyph_runs;
@@ -229,5 +427,13 @@ mod tests {
                 .all(|glyph| (glyph.y - glyph.y.round()).abs() <= 0.001),
             "render-once should snap physical glyph baselines"
         );
+    }
+
+    #[test]
+    fn render_once_readback_rows_align_to_wgpu_copy_pitch() {
+        assert_eq!(align_to(0, 256), 0);
+        assert_eq!(align_to(4, 256), 256);
+        assert_eq!(align_to(1024, 256), 1024);
+        assert_eq!(align_to(1025, 256), 1280);
     }
 }
