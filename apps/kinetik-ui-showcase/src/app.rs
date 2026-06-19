@@ -273,12 +273,14 @@ impl ShowcaseApp {
             size: Size::new(64.0, 48.0),
             sampling: RenderImageSampling::default(),
             pixels: Some(thumbnail_image()),
+            atlas_region: None,
         });
         resources.register_image(ImageResource {
             id: ImageId::from_raw(11),
             size: Size::new(96.0, 72.0),
             sampling: RenderImageSampling::default(),
             pixels: Some(primitive_image()),
+            atlas_region: None,
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(99),
@@ -1970,8 +1972,8 @@ mod tests {
     use super::{ShowcaseApp, ShowcaseInput, ShowcasePage, frame_context};
     use kinetik_ui::{
         core::{
-            Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, Primitive,
-            Rect, ScaleFactor, Size, UiInput, ViewportInfo,
+            ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point,
+            Primitive, Rect, ScaleFactor, Size, UiInput, ViewportInfo,
         },
         render::RenderFrameInput,
         render_vello::VelloRenderer,
@@ -2096,9 +2098,36 @@ mod tests {
         assert!(
             resources
                 .image(image)
-                .and_then(|resource| resource.pixels.as_ref())
-                .is_some_and(|pixels| pixels.data.chunks_exact(4).any(|rgba| rgba[3] == 0))
+                .and_then(|resource| resource.atlas_region)
+                .and_then(|region| resources.image(region.atlas))
+                .and_then(|atlas| atlas.pixels.as_ref())
+                .is_some_and(|pixels| pixels.width == 224 && pixels.height == 128)
         );
+    }
+
+    #[test]
+    fn editor_icons_are_registered_as_atlas_regions() {
+        let app = ShowcaseApp::new();
+        let resources = app.render_resources();
+        let atlas = ImageId::from_raw(7_000);
+
+        assert!(
+            resources
+                .image(atlas)
+                .and_then(|resource| resource.pixels.as_ref())
+                .is_some_and(|pixels| pixels.width == 224 && pixels.height == 128)
+        );
+        let icon_regions = (7_001..=7_028)
+            .filter_map(|raw| resources.image(ImageId::from_raw(raw)))
+            .filter(|resource| resource.pixels.is_none())
+            .filter(|resource| {
+                resource
+                    .atlas_region
+                    .is_some_and(|region| region.atlas == atlas)
+            })
+            .count();
+
+        assert_eq!(icon_regions, 28);
     }
 
     #[test]

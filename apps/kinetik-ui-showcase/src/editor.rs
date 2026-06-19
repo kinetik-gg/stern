@@ -12,7 +12,8 @@ use kinetik_ui::core::{
     Stroke, TextPrimitive, TextureId, Vec2,
 };
 use kinetik_ui::render::{
-    ImageResource, RenderImage, RenderImageSampling, RenderResources, TextureResource,
+    ImageAtlasRegion, ImageResource, RenderImage, RenderImageSampling, RenderResources,
+    TextureResource,
 };
 use kinetik_ui::text::TextEditState;
 use kinetik_ui::widgets::{
@@ -43,6 +44,11 @@ const ACTION_TOOL_SCALE: &str = "editor.tool.scale";
 
 const VIEWPORT_TEXTURE: TextureId = TextureId::from_raw(9_001);
 const VIEWPORT_SIZE: Size = Size::new(1280.0, 720.0);
+
+const ICON_ATLAS: ImageId = ImageId::from_raw(7_000);
+const ICON_SIZE: u32 = 32;
+const ICON_ATLAS_COLUMNS: u32 = 7;
+const ICON_ATLAS_ROWS: u32 = 4;
 
 const ICON_CURSOR: ImageId = ImageId::from_raw(7_001);
 const ICON_MOVE: ImageId = ImageId::from_raw(7_002);
@@ -1536,16 +1542,60 @@ pub fn register_resources(resources: &mut RenderResources) {
             snapshot: Some(snapshot),
         });
     }
-    for (id, bytes) in ICON_ASSETS {
-        if let Some(pixels) = RenderImage::rgba8(32, 32, (*bytes).to_vec()) {
-            resources.register_image(ImageResource {
-                id: *id,
-                size: Size::new(32.0, 32.0),
-                sampling: RenderImageSampling::default(),
-                pixels: Some(pixels),
-            });
+    if let Some(atlas) = icon_atlas_image() {
+        resources.register_image(ImageResource {
+            id: ICON_ATLAS,
+            size: Size::new(
+                (ICON_ATLAS_COLUMNS * ICON_SIZE) as f32,
+                (ICON_ATLAS_ROWS * ICON_SIZE) as f32,
+            ),
+            sampling: RenderImageSampling::default(),
+            pixels: Some(atlas),
+            atlas_region: None,
+        });
+    }
+    for (index, (id, _)) in ICON_ASSETS.iter().enumerate() {
+        let column = index as u32 % ICON_ATLAS_COLUMNS;
+        let row = index as u32 / ICON_ATLAS_COLUMNS;
+        resources.register_image(ImageResource {
+            id: *id,
+            size: Size::new(ICON_SIZE as f32, ICON_SIZE as f32),
+            sampling: RenderImageSampling::default(),
+            pixels: None,
+            atlas_region: Some(ImageAtlasRegion {
+                atlas: ICON_ATLAS,
+                source: Rect::new(
+                    (column * ICON_SIZE) as f32,
+                    (row * ICON_SIZE) as f32,
+                    ICON_SIZE as f32,
+                    ICON_SIZE as f32,
+                ),
+            }),
+        });
+    }
+}
+
+fn icon_atlas_image() -> Option<RenderImage> {
+    let width = ICON_ATLAS_COLUMNS * ICON_SIZE;
+    let height = ICON_ATLAS_ROWS * ICON_SIZE;
+    let mut data = vec![0; (width * height * 4) as usize];
+    for (index, (_, bytes)) in ICON_ASSETS.iter().enumerate() {
+        if bytes.len() != (ICON_SIZE * ICON_SIZE * 4) as usize {
+            return None;
+        }
+        let column = index as u32 % ICON_ATLAS_COLUMNS;
+        let row = index as u32 / ICON_ATLAS_COLUMNS;
+        let x0 = column * ICON_SIZE;
+        let y0 = row * ICON_SIZE;
+        for y in 0..ICON_SIZE {
+            let source_start = (y * ICON_SIZE * 4) as usize;
+            let source_end = source_start + (ICON_SIZE * 4) as usize;
+            let dest_start = (((y0 + y) * width + x0) * 4) as usize;
+            let dest_end = dest_start + (ICON_SIZE * 4) as usize;
+            data[dest_start..dest_end].copy_from_slice(&bytes[source_start..source_end]);
         }
     }
+    RenderImage::rgba8(width, height, data)
 }
 
 fn menu_header_rects() -> [(EditorMenuKind, &'static str, Rect); 7] {
