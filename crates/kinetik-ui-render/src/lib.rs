@@ -156,8 +156,8 @@ pub struct TextLayoutResource {
     pub id: TextLayoutId,
     /// Layout request used to shape the text.
     pub key: TextLayoutKey,
-    /// Owned shaped text layout.
-    pub layout: ShapedTextLayout,
+    /// Shared shaped text layout.
+    pub layout: Arc<ShapedTextLayout>,
 }
 
 /// Resource registry used during frame translation and encoding.
@@ -202,7 +202,7 @@ impl RenderResources {
             TextLayoutResource {
                 id,
                 key: key.clone(),
-                layout: layout.clone(),
+                layout: Arc::new(layout.clone()),
             },
         );
     }
@@ -213,7 +213,14 @@ impl RenderResources {
         layouts: impl IntoIterator<Item = StoredTextLayout<'a>>,
     ) {
         for layout in layouts {
-            self.register_text_layout_ref(layout.id, layout.key, layout.layout);
+            self.text_layouts.insert(
+                layout.id,
+                TextLayoutResource {
+                    id: layout.id,
+                    key: layout.key.clone(),
+                    layout: layout.layout,
+                },
+            );
         }
     }
 
@@ -251,7 +258,7 @@ impl RenderResources {
     #[must_use]
     pub fn text_layout(&self, layout: TextLayoutId) -> Option<&ShapedTextLayout> {
         self.text_layout_resource(layout)
-            .map(|resource| &resource.layout)
+            .map(|resource| resource.layout.as_ref())
     }
 
     /// Returns a registered shaped text layout resource.
@@ -589,7 +596,7 @@ pub const fn crate_name() -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::Infallible;
+    use std::{convert::Infallible, sync::Arc};
 
     use super::{
         ImageAtlasRegion, ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput,
@@ -599,7 +606,9 @@ mod tests {
     use kinetik_ui_core::{
         ImageId, PhysicalSize, ScaleFactor, Size, TextLayoutId, TextureId, ViewportInfo,
     };
-    use kinetik_ui_text::{CosmicTextEngine, ShapedTextLayout, TextLayoutKey, TextStyle};
+    use kinetik_ui_text::{
+        CosmicTextEngine, ShapedTextLayout, TextLayoutKey, TextLayoutStore, TextStyle,
+    };
 
     #[derive(Default)]
     struct RecordingRenderer {
@@ -676,7 +685,7 @@ mod tests {
         resources.register_text_layout(TextLayoutResource {
             id: text,
             key,
-            layout,
+            layout: Arc::new(layout),
         });
 
         assert!(resources.has_image(image));
@@ -685,6 +694,33 @@ mod tests {
         assert!(resources.image(image).is_some());
         assert!(resources.texture(texture).is_some());
         assert!(resources.text_layout(text).is_some());
+    }
+
+    #[test]
+    fn resources_preserve_shared_text_layout_exports() {
+        let mut store = TextLayoutStore::new();
+        let id = store.layout_id(TextLayoutKey::new(
+            "Shared",
+            TextStyle::new("sans-serif", 12.0, 16.0),
+            200.0,
+            false,
+        ));
+        let exported = store
+            .layouts()
+            .find(|layout| layout.id == id)
+            .expect("stored layout");
+        let exported_layout = Arc::clone(&exported.layout);
+        let mut resources = RenderResources::new();
+
+        resources.register_text_layouts([exported]);
+
+        assert!(Arc::ptr_eq(
+            &exported_layout,
+            &resources
+                .text_layout_resource(id)
+                .expect("resource layout")
+                .layout
+        ));
     }
 
     #[test]
@@ -728,7 +764,7 @@ mod tests {
                 200.0,
                 false,
             ),
-            layout,
+            layout: Arc::new(layout),
         });
         resources.register_image(ImageResource {
             id: ImageId::from_raw(1),

@@ -2291,7 +2291,11 @@ mod tests {
         let mut engine = CosmicTextEngine::new();
         let key = TextLayoutKey::new(text, TextStyle::new("sans-serif", 12.0, 16.0), 200.0, false);
         let layout = engine.shape_text(&key);
-        TextLayoutResource { id, key, layout }
+        TextLayoutResource {
+            id,
+            key,
+            layout: std::sync::Arc::new(layout),
+        }
     }
 
     fn clip_rects(command: &RenderCommand) -> Vec<Rect> {
