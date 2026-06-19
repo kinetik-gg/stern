@@ -231,6 +231,8 @@ impl ApplicationHandler for LiveShowcase {
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers.state();
+                self.input.set_modifiers(self.modifiers);
+                self.request_interactive_redraw();
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 self.input.keyboard_event_with_physical_key(

@@ -350,6 +350,11 @@ impl WinitInputAdapter {
         );
     }
 
+    /// Updates the current keyboard modifier state.
+    pub fn set_modifiers(&mut self, modifiers: ModifiersState) {
+        self.input.keyboard.modifiers = modifiers_from_winit(modifiers);
+    }
+
     fn clear_pointer_position(&mut self) {
         self.input.pointer.position = None;
         self.input.pointer.delta = Vec2::ZERO;
@@ -1033,6 +1038,19 @@ mod tests {
             modifiers_from_winit(ModifiersState::CONTROL),
             Modifiers::new(false, true, false, false)
         );
+    }
+
+    #[test]
+    fn adapter_tracks_modifier_only_changes_without_key_events() {
+        let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+
+        adapter.set_modifiers(ModifiersState::SHIFT | ModifiersState::ALT);
+
+        assert_eq!(
+            adapter.input().keyboard.modifiers,
+            Modifiers::new(true, false, true, false)
+        );
+        assert!(adapter.input().keyboard.events.is_empty());
     }
 
     #[test]
