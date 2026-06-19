@@ -625,6 +625,7 @@ impl EditorShowcase {
                     if response.clicked && enabled {
                         self.trigger_menu_action(invocations, action.id.as_str());
                         self.open_menu = None;
+                        ui.request_repaint(RepaintRequest::NextFrame);
                     }
                     y += 24.0;
                 }
@@ -1024,6 +1025,7 @@ impl EditorShowcase {
         );
         if add.clicked {
             "Create node requested".clone_into(&mut self.status);
+            ui.request_repaint(RepaintRequest::NextFrame);
         }
         text(
             ui,
@@ -1182,6 +1184,7 @@ impl EditorShowcase {
                     );
                     if response.clicked {
                         self.status = format!("Asset selected: {}", asset.name);
+                        ui.request_repaint(RepaintRequest::NextFrame);
                     }
                     vector_icon(
                         ui,

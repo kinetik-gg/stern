@@ -2077,6 +2077,7 @@ mod tests {
         click(&mut app, Point::new(170.0, 93.0));
 
         assert_eq!(app.action_count(), 1);
+        assert_eq!(app.output().repaint, RepaintRequest::NextFrame);
         for label in ["Saved project snapshot", "Actions: 1"] {
             assert!(
                 app.primitives().iter().any(|primitive| {
@@ -2132,6 +2133,32 @@ mod tests {
 
         assert!(app.primitives().iter().any(|primitive| {
             matches!(primitive, Primitive::Text(text) if text.text == "Viewport grid hidden")
+        }));
+    }
+
+    #[test]
+    fn editor_scene_add_requests_follow_up_repaint() {
+        let mut app = ShowcaseApp::new();
+        let add_node = app
+            .output()
+            .semantics
+            .nodes()
+            .iter()
+            .find(|node| node.label.as_deref() == Some("Add node"))
+            .expect("add node semantics")
+            .bounds;
+
+        click(
+            &mut app,
+            Point::new(
+                add_node.x + add_node.width * 0.5,
+                add_node.y + add_node.height * 0.5,
+            ),
+        );
+
+        assert_eq!(app.output().repaint, RepaintRequest::NextFrame);
+        assert!(app.primitives().iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "Create node requested")
         }));
     }
 
