@@ -955,6 +955,9 @@ impl<'a> Ui<'a> {
         let id = self.id(key);
         let (input, memory) = self.runtime.input_and_memory_mut();
         let scroll = scrollable(id, rect, content_size, input, memory, disabled);
+        if scroll.delta != Vec2::ZERO {
+            self.runtime.request_repaint(RepaintRequest::NextFrame);
+        }
         let clip = ClipId::from_raw(id.raw());
 
         self.runtime
@@ -1420,6 +1423,7 @@ mod tests {
             memory.scroll_offset(output.scroll.response.id),
             Vec2::new(0.0, 24.0)
         );
+        assert_eq!(frame.repaint, RepaintRequest::NextFrame);
         assert!(matches!(frame.primitives[0], Primitive::ClipBegin { .. }));
         assert!(matches!(
             frame.primitives[1],
