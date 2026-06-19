@@ -206,6 +206,11 @@ impl<'a> Ui<'a> {
         self.runtime.invoke_action(action_id, source, context);
     }
 
+    /// Requests a repaint from application code that mutates state during this frame.
+    pub fn request_repaint(&mut self, request: RepaintRequest) {
+        self.runtime.request_repaint(request);
+    }
+
     /// Invokes a visible, enabled action descriptor from the provided UI source.
     ///
     /// Returns false when the descriptor is hidden or disabled.
@@ -528,6 +533,22 @@ impl<'a> Ui<'a> {
         self.push_interactive(output)
     }
 
+    /// Emits a checkbox, toggling the provided value when clicked.
+    pub fn checkbox_value(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        checked: &mut bool,
+        disabled: bool,
+    ) -> Response {
+        let response = self.checkbox(key, rect, *checked, disabled);
+        if response.clicked {
+            *checked = !*checked;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        response
+    }
+
     /// Emits a checkbox with an accessible label and returns its interaction response.
     pub fn checkbox_with_label(
         &mut self,
@@ -543,6 +564,23 @@ impl<'a> Ui<'a> {
         let output =
             checkbox_with_label_widget(id, rect, label, checked, input, memory, theme, disabled);
         self.push_interactive(output)
+    }
+
+    /// Emits a labeled checkbox, toggling the provided value when clicked.
+    pub fn checkbox_value_with_label(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        label: impl Into<String>,
+        checked: &mut bool,
+        disabled: bool,
+    ) -> Response {
+        let response = self.checkbox_with_label(key, rect, label, *checked, disabled);
+        if response.clicked {
+            *checked = !*checked;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        response
     }
 
     /// Emits a radio button and returns its interaction response.
@@ -587,6 +625,22 @@ impl<'a> Ui<'a> {
         self.push_interactive(output)
     }
 
+    /// Emits a toggle, mutating the provided value when clicked.
+    pub fn toggle_value(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        on: &mut bool,
+        disabled: bool,
+    ) -> Response {
+        let response = self.toggle(key, rect, *on, disabled);
+        if response.clicked {
+            *on = !*on;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        response
+    }
+
     /// Emits a toggle with an accessible label and returns its interaction response.
     pub fn toggle_with_label(
         &mut self,
@@ -601,6 +655,23 @@ impl<'a> Ui<'a> {
         let (input, memory) = self.runtime.input_and_memory_mut();
         let output = toggle_with_label_widget(id, rect, label, on, input, memory, theme, disabled);
         self.push_interactive(output)
+    }
+
+    /// Emits a labeled toggle, mutating the provided value when clicked.
+    pub fn toggle_value_with_label(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        label: impl Into<String>,
+        on: &mut bool,
+        disabled: bool,
+    ) -> Response {
+        let response = self.toggle_with_label(key, rect, label, *on, disabled);
+        if response.clicked {
+            *on = !*on;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        response
     }
 
     /// Emits a slider and mutates its value while active.
@@ -1242,6 +1313,43 @@ mod tests {
         let output = ui.finish_output();
 
         assert!(response.clicked);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
+    }
+
+    #[test]
+    fn ui_request_repaint_exposes_app_state_dirty_path() {
+        let theme = default_dark_theme();
+        let input = UiInput::default();
+        let mut memory = UiMemory::new();
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+
+        ui.request_repaint(RepaintRequest::NextFrame);
+
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
+    }
+
+    #[test]
+    fn ui_toggle_value_mutates_and_reflects_clicked_state_same_frame() {
+        let theme = default_dark_theme();
+        let rect = Rect::new(0.0, 0.0, 54.0, 24.0);
+        let mut memory = UiMemory::new();
+        let mut value = false;
+
+        let input = pressed_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let pressed = ui.toggle_value("toggle", rect, &mut value, false);
+        assert!(pressed.state.pressed);
+        assert!(!value);
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::None);
+
+        let input = released_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let clicked = ui.toggle_value("toggle", rect, &mut value, false);
+        let output = ui.finish_output();
+
+        assert!(clicked.clicked);
+        assert!(clicked.state.selected);
+        assert!(value);
         assert_eq!(output.repaint, RepaintRequest::NextFrame);
     }
 

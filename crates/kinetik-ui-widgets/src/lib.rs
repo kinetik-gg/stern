@@ -1234,13 +1234,15 @@ pub fn checkbox_with_label(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    let response = selectable(id, rect, input, memory, checked, disabled);
+    let mut response = selectable(id, rect, input, memory, checked, disabled);
+    let selected = clicked_toggle_state(checked, response.clicked);
+    response.state.selected = selected;
     let recipe = theme.checkbox(ComponentState {
         hovered: response.state.hovered,
         pressed: response.state.pressed,
         focused: response.state.focused,
         disabled,
-        selected: checked,
+        selected,
     });
     let box_rect = Rect::new(rect.x, rect.y, recipe.size, recipe.size);
 
@@ -1255,7 +1257,7 @@ pub fn checkbox_with_label(
             })],
         )
         .with_semantic(with_response_state(
-            checkbox_semantics(id, rect, label, checked, disabled),
+            checkbox_semantics(id, rect, label, selected, disabled),
             &response,
         )),
         &response,
@@ -1298,6 +1300,14 @@ pub fn radio_button_with_label(
     disabled: bool,
 ) -> WidgetOutput {
     let mut output = checkbox_with_label(id, rect, label, selected, input, memory, theme, disabled);
+    let display_selected = selected
+        || output
+            .response
+            .as_ref()
+            .is_some_and(|response| response.clicked);
+    if let Some(response) = output.response.as_mut() {
+        response.state.selected = display_selected;
+    }
     let recipe = theme.radio_button(ComponentState {
         hovered: output
             .response
@@ -1312,14 +1322,15 @@ pub fn radio_button_with_label(
             .as_ref()
             .is_some_and(|response| response.state.focused),
         disabled,
-        selected,
+        selected: display_selected,
     });
     if let Some(Primitive::Rect(primitive)) = output.primitives.first_mut() {
         primitive.radius = recipe.radius;
     }
     for node in &mut output.semantics {
         node.role = SemanticRole::RadioButton;
-        node.state.selected = selected;
+        node.state.selected = display_selected;
+        node.state.checked = Some(display_selected);
     }
     output
 }
@@ -1349,15 +1360,17 @@ pub fn toggle_with_label(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    let response = selectable(id, rect, input, memory, on, disabled);
+    let mut response = selectable(id, rect, input, memory, on, disabled);
+    let selected = clicked_toggle_state(on, response.clicked);
+    response.state.selected = selected;
     let recipe = theme.toggle(ComponentState {
         hovered: response.state.hovered,
         pressed: response.state.pressed,
         focused: response.state.focused,
         disabled,
-        selected: on,
+        selected,
     });
-    let knob_x = if on {
+    let knob_x = if selected {
         rect.max_x() - rect.height
     } else {
         rect.x
@@ -1387,12 +1400,16 @@ pub fn toggle_with_label(
             ],
         )
         .with_semantic(with_response_state(
-            toggle_semantics(id, rect, label, on, disabled),
+            toggle_semantics(id, rect, label, selected, disabled),
             &response,
         )),
         &response,
         CursorShape::PointingHand,
     )
+}
+
+fn clicked_toggle_state(selected: bool, clicked: bool) -> bool {
+    if clicked { !selected } else { selected }
 }
 
 /// Emits a slider and updates its value while active.
@@ -2088,8 +2105,8 @@ mod tests {
     use kinetik_ui_core::{
         ClipboardText, ImageId, Insets, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
         PathElement, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect,
-        SemanticActionKind, SemanticRole, SemanticValue, UiInput, UiMemory, WidgetId,
-        default_dark_theme,
+        RectPrimitive, SemanticActionKind, SemanticRole, SemanticValue, UiInput, UiMemory,
+        WidgetId, default_dark_theme,
     };
     use kinetik_ui_text::{TextEditState, TextLayoutStore, TextSelection};
 
@@ -2308,6 +2325,73 @@ mod tests {
 
         assert!(checkbox.response.expect("checkbox response").state.selected);
         assert_eq!(toggle.primitives.len(), 2);
+    }
+
+    #[test]
+    fn checkbox_and_toggle_reflect_clicked_selection_same_frame() {
+        let theme = default_dark_theme();
+        let mut checkbox_memory = UiMemory::new();
+        let check_id = WidgetId::from_key("check");
+        let check_rect = Rect::new(0.0, 0.0, 20.0, 20.0);
+        let mut input = input_at(10.0, 10.0);
+        input.pointer.primary = PointerButtonState::new(true, true, false);
+        checkbox(
+            check_id,
+            check_rect,
+            false,
+            &input,
+            &mut checkbox_memory,
+            &theme,
+            false,
+        );
+        input.pointer.primary = PointerButtonState::new(false, false, true);
+        let checkbox = checkbox(
+            check_id,
+            check_rect,
+            false,
+            &input,
+            &mut checkbox_memory,
+            &theme,
+            false,
+        );
+
+        let checkbox_response = checkbox.response.expect("checkbox response");
+        assert!(checkbox_response.clicked);
+        assert!(checkbox_response.state.selected);
+        assert_eq!(checkbox.semantics[0].state.checked, Some(true));
+
+        let mut toggle_memory = UiMemory::new();
+        let toggle_id = WidgetId::from_key("toggle");
+        let toggle_rect = Rect::new(0.0, 0.0, 36.0, 18.0);
+        input.pointer.primary = PointerButtonState::new(true, true, false);
+        toggle(
+            toggle_id,
+            toggle_rect,
+            false,
+            &input,
+            &mut toggle_memory,
+            &theme,
+            false,
+        );
+        input.pointer.primary = PointerButtonState::new(false, false, true);
+        let toggle = toggle(
+            toggle_id,
+            toggle_rect,
+            false,
+            &input,
+            &mut toggle_memory,
+            &theme,
+            false,
+        );
+
+        let toggle_response = toggle.response.expect("toggle response");
+        assert!(toggle_response.clicked);
+        assert!(toggle_response.state.selected);
+        assert_eq!(toggle.semantics[0].state.checked, Some(true));
+        assert!(matches!(
+            toggle.primitives[1],
+            Primitive::Rect(RectPrimitive { rect, .. }) if rect.x > toggle_rect.x
+        ));
     }
 
     #[test]

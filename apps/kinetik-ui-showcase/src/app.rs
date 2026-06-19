@@ -633,26 +633,24 @@ impl ShowcaseApp {
     }
 
     fn component_selection_controls(&mut self, ui: &mut Ui<'_>, x: f32, y: f32) {
-        let checkbox = ui.checkbox(
+        let checkbox = ui.checkbox_value(
             "components.checkbox",
             Rect::new(x, y + 48.0, 22.0, 22.0),
-            self.checkbox,
+            &mut self.checkbox,
             false,
         );
         if checkbox.clicked {
-            self.checkbox = !self.checkbox;
             self.status = format!("Checkbox: {}", self.checkbox);
         }
         ui.label(Rect::new(x + 32.0, y + 46.0, 90.0, 20.0), "Checkbox");
 
-        let toggle = ui.toggle(
+        let toggle = ui.toggle_value(
             "components.toggle",
             Rect::new(x + 144.0, y + 48.0, 54.0, 24.0),
-            self.toggle,
+            &mut self.toggle,
             false,
         );
         if toggle.clicked {
-            self.toggle = !self.toggle;
             self.status = format!("Toggle: {}", self.toggle);
         }
         ui.label(Rect::new(x + 210.0, y + 46.0, 70.0, 20.0), "Toggle");

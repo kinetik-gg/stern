@@ -1226,19 +1226,14 @@ fn encode_command(
             x1,
             y1,
             stroke,
-        } => {
-            let (from, to) = snap_stroked_line_to_device(
-                Point::new(*x0, *y0),
-                Point::new(*x1, *y1),
-                stroke.width,
-                device_scale,
-            );
-            let line = KurboLine::new(
-                (f64::from(from.x), f64::from(from.y)),
-                (f64::from(to.x), f64::from(to.y)),
-            );
-            stroke_shape(scene, transform, stroke, &line, device_scale);
-        }
+        } => encode_line_command(
+            scene,
+            transform,
+            Point::new(*x0, *y0),
+            Point::new(*x1, *y1),
+            *stroke,
+            device_scale,
+        ),
         RenderCommandKind::Shadow {
             rect,
             offset,
@@ -1305,6 +1300,22 @@ fn encode_command(
             );
         }
     }
+}
+
+fn encode_line_command(
+    scene: &mut Scene,
+    transform: Affine,
+    from: Point,
+    to: Point,
+    stroke: Stroke,
+    device_scale: f64,
+) {
+    let (from, to) = snap_stroked_line_to_device(from, to, stroke.width, device_scale);
+    let line = KurboLine::new(
+        (f64::from(from.x), f64::from(from.y)),
+        (f64::from(to.x), f64::from(to.y)),
+    );
+    stroke_shape(scene, transform, &stroke, &line, device_scale);
 }
 
 fn encode_rect_command(
