@@ -328,8 +328,8 @@ impl EditorShowcase {
         self.menu_bar(ui, viewport);
         self.tool_bar(ui, viewport, &mut invocations);
         self.workspace(ui, viewport);
-        self.status_bar(ui, viewport, action_count + invocations.len() as u32);
         self.menu_overlay(ui, viewport, &mut invocations);
+        self.status_bar(ui, viewport, action_count + invocations.len() as u32);
         invocations
     }
 

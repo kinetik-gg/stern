@@ -2068,6 +2068,17 @@ mod tests {
         }
 
         click(&mut app, Point::new(170.0, 93.0));
+
+        assert_eq!(app.action_count(), 1);
+        for label in ["Saved project snapshot", "Actions: 1"] {
+            assert!(
+                app.primitives().iter().any(|primitive| {
+                    matches!(primitive, Primitive::Text(text) if text.text == label)
+                }),
+                "{label}"
+            );
+        }
+
         app.update(&ShowcaseInput::default());
 
         assert_eq!(app.action_count(), 1);
