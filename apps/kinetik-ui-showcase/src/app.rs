@@ -10,9 +10,10 @@ use kinetik_ui::core::{
     ActionRoutingContext, ActionSource, Axis, Brush, ClipId, Color, CornerRadius, FrameContext,
     FrameOutput, ImageId, Insets, Key, KeyEvent, KeyState, LayoutItem, LinePrimitive, Measurement,
     Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput, Primitive, Rect,
-    RectPrimitive, ScaleFactor, Shortcut, Size, SizeRule, Stroke, TextInputEvent, TextPrimitive,
-    TextureId, TexturePrimitive, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, column_layout,
-    default_dark_theme, inspect_primitives, rect_from_size, row_layout, split_leading,
+    RectPrimitive, RepaintRequest, ScaleFactor, Shortcut, Size, SizeRule, Stroke, TextInputEvent,
+    TextPrimitive, TextureId, TexturePrimitive, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo,
+    column_layout, default_dark_theme, inspect_primitives, rect_from_size, row_layout,
+    split_leading,
 };
 use kinetik_ui::render::{
     ImageResource, RenderImage, RenderImageSampling, RenderResources, TextureResource,
@@ -281,7 +282,7 @@ impl ShowcaseApp {
         let mut memory = std::mem::take(&mut self.memory);
         let mut text_layouts = std::mem::take(&mut self.text_layouts);
         let mut editor_invocations = Vec::new();
-        let output = {
+        let mut output = {
             let mut ui =
                 Ui::begin_frame_with_text_layouts(context, &mut memory, &theme, &mut text_layouts);
 
@@ -295,8 +296,12 @@ impl ShowcaseApp {
 
             ui.finish_output()
         };
+        let editor_invoked = !editor_invocations.is_empty();
         for invocation in editor_invocations {
             self.record_action(invocation.action_id, invocation.source);
+        }
+        if editor_invoked {
+            output.request_repaint(RepaintRequest::NextFrame);
         }
         self.memory = memory;
         self.text_layouts = text_layouts;
@@ -1978,7 +1983,7 @@ mod tests {
     use kinetik_ui::{
         core::{
             ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point,
-            Primitive, Rect, ScaleFactor, Size, TextureId, UiInput, ViewportInfo,
+            Primitive, Rect, RepaintRequest, ScaleFactor, Size, TextureId, UiInput, ViewportInfo,
         },
         render::{RenderFrameInput, RenderImageSampling},
         render_vello::VelloRenderer,
@@ -2068,6 +2073,22 @@ mod tests {
         assert_eq!(app.action_count(), 1);
         assert!(app.primitives().iter().any(|primitive| {
             matches!(primitive, Primitive::Text(text) if text.text == "Actions: 1")
+        }));
+    }
+
+    #[test]
+    fn editor_toolbar_action_requests_follow_up_repaint() {
+        let mut app = ShowcaseApp::new();
+
+        click(&mut app, Point::new(166.0, 46.0));
+
+        assert_eq!(app.action_count(), 1);
+        assert_eq!(app.output().repaint, RepaintRequest::NextFrame);
+
+        app.update(&ShowcaseInput::default());
+
+        assert!(app.primitives().iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "Viewport grid hidden")
         }));
     }
 
