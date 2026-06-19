@@ -2328,16 +2328,12 @@ fn snap_radius_value_to_device(value: f32, device_scale: f64) -> f32 {
     snap_scalar_to_device(value, device_scale)
 }
 
-fn snap_image_rect_to_device(rect: Rect, sampling: RenderImageSampling, device_scale: f64) -> Rect {
-    match sampling {
-        RenderImageSampling::Pixelated | RenderImageSampling::UiIcon => {
-            snap_rect_to_device(rect, device_scale)
-        }
-        RenderImageSampling::Smooth | RenderImageSampling::HighQuality => {
-            let origin = snap_point_to_device(rect.origin(), device_scale);
-            Rect::new(origin.x, origin.y, rect.width, rect.height)
-        }
-    }
+fn snap_image_rect_to_device(
+    rect: Rect,
+    _sampling: RenderImageSampling,
+    device_scale: f64,
+) -> Rect {
+    snap_rect_to_device(rect, device_scale)
 }
 
 #[allow(clippy::cast_possible_truncation)]
@@ -3569,18 +3565,21 @@ mod tests {
     }
 
     #[test]
-    fn image_rect_snapping_respects_sampling_intent() {
+    fn image_rect_snapping_aligns_all_sampling_modes_to_device_bounds() {
         let rect = Rect::new(3.2, 4.2, 14.0, 14.0);
         let icon = snap_image_rect_to_device(rect, RenderImageSampling::UiIcon, 1.25);
+        let smooth = snap_image_rect_to_device(rect, RenderImageSampling::Smooth, 1.25);
         let high_quality = snap_image_rect_to_device(rect, RenderImageSampling::HighQuality, 1.25);
 
         assert_approx(icon.x, 3.2);
         assert_approx(icon.y, 4.0);
         assert!((icon.width - 14.4).abs() < 0.000_01);
         assert!((icon.height - 14.4).abs() < 0.000_01);
-        assert_eq!(high_quality, Rect::new(3.2, 4.0, 14.0, 14.0));
+        assert_eq!(smooth, icon);
+        assert_eq!(high_quality, icon);
         assert!((icon.width * 1.25 - 18.0).abs() < 0.000_01);
-        assert_approx(high_quality.width, 14.0);
+        assert!((smooth.width * 1.25 - 18.0).abs() < 0.000_01);
+        assert!((high_quality.width * 1.25 - 18.0).abs() < 0.000_01);
     }
 
     #[test]
