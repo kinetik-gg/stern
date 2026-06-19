@@ -1416,13 +1416,34 @@ fn encode_rect_command(
         );
         fill_shape(scene, transform, &fill, &shape);
     }
-    if let Some(stroke) = stroke {
+    if let Some(stroke) = stroke
+        && !encode_crisp_rect_border(scene, transform, rect, stroke, radius, device_scale)
+    {
         let shape = rounded_rect(
             snap_stroked_rect_to_device(rect, stroke.width, device_scale),
             snap_radius_to_device(radius, device_scale),
         );
         stroke_shape(scene, transform, &stroke, &shape, device_scale);
     }
+}
+
+fn encode_crisp_rect_border(
+    scene: &mut Scene,
+    transform: Affine,
+    rect: Rect,
+    stroke: Stroke,
+    radius: CornerRadius,
+    device_scale: f64,
+) -> bool {
+    if !radius_is_zero(radius) {
+        return false;
+    }
+
+    for segment in crisp_rect_border_segments(rect, stroke.width, device_scale) {
+        let shape = kurbo_rect(segment);
+        fill_shape(scene, transform, &stroke.brush, &shape);
+    }
+    true
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2352,6 +2373,50 @@ fn snap_scalar_to_device(value: f32, device_scale: f64) -> f32 {
     ((f64::from(value) * device_scale).round() / device_scale) as f32
 }
 
+fn crisp_rect_border_segments(rect: Rect, stroke_width: f32, device_scale: f64) -> Vec<Rect> {
+    if stroke_width <= 0.0
+        || !stroke_width.is_finite()
+        || !device_scale.is_finite()
+        || device_scale <= 0.0
+    {
+        return Vec::new();
+    }
+
+    let outer = snap_rect_to_device(rect, device_scale);
+    if outer.width <= 0.0 || outer.height <= 0.0 {
+        return Vec::new();
+    }
+
+    let width = quantize_stroke_width_to_device(stroke_width, device_scale)
+        .min(outer.width)
+        .min(outer.height);
+    if width <= 0.0 || !width.is_finite() {
+        return Vec::new();
+    }
+    if width * 2.0 >= outer.width || width * 2.0 >= outer.height {
+        return vec![outer];
+    }
+
+    vec![
+        Rect::new(outer.x, outer.y, outer.width, width),
+        Rect::new(outer.x, outer.max_y() - width, outer.width, width),
+        Rect::new(outer.x, outer.y + width, width, outer.height - width * 2.0),
+        Rect::new(
+            outer.max_x() - width,
+            outer.y + width,
+            width,
+            outer.height - width * 2.0,
+        ),
+    ]
+}
+
+fn radius_is_zero(radius: CornerRadius) -> bool {
+    radius.top_left.abs() <= f32::EPSILON
+        && radius.top_right.abs() <= f32::EPSILON
+        && radius.bottom_right.abs() <= f32::EPSILON
+        && radius.bottom_left.abs() <= f32::EPSILON
+}
+
 fn compose_transform(parent: Transform, child: Transform) -> Transform {
     Transform {
         m11: parent.m11.mul_add(child.m11, parent.m21 * child.m12),
@@ -2417,9 +2482,9 @@ mod tests {
         ImageAtlasRegion, ImageDataCache, ImageResource, RenderCommand, RenderCommandKind,
         RenderDiagnostic, RenderFrameInput, RenderImage, RenderImageSampling, RenderResources,
         RendererBackend, ShapedTextCache, TextLayoutResource, TextureResource, VelloRenderer,
-        image_quality, physical_text_layout, physical_text_layout_for_key,
-        quantize_stroke_width_to_device, render_translation_snapshot, root_transform,
-        snap_axis_aligned_translation, snap_filled_path_elements_to_device,
+        crisp_rect_border_segments, image_quality, physical_text_layout,
+        physical_text_layout_for_key, quantize_stroke_width_to_device, render_translation_snapshot,
+        root_transform, snap_axis_aligned_translation, snap_filled_path_elements_to_device,
         snap_image_rect_to_device, snap_point_to_device, snap_radius_to_device,
         snap_rect_to_device, snap_stroke_center_to_device, snap_stroked_line_to_device,
         snap_stroked_path_elements_to_device, snap_stroked_rect_to_device,
@@ -3462,6 +3527,39 @@ mod tests {
         assert_eq!(horizontal.1, Point::new(20.0, 10.5));
         assert_eq!(rect, Rect::new(0.5, 0.5, 19.0, 11.0));
         assert_eq!(fractional_rect, Rect::new(0.4, 0.4, 19.2, 11.2));
+    }
+
+    #[test]
+    fn square_rect_borders_are_segmented_on_physical_pixels() {
+        let segments = crisp_rect_border_segments(Rect::new(0.0, 0.0, 20.0, 12.0), 1.0, 1.25);
+
+        assert_eq!(
+            segments,
+            vec![
+                Rect::new(0.0, 0.0, 20.0, 0.8),
+                Rect::new(0.0, 11.2, 20.0, 0.8),
+                Rect::new(0.0, 0.8, 0.8, 10.4),
+                Rect::new(19.2, 0.8, 0.8, 10.4),
+            ]
+        );
+        for segment in segments {
+            for value in [
+                segment.x * 1.25,
+                segment.y * 1.25,
+                segment.width * 1.25,
+                segment.height * 1.25,
+            ] {
+                assert!((value - value.round()).abs() <= 0.000_01, "{value}");
+            }
+        }
+    }
+
+    #[test]
+    fn square_rect_border_segments_collapse_tiny_rectangles() {
+        assert_eq!(
+            crisp_rect_border_segments(Rect::new(0.0, 0.0, 1.0, 1.0), 1.0, 1.25),
+            vec![Rect::new(0.0, 0.0, 0.8, 0.8)]
+        );
     }
 
     #[test]
