@@ -108,6 +108,7 @@ pub struct ShowcaseApp {
     status: String,
     output: FrameOutput,
     editor: EditorShowcase,
+    static_resources: RenderResources,
 }
 
 impl Default for ShowcaseApp {
@@ -137,6 +138,7 @@ impl Default for ShowcaseApp {
             status: "Ready".to_owned(),
             output: FrameOutput::new(),
             editor: EditorShowcase::new(),
+            static_resources: static_render_resources(),
         };
         app.redraw_idle();
         app
@@ -265,35 +267,8 @@ impl ShowcaseApp {
     /// Builds render resources referenced by the current showcase frame.
     #[must_use]
     pub fn render_resources(&self) -> RenderResources {
-        let mut resources = RenderResources::new();
+        let mut resources = self.static_resources.clone();
         resources.register_text_layouts(self.text_layouts.layouts());
-        editor_showcase::register_resources(&mut resources);
-        resources.register_image(ImageResource {
-            id: ImageId::from_raw(7),
-            size: Size::new(64.0, 48.0),
-            sampling: RenderImageSampling::Smooth,
-            pixels: Some(thumbnail_image()),
-            atlas_region: None,
-        });
-        resources.register_image(ImageResource {
-            id: ImageId::from_raw(11),
-            size: Size::new(96.0, 72.0),
-            sampling: RenderImageSampling::Smooth,
-            pixels: Some(primitive_image()),
-            atlas_region: None,
-        });
-        resources.register_texture(TextureResource {
-            id: TextureId::from_raw(99),
-            size: Size::new(384.0, 216.0),
-            sampling: RenderImageSampling::HighQuality,
-            snapshot: Some(viewport_texture()),
-        });
-        resources.register_texture(TextureResource {
-            id: TextureId::from_raw(101),
-            size: Size::new(256.0, 144.0),
-            sampling: RenderImageSampling::HighQuality,
-            snapshot: Some(video_texture()),
-        });
         resources
     }
 
@@ -1816,6 +1791,38 @@ fn nav_items(viewport_width: f32) -> [(ShowcasePage, Rect); 4] {
     ]
 }
 
+fn static_render_resources() -> RenderResources {
+    let mut resources = RenderResources::new();
+    editor_showcase::register_resources(&mut resources);
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(7),
+        size: Size::new(64.0, 48.0),
+        sampling: RenderImageSampling::Smooth,
+        pixels: Some(thumbnail_image()),
+        atlas_region: None,
+    });
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(11),
+        size: Size::new(96.0, 72.0),
+        sampling: RenderImageSampling::Smooth,
+        pixels: Some(primitive_image()),
+        atlas_region: None,
+    });
+    resources.register_texture(TextureResource {
+        id: TextureId::from_raw(99),
+        size: Size::new(384.0, 216.0),
+        sampling: RenderImageSampling::HighQuality,
+        snapshot: Some(viewport_texture()),
+    });
+    resources.register_texture(TextureResource {
+        id: TextureId::from_raw(101),
+        size: Size::new(256.0, 144.0),
+        sampling: RenderImageSampling::HighQuality,
+        snapshot: Some(video_texture()),
+    });
+    resources
+}
+
 fn frame_context(size: Size, input: UiInput) -> FrameContext {
     let width = physical_dimension(size.width);
     let height = physical_dimension(size.height);
@@ -1967,7 +1974,7 @@ fn sanitize_viewport_size(size: Size) -> Size {
 
 #[cfg(test)]
 mod tests {
-    use super::{ShowcaseApp, ShowcaseInput, ShowcasePage, frame_context};
+    use super::{ShowcaseApp, ShowcaseInput, ShowcasePage, frame_context, static_render_resources};
     use kinetik_ui::{
         core::{
             ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point,
@@ -2126,6 +2133,23 @@ mod tests {
             .count();
 
         assert_eq!(icon_regions, 28);
+    }
+
+    #[test]
+    fn render_resources_reuse_static_media_and_append_text_layouts() {
+        let app = ShowcaseApp::new();
+        let static_snapshot = app.static_resources.snapshot();
+        let fresh_static_snapshot = static_render_resources().snapshot();
+
+        assert_eq!(static_snapshot, fresh_static_snapshot);
+        assert!(!static_snapshot.images.is_empty());
+        assert!(!static_snapshot.textures.is_empty());
+        assert!(static_snapshot.text_layouts.is_empty());
+
+        let frame_snapshot = app.render_resources().snapshot();
+        assert_eq!(frame_snapshot.images, static_snapshot.images);
+        assert_eq!(frame_snapshot.textures, static_snapshot.textures);
+        assert!(!frame_snapshot.text_layouts.is_empty());
     }
 
     #[test]
