@@ -636,14 +636,14 @@ impl ShowcaseApp {
         ui.label(Rect::new(x + 210.0, y + 46.0, 70.0, 20.0), "Toggle");
 
         for (index, radio_x, label) in [(0, x, "Radio A"), (1, x + 100.0, "Radio B")] {
-            let response = ui.radio_button(
+            let response = ui.radio_button_value(
                 ("components.radio", index),
                 Rect::new(radio_x, y + 94.0, 20.0, 20.0),
-                self.radio == index,
+                &mut self.radio,
+                index,
                 false,
             );
             if response.clicked {
-                self.radio = index;
                 self.status = format!("Radio: {label}");
             }
             ui.label(Rect::new(radio_x + 30.0, y + 92.0, 70.0, 20.0), label);
@@ -2021,6 +2021,19 @@ mod tests {
 
         assert!(app.primitives().iter().any(|primitive| {
             matches!(primitive, Primitive::Text(text) if text.text == "Toggle: true")
+        }));
+    }
+
+    #[test]
+    fn component_status_reflects_radio_click_same_frame() {
+        let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Components);
+
+        click(&mut app, Point::new(170.0, 252.0));
+
+        assert_eq!(app.radio, 1);
+        assert!(app.primitives().iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "Radio: Radio B")
         }));
     }
 
