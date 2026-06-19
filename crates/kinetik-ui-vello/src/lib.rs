@@ -1386,13 +1386,16 @@ fn encode_rect_command(
     device_scale: f64,
 ) {
     if let Some(fill) = fill {
-        let shape = rounded_rect(snap_rect_to_device(rect, device_scale), radius);
+        let shape = rounded_rect(
+            snap_rect_to_device(rect, device_scale),
+            snap_radius_to_device(radius, device_scale),
+        );
         fill_shape(scene, transform, &fill, &shape);
     }
     if let Some(stroke) = stroke {
         let shape = rounded_rect(
             snap_stroked_rect_to_device(rect, stroke.width, device_scale),
-            radius,
+            snap_radius_to_device(radius, device_scale),
         );
         stroke_shape(scene, transform, &stroke, &shape, device_scale);
     }
@@ -1614,11 +1617,14 @@ fn encode_path(
     stroke: Option<Stroke>,
     device_scale: f64,
 ) {
-    let path = bez_path(elements);
     if let Some(fill) = fill {
+        let path = bez_path(elements);
         fill_shape(scene, transform, &fill, &path);
     }
     if let Some(stroke) = stroke {
+        let snapped_elements =
+            snap_stroked_path_elements_to_device(elements, stroke.width, device_scale);
+        let path = bez_path(&snapped_elements);
         stroke_shape(scene, transform, &stroke, &path, device_scale);
     }
 }
@@ -1650,6 +1656,75 @@ fn bez_path(elements: &[PathElement]) -> BezPath {
         }
     }
     path
+}
+
+fn snap_stroked_path_elements_to_device(
+    elements: &[PathElement],
+    stroke_width: f32,
+    device_scale: f64,
+) -> Vec<PathElement> {
+    if elements.iter().any(|element| {
+        matches!(
+            element,
+            PathElement::QuadTo { .. } | PathElement::CubicTo { .. }
+        )
+    }) {
+        return elements.to_vec();
+    }
+
+    let mut snapped = Vec::with_capacity(elements.len());
+    let mut pending_move = None;
+    let mut current = None;
+
+    for element in elements {
+        match *element {
+            PathElement::MoveTo(point) => {
+                if let Some(point) = pending_move.replace(point) {
+                    snapped.push(PathElement::MoveTo(snap_point_to_device(
+                        point,
+                        device_scale,
+                    )));
+                }
+                current = Some(point);
+            }
+            PathElement::LineTo(point) => {
+                if let Some(from) = current {
+                    let (from, to) =
+                        snap_stroked_line_to_device(from, point, stroke_width, device_scale);
+                    if pending_move.take().is_some() {
+                        snapped.push(PathElement::MoveTo(from));
+                    }
+                    snapped.push(PathElement::LineTo(to));
+                } else {
+                    snapped.push(PathElement::LineTo(snap_point_to_device(
+                        point,
+                        device_scale,
+                    )));
+                }
+                current = Some(point);
+            }
+            PathElement::Close => {
+                if let Some(point) = pending_move.take() {
+                    snapped.push(PathElement::MoveTo(snap_point_to_device(
+                        point,
+                        device_scale,
+                    )));
+                }
+                snapped.push(PathElement::Close);
+                current = None;
+            }
+            PathElement::QuadTo { .. } | PathElement::CubicTo { .. } => unreachable!(),
+        }
+    }
+
+    if let Some(point) = pending_move {
+        snapped.push(PathElement::MoveTo(snap_point_to_device(
+            point,
+            device_scale,
+        )));
+    }
+
+    snapped
 }
 
 fn shape_fallback_text(
@@ -2008,7 +2083,10 @@ fn encode_resource_placeholder(
     fill: Color,
     stroke: Color,
 ) {
-    let shape = rounded_rect(rect, CornerRadius::all(2.0));
+    let shape = rounded_rect(
+        rect,
+        snap_radius_to_device(CornerRadius::all(2.0), device_scale),
+    );
     scene.fill(Fill::NonZero, transform, vello_color(fill), None, &shape);
     let stroke_style = vello::kurbo::Stroke::new(f64::from(quantize_stroke_width_to_device(
         1.0,
@@ -2081,6 +2159,22 @@ fn snap_rect_to_device(rect: Rect, device_scale: f64) -> Rect {
         (max.x - min.x).max(0.0),
         (max.y - min.y).max(0.0),
     )
+}
+
+fn snap_radius_to_device(radius: CornerRadius, device_scale: f64) -> CornerRadius {
+    CornerRadius {
+        top_left: snap_radius_value_to_device(radius.top_left, device_scale),
+        top_right: snap_radius_value_to_device(radius.top_right, device_scale),
+        bottom_right: snap_radius_value_to_device(radius.bottom_right, device_scale),
+        bottom_left: snap_radius_value_to_device(radius.bottom_left, device_scale),
+    }
+}
+
+fn snap_radius_value_to_device(value: f32, device_scale: f64) -> f32 {
+    if value <= 0.0 || !value.is_finite() || !device_scale.is_finite() || device_scale <= 0.0 {
+        return value;
+    }
+    snap_scalar_to_device(value, device_scale)
 }
 
 fn snap_image_rect_to_device(rect: Rect, sampling: RenderImageSampling, device_scale: f64) -> Rect {
@@ -2253,7 +2347,8 @@ mod tests {
         image_quality, physical_text_layout, physical_text_layout_for_key,
         quantize_stroke_width_to_device, render_translation_snapshot, root_transform,
         snap_axis_aligned_translation, snap_image_rect_to_device, snap_point_to_device,
-        snap_rect_to_device, snap_stroke_center_to_device, snap_stroked_line_to_device,
+        snap_radius_to_device, snap_rect_to_device, snap_stroke_center_to_device,
+        snap_stroked_line_to_device, snap_stroked_path_elements_to_device,
         snap_stroked_rect_to_device, snap_text_origin_to_device, translate_primitives,
         viewport_device_scale,
     };
@@ -3237,9 +3332,27 @@ mod tests {
     fn renderer_snaps_geometry_to_device_pixel_grid() {
         let point = snap_point_to_device(Point::new(10.2, 20.6), 2.0);
         let rect = snap_rect_to_device(Rect::new(1.2, 2.2, 9.1, 10.1), 2.0);
+        let radius = snap_radius_to_device(
+            CornerRadius {
+                top_left: 2.0,
+                top_right: 3.2,
+                bottom_right: 0.0,
+                bottom_left: -1.0,
+            },
+            1.25,
+        );
 
         assert_eq!(point, Point::new(10.0, 20.5));
         assert_eq!(rect, Rect::new(1.0, 2.0, 9.5, 10.5));
+        assert_eq!(
+            radius,
+            CornerRadius {
+                top_left: 2.4,
+                top_right: 3.2,
+                bottom_right: 0.0,
+                bottom_left: -1.0,
+            }
+        );
     }
 
     #[test]
@@ -3275,6 +3388,46 @@ mod tests {
         assert_eq!(horizontal.1, Point::new(20.0, 10.5));
         assert_eq!(rect, Rect::new(0.5, 0.5, 19.0, 11.0));
         assert_eq!(fractional_rect, Rect::new(0.4, 0.4, 19.2, 11.2));
+    }
+
+    #[test]
+    fn renderer_snaps_line_based_stroked_paths_to_device_pixels() {
+        let elements = vec![
+            PathElement::MoveTo(Point::new(0.2, 10.3)),
+            PathElement::LineTo(Point::new(20.2, 10.3)),
+            PathElement::MoveTo(Point::new(4.2, 1.2)),
+            PathElement::LineTo(Point::new(4.2, 11.2)),
+            PathElement::Close,
+        ];
+
+        let snapped = snap_stroked_path_elements_to_device(&elements, 1.0, 1.25);
+
+        assert_eq!(
+            snapped,
+            vec![
+                PathElement::MoveTo(Point::new(0.0, 10.0)),
+                PathElement::LineTo(Point::new(20.0, 10.0)),
+                PathElement::MoveTo(Point::new(4.4, 1.6)),
+                PathElement::LineTo(Point::new(4.4, 11.2)),
+                PathElement::Close,
+            ]
+        );
+    }
+
+    #[test]
+    fn renderer_leaves_curved_stroked_paths_unsnapped() {
+        let elements = vec![
+            PathElement::MoveTo(Point::new(0.2, 10.3)),
+            PathElement::QuadTo {
+                ctrl: Point::new(5.2, 4.2),
+                to: Point::new(20.2, 10.3),
+            },
+        ];
+
+        assert_eq!(
+            snap_stroked_path_elements_to_device(&elements, 1.0, 1.25),
+            elements
+        );
     }
 
     #[test]
