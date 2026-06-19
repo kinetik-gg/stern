@@ -415,6 +415,7 @@ impl EditorShowcase {
         let mut invocations = Vec::new();
         Self::background(ui, viewport);
         self.dismiss_menu_for_input(ui, viewport);
+        self.tool_bar_run_interactions(ui, viewport, &mut invocations);
         self.menu_bar(ui, viewport);
         self.tool_bar(ui, viewport, &mut invocations);
         self.workspace(ui, viewport);
@@ -906,31 +907,27 @@ impl EditorShowcase {
             x += TOOLBAR_STRIDE;
         }
 
-        let right = viewport.max_x() - 220.0;
-        for (index, (icon, label, action)) in [
-            (ToolbarIcon::Play, "Play", ACTION_PLAY),
-            (ToolbarIcon::Pause, "Pause", ACTION_PLAY),
-            (ToolbarIcon::Stop, "Stop", ACTION_STOP),
-            (ToolbarIcon::Rocket, "Build", ACTION_BUILD),
-            (ToolbarIcon::Download, "Export", ACTION_BUILD),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let response = toolbar_icon_button(
+        for (index, icon, label, action, rect) in run_toolbar_buttons(viewport) {
+            toolbar_icon_button(
                 ui,
                 ("editor.run", action, index),
-                Rect::new(
-                    right + index as f32 * TOOLBAR_STRIDE,
-                    TOOLBAR_Y,
-                    TOOLBAR_BUTTON_SIZE,
-                    TOOLBAR_BUTTON_SIZE,
-                ),
+                rect,
                 icon,
                 label,
                 false,
                 false,
             );
+        }
+    }
+
+    fn tool_bar_run_interactions(
+        &mut self,
+        ui: &mut Ui<'_>,
+        viewport: Rect,
+        invocations: &mut Vec<EditorInvocation>,
+    ) {
+        for (index, _icon, _label, action, rect) in run_toolbar_buttons(viewport) {
+            let response = ui.pressable(("editor.run.prepass", action, index), rect, false);
             if response.clicked {
                 self.trigger(invocations, action, ActionSource::Button);
             }
@@ -2022,6 +2019,69 @@ fn frame_tab_rects(frame: &Frame, frame_rect: Rect, tab_height: f32) -> Vec<(Fra
             (tab, tab_rect)
         })
         .collect()
+}
+
+fn run_toolbar_buttons(
+    viewport: Rect,
+) -> [(usize, ToolbarIcon, &'static str, &'static str, Rect); 5] {
+    let right = viewport.max_x() - 220.0;
+    [
+        (
+            0,
+            ToolbarIcon::Play,
+            "Play",
+            ACTION_PLAY,
+            Rect::new(right, TOOLBAR_Y, TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE),
+        ),
+        (
+            1,
+            ToolbarIcon::Pause,
+            "Pause",
+            ACTION_PLAY,
+            Rect::new(
+                right + TOOLBAR_STRIDE,
+                TOOLBAR_Y,
+                TOOLBAR_BUTTON_SIZE,
+                TOOLBAR_BUTTON_SIZE,
+            ),
+        ),
+        (
+            2,
+            ToolbarIcon::Stop,
+            "Stop",
+            ACTION_STOP,
+            Rect::new(
+                right + 2.0 * TOOLBAR_STRIDE,
+                TOOLBAR_Y,
+                TOOLBAR_BUTTON_SIZE,
+                TOOLBAR_BUTTON_SIZE,
+            ),
+        ),
+        (
+            3,
+            ToolbarIcon::Rocket,
+            "Build",
+            ACTION_BUILD,
+            Rect::new(
+                right + 3.0 * TOOLBAR_STRIDE,
+                TOOLBAR_Y,
+                TOOLBAR_BUTTON_SIZE,
+                TOOLBAR_BUTTON_SIZE,
+            ),
+        ),
+        (
+            4,
+            ToolbarIcon::Download,
+            "Export",
+            ACTION_BUILD,
+            Rect::new(
+                right + 4.0 * TOOLBAR_STRIDE,
+                TOOLBAR_Y,
+                TOOLBAR_BUTTON_SIZE,
+                TOOLBAR_BUTTON_SIZE,
+            ),
+        ),
+    ]
 }
 
 #[cfg(test)]

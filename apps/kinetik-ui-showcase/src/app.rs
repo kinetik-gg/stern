@@ -2164,6 +2164,17 @@ mod tests {
     }
 
     #[test]
+    fn editor_play_toolbar_updates_hint_same_frame() {
+        let mut app = ShowcaseApp::new();
+
+        click(&mut app, Point::new(1237.0, 49.0));
+
+        assert_eq!(app.action_count(), 1);
+        assert!(has_text(&app, "Play Mode: Running"));
+        assert!(has_text(&app, "Play mode running"));
+    }
+
+    #[test]
     fn editor_scene_add_requests_follow_up_repaint() {
         let mut app = ShowcaseApp::new();
         let add_node = app
