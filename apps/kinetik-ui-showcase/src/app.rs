@@ -1016,8 +1016,8 @@ impl ShowcaseApp {
 
     fn dock_preview(&mut self, ui: &mut Ui<'_>, panel: Rect) {
         panel_title(ui, panel, "Interactive Dock Model");
-        let area = self.dock_area_preview();
         self.dock_preview_controls(ui, panel);
+        let area = self.dock_area_preview();
         Self::draw_dock_preview(ui, &area, panel);
     }
 
@@ -2461,7 +2461,7 @@ mod tests {
         click(&mut app, Point::new(700.0, 162.0));
 
         assert!(app.primitives().iter().any(|primitive| {
-            matches!(primitive, Primitive::Text(text) if text.text.contains("Frames: 3"))
+            matches!(primitive, Primitive::Text(text) if text.text == "Frame 9")
         }));
     }
 
