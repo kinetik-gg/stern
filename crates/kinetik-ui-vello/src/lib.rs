@@ -1750,7 +1750,7 @@ fn encode_shaped_text_device_space(
 }
 
 fn snap_text_origin_to_device(origin: Point) -> Point {
-    Point::new(origin.x, origin.y.round())
+    Point::new(origin.x.round(), origin.y.round())
 }
 
 fn uniform_axis_aligned_scale(transform: Affine) -> Option<f64> {
@@ -3414,15 +3414,15 @@ mod tests {
     }
 
     #[test]
-    fn text_origin_snapping_preserves_x_and_rounds_baseline_y() {
+    fn text_origin_snapping_rounds_x_and_baseline_y() {
         let origin = snap_text_origin_to_device(Point::new(5.375, 20.5));
 
-        assert_approx(origin.x, 5.375);
+        assert_approx(origin.x, 5.0);
         assert_approx(origin.y, 21.0);
     }
 
     #[test]
-    fn physical_text_snaps_baseline_without_rounding_horizontal_origin() {
+    fn physical_text_snaps_horizontal_origin_and_baseline() {
         let mut renderer = VelloRenderer::new();
         let resources = RenderResources::new();
         let primitives = vec![Primitive::Text(TextPrimitive {
@@ -3453,7 +3453,7 @@ mod tests {
             .expect("glyph");
 
         assert!(output.diagnostics.is_empty());
-        assert_approx(glyph.x, 5.375);
+        assert_approx(glyph.x, 5.0);
         assert_approx(glyph.y, 21.0);
     }
 
@@ -3560,7 +3560,7 @@ mod tests {
         resources.register_text_layout(text_layout_resource(layout, "Label"));
         let primitives = vec![Primitive::Text(TextPrimitive {
             layout: Some(layout),
-            origin: Point::new(4.0, 16.0),
+            origin: Point::new(4.3, 16.4),
             text: "Label".to_owned(),
             family: "sans-serif".to_owned(),
             size: 12.0,
@@ -3585,10 +3585,19 @@ mod tests {
             .glyph_runs
             .first()
             .expect("glyph run");
+        let glyph = renderer
+            .scene()
+            .encoding()
+            .resources
+            .glyphs
+            .first()
+            .expect("glyph");
 
         assert!(output.diagnostics.is_empty());
         assert_approx(glyph_run.font_size, 15.0);
         assert!(glyph_run.hint);
+        assert_approx(glyph.x, 5.0);
+        assert_approx(glyph.y, 21.0);
     }
 
     #[test]
