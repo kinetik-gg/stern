@@ -1915,8 +1915,8 @@ fn encode_shaped_text_device_space(
                 Fill::NonZero,
                 run.glyphs.iter().map(|glyph| Glyph {
                     id: glyph.id,
-                    x: origin.x + glyph.x * scale as f32,
-                    y: origin.y + glyph.y * scale as f32,
+                    x: snap_text_glyph_position_to_device(origin.x + glyph.x * scale as f32),
+                    y: snap_text_glyph_position_to_device(origin.y + glyph.y * scale as f32),
                 }),
             );
     }
@@ -1924,6 +1924,10 @@ fn encode_shaped_text_device_space(
 
 fn snap_text_origin_to_device(origin: Point) -> Point {
     Point::new(origin.x.round(), origin.y.round())
+}
+
+fn snap_text_glyph_position_to_device(position: f32) -> f32 {
+    position.round()
 }
 
 fn uniform_axis_aligned_scale(transform: Affine) -> Option<f64> {
@@ -2379,7 +2383,8 @@ mod tests {
         snap_image_rect_to_device, snap_point_to_device, snap_radius_to_device,
         snap_rect_to_device, snap_stroke_center_to_device, snap_stroked_line_to_device,
         snap_stroked_path_elements_to_device, snap_stroked_rect_to_device,
-        snap_text_origin_to_device, translate_primitives, viewport_device_scale,
+        snap_text_glyph_position_to_device, snap_text_origin_to_device, translate_primitives,
+        viewport_device_scale,
     };
     use kinetik_ui_core::render::TexturePrimitive;
     use kinetik_ui_core::{
@@ -3759,6 +3764,12 @@ mod tests {
     }
 
     #[test]
+    fn text_glyph_position_snapping_rounds_device_coordinates() {
+        assert_approx(snap_text_glyph_position_to_device(11.49), 11.0);
+        assert_approx(snap_text_glyph_position_to_device(11.5), 12.0);
+    }
+
+    #[test]
     fn physical_text_snaps_horizontal_origin_and_baseline() {
         let mut renderer = VelloRenderer::new();
         let resources = RenderResources::new();
@@ -3792,6 +3803,39 @@ mod tests {
         assert!(output.diagnostics.is_empty());
         assert_approx(glyph.x, 5.0);
         assert_approx(glyph.y, 21.0);
+    }
+
+    #[test]
+    fn physical_text_snaps_each_glyph_to_device_pixels() {
+        let mut renderer = VelloRenderer::new();
+        let resources = RenderResources::new();
+        let primitives = vec![Primitive::Text(TextPrimitive {
+            layout: None,
+            origin: Point::new(4.3, 16.4),
+            text: "Kinetik".to_owned(),
+            family: "sans-serif".to_owned(),
+            size: 13.0,
+            line_height: 18.0,
+            brush: Brush::Solid(Color::WHITE),
+        })];
+
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: ViewportInfo::new(
+                Size::new(100.0, 100.0),
+                kinetik_ui_core::PhysicalSize::new(125, 125),
+                ScaleFactor::new(1.25),
+            ),
+            primitives: &primitives,
+            resources: &resources,
+        });
+        let glyphs = &renderer.scene().encoding().resources.glyphs;
+
+        assert!(output.diagnostics.is_empty());
+        assert!(glyphs.len() > 1);
+        for glyph in glyphs {
+            assert_approx(glyph.x, glyph.x.round());
+            assert_approx(glyph.y, glyph.y.round());
+        }
     }
 
     #[test]
