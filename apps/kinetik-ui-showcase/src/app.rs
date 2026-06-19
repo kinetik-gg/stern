@@ -1811,13 +1811,13 @@ fn static_render_resources() -> RenderResources {
     resources.register_texture(TextureResource {
         id: TextureId::from_raw(99),
         size: Size::new(384.0, 216.0),
-        sampling: RenderImageSampling::HighQuality,
+        sampling: RenderImageSampling::Pixelated,
         snapshot: Some(viewport_texture()),
     });
     resources.register_texture(TextureResource {
         id: TextureId::from_raw(101),
         size: Size::new(256.0, 144.0),
-        sampling: RenderImageSampling::HighQuality,
+        sampling: RenderImageSampling::Pixelated,
         snapshot: Some(video_texture()),
     });
     resources
@@ -1978,9 +1978,9 @@ mod tests {
     use kinetik_ui::{
         core::{
             ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point,
-            Primitive, Rect, ScaleFactor, Size, UiInput, ViewportInfo,
+            Primitive, Rect, ScaleFactor, Size, TextureId, UiInput, ViewportInfo,
         },
-        render::RenderFrameInput,
+        render::{RenderFrameInput, RenderImageSampling},
         render_vello::VelloRenderer,
     };
 
@@ -2094,6 +2094,10 @@ mod tests {
             .expect("editor emits icon images");
 
         assert!(resources.texture(texture).is_some());
+        assert_eq!(
+            resources.texture(texture).map(|resource| resource.sampling),
+            Some(RenderImageSampling::Pixelated)
+        );
         assert!(
             resources
                 .texture(texture)
@@ -2133,6 +2137,23 @@ mod tests {
             .count();
 
         assert_eq!(icon_regions, 28);
+    }
+
+    #[test]
+    fn generated_showcase_textures_use_pixel_snapped_sampling() {
+        let resources = static_render_resources();
+
+        for texture in [
+            TextureId::from_raw(99),
+            TextureId::from_raw(101),
+            TextureId::from_raw(9_001),
+        ] {
+            assert_eq!(
+                resources.texture(texture).map(|resource| resource.sampling),
+                Some(RenderImageSampling::Pixelated),
+                "{texture:?}"
+            );
+        }
     }
 
     #[test]

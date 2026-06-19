@@ -2146,6 +2146,13 @@ mod tests {
         }
     }
 
+    fn assert_approx(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() < f32::EPSILON,
+            "expected {actual} to equal {expected}"
+        );
+    }
+
     fn check_icon() -> IconGraphic {
         IconGraphic::new(
             Rect::new(0.0, 0.0, 24.0, 24.0),
@@ -2253,6 +2260,30 @@ mod tests {
         assert!(matches!(output.primitives[1], Primitive::Image(_)));
         assert_eq!(output.semantics[0].role, SemanticRole::IconButton);
         assert_eq!(output.semantics[0].label.as_deref(), Some("Save project"));
+    }
+
+    #[test]
+    fn image_icon_button_uses_common_scale_integer_icon_size() {
+        let output = image_icon_button(
+            WidgetId::from_key("bitmap-icon"),
+            Rect::new(0.0, 0.0, 28.0, 28.0),
+            ImageId::from_raw(99),
+            "Save project",
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            &default_dark_theme(),
+            false,
+        );
+        let Primitive::Image(image) = output.primitives[1] else {
+            panic!("expected image primitive");
+        };
+
+        assert_approx(image.rect.width, 16.0);
+        assert_approx(image.rect.height, 16.0);
+        for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+            assert_approx((image.rect.width * scale).fract(), 0.0);
+            assert_approx((image.rect.height * scale).fract(), 0.0);
+        }
     }
 
     #[test]
