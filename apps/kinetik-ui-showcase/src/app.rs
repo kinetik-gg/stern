@@ -690,7 +690,7 @@ impl ShowcaseApp {
         );
         if panel.width >= 560.0 {
             ui.image(
-                Rect::new(slider_x + 152.0, slider_y + 38.0, 54.0, 42.0),
+                Rect::new(slider_x + 152.0, slider_y + 36.0, 64.0, 48.0),
                 ImageId::from_raw(7),
             );
             ui.label(
@@ -1822,7 +1822,7 @@ fn static_render_resources() -> RenderResources {
     resources.register_texture(TextureResource {
         id: TextureId::from_raw(101),
         size: Size::new(256.0, 144.0),
-        sampling: RenderImageSampling::Pixelated,
+        sampling: RenderImageSampling::Smooth,
         snapshot: Some(video_texture()),
     });
     resources
@@ -2173,7 +2173,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_showcase_media_uses_pixel_snapped_sampling() {
+    fn generated_showcase_media_uses_intentional_sampling() {
         let resources = static_render_resources();
 
         for image in [ImageId::from_raw(7), ImageId::from_raw(11)] {
@@ -2184,17 +2184,38 @@ mod tests {
             );
         }
 
-        for texture in [
-            TextureId::from_raw(99),
-            TextureId::from_raw(101),
-            TextureId::from_raw(9_001),
-        ] {
+        for texture in [TextureId::from_raw(99), TextureId::from_raw(9_001)] {
             assert_eq!(
                 resources.texture(texture).map(|resource| resource.sampling),
                 Some(RenderImageSampling::Pixelated),
                 "{texture:?}"
             );
         }
+
+        assert_eq!(
+            resources
+                .texture(TextureId::from_raw(101))
+                .map(|resource| resource.sampling),
+            Some(RenderImageSampling::Smooth)
+        );
+    }
+
+    #[test]
+    fn component_thumbnail_uses_native_pixel_rect() {
+        let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Components);
+
+        let thumbnail = app
+            .primitives()
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Image(image) if image.image == ImageId::from_raw(7) => Some(image.rect),
+                _ => None,
+            })
+            .expect("thumbnail image");
+
+        assert!((thumbnail.width - 64.0).abs() < f32::EPSILON);
+        assert!((thumbnail.height - 48.0).abs() < f32::EPSILON);
     }
 
     #[test]
