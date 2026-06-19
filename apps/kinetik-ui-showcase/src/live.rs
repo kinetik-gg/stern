@@ -272,7 +272,7 @@ impl LiveVelloRenderer {
         let size = sanitize_physical_size(size);
         let mut context = RenderContext::new();
         let surface = context
-            .create_surface(window, size.width, size.height, PresentMode::Fifo)
+            .create_surface(window, size.width, size.height, live_present_mode())
             .await?;
         let device = &context.devices[surface.dev_id].device;
         let renderer = Renderer::new(device, RendererOptions::default())?;
@@ -491,11 +491,15 @@ fn live_antialiasing_method() -> AaConfig {
     AaConfig::Area
 }
 
+fn live_present_mode() -> PresentMode {
+    PresentMode::AutoNoVsync
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        LiveShowcase, RepaintSchedule, blit_extents_match, live_antialiasing_method,
-        resolve_repaint_schedule,
+        LiveShowcase, PresentMode, RepaintSchedule, blit_extents_match, live_antialiasing_method,
+        live_present_mode, resolve_repaint_schedule,
     };
     use kinetik_ui::core::RepaintRequest;
     use std::time::{Duration, Instant};
@@ -561,6 +565,11 @@ mod tests {
     #[test]
     fn live_renderer_uses_area_antialiasing_for_crisper_ui_edges() {
         assert!(matches!(live_antialiasing_method(), AaConfig::Area));
+    }
+
+    #[test]
+    fn live_renderer_prefers_low_latency_present_mode() {
+        assert_eq!(live_present_mode(), PresentMode::AutoNoVsync);
     }
 
     #[test]
