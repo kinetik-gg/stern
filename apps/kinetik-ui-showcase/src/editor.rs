@@ -185,6 +185,17 @@ enum ToolbarIcon {
     Stop,
     Rocket,
     Download,
+    Plus,
+    Dots,
+    Search,
+    Gear,
+    Layers,
+    Caret,
+    Eye,
+    Component,
+    Cube,
+    Archive,
+    Box,
 }
 
 impl ToolbarIcon {
@@ -202,6 +213,17 @@ impl ToolbarIcon {
             Self::Stop => 10,
             Self::Rocket => 11,
             Self::Download => 12,
+            Self::Plus => 13,
+            Self::Dots => 14,
+            Self::Search => 15,
+            Self::Gear => 16,
+            Self::Layers => 17,
+            Self::Caret => 18,
+            Self::Eye => 19,
+            Self::Component => 20,
+            Self::Cube => 21,
+            Self::Archive => 22,
+            Self::Box => 23,
         }
     }
 }
@@ -990,12 +1012,15 @@ impl EditorShowcase {
     fn scene_graph(&mut self, ui: &mut Ui<'_>, body: Rect) {
         rect(ui, body, rgb(24, 25, 27), None);
         let header = Rect::new(body.x + 8.0, body.y + 8.0, body.width - 16.0, 24.0);
-        let add = ui.image_icon_button(
+        let add = toolbar_icon_button_sized(
+            ui,
             "editor.scene.add",
             header.with_width(28.0),
-            ICON_PLUS,
+            ToolbarIcon::Plus,
             "Add node",
             false,
+            false,
+            DENSE_ICON_SIZE,
         );
         if add.clicked {
             "Create node requested".clone_into(&mut self.status);
@@ -1008,7 +1033,12 @@ impl EditorShowcase {
             13.0,
             rgb(222, 225, 230),
         );
-        icon(ui, header.right_strip(24.0), ICON_DOTS, DENSE_ICON_SIZE);
+        vector_icon(
+            ui,
+            header.right_strip(24.0),
+            ToolbarIcon::Dots,
+            DENSE_ICON_SIZE,
+        );
 
         let rows = scene_model().visible_rows(&self.scene_expansion);
         let layout = TreeLayout::new(22.0, 15.0);
@@ -1063,7 +1093,7 @@ impl EditorShowcase {
                             rgb(176, 181, 188),
                         );
                     }
-                    icon(
+                    vector_icon(
                         ui,
                         Rect::new(
                             row_rect.content_rect.x + 17.0,
@@ -1096,10 +1126,10 @@ impl EditorShowcase {
             &mut self.asset_filter,
             false,
         );
-        icon(
+        vector_icon(
             ui,
             Rect::new(search.x + 5.0, search.y + 5.0, 18.0, 18.0),
-            ICON_SEARCH,
+            ToolbarIcon::Search,
             DENSE_ICON_SIZE,
         );
 
@@ -1153,10 +1183,10 @@ impl EditorShowcase {
                     if response.clicked {
                         self.status = format!("Asset selected: {}", asset.name);
                     }
-                    icon(
+                    vector_icon(
                         ui,
                         Rect::new(item.rect.x + 8.0, item.rect.y + 8.0, 24.0, 24.0),
-                        asset.icon,
+                        asset_icon(asset.icon),
                         ASSET_ICON_SIZE,
                     );
                     text(
@@ -1358,7 +1388,7 @@ impl EditorShowcase {
         rect(ui, body, rgb(24, 25, 27), None);
         let header = Rect::new(body.x + 8.0, body.y + 8.0, body.width - 16.0, 34.0);
         rect(ui, header, rgb(37, 39, 43), Some(rgb(55, 58, 64)));
-        icon(
+        vector_icon(
             ui,
             Rect::new(header.x + 7.0, header.y + 7.0, 20.0, 20.0),
             scene_icon(self.selected_node),
@@ -1372,10 +1402,10 @@ impl EditorShowcase {
             13.0,
             rgb(231, 233, 237),
         );
-        icon(
+        vector_icon(
             ui,
             Rect::new(header.max_x() - 27.0, header.y + 7.0, 20.0, 20.0),
-            ICON_GEAR,
+            ToolbarIcon::Gear,
             DENSE_ICON_SIZE,
         );
 
@@ -2072,7 +2102,7 @@ mod tests {
     }
 
     #[test]
-    fn editor_icon_destinations_land_on_common_physical_pixels() {
+    fn editor_uses_vector_primitives_for_visible_editor_icons() {
         let theme = default_dark_theme();
         let mut memory = UiMemory::new();
         let context = editor_test_context(UiInput::default());
@@ -2081,27 +2111,21 @@ mod tests {
 
         editor.render(&mut ui, 0);
         let output = ui.finish_output();
-        let icon_rects: Vec<_> = output
+        let atlas_icon_count = output
             .primitives
             .iter()
-            .filter_map(|primitive| match primitive {
-                Primitive::Image(image) if is_editor_icon(image.image) => Some(image.rect),
-                _ => None,
+            .filter(|primitive| {
+                matches!(primitive, Primitive::Image(image) if is_editor_icon(image.image))
             })
-            .collect();
+            .count();
+        let vector_icon_count = output
+            .primitives
+            .iter()
+            .filter(|primitive| matches!(primitive, Primitive::Line(_) | Primitive::Path(_)))
+            .count();
 
-        assert!(!icon_rects.is_empty());
-        for rect in icon_rects {
-            assert_eq!(rect.width, rect.height);
-            for scale in [1.0_f32, 1.25, 1.5, 2.0] {
-                let physical = rect.width * scale;
-                assert_eq!(
-                    physical,
-                    physical.round(),
-                    "icon rect {rect:?} is fractional at {scale}x"
-                );
-            }
-        }
+        assert_eq!(atlas_icon_count, 0);
+        assert!(vector_icon_count >= 24);
     }
 
     #[test]
@@ -2359,18 +2383,35 @@ fn scene_label(id: ItemId) -> &'static str {
     }
 }
 
-fn scene_icon(id: ItemId) -> ImageId {
+fn scene_icon(id: ItemId) -> ToolbarIcon {
     match id.raw() {
-        1 => ICON_LAYERS,
-        2 | 6 => ICON_CARET,
-        3 => ICON_EYE,
-        4 => ICON_CROSSHAIR,
-        5 => ICON_GRID,
-        7 => ICON_COMPONENT,
-        8 | 9 => ICON_CUBE,
-        10 => ICON_ROCKET,
-        11 => ICON_ARCHIVE,
-        _ => ICON_BOX,
+        1 => ToolbarIcon::Layers,
+        2 | 6 => ToolbarIcon::Caret,
+        3 => ToolbarIcon::Eye,
+        4 => ToolbarIcon::Crosshair,
+        5 => ToolbarIcon::Grid,
+        7 => ToolbarIcon::Component,
+        8 | 9 => ToolbarIcon::Cube,
+        10 => ToolbarIcon::Rocket,
+        11 => ToolbarIcon::Archive,
+        _ => ToolbarIcon::Box,
+    }
+}
+
+fn asset_icon(id: ImageId) -> ToolbarIcon {
+    match id.raw() {
+        raw if raw == ICON_LAYERS.raw() => ToolbarIcon::Layers,
+        raw if raw == ICON_CARET.raw() => ToolbarIcon::Caret,
+        raw if raw == ICON_EYE.raw() => ToolbarIcon::Eye,
+        raw if raw == ICON_CROSSHAIR.raw() => ToolbarIcon::Crosshair,
+        raw if raw == ICON_GRID.raw() => ToolbarIcon::Grid,
+        raw if raw == ICON_COMPONENT.raw() => ToolbarIcon::Component,
+        raw if raw == ICON_CUBE.raw() => ToolbarIcon::Cube,
+        raw if raw == ICON_ROCKET.raw() => ToolbarIcon::Rocket,
+        raw if raw == ICON_ARCHIVE.raw() => ToolbarIcon::Archive,
+        raw if raw == ICON_IMAGE.raw() => ToolbarIcon::Box,
+        raw if raw == ICON_CODE.raw() => ToolbarIcon::Scale,
+        _ => ToolbarIcon::Box,
     }
 }
 
@@ -2456,6 +2497,29 @@ fn toolbar_icon_button(
     selected: bool,
     disabled: bool,
 ) -> kinetik_ui::core::Response {
+    toolbar_icon_button_sized(
+        ui,
+        key,
+        rect,
+        icon,
+        label,
+        selected,
+        disabled,
+        TOOLBAR_ICON_SIZE,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn toolbar_icon_button_sized(
+    ui: &mut Ui<'_>,
+    key: impl std::hash::Hash,
+    rect: Rect,
+    icon: ToolbarIcon,
+    label: &str,
+    selected: bool,
+    disabled: bool,
+    icon_size: f32,
+) -> kinetik_ui::core::Response {
     let id = ui.id(key);
     let response = ui.pressable_with_id(id, rect, disabled);
     let visual_selected = selected || response.clicked;
@@ -2484,11 +2548,16 @@ fn toolbar_icon_button(
     };
 
     rect_fill(ui, rect, fill, Some(stroke), CornerRadius::all(4.0));
+    let icon_size = if icon_size.is_finite() && icon_size > 0.0 {
+        icon_size
+    } else {
+        DENSE_ICON_SIZE
+    };
     let icon_rect = Rect::new(
-        rect.x + (rect.width - TOOLBAR_ICON_SIZE) * 0.5,
-        rect.y + (rect.height - TOOLBAR_ICON_SIZE) * 0.5,
-        TOOLBAR_ICON_SIZE,
-        TOOLBAR_ICON_SIZE,
+        rect.x + (rect.width - icon_size) * 0.5,
+        rect.y + (rect.height - icon_size) * 0.5,
+        icon_size,
+        icon_size,
     );
     draw_toolbar_icon(ui, icon_rect, icon, color);
 
@@ -2632,6 +2701,127 @@ fn draw_toolbar_icon(ui: &mut Ui<'_>, rect: Rect, icon: ToolbarIcon, color: Colo
             icon_line(ui, rect, (0.69, 0.47), (0.5, 0.66), color, 2.0);
             icon_line(ui, rect, (0.24, 0.80), (0.76, 0.80), color, 2.0);
         }
+        ToolbarIcon::Plus => {
+            icon_line(ui, rect, (0.5, 0.22), (0.5, 0.78), color, 2.0);
+            icon_line(ui, rect, (0.22, 0.5), (0.78, 0.5), color, 2.0);
+        }
+        ToolbarIcon::Dots => {
+            for x in [0.28, 0.5, 0.72] {
+                icon_filled_rect(ui, rect, Rect::new(x - 0.045, 0.455, 0.09, 0.09), color);
+            }
+        }
+        ToolbarIcon::Search => {
+            icon_polyline(
+                ui,
+                rect,
+                &[
+                    (0.42, 0.22),
+                    (0.56, 0.27),
+                    (0.63, 0.41),
+                    (0.58, 0.56),
+                    (0.44, 0.63),
+                    (0.29, 0.58),
+                    (0.22, 0.44),
+                    (0.27, 0.29),
+                    (0.42, 0.22),
+                ],
+                color,
+                2.0,
+            );
+            icon_line(ui, rect, (0.57, 0.57), (0.78, 0.78), color, 2.0);
+        }
+        ToolbarIcon::Gear => {
+            icon_rect(ui, rect, Rect::new(0.34, 0.34, 0.32, 0.32), color, 2.0);
+            icon_line(ui, rect, (0.5, 0.16), (0.5, 0.30), color, 2.0);
+            icon_line(ui, rect, (0.5, 0.70), (0.5, 0.84), color, 2.0);
+            icon_line(ui, rect, (0.16, 0.5), (0.30, 0.5), color, 2.0);
+            icon_line(ui, rect, (0.70, 0.5), (0.84, 0.5), color, 2.0);
+            icon_line(ui, rect, (0.26, 0.26), (0.36, 0.36), color, 2.0);
+            icon_line(ui, rect, (0.64, 0.64), (0.74, 0.74), color, 2.0);
+            icon_line(ui, rect, (0.74, 0.26), (0.64, 0.36), color, 2.0);
+            icon_line(ui, rect, (0.36, 0.64), (0.26, 0.74), color, 2.0);
+        }
+        ToolbarIcon::Layers => {
+            icon_filled_path(
+                ui,
+                rect,
+                &[(0.50, 0.16), (0.82, 0.34), (0.50, 0.52), (0.18, 0.34)],
+                color,
+            );
+            icon_polyline(
+                ui,
+                rect,
+                &[(0.18, 0.50), (0.50, 0.68), (0.82, 0.50)],
+                color,
+                2.0,
+            );
+            icon_polyline(
+                ui,
+                rect,
+                &[(0.18, 0.64), (0.50, 0.82), (0.82, 0.64)],
+                color,
+                2.0,
+            );
+        }
+        ToolbarIcon::Caret => {
+            icon_line(ui, rect, (0.28, 0.40), (0.50, 0.62), color, 2.0);
+            icon_line(ui, rect, (0.72, 0.40), (0.50, 0.62), color, 2.0);
+        }
+        ToolbarIcon::Eye => {
+            icon_polyline(
+                ui,
+                rect,
+                &[
+                    (0.15, 0.50),
+                    (0.32, 0.32),
+                    (0.50, 0.27),
+                    (0.68, 0.32),
+                    (0.85, 0.50),
+                    (0.68, 0.68),
+                    (0.50, 0.73),
+                    (0.32, 0.68),
+                    (0.15, 0.50),
+                ],
+                color,
+                2.0,
+            );
+            icon_filled_rect(ui, rect, Rect::new(0.45, 0.45, 0.10, 0.10), color);
+        }
+        ToolbarIcon::Component => {
+            for (x, y) in [(0.50, 0.18), (0.30, 0.50), (0.70, 0.50), (0.50, 0.82)] {
+                icon_filled_path(
+                    ui,
+                    rect,
+                    &[(x, y - 0.11), (x + 0.11, y), (x, y + 0.11), (x - 0.11, y)],
+                    color,
+                );
+            }
+        }
+        ToolbarIcon::Cube | ToolbarIcon::Box => {
+            icon_polyline(
+                ui,
+                rect,
+                &[
+                    (0.50, 0.16),
+                    (0.78, 0.31),
+                    (0.78, 0.66),
+                    (0.50, 0.84),
+                    (0.22, 0.66),
+                    (0.22, 0.31),
+                    (0.50, 0.16),
+                ],
+                color,
+                2.0,
+            );
+            icon_line(ui, rect, (0.22, 0.31), (0.50, 0.48), color, 2.0);
+            icon_line(ui, rect, (0.78, 0.31), (0.50, 0.48), color, 2.0);
+            icon_line(ui, rect, (0.50, 0.48), (0.50, 0.84), color, 2.0);
+        }
+        ToolbarIcon::Archive => {
+            icon_rect(ui, rect, Rect::new(0.22, 0.34, 0.56, 0.44), color, 2.0);
+            icon_line(ui, rect, (0.18, 0.26), (0.82, 0.26), color, 2.0);
+            icon_line(ui, rect, (0.40, 0.46), (0.60, 0.46), color, 2.0);
+        }
     }
 }
 
@@ -2704,7 +2894,7 @@ fn icon_filled_path(ui: &mut Ui<'_>, rect: Rect, points: &[(f32, f32)], color: C
     }
 }
 
-fn icon(ui: &mut Ui<'_>, bounds: Rect, image: ImageId, size: f32) {
+fn vector_icon(ui: &mut Ui<'_>, bounds: Rect, icon: ToolbarIcon, size: f32) {
     let size = if size.is_finite() && size > 0.0 {
         size
     } else {
@@ -2716,7 +2906,7 @@ fn icon(ui: &mut Ui<'_>, bounds: Rect, image: ImageId, size: f32) {
         size,
         size,
     );
-    ui.image(rect, image);
+    draw_toolbar_icon(ui, rect, icon, rgb(205, 212, 222));
 }
 
 fn text(ui: &mut Ui<'_>, x: f32, baseline: f32, value: &str, size: f32, fill: Color) {
