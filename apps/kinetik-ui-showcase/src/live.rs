@@ -82,7 +82,7 @@ impl LiveShowcase {
     }
 
     fn request_interactive_redraw(&mut self) {
-        self.next_redraw_at = None;
+        self.next_redraw_at = Some(Instant::now());
         self.request_redraw();
     }
 
@@ -705,12 +705,15 @@ mod tests {
     }
 
     #[test]
-    fn interactive_redraw_clears_delayed_repaint_deadline() {
+    fn interactive_redraw_replaces_delayed_repaint_with_immediate_deadline() {
         let mut app = LiveShowcase::new(None);
         app.next_redraw_at = Some(Instant::now() + Duration::from_secs(1));
 
+        let before = Instant::now();
         app.request_interactive_redraw();
 
-        assert_eq!(app.next_redraw_at, None);
+        let deadline = app.next_redraw_at.expect("interactive redraw deadline");
+        assert!(deadline >= before);
+        assert!(deadline <= Instant::now());
     }
 }
