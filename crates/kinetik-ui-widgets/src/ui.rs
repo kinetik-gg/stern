@@ -652,6 +652,23 @@ impl<'a> Ui<'a> {
         self.push_interactive(output)
     }
 
+    /// Emits a radio button and assigns the value when clicked.
+    pub fn radio_button_value<T: Copy + Eq>(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        selected: &mut T,
+        value: T,
+        disabled: bool,
+    ) -> Response {
+        let response = self.radio_button(key, rect, *selected == value, disabled);
+        if response.clicked {
+            *selected = value;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        response
+    }
+
     /// Emits a radio button with an accessible label and returns its interaction response.
     pub fn radio_button_with_label(
         &mut self,
@@ -668,6 +685,24 @@ impl<'a> Ui<'a> {
             id, rect, label, selected, input, memory, theme, disabled,
         );
         self.push_interactive(output)
+    }
+
+    /// Emits a labeled radio button and assigns the value when clicked.
+    pub fn radio_button_value_with_label<T: Copy + Eq>(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        label: impl Into<String>,
+        selected: &mut T,
+        value: T,
+        disabled: bool,
+    ) -> Response {
+        let response = self.radio_button_with_label(key, rect, label, *selected == value, disabled);
+        if response.clicked {
+            *selected = value;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        response
     }
 
     /// Emits a toggle and returns its interaction response.
@@ -1474,6 +1509,21 @@ mod tests {
         assert!(asset.clicked);
         assert!(asset.state.selected);
         assert_eq!(selected, 3);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+        let mut memory = UiMemory::new();
+        let input = pressed_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.radio_button_value("radio", rect, &mut selected, 4, false);
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
+
+        let input = released_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let radio = ui.radio_button_value("radio", rect, &mut selected, 4, false);
+        let output = ui.finish_output();
+        assert!(radio.clicked);
+        assert!(radio.state.selected);
+        assert_eq!(selected, 4);
         assert_eq!(output.repaint, RepaintRequest::NextFrame);
     }
 
