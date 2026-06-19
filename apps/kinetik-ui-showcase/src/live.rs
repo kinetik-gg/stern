@@ -342,6 +342,16 @@ impl LiveVelloRenderer {
             }
         };
 
+        if !blit_extents_match(
+            PhysicalSize::new(width, height),
+            PhysicalSize::new(
+                surface_texture.texture.width(),
+                surface_texture.texture.height(),
+            ),
+        ) {
+            return Err(LiveRenderError::Surface(SurfaceStatus::Outdated));
+        }
+
         let view = surface_texture
             .texture
             .create_view(&TextureViewDescriptor::default());
@@ -468,11 +478,16 @@ fn sanitize_physical_size(size: PhysicalSize<u32>) -> PhysicalSize<u32> {
     PhysicalSize::new(size.width.max(MIN_WIDTH), size.height.max(MIN_HEIGHT))
 }
 
+fn blit_extents_match(target: PhysicalSize<u32>, surface: PhysicalSize<u32>) -> bool {
+    target.width == surface.width && target.height == surface.height
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{RepaintSchedule, resolve_repaint_schedule};
+    use super::{RepaintSchedule, blit_extents_match, resolve_repaint_schedule};
     use kinetik_ui::core::RepaintRequest;
     use std::time::{Duration, Instant};
+    use winit::dpi::PhysicalSize;
 
     #[test]
     fn next_frame_repaint_requests_immediate_redraw() {
@@ -512,5 +527,21 @@ mod tests {
             ),
             RepaintSchedule::Continuous
         );
+    }
+
+    #[test]
+    fn blit_extents_must_match_target_and_surface() {
+        assert!(blit_extents_match(
+            PhysicalSize::new(800, 600),
+            PhysicalSize::new(800, 600),
+        ));
+        assert!(!blit_extents_match(
+            PhysicalSize::new(800, 600),
+            PhysicalSize::new(801, 600),
+        ));
+        assert!(!blit_extents_match(
+            PhysicalSize::new(800, 600),
+            PhysicalSize::new(800, 601),
+        ));
     }
 }
