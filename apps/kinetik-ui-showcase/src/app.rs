@@ -2136,10 +2136,11 @@ mod tests {
     }
 
     #[test]
-    fn editor_resources_match_emitted_images_and_textures() {
+    fn editor_resources_match_emitted_media_and_vector_icons() {
         let app = ShowcaseApp::new();
         let resources = app.render_resources();
 
+        let primitives = app.primitives();
         let texture = app
             .primitives()
             .iter()
@@ -2148,14 +2149,6 @@ mod tests {
                 _ => None,
             })
             .expect("editor emits viewport texture");
-        let image = app
-            .primitives()
-            .iter()
-            .find_map(|primitive| match primitive {
-                Primitive::Image(image) => Some(image.image),
-                _ => None,
-            })
-            .expect("editor emits icon images");
 
         assert!(resources.texture(texture).is_some());
         assert_eq!(
@@ -2169,13 +2162,16 @@ mod tests {
                 .is_some_and(|snapshot| snapshot.width == 1280 && snapshot.height == 720)
         );
         assert!(
-            resources
-                .image(image)
-                .and_then(|resource| resource.atlas_region)
-                .and_then(|region| resources.image(region.atlas))
-                .and_then(|atlas| atlas.pixels.as_ref())
-                .is_some_and(|pixels| pixels.width == 238 && pixels.height == 136)
+            !primitives
+                .iter()
+                .any(|primitive| matches!(primitive, Primitive::Image(_)))
         );
+        assert!(
+            primitives
+                .iter()
+                .any(|primitive| matches!(primitive, Primitive::Line(_) | Primitive::Path(_)))
+        );
+        assert!(!resources.snapshot().images.is_empty());
     }
 
     #[test]
@@ -2461,7 +2457,12 @@ mod tests {
         assert!(
             primitives
                 .iter()
-                .any(|item| matches!(item, Primitive::Image(_)))
+                .any(|item| matches!(item, Primitive::Texture(_)))
+        );
+        assert!(
+            primitives
+                .iter()
+                .any(|item| matches!(item, Primitive::Line(_) | Primitive::Path(_)))
         );
         assert!(
             primitives
