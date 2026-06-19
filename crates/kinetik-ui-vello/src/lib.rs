@@ -1516,8 +1516,7 @@ fn encode_image_command(
     device_scale: f64,
 ) {
     if let Some(draw) = resolve_image_draw(resources, image) {
-        let rect = snap_image_rect_to_device(rect, draw.sampling, device_scale);
-        encode_image_region(scene, transform, rect, image_cache, draw);
+        encode_image_region(scene, transform, rect, image_cache, draw, device_scale);
     } else {
         let rect = snap_rect_to_device(rect, device_scale);
         encode_resource_placeholder(
@@ -1546,15 +1545,22 @@ fn encode_texture_command(
         && let Some(snapshot) = resource.snapshot.as_ref()
         && source_size_matches_snapshot(source_size, snapshot)
     {
-        let rect = snap_image_rect_to_device(rect, resource.sampling, device_scale);
-        encode_cached_texture(
+        let source = full_image_source(snapshot);
+        if snapshot.width == 0 || snapshot.height == 0 || rect.width <= 0.0 || rect.height <= 0.0 {
+            return;
+        }
+        if !atlas_source_is_finite_positive(source) || !atlas_source_fits_image(source, snapshot) {
+            return;
+        }
+
+        fill_image_region(
             scene,
             transform,
             rect,
-            image_cache,
-            texture,
-            snapshot,
+            image_cache.texture_data(texture, snapshot),
+            source,
             resource.sampling,
+            device_scale,
         );
     } else {
         let rect = snap_rect_to_device(rect, device_scale);
@@ -2086,39 +2092,13 @@ fn transform_point(transform: Affine, point: Point) -> Point {
     )
 }
 
-fn encode_cached_texture(
-    scene: &mut Scene,
-    transform: Affine,
-    rect: Rect,
-    image_cache: &mut ImageDataCache,
-    texture: TextureId,
-    image: &RenderImage,
-    sampling: RenderImageSampling,
-) {
-    let source = full_image_source(image);
-    if image.width == 0 || image.height == 0 || rect.width <= 0.0 || rect.height <= 0.0 {
-        return;
-    }
-    if !atlas_source_is_finite_positive(source) || !atlas_source_fits_image(source, image) {
-        return;
-    }
-
-    fill_image_region(
-        scene,
-        transform,
-        rect,
-        image_cache.texture_data(texture, image),
-        source,
-        sampling,
-    );
-}
-
 fn encode_image_region(
     scene: &mut Scene,
     transform: Affine,
     rect: Rect,
     image_cache: &mut ImageDataCache,
     draw: ResolvedImageDraw<'_>,
+    device_scale: f64,
 ) {
     let image = draw.pixels;
     let source = draw.source;
@@ -2136,6 +2116,7 @@ fn encode_image_region(
         image_cache.image_data(draw.payload, image),
         source,
         draw.sampling,
+        device_scale,
     );
 }
 
@@ -2146,15 +2127,31 @@ fn fill_image_region(
     image_data: ImageData,
     source: Rect,
     sampling: RenderImageSampling,
+    device_scale: f64,
 ) {
+    let transform = snapped_image_region_transform(transform, rect, source, sampling, device_scale);
     let brush = ImageBrush::new(image_data).with_quality(image_quality(sampling));
     scene.fill(
         Fill::NonZero,
-        image_region_transform(transform, rect, source),
+        transform,
         brush.as_ref(),
         None,
         &kurbo_rect(source),
     );
+}
+
+fn snapped_image_region_transform(
+    transform: Affine,
+    rect: Rect,
+    source: Rect,
+    sampling: RenderImageSampling,
+    device_scale: f64,
+) -> Affine {
+    image_region_transform(
+        transform,
+        snap_image_rect_to_device(rect, sampling, device_scale),
+        source,
+    )
 }
 
 fn image_region_transform(transform: Affine, rect: Rect, source: Rect) -> Affine {
@@ -2552,8 +2549,8 @@ mod tests {
         snap_rect_to_device, snap_stroke_center_to_device, snap_stroked_line_to_device,
         snap_stroked_path_elements_to_device, snap_stroked_rect_to_device,
         snap_text_glyph_baseline_to_device, snap_text_origin_to_device,
-        snap_text_transform_origin_to_device, transform_point, translate_primitives,
-        viewport_device_scale,
+        snap_text_transform_origin_to_device, snapped_image_region_transform, transform_point,
+        translate_primitives, viewport_device_scale,
     };
     use kinetik_ui_core::render::TexturePrimitive;
     use kinetik_ui_core::{
@@ -3801,6 +3798,25 @@ mod tests {
         assert_approx64(coeffs[3], 1.25);
         assert_approx64(coeffs[4], 85.0);
         assert_approx64(coeffs[5], 86.25);
+    }
+
+    #[test]
+    fn snapped_image_regions_place_atlas_origin_on_physical_pixels() {
+        let source = Rect::new(33.0, 34.0, 32.0, 32.0);
+        let rect = Rect::new(101.0, 103.0, 32.0, 32.0);
+        let transform = snapped_image_region_transform(
+            root_transform(1.25),
+            rect,
+            source,
+            RenderImageSampling::UiIcon,
+            1.25,
+        );
+
+        let mapped = transform * KurboPoint::new(f64::from(source.x), f64::from(source.y));
+        assert!((mapped.x - mapped.x.round()).abs() < 0.000_01);
+        assert!((mapped.y - mapped.y.round()).abs() < 0.000_01);
+        assert!((mapped.x - 126.0).abs() < 0.000_01);
+        assert!((mapped.y - 129.0).abs() < 0.000_01);
     }
 
     #[test]
