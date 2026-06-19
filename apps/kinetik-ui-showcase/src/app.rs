@@ -271,27 +271,27 @@ impl ShowcaseApp {
         resources.register_image(ImageResource {
             id: ImageId::from_raw(7),
             size: Size::new(64.0, 48.0),
-            sampling: RenderImageSampling::default(),
+            sampling: RenderImageSampling::Smooth,
             pixels: Some(thumbnail_image()),
             atlas_region: None,
         });
         resources.register_image(ImageResource {
             id: ImageId::from_raw(11),
             size: Size::new(96.0, 72.0),
-            sampling: RenderImageSampling::default(),
+            sampling: RenderImageSampling::Smooth,
             pixels: Some(primitive_image()),
             atlas_region: None,
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(99),
             size: Size::new(384.0, 216.0),
-            sampling: RenderImageSampling::default(),
+            sampling: RenderImageSampling::HighQuality,
             snapshot: Some(viewport_texture()),
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(101),
             size: Size::new(256.0, 144.0),
-            sampling: RenderImageSampling::default(),
+            sampling: RenderImageSampling::HighQuality,
             snapshot: Some(video_texture()),
         });
         resources

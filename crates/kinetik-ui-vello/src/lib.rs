@@ -1895,8 +1895,9 @@ fn logical_size_matches_snapshot(size: Size, image: &RenderImage) -> bool {
 
 fn image_quality(sampling: RenderImageSampling) -> ImageQuality {
     match sampling {
-        RenderImageSampling::Pixelated => ImageQuality::Low,
+        RenderImageSampling::Pixelated | RenderImageSampling::UiIcon => ImageQuality::Low,
         RenderImageSampling::Smooth => ImageQuality::Medium,
+        RenderImageSampling::HighQuality => ImageQuality::High,
     }
 }
 
@@ -3194,8 +3195,16 @@ mod tests {
             ImageQuality::Low
         );
         assert_eq!(
+            image_quality(RenderImageSampling::UiIcon),
+            ImageQuality::Low
+        );
+        assert_eq!(
             image_quality(RenderImageSampling::Smooth),
             ImageQuality::Medium
+        );
+        assert_eq!(
+            image_quality(RenderImageSampling::HighQuality),
+            ImageQuality::High
         );
     }
 

@@ -53,8 +53,12 @@ pub enum RenderImageSampling {
     /// Preserve crisp texels. Best for icons, UI snapshots, and editor/game surfaces.
     #[default]
     Pixelated,
+    /// Preserve crisp UI icon edges while allowing renderers to use icon-specific policies.
+    UiIcon,
     /// Smooth resampling for photographic or heavily scaled content.
     Smooth,
+    /// Prioritize quality for previews or photographic content where scaling artifacts matter.
+    HighQuality,
 }
 
 /// CPU image data accepted by renderer boundaries.
@@ -310,20 +314,22 @@ impl RenderResourceSnapshot {
         lines.push("resources:".to_owned());
         for image in &self.images {
             lines.push(format!(
-                "  image#{id} size={width}x{height} pixels={pixels} atlas={atlas}",
+                "  image#{id} size={width}x{height} sampling={sampling} pixels={pixels} atlas={atlas}",
                 id = image.id,
                 width = format_f32(image.width),
                 height = format_f32(image.height),
+                sampling = format_sampling(image.sampling),
                 pixels = image.has_pixels,
                 atlas = format_optional_atlas(image.atlas),
             ));
         }
         for texture in &self.textures {
             lines.push(format!(
-                "  texture#{id} size={width}x{height} snapshot={snapshot}",
+                "  texture#{id} size={width}x{height} sampling={sampling} snapshot={snapshot}",
                 id = texture.id,
                 width = format_f32(texture.width),
                 height = format_f32(texture.height),
+                sampling = format_sampling(texture.sampling),
                 snapshot = texture.has_snapshot,
             ));
         }
@@ -352,6 +358,8 @@ pub struct ImageResourceSnapshot {
     pub height: OrderedF32,
     /// Whether drawable pixel data is present.
     pub has_pixels: bool,
+    /// Sampling intent.
+    pub sampling: RenderImageSampling,
     /// Atlas source when this resource is a region.
     pub atlas: Option<ImageAtlasRegionSnapshot>,
 }
@@ -363,6 +371,7 @@ impl ImageResourceSnapshot {
             width: OrderedF32::new(resource.size.width),
             height: OrderedF32::new(resource.size.height),
             has_pixels: resource.pixels.is_some(),
+            sampling: resource.sampling,
             atlas: resource
                 .atlas_region
                 .map(ImageAtlasRegionSnapshot::from_region),
@@ -408,6 +417,8 @@ pub struct TextureResourceSnapshot {
     pub height: OrderedF32,
     /// Whether a drawable CPU snapshot is present.
     pub has_snapshot: bool,
+    /// Sampling intent.
+    pub sampling: RenderImageSampling,
 }
 
 impl TextureResourceSnapshot {
@@ -417,6 +428,7 @@ impl TextureResourceSnapshot {
             width: OrderedF32::new(resource.size.width),
             height: OrderedF32::new(resource.size.height),
             has_snapshot: resource.snapshot.is_some(),
+            sampling: resource.sampling,
         }
     }
 }
@@ -485,6 +497,15 @@ fn format_optional_atlas(atlas: Option<ImageAtlasRegionSnapshot>) -> String {
             )
         },
     )
+}
+
+fn format_sampling(sampling: RenderImageSampling) -> &'static str {
+    match sampling {
+        RenderImageSampling::Pixelated => "pixelated",
+        RenderImageSampling::UiIcon => "ui_icon",
+        RenderImageSampling::Smooth => "smooth",
+        RenderImageSampling::HighQuality => "high_quality",
+    }
 }
 
 fn normalize_zero(value: f32) -> f32 {
@@ -711,7 +732,7 @@ mod tests {
 
         assert_eq!(
             resources.snapshot().to_text(),
-            "resources:\n  image#1 size=2.000x1.000 pixels=false atlas=none\n  image#2 size=4.000x3.000 pixels=true atlas=none\n  image#3 size=2.000x2.000 pixels=false atlas=2:(1.000,0.000,2.000,2.000)\n  texture#9 size=12.000x8.000 snapshot=false\n  text_layout#5 size=20.000x10.000 lines=2 glyphs=0"
+            "resources:\n  image#1 size=2.000x1.000 sampling=pixelated pixels=false atlas=none\n  image#2 size=4.000x3.000 sampling=pixelated pixels=true atlas=none\n  image#3 size=2.000x2.000 sampling=pixelated pixels=false atlas=2:(1.000,0.000,2.000,2.000)\n  texture#9 size=12.000x8.000 sampling=pixelated snapshot=false\n  text_layout#5 size=20.000x10.000 lines=2 glyphs=0"
         );
     }
 

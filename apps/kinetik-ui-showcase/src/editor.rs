@@ -1541,7 +1541,7 @@ pub fn register_resources(resources: &mut RenderResources) {
         resources.register_texture(TextureResource {
             id: VIEWPORT_TEXTURE,
             size: VIEWPORT_SIZE,
-            sampling: RenderImageSampling::default(),
+            sampling: RenderImageSampling::HighQuality,
             snapshot: Some(snapshot),
         });
     }
@@ -1552,7 +1552,7 @@ pub fn register_resources(resources: &mut RenderResources) {
                 (ICON_ATLAS_COLUMNS * ICON_SIZE) as f32,
                 (ICON_ATLAS_ROWS * ICON_SIZE) as f32,
             ),
-            sampling: RenderImageSampling::default(),
+            sampling: RenderImageSampling::UiIcon,
             pixels: Some(atlas),
             atlas_region: None,
         });
@@ -1563,7 +1563,7 @@ pub fn register_resources(resources: &mut RenderResources) {
         resources.register_image(ImageResource {
             id: *id,
             size: Size::new(ICON_SIZE as f32, ICON_SIZE as f32),
-            sampling: RenderImageSampling::default(),
+            sampling: RenderImageSampling::UiIcon,
             pixels: None,
             atlas_region: Some(ImageAtlasRegion {
                 atlas: ICON_ATLAS,
