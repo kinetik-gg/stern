@@ -941,7 +941,7 @@ pub const fn default_dark_theme() -> Theme {
         controls: ControlMetrics {
             control_height: 28.0,
             compact_control_height: 22.0,
-            icon_size: 14.0,
+            icon_size: 16.0,
             check_size: 14.0,
             padding_x: 8.0,
             padding_y: 4.0,
@@ -984,6 +984,7 @@ mod tests {
         assert_eq!(theme.text_size, 12.0);
         assert_eq!(theme.border_width, 1.0);
         assert_eq!(theme.controls.control_height, 28.0);
+        assert_eq!(theme.controls.icon_size, 16.0);
         assert_eq!(theme.font(TextRole::Body).line_height, 17.0);
     }
 
