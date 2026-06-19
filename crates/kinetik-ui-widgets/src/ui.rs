@@ -18,8 +18,9 @@ use crate::{
     icon_button as fallback_icon_button_widget,
     icon_button_with_label as fallback_icon_button_with_label_widget,
     icon_button_with_library as icon_button_with_library_widget, image as image_widget,
-    image_icon_button as image_icon_button_widget, image_semantics, label as label_widget,
-    label_semantics, list_row as list_row_widget,
+    image_icon_button as image_icon_button_widget,
+    image_icon_selectable_button as image_icon_selectable_button_widget, image_semantics,
+    label as label_widget, label_semantics, list_row as list_row_widget,
     multi_line_text_field_with_text_layouts as multi_line_text_field_widget,
     numeric_input_with_text_layouts as numeric_input_widget, panel as panel_widget,
     panel_semantics, radio_button as radio_button_widget,
@@ -502,6 +503,52 @@ impl<'a> Ui<'a> {
         let output =
             image_icon_button_widget(id, rect, image, label, input, memory, theme, disabled);
         self.push_interactive(output)
+    }
+
+    /// Emits a selectable bitmap-backed icon button with an accessible label.
+    pub fn image_icon_selectable_button(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        image: ImageId,
+        label: impl Into<String>,
+        selected: bool,
+        disabled: bool,
+    ) -> Response {
+        let id = self.id(key);
+        let theme = self.theme;
+        let (input, memory) = self.runtime.input_and_memory_mut();
+        let output = image_icon_selectable_button_widget(
+            id, rect, image, label, selected, input, memory, theme, disabled,
+        );
+        self.push_interactive(output)
+    }
+
+    /// Emits a selectable bitmap-backed icon button and assigns the value when clicked.
+    #[allow(clippy::too_many_arguments)]
+    pub fn image_icon_button_value<T: Copy + Eq>(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        image: ImageId,
+        label: impl Into<String>,
+        selected: &mut T,
+        value: T,
+        disabled: bool,
+    ) -> Response {
+        let response = self.image_icon_selectable_button(
+            key,
+            rect,
+            image,
+            label,
+            *selected == value,
+            disabled,
+        );
+        if response.clicked {
+            *selected = value;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        response
     }
 
     /// Emits a tab header and returns its interaction response.
@@ -1524,6 +1571,37 @@ mod tests {
         assert!(radio.clicked);
         assert!(radio.state.selected);
         assert_eq!(selected, 4);
+        assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+        let mut memory = UiMemory::new();
+        let input = pressed_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.image_icon_button_value(
+            "image-icon",
+            rect,
+            ImageId::from_raw(7),
+            "Tool",
+            &mut selected,
+            5,
+            false,
+        );
+        assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
+
+        let input = released_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        let icon = ui.image_icon_button_value(
+            "image-icon",
+            rect,
+            ImageId::from_raw(7),
+            "Tool",
+            &mut selected,
+            5,
+            false,
+        );
+        let output = ui.finish_output();
+        assert!(icon.clicked);
+        assert!(icon.state.selected);
+        assert_eq!(selected, 5);
         assert_eq!(output.repaint, RepaintRequest::NextFrame);
     }
 

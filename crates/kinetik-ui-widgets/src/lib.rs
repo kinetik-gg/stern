@@ -1000,13 +1000,33 @@ pub fn image_icon_button(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    let response = focusable(id, rect, input, memory, disabled);
+    image_icon_selectable_button(
+        id, rect, image, label, false, input, memory, theme, disabled,
+    )
+}
+
+/// Emits a selectable icon button backed by a bitmap image resource.
+#[allow(clippy::too_many_arguments)]
+pub fn image_icon_selectable_button(
+    id: WidgetId,
+    rect: Rect,
+    image: ImageId,
+    label: impl Into<String>,
+    selected: bool,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    disabled: bool,
+) -> WidgetOutput {
+    let mut response = focusable(id, rect, input, memory, disabled);
+    let selected = clicked_select_state(selected, response.clicked);
+    response.state.selected = selected;
     let recipe = theme.button(ComponentState {
         hovered: response.state.hovered,
         pressed: response.state.pressed,
         focused: response.state.focused,
         disabled,
-        selected: false,
+        selected,
     });
     let icon_rect = fit_box(
         rect,
@@ -1014,6 +1034,8 @@ pub fn image_icon_button(
         kinetik_ui_core::Alignment::Center,
         kinetik_ui_core::Alignment::Center,
     );
+    let mut semantics = icon_button_semantics(id, rect, label, disabled);
+    semantics.state.selected = selected;
 
     with_hover_cursor(
         WidgetOutput::new(
@@ -1031,10 +1053,7 @@ pub fn image_icon_button(
                 }),
             ],
         )
-        .with_semantic(with_response_state(
-            icon_button_semantics(id, rect, label, disabled),
-            &response,
-        )),
+        .with_semantic(with_response_state(semantics, &response)),
         &response,
         CursorShape::PointingHand,
     )
@@ -2105,7 +2124,7 @@ mod tests {
     use super::{
         IconId, PanelFrame, button, button_semantics, checkbox, checkbox_semantics,
         checkbox_with_label, icon_button, icon_button_with_label, icon_button_with_library, image,
-        image_icon_button, label, list_row, multi_line_text_field,
+        image_icon_button, image_icon_selectable_button, label, list_row, multi_line_text_field,
         multi_line_text_field_with_text_layouts, numeric_input, panel, panel_semantics,
         radio_button_with_label, search_field, search_field_semantics, slider, slider_semantics,
         slider_with_label, tab_button, text_field, text_field_semantics,
@@ -2407,6 +2426,40 @@ mod tests {
         assert!(row_response.clicked);
         assert!(row_response.state.selected);
         assert!(row.semantics[0].state.selected);
+
+        let mut icon_memory = UiMemory::new();
+        let icon_id = WidgetId::from_key("image-icon");
+        let icon_rect = Rect::new(0.0, 64.0, 28.0, 28.0);
+        let mut input = input_at(4.0, 68.0);
+        input.pointer.primary = PointerButtonState::new(true, true, false);
+        image_icon_selectable_button(
+            icon_id,
+            icon_rect,
+            ImageId::from_raw(7),
+            "Tool",
+            false,
+            &input,
+            &mut icon_memory,
+            &theme,
+            false,
+        );
+        input.pointer.primary = PointerButtonState::new(false, false, true);
+        let icon = image_icon_selectable_button(
+            icon_id,
+            icon_rect,
+            ImageId::from_raw(7),
+            "Tool",
+            false,
+            &input,
+            &mut icon_memory,
+            &theme,
+            false,
+        );
+
+        let icon_response = icon.response.expect("icon response");
+        assert!(icon_response.clicked);
+        assert!(icon_response.state.selected);
+        assert!(icon.semantics[0].state.selected);
     }
 
     #[test]

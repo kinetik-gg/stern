@@ -752,18 +752,27 @@ impl EditorShowcase {
             ),
         ] {
             let button = Rect::new(x, 33.0, 28.0, 26.0);
-            if self.selected_tool == tool {
-                rect(
-                    ui,
-                    button.inset(-1.0),
-                    rgb(48, 79, 128),
-                    Some(rgb(76, 128, 208)),
-                );
-            }
-            let response =
-                ui.image_icon_button(("editor.tool", action), button, icon, label, false);
+            let response = ui.image_icon_button_value(
+                ("editor.tool", action),
+                button,
+                icon,
+                label,
+                &mut self.selected_tool,
+                tool,
+                false,
+            );
             if response.clicked {
-                self.trigger(invocations, action, ActionSource::Button);
+                let status = match tool {
+                    EditorTool::Select => "Select tool active",
+                    EditorTool::Move => "Move tool active",
+                    EditorTool::Rotate => "Rotate tool active",
+                    EditorTool::Scale => "Scale tool active",
+                };
+                status.clone_into(&mut self.status);
+                invocations.push(EditorInvocation {
+                    action_id: action,
+                    source: ActionSource::Button,
+                });
             }
             x += 32.0;
         }
@@ -1832,8 +1841,9 @@ fn inspector_label_width(grid_width: f32) -> f32 {
 #[allow(clippy::float_cmp, clippy::items_after_test_module)]
 mod tests {
     use super::{
-        EditorShowcase, ICON_ASSETS, ICON_ATLAS, ICON_ATLAS_CELL_SIZE, ICON_ATLAS_PADDING,
-        ICON_CROSSHAIR, ICON_SIZE, icon_atlas_image, inspector_label_width, register_resources,
+        EditorShowcase, EditorTool, ICON_ASSETS, ICON_ATLAS, ICON_ATLAS_CELL_SIZE,
+        ICON_ATLAS_PADDING, ICON_CROSSHAIR, ICON_SIZE, icon_atlas_image, inspector_label_width,
+        register_resources,
     };
     use kinetik_ui::core::{
         FrameContext, PhysicalSize, Point, PointerButtonState, PointerInput, Primitive, Rect,
@@ -1875,6 +1885,34 @@ mod tests {
         assert!(!editor.snap_enabled);
         assert!(output.primitives.iter().any(|primitive| {
             matches!(primitive, Primitive::Text(text) if text.text == "Snap off")
+        }));
+    }
+
+    #[test]
+    fn toolbar_tool_selection_updates_status_same_frame() {
+        let mut editor = EditorShowcase::new();
+        let mut memory = UiMemory::new();
+        let theme = default_dark_theme();
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(14.0, 40.0, true, true, false)),
+            &mut memory,
+            &theme,
+        );
+        editor.render(&mut ui, 0);
+        let _ = ui.finish_output();
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(14.0, 40.0, false, false, true)),
+            &mut memory,
+            &theme,
+        );
+        editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+
+        assert_eq!(editor.selected_tool, EditorTool::Select);
+        assert!(output.primitives.iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "Select tool active")
         }));
     }
 
