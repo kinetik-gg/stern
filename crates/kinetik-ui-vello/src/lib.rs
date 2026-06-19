@@ -1990,7 +1990,7 @@ fn encode_shaped_text_device_space(
                 Fill::NonZero,
                 run.glyphs.iter().map(|glyph| Glyph {
                     id: glyph.id,
-                    x: origin.x + glyph.x * scale as f32,
+                    x: snap_text_glyph_position_to_device(origin.x + glyph.x * scale as f32),
                     y: snap_text_glyph_baseline_to_device(origin.y + glyph.y * scale as f32),
                 }),
             );
@@ -2027,7 +2027,9 @@ fn encode_shaped_text_axis_aligned_device_space(
                 Fill::NonZero,
                 run.glyphs.iter().map(|glyph| Glyph {
                     id: glyph.id,
-                    x: origin.x + (f64::from(glyph.x) * scale_x) as f32,
+                    x: snap_text_glyph_position_to_device(
+                        origin.x + (f64::from(glyph.x) * scale_x) as f32,
+                    ),
                     y: snap_text_glyph_baseline_to_device(
                         origin.y + (f64::from(glyph.y) * effective_y_scale) as f32,
                     ),
@@ -2038,6 +2040,10 @@ fn encode_shaped_text_axis_aligned_device_space(
 
 fn snap_text_origin_to_device(origin: Point) -> Point {
     Point::new(origin.x.round(), origin.y.round())
+}
+
+fn snap_text_glyph_position_to_device(position: f32) -> f32 {
+    position.round()
 }
 
 fn snap_text_glyph_baseline_to_device(position: f32) -> f32 {
@@ -4153,7 +4159,7 @@ mod tests {
     }
 
     #[test]
-    fn physical_text_preserves_shaped_horizontal_glyph_positions() {
+    fn physical_text_snaps_shaped_horizontal_glyph_positions() {
         let mut renderer = VelloRenderer::new();
         let resources = RenderResources::new();
         let mut text_engine = CosmicTextEngine::new();
@@ -4193,8 +4199,14 @@ mod tests {
         assert!(output.diagnostics.is_empty());
         assert_eq!(glyphs.len(), expected_x.len());
         for (glyph, expected) in glyphs.iter().zip(expected_x) {
-            assert_approx(glyph.x, expected);
+            assert_approx(glyph.x, expected.round());
         }
+        assert!(
+            glyphs
+                .iter()
+                .all(|glyph| (glyph.x - glyph.x.round()).abs() <= 0.001),
+            "glyph x positions should stay snapped to physical pixels"
+        );
         assert!(
             glyphs
                 .iter()
@@ -4243,7 +4255,12 @@ mod tests {
             assert_approx(glyph_run.font_size, expected_font_size);
             assert!(glyph_run.hint);
             assert_approx(first_glyph.x, expected_x);
-            assert!((first_glyph.x - first_glyph.x.round()).abs() <= 0.001);
+            assert!(
+                glyphs
+                    .iter()
+                    .all(|glyph| (glyph.x - glyph.x.round()).abs() <= 0.001),
+                "scale {scale} should snap glyph x positions"
+            );
             assert!(
                 glyphs
                     .iter()
@@ -4288,8 +4305,12 @@ mod tests {
         assert_approx(glyph_run.font_size, 20.0);
         assert!(glyph_run.hint);
         assert!(glyphs.len() > 1);
-        let first_glyph = glyphs.first().expect("glyph");
-        assert!((first_glyph.x - first_glyph.x.round()).abs() <= 0.001);
+        assert!(
+            glyphs
+                .iter()
+                .all(|glyph| (glyph.x - glyph.x.round()).abs() <= 0.001),
+            "translated text should snap glyph x positions"
+        );
         assert!(
             glyphs
                 .iter()
@@ -4348,8 +4369,12 @@ mod tests {
         assert_approx(glyph_transform.matrix[0], 0.8125);
         assert_approx(glyph_transform.matrix[3], 1.0);
         assert!(glyphs.len() > 1);
-        let first_glyph = glyphs.first().expect("glyph");
-        assert!((first_glyph.x - first_glyph.x.round()).abs() <= 0.001);
+        assert!(
+            glyphs
+                .iter()
+                .all(|glyph| (glyph.x - glyph.x.round()).abs() <= 0.001),
+            "non-uniform text should snap glyph x positions"
+        );
         assert!(
             glyphs
                 .iter()

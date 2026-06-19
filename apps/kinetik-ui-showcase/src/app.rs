@@ -2641,7 +2641,6 @@ mod tests {
                 });
                 let encoding = renderer.scene().encoding();
                 let glyphs = &encoding.resources.glyphs;
-                let glyph_runs = &encoding.resources.glyph_runs;
 
                 assert!(
                     output.diagnostics.is_empty(),
@@ -2653,12 +2652,10 @@ mod tests {
                     "{page:?} at {size:?} emitted no glyphs at fractional DPI"
                 );
                 assert!(
-                    glyph_runs.iter().all(|run| {
-                        glyphs
-                            .get(run.glyphs.start)
-                            .is_some_and(|glyph| (glyph.x - glyph.x.round()).abs() <= 0.001)
-                    }),
-                    "{page:?} at {size:?} emitted fractional glyph run origins"
+                    glyphs
+                        .iter()
+                        .all(|glyph| (glyph.x - glyph.x.round()).abs() <= 0.001),
+                    "{page:?} at {size:?} emitted fractional glyph x positions"
                 );
                 assert!(
                     glyphs
