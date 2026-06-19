@@ -29,6 +29,10 @@ use vello::{
 const DEFAULT_WIDTH: usize = 1440;
 const DEFAULT_HEIGHT: usize = 900;
 
+pub(crate) fn showcase_antialiasing_method() -> AaConfig {
+    AaConfig::Msaa16
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct RenderOnceTarget {
     physical_width: usize,
@@ -223,7 +227,7 @@ fn render_scene_to_texture(
             base_color: VelloColor::from_rgb8(11, 12, 13),
             width,
             height,
-            antialiasing_method: AaConfig::Area,
+            antialiasing_method: showcase_antialiasing_method(),
         },
     )?;
     Ok(())
@@ -401,9 +405,10 @@ impl From<vello::Error> for RenderOnceVelloError {
 mod tests {
     use super::{
         Size, align_to, f64_arg, logical_size_from_pixels, render_once_target,
-        render_once_viewport, submit_render_once_to_vello, usize_arg,
+        render_once_viewport, showcase_antialiasing_method, submit_render_once_to_vello, usize_arg,
     };
     use kinetik_ui_showcase::app::ShowcaseApp;
+    use vello::AaConfig;
 
     #[test]
     fn render_once_cli_parses_physical_scale_and_dimensions() {
@@ -495,6 +500,11 @@ mod tests {
         assert!(render_once_target(&args).is_err());
         assert!(render_once_viewport(&app, 1440, 900, 0.0).is_err());
         assert!(render_once_viewport(&app, 1440, 900, f64::NAN).is_err());
+    }
+
+    #[test]
+    fn render_once_prefers_crisp_showcase_antialiasing() {
+        assert_eq!(showcase_antialiasing_method(), AaConfig::Msaa16);
     }
 
     #[test]

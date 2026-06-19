@@ -580,8 +580,8 @@ fn surface_status_forces_reconfigure(status: SurfaceStatus) -> bool {
     matches!(status, SurfaceStatus::Outdated | SurfaceStatus::Lost)
 }
 
-fn live_antialiasing_method() -> AaConfig {
-    AaConfig::Area
+pub(crate) fn live_antialiasing_method() -> AaConfig {
+    crate::showcase_antialiasing_method()
 }
 
 fn live_present_mode() -> PresentMode {
@@ -702,8 +702,12 @@ mod tests {
     }
 
     #[test]
-    fn live_renderer_prefers_responsive_area_antialiasing() {
-        assert!(matches!(live_antialiasing_method(), AaConfig::Area));
+    fn live_renderer_uses_shared_crisp_showcase_antialiasing() {
+        assert_eq!(live_antialiasing_method(), AaConfig::Msaa16);
+        assert_eq!(
+            live_antialiasing_method(),
+            crate::showcase_antialiasing_method()
+        );
     }
 
     #[test]
