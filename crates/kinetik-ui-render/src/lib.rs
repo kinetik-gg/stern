@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use kinetik_ui_core::{ImageId, Primitive, Size, TextLayoutId, TextureId, ViewportInfo};
+use kinetik_ui_core::{ImageId, Primitive, Rect, Size, TextLayoutId, TextureId, ViewportInfo};
 use kinetik_ui_text::{ShapedTextLayout, StoredTextLayout, TextLayoutKey};
 
 /// Static image resource known by a renderer.
@@ -21,6 +21,17 @@ pub struct ImageResource {
     pub sampling: RenderImageSampling,
     /// Optional CPU pixel data to draw.
     pub pixels: Option<RenderImage>,
+    /// Optional source rectangle into another image resource.
+    pub atlas_region: Option<ImageAtlasRegion>,
+}
+
+/// Source rectangle inside an atlas image resource.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ImageAtlasRegion {
+    /// Atlas image handle.
+    pub atlas: ImageId,
+    /// Source rectangle in atlas pixels.
+    pub source: Rect,
 }
 
 /// Dynamic texture resource known by a renderer.
@@ -299,11 +310,12 @@ impl RenderResourceSnapshot {
         lines.push("resources:".to_owned());
         for image in &self.images {
             lines.push(format!(
-                "  image#{id} size={width}x{height} pixels={pixels}",
+                "  image#{id} size={width}x{height} pixels={pixels} atlas={atlas}",
                 id = image.id,
                 width = format_f32(image.width),
                 height = format_f32(image.height),
                 pixels = image.has_pixels,
+                atlas = format_optional_atlas(image.atlas),
             ));
         }
         for texture in &self.textures {
@@ -340,6 +352,8 @@ pub struct ImageResourceSnapshot {
     pub height: OrderedF32,
     /// Whether drawable pixel data is present.
     pub has_pixels: bool,
+    /// Atlas source when this resource is a region.
+    pub atlas: Option<ImageAtlasRegionSnapshot>,
 }
 
 impl ImageResourceSnapshot {
@@ -349,6 +363,36 @@ impl ImageResourceSnapshot {
             width: OrderedF32::new(resource.size.width),
             height: OrderedF32::new(resource.size.height),
             has_pixels: resource.pixels.is_some(),
+            atlas: resource
+                .atlas_region
+                .map(ImageAtlasRegionSnapshot::from_region),
+        }
+    }
+}
+
+/// Snapshot of one atlas region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImageAtlasRegionSnapshot {
+    /// Raw atlas image handle.
+    pub atlas: u64,
+    /// Source x coordinate.
+    pub x: OrderedF32,
+    /// Source y coordinate.
+    pub y: OrderedF32,
+    /// Source width.
+    pub width: OrderedF32,
+    /// Source height.
+    pub height: OrderedF32,
+}
+
+impl ImageAtlasRegionSnapshot {
+    fn from_region(region: ImageAtlasRegion) -> Self {
+        Self {
+            atlas: region.atlas.raw(),
+            x: OrderedF32::new(region.source.x),
+            y: OrderedF32::new(region.source.y),
+            width: OrderedF32::new(region.source.width),
+            height: OrderedF32::new(region.source.height),
         }
     }
 }
@@ -425,6 +469,22 @@ impl OrderedF32 {
 
 fn format_f32(value: OrderedF32) -> String {
     format!("{:.3}", value.get())
+}
+
+fn format_optional_atlas(atlas: Option<ImageAtlasRegionSnapshot>) -> String {
+    atlas.map_or_else(
+        || "none".to_owned(),
+        |atlas| {
+            format!(
+                "{}:({},{},{},{})",
+                atlas.atlas,
+                format_f32(atlas.x),
+                format_f32(atlas.y),
+                format_f32(atlas.width),
+                format_f32(atlas.height)
+            )
+        },
+    )
 }
 
 fn normalize_zero(value: f32) -> f32 {
@@ -511,8 +571,9 @@ mod tests {
     use std::convert::Infallible;
 
     use super::{
-        ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput, RenderImage,
-        RenderImageSampling, RenderResources, RendererBackend, TextLayoutResource, TextureResource,
+        ImageAtlasRegion, ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput,
+        RenderImage, RenderImageSampling, RenderResources, RendererBackend, TextLayoutResource,
+        TextureResource,
     };
     use kinetik_ui_core::{
         ImageId, PhysicalSize, ScaleFactor, Size, TextLayoutId, TextureId, ViewportInfo,
@@ -575,6 +636,7 @@ mod tests {
             size: Size::new(1.0, 1.0),
             sampling: RenderImageSampling::default(),
             pixels: None,
+            atlas_region: None,
         });
         resources.register_texture(TextureResource {
             id: texture,
@@ -617,6 +679,17 @@ mod tests {
             size: Size::new(4.0, 3.0),
             sampling: RenderImageSampling::default(),
             pixels: Some(RenderImage::rgba8(1, 1, vec![255; 4]).expect("valid image")),
+            atlas_region: None,
+        });
+        resources.register_image(ImageResource {
+            id: ImageId::from_raw(3),
+            size: Size::new(2.0, 2.0),
+            sampling: RenderImageSampling::default(),
+            pixels: None,
+            atlas_region: Some(ImageAtlasRegion {
+                atlas: ImageId::from_raw(2),
+                source: kinetik_ui_core::Rect::new(1.0, 0.0, 2.0, 2.0),
+            }),
         });
         resources.register_text_layout(TextLayoutResource {
             id: TextLayoutId::from_raw(5),
@@ -633,11 +706,12 @@ mod tests {
             size: Size::new(2.0, 1.0),
             sampling: RenderImageSampling::default(),
             pixels: None,
+            atlas_region: None,
         });
 
         assert_eq!(
             resources.snapshot().to_text(),
-            "resources:\n  image#1 size=2.000x1.000 pixels=false\n  image#2 size=4.000x3.000 pixels=true\n  texture#9 size=12.000x8.000 snapshot=false\n  text_layout#5 size=20.000x10.000 lines=2 glyphs=0"
+            "resources:\n  image#1 size=2.000x1.000 pixels=false atlas=none\n  image#2 size=4.000x3.000 pixels=true atlas=none\n  image#3 size=2.000x2.000 pixels=false atlas=2:(1.000,0.000,2.000,2.000)\n  texture#9 size=12.000x8.000 snapshot=false\n  text_layout#5 size=20.000x10.000 lines=2 glyphs=0"
         );
     }
 

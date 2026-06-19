@@ -6,9 +6,9 @@ use kinetik_ui_core::{
     ViewportInfo,
 };
 pub use kinetik_ui_render::{
-    ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput, RenderImage,
-    RenderImageAlpha, RenderImageFormat, RenderImageSampling, RenderResources, RendererBackend,
-    TextLayoutResource, TextureResource, Translation as RenderTranslation,
+    ImageAtlasRegion, ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput,
+    RenderImage, RenderImageAlpha, RenderImageFormat, RenderImageSampling, RenderResources,
+    RendererBackend, TextLayoutResource, TextureResource, Translation as RenderTranslation,
 };
 use kinetik_ui_text::{CosmicTextEngine, ShapedTextLayout, TextLayoutKey, TextStyle};
 use vello::{
@@ -327,13 +327,7 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                 let Some(rect) = sanitize_rect(image.rect, &mut diagnostics, "image") else {
                     continue;
                 };
-                match resources.image(image.image) {
-                    None => diagnostics.push(RenderDiagnostic::MissingImage(image.image)),
-                    Some(resource) if resource.pixels.is_none() => {
-                        diagnostics.push(RenderDiagnostic::MissingImagePixels(image.image));
-                    }
-                    Some(_) => {}
-                }
+                validate_image_resource(resources, image.image, &mut diagnostics);
                 commands.push(render_command(
                     &layers,
                     &clips,
@@ -434,6 +428,39 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
     Translation {
         commands,
         diagnostics,
+    }
+}
+
+fn validate_image_resource(
+    resources: &RenderResources,
+    image: ImageId,
+    diagnostics: &mut Vec<RenderDiagnostic>,
+) {
+    let Some(resource) = resources.image(image) else {
+        diagnostics.push(RenderDiagnostic::MissingImage(image));
+        return;
+    };
+    if resource.pixels.is_some() {
+        return;
+    }
+    let Some(region) = resource.atlas_region else {
+        diagnostics.push(RenderDiagnostic::MissingImagePixels(image));
+        return;
+    };
+    if !atlas_source_is_finite_positive(region.source) {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("image_atlas_source"));
+        return;
+    }
+    let Some(atlas) = resources.image(region.atlas) else {
+        diagnostics.push(RenderDiagnostic::MissingImage(region.atlas));
+        return;
+    };
+    let Some(pixels) = atlas.pixels.as_ref() else {
+        diagnostics.push(RenderDiagnostic::MissingImagePixels(region.atlas));
+        return;
+    };
+    if !atlas_source_fits_image(region.source, pixels) {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("image_atlas_source"));
     }
 }
 
@@ -1237,10 +1264,8 @@ fn encode_image_command(
     device_scale: f64,
 ) {
     let rect = snap_rect_to_device(rect, device_scale);
-    if let Some(resource) = resources.image(image)
-        && let Some(pixels) = resource.pixels.as_ref()
-    {
-        encode_image(scene, transform, rect, pixels, resource.sampling);
+    if let Some((pixels, source, sampling)) = resolve_image_draw(resources, image) {
+        encode_image_region(scene, transform, rect, pixels, source, sampling);
     } else {
         encode_resource_placeholder(
             scene,
@@ -1278,6 +1303,24 @@ fn encode_texture_command(
             Color::rgba(0.60, 0.84, 0.62, 0.75),
         );
     }
+}
+
+fn resolve_image_draw(
+    resources: &RenderResources,
+    image: ImageId,
+) -> Option<(&RenderImage, Rect, RenderImageSampling)> {
+    let resource = resources.image(image)?;
+    if let Some(pixels) = resource.pixels.as_ref() {
+        return Some((pixels, full_image_source(pixels), resource.sampling));
+    }
+    let region = resource.atlas_region?;
+    let atlas = resources.image(region.atlas)?;
+    let pixels = atlas.pixels.as_ref()?;
+    atlas_source_fits_image(region.source, pixels).then_some((
+        pixels,
+        region.source,
+        resource.sampling,
+    ))
 }
 
 fn encode_shadow(scene: &mut Scene, transform: Affine, shadow: ShadowPrimitive) {
@@ -1594,7 +1637,28 @@ fn encode_image(
     image: &RenderImage,
     sampling: RenderImageSampling,
 ) {
+    encode_image_region(
+        scene,
+        transform,
+        rect,
+        image,
+        full_image_source(image),
+        sampling,
+    );
+}
+
+fn encode_image_region(
+    scene: &mut Scene,
+    transform: Affine,
+    rect: Rect,
+    image: &RenderImage,
+    source: Rect,
+    sampling: RenderImageSampling,
+) {
     if image.width == 0 || image.height == 0 || rect.width <= 0.0 || rect.height <= 0.0 {
+        return;
+    }
+    if !atlas_source_is_finite_positive(source) || !atlas_source_fits_image(source, image) {
         return;
     }
 
@@ -1606,12 +1670,42 @@ fn encode_image(
         height: image.height,
     };
     let brush = ImageBrush::new(image_data).with_quality(image_quality(sampling));
-    let scale_x = f64::from(rect.width) / f64::from(image.width);
-    let scale_y = f64::from(rect.height) / f64::from(image.height);
+    let scale_x = f64::from(rect.width) / f64::from(source.width);
+    let scale_y = f64::from(rect.height) / f64::from(source.height);
     let image_transform = transform
         * Affine::translate((f64::from(rect.x), f64::from(rect.y)))
-        * Affine::scale_non_uniform(scale_x, scale_y);
-    scene.draw_image(brush.as_ref(), image_transform);
+        * Affine::scale_non_uniform(scale_x, scale_y)
+        * Affine::translate((-f64::from(source.x), -f64::from(source.y)));
+    scene.fill(
+        Fill::NonZero,
+        image_transform,
+        brush.as_ref(),
+        None,
+        &kurbo_rect(source),
+    );
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn full_image_source(image: &RenderImage) -> Rect {
+    Rect::new(0.0, 0.0, image.width as f32, image.height as f32)
+}
+
+fn atlas_source_is_finite_positive(source: Rect) -> bool {
+    source.x.is_finite()
+        && source.y.is_finite()
+        && source.width.is_finite()
+        && source.height.is_finite()
+        && source.width > 0.0
+        && source.height > 0.0
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn atlas_source_fits_image(source: Rect, image: &RenderImage) -> bool {
+    atlas_source_is_finite_positive(source)
+        && source.x >= 0.0
+        && source.y >= 0.0
+        && source.max_x() <= image.width as f32
+        && source.max_y() <= image.height as f32
 }
 
 fn source_size_matches_snapshot(source_size: Size, image: &RenderImage) -> bool {
@@ -1887,9 +1981,9 @@ fn vello_gradient(gradient: &LinearGradient) -> PenikoGradient {
 #[cfg(test)]
 mod tests {
     use super::{
-        ImageResource, RenderCommand, RenderCommandKind, RenderDiagnostic, RenderFrameInput,
-        RenderImage, RenderImageSampling, RenderResources, RendererBackend, TextLayoutResource,
-        TextureResource, VelloRenderer, image_quality, physical_text_layout,
+        ImageAtlasRegion, ImageResource, RenderCommand, RenderCommandKind, RenderDiagnostic,
+        RenderFrameInput, RenderImage, RenderImageSampling, RenderResources, RendererBackend,
+        TextLayoutResource, TextureResource, VelloRenderer, image_quality, physical_text_layout,
         physical_text_layout_for_key, quantize_stroke_width_to_device, render_translation_snapshot,
         root_transform, snap_axis_aligned_translation, snap_point_to_device, snap_rect_to_device,
         snap_stroke_center_to_device, snap_stroked_line_to_device, snap_stroked_rect_to_device,
@@ -1914,6 +2008,7 @@ mod tests {
             size: Size::new(64.0, 64.0),
             sampling: RenderImageSampling::default(),
             pixels: Some(tiny_image()),
+            atlas_region: None,
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(2),
@@ -1931,12 +2026,35 @@ mod tests {
             size: Size::new(64.0, 64.0),
             sampling: RenderImageSampling::default(),
             pixels: None,
+            atlas_region: None,
         });
         resources.register_texture(TextureResource {
             id: TextureId::from_raw(2),
             size: Size::new(2.0, 2.0),
             sampling: RenderImageSampling::default(),
             snapshot: None,
+        });
+        resources
+    }
+
+    fn atlas_resources() -> RenderResources {
+        let mut resources = RenderResources::new();
+        resources.register_image(ImageResource {
+            id: ImageId::from_raw(1),
+            size: Size::new(2.0, 2.0),
+            sampling: RenderImageSampling::default(),
+            pixels: Some(tiny_image()),
+            atlas_region: None,
+        });
+        resources.register_image(ImageResource {
+            id: ImageId::from_raw(3),
+            size: Size::new(1.0, 1.0),
+            sampling: RenderImageSampling::default(),
+            pixels: None,
+            atlas_region: Some(ImageAtlasRegion {
+                atlas: ImageId::from_raw(1),
+                source: Rect::new(1.0, 0.0, 1.0, 1.0),
+            }),
         });
         resources
     }
@@ -2618,6 +2736,44 @@ mod tests {
     }
 
     #[test]
+    fn atlas_backed_image_resources_do_not_emit_missing_diagnostics() {
+        let primitives = vec![Primitive::Image(ImagePrimitive {
+            image: ImageId::from_raw(3),
+            rect: Rect::new(0.0, 0.0, 16.0, 16.0),
+        })];
+
+        let translation = translate_primitives(&primitives, &atlas_resources());
+
+        assert!(translation.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn invalid_atlas_source_is_diagnosed() {
+        let mut resources = atlas_resources();
+        resources.register_image(ImageResource {
+            id: ImageId::from_raw(4),
+            size: Size::new(4.0, 4.0),
+            sampling: RenderImageSampling::default(),
+            pixels: None,
+            atlas_region: Some(ImageAtlasRegion {
+                atlas: ImageId::from_raw(1),
+                source: Rect::new(1.0, 1.0, 4.0, 4.0),
+            }),
+        });
+        let primitives = vec![Primitive::Image(ImagePrimitive {
+            image: ImageId::from_raw(4),
+            rect: Rect::new(0.0, 0.0, 16.0, 16.0),
+        })];
+
+        let translation = translate_primitives(&primitives, &resources);
+
+        assert_eq!(
+            translation.diagnostics,
+            vec![RenderDiagnostic::InvalidGeometry("image_atlas_source")]
+        );
+    }
+
+    #[test]
     fn texture_source_size_mismatch_is_diagnosed_and_dropped() {
         let primitives = vec![Primitive::Texture(TexturePrimitive {
             texture: TextureId::from_raw(2),
@@ -2823,6 +2979,30 @@ mod tests {
             image_quality(RenderImageSampling::Smooth),
             ImageQuality::Medium
         );
+    }
+
+    #[test]
+    fn frame_submission_encodes_atlas_backed_image_resource() {
+        let mut renderer = VelloRenderer::new();
+        let resources = atlas_resources();
+        let primitives = vec![Primitive::Image(ImagePrimitive {
+            image: ImageId::from_raw(3),
+            rect: Rect::new(4.0, 4.0, 16.0, 16.0),
+        })];
+
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: ViewportInfo::new(
+                Size::new(100.0, 100.0),
+                kinetik_ui_core::PhysicalSize::new(100, 100),
+                ScaleFactor::ONE,
+            ),
+            primitives: &primitives,
+            resources: &resources,
+        });
+
+        assert!(output.diagnostics.is_empty());
+        assert!(!renderer.scene().encoding().is_empty());
+        assert!(!renderer.scene().encoding().resources.patches.is_empty());
     }
 
     #[test]
