@@ -2148,19 +2148,14 @@ mod tests {
     }
 
     #[test]
-    fn editor_toolbar_action_requests_follow_up_repaint() {
+    fn editor_grid_toolbar_updates_status_same_frame_and_requests_repaint() {
         let mut app = ShowcaseApp::new();
 
         click(&mut app, Point::new(197.0, 49.0));
 
         assert_eq!(app.action_count(), 1);
         assert_eq!(app.output().repaint, RepaintRequest::NextFrame);
-
-        app.update(&ShowcaseInput::default());
-
-        assert!(app.primitives().iter().any(|primitive| {
-            matches!(primitive, Primitive::Text(text) if text.text == "Viewport grid hidden")
-        }));
+        assert!(has_text(&app, "Viewport grid hidden"));
     }
 
     #[test]
