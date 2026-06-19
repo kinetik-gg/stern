@@ -290,6 +290,7 @@ impl ShowcaseApp {
                 editor_invocations = self.editor.render(&mut ui, self.action_count);
             } else {
                 Self::app_background(&mut ui);
+                self.nav_interactions(&mut ui);
                 self.page_content(&mut ui);
                 self.chrome(&mut ui);
             }
@@ -469,6 +470,20 @@ impl ShowcaseApp {
             rgb(238, 238, 238),
         );
         text(ui, 20.0, 40.0, "Workbench", 10.0, rgb(150, 160, 164));
+        for (page, item) in nav_items(viewport.width) {
+            let response = ui.tab_button_value(
+                ("nav", page as u8),
+                item,
+                page.label(),
+                &mut self.page,
+                page,
+                false,
+            );
+            if response.clicked {
+                self.status = format!("Page: {}", page.label());
+            }
+        }
+
         if viewport.width >= 1200.0 {
             Self::status_badge(
                 ui,
@@ -493,18 +508,16 @@ impl ShowcaseApp {
                 rgb(178, 182, 188),
             );
         }
+    }
 
+    fn nav_interactions(&mut self, ui: &mut Ui<'_>) {
+        let viewport = rect_from_size(ui.viewport().logical_size);
         for (page, item) in nav_items(viewport.width) {
-            let response = ui.tab_button_value(
-                ("nav", page as u8),
-                item,
-                page.label(),
-                &mut self.page,
-                page,
-                false,
-            );
+            let response = ui.pressable(("nav", page as u8), item, false);
             if response.clicked {
+                self.page = page;
                 self.status = format!("Page: {}", page.label());
+                ui.request_repaint(RepaintRequest::NextFrame);
             }
         }
     }
@@ -2344,6 +2357,9 @@ mod tests {
         click(&mut app, Point::new(620.0, 20.0));
 
         assert_eq!(app.page(), ShowcasePage::Viewport);
+        assert!(has_text(&app, "Viewport, Texture, and Overlay Surface"));
+        assert!(has_text(&app, "Page: Viewport"));
+        assert!(!has_text(&app, "Component Gallery"));
     }
 
     #[test]
