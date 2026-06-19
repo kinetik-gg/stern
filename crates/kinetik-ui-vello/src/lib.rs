@@ -1,9 +1,6 @@
 //! Vello renderer boundary for Kinetik UI render primitives.
 
-use std::{
-    collections::HashMap,
-    hash::{Hash, Hasher},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use kinetik_ui_core::{
     Brush, ClipId, Color, CornerRadius, ImageId, LayerId, LinearGradient, PathElement, Point,
@@ -189,13 +186,23 @@ struct CachedImageData {
     data: ImageData,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 struct ImageSignature {
     width: u32,
     height: u32,
     format: RenderImageFormat,
     alpha: RenderImageAlpha,
-    data_hash: u64,
+    data: Arc<[u8]>,
+}
+
+impl ImageSignature {
+    fn matches(&self, image: &RenderImage) -> bool {
+        self.width == image.width
+            && self.height == image.height
+            && self.format == image.format
+            && self.alpha == image.alpha
+            && Arc::ptr_eq(&self.data, &image.data)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -207,7 +214,7 @@ impl ImageDataCache {
     fn image_data(&mut self, id: ImageId, image: &RenderImage) -> ImageData {
         let signature = image_signature(image);
         if let Some(cached) = self.images.get(&id)
-            && cached.signature == signature
+            && cached.signature.matches(image)
         {
             return cached.data.clone();
         }
@@ -230,14 +237,12 @@ impl ImageDataCache {
 }
 
 fn image_signature(image: &RenderImage) -> ImageSignature {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    image.data.hash(&mut hasher);
     ImageSignature {
         width: image.width,
         height: image.height,
         format: image.format,
         alpha: image.alpha,
-        data_hash: hasher.finish(),
+        data: Arc::clone(&image.data),
     }
 }
 
@@ -2178,14 +2183,14 @@ fn vello_gradient(gradient: &LinearGradient) -> PenikoGradient {
 #[cfg(test)]
 mod tests {
     use super::{
-        ImageAtlasRegion, ImageResource, RenderCommand, RenderCommandKind, RenderDiagnostic,
-        RenderFrameInput, RenderImage, RenderImageSampling, RenderResources, RendererBackend,
-        TextLayoutResource, TextureResource, VelloRenderer, image_quality, physical_text_layout,
-        physical_text_layout_for_key, quantize_stroke_width_to_device, render_translation_snapshot,
-        root_transform, snap_axis_aligned_translation, snap_image_rect_to_device,
-        snap_point_to_device, snap_rect_to_device, snap_stroke_center_to_device,
-        snap_stroked_line_to_device, snap_stroked_rect_to_device, snap_text_origin_to_device,
-        translate_primitives, viewport_device_scale,
+        ImageAtlasRegion, ImageDataCache, ImageResource, RenderCommand, RenderCommandKind,
+        RenderDiagnostic, RenderFrameInput, RenderImage, RenderImageSampling, RenderResources,
+        RendererBackend, TextLayoutResource, TextureResource, VelloRenderer, image_quality,
+        physical_text_layout, physical_text_layout_for_key, quantize_stroke_width_to_device,
+        render_translation_snapshot, root_transform, snap_axis_aligned_translation,
+        snap_image_rect_to_device, snap_point_to_device, snap_rect_to_device,
+        snap_stroke_center_to_device, snap_stroked_line_to_device, snap_stroked_rect_to_device,
+        snap_text_origin_to_device, translate_primitives, viewport_device_scale,
     };
     use kinetik_ui_core::render::TexturePrimitive;
     use kinetik_ui_core::{
@@ -3296,6 +3301,34 @@ mod tests {
 
         assert!(output.diagnostics.is_empty());
         assert_eq!(renderer.cached_image_count(), 1);
+    }
+
+    #[test]
+    fn image_cache_uses_shared_payload_identity_for_hits() {
+        let id = ImageId::from_raw(11);
+        let image = RenderImage::rgba8(2, 2, vec![1; 16]).expect("valid image");
+        let clone = image.clone();
+        let replacement = RenderImage::rgba8(2, 2, vec![2; 16]).expect("valid image");
+        let mut cache = ImageDataCache::default();
+
+        cache.image_data(id, &image);
+        let cached_payload = cache
+            .images
+            .get(&id)
+            .expect("cache entry")
+            .signature
+            .data
+            .clone();
+        cache.image_data(id, &clone);
+        assert!(std::sync::Arc::ptr_eq(
+            &cached_payload,
+            &cache.images.get(&id).expect("cache entry").signature.data
+        ));
+
+        cache.image_data(id, &replacement);
+        let replaced_payload = &cache.images.get(&id).expect("cache entry").signature.data;
+        assert!(std::sync::Arc::ptr_eq(replaced_payload, &replacement.data));
+        assert!(!std::sync::Arc::ptr_eq(&cached_payload, replaced_payload));
     }
 
     #[test]
