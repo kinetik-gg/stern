@@ -7,7 +7,7 @@
 )]
 
 use kinetik_ui::core::{
-    ActionDescriptor, ActionSource, Axis, Brush, ClipId, Color, CornerRadius, CursorShape, ImageId,
+    ActionDescriptor, ActionSource, Axis, Brush, ClipId, Color, CornerRadius, CursorShape,
     ImagePrimitive, Key, KeyState, LinePrimitive, Modifiers, PlatformRequest, Point, Primitive,
     Rect, RectPrimitive, RepaintRequest, Shortcut, Size, Stroke, TextPrimitive, TextureId, Vec2,
 };
@@ -46,7 +46,7 @@ const VIEWPORT_TEXTURE: TextureId = TextureId::from_raw(9_001);
 const VIEWPORT_SIZE: Size = Size::new(1280.0, 720.0);
 
 #[allow(dead_code, missing_docs)]
-mod phosphor_icons {
+pub(crate) mod phosphor_icons {
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/assets/icons/phosphor/phosphor_icons.rs"
@@ -54,20 +54,16 @@ mod phosphor_icons {
 }
 
 use phosphor_icons::{
-    ICON_ARCHIVE, ICON_ATLAS, ICON_ATLAS_BYTES, ICON_ATLAS_HEIGHT, ICON_ATLAS_WIDTH, ICON_BOX,
-    ICON_CARET, ICON_CODE, ICON_COMPONENT, ICON_CROSSHAIR, ICON_CUBE, ICON_CURSOR, ICON_DOTS,
-    ICON_DOWNLOAD, ICON_ENTRIES, ICON_EYE, ICON_GEAR, ICON_GRID, ICON_IMAGE, ICON_LAYERS,
-    ICON_MOVE, ICON_PAUSE, ICON_PLAY, ICON_PLUS, ICON_RESET, ICON_ROCKET, ICON_ROTATE, ICON_SEARCH,
-    ICON_SIZE, ICON_STOP, ICON_TOKENS, ICON_TRANSFORM,
+    DENSE_ICON_LOGICAL_SIZE, ICON_ATLASES, ICON_ENTRIES, PhosphorIcon, STANDARD_ICON_LOGICAL_SIZE,
 };
 
-const DENSE_ICON_SIZE: f32 = 16.0;
+const DENSE_ICON_SIZE: f32 = DENSE_ICON_LOGICAL_SIZE as f32;
 const TOOLBAR_Y: f32 = 32.0;
 const TOOLBAR_BUTTON_SIZE: f32 = 34.0;
 const TOOLBAR_STRIDE: f32 = 38.0;
-const TOOLBAR_ICON_SIZE: f32 = ICON_SIZE as f32;
+const TOOLBAR_ICON_SIZE: f32 = STANDARD_ICON_LOGICAL_SIZE as f32;
 const WORKSPACE_TOP: f32 = 76.0;
-const ASSET_ICON_SIZE: f32 = 24.0;
+const ASSET_ICON_SIZE: f32 = STANDARD_ICON_LOGICAL_SIZE as f32;
 
 const FRAME_SCENE: FrameId = FrameId::from_raw(1);
 const FRAME_ASSETS: FrameId = FrameId::from_raw(2);
@@ -113,6 +109,9 @@ enum ToolbarIcon {
     Component,
     Cube,
     Archive,
+    Image,
+    Code,
+    Tokens,
     Box,
 }
 
@@ -168,35 +167,41 @@ impl ToolbarIcon {
             Self::Component => 20,
             Self::Cube => 21,
             Self::Archive => 22,
-            Self::Box => 23,
+            Self::Image => 23,
+            Self::Code => 24,
+            Self::Tokens => 25,
+            Self::Box => 26,
         }
     }
 
-    const fn image(self) -> ImageId {
+    const fn phosphor(self) -> PhosphorIcon {
         match self {
-            Self::Select => ICON_CURSOR,
-            Self::Move => ICON_MOVE,
-            Self::Rotate => ICON_ROTATE,
-            Self::Scale => ICON_TRANSFORM,
-            Self::Grid => ICON_GRID,
-            Self::Crosshair => ICON_CROSSHAIR,
-            Self::Reset => ICON_RESET,
-            Self::Play => ICON_PLAY,
-            Self::Pause => ICON_PAUSE,
-            Self::Stop => ICON_STOP,
-            Self::Rocket => ICON_ROCKET,
-            Self::Download => ICON_DOWNLOAD,
-            Self::Plus => ICON_PLUS,
-            Self::Dots => ICON_DOTS,
-            Self::Search => ICON_SEARCH,
-            Self::Gear => ICON_GEAR,
-            Self::Layers => ICON_LAYERS,
-            Self::Caret => ICON_CARET,
-            Self::Eye => ICON_EYE,
-            Self::Component => ICON_COMPONENT,
-            Self::Cube => ICON_CUBE,
-            Self::Archive => ICON_ARCHIVE,
-            Self::Box => ICON_BOX,
+            Self::Select => PhosphorIcon::Cursor,
+            Self::Move => PhosphorIcon::Move,
+            Self::Rotate => PhosphorIcon::Rotate,
+            Self::Scale => PhosphorIcon::Transform,
+            Self::Grid => PhosphorIcon::Grid,
+            Self::Crosshair => PhosphorIcon::Crosshair,
+            Self::Reset => PhosphorIcon::Reset,
+            Self::Play => PhosphorIcon::Play,
+            Self::Pause => PhosphorIcon::Pause,
+            Self::Stop => PhosphorIcon::Stop,
+            Self::Rocket => PhosphorIcon::Rocket,
+            Self::Download => PhosphorIcon::Download,
+            Self::Plus => PhosphorIcon::Plus,
+            Self::Dots => PhosphorIcon::Dots,
+            Self::Search => PhosphorIcon::Search,
+            Self::Gear => PhosphorIcon::Gear,
+            Self::Layers => PhosphorIcon::Layers,
+            Self::Caret => PhosphorIcon::Caret,
+            Self::Eye => PhosphorIcon::Eye,
+            Self::Component => PhosphorIcon::Component,
+            Self::Cube => PhosphorIcon::Cube,
+            Self::Archive => PhosphorIcon::Archive,
+            Self::Image => PhosphorIcon::Image,
+            Self::Code => PhosphorIcon::Code,
+            Self::Tokens => PhosphorIcon::Tokens,
+            Self::Box => PhosphorIcon::Box,
         }
     }
 }
@@ -1202,7 +1207,7 @@ impl EditorShowcase {
                     draw_icon(
                         ui,
                         Rect::new(item.rect.x + 8.0, item.rect.y + 8.0, 24.0, 24.0),
-                        asset_icon(asset.icon),
+                        asset.icon,
                         ASSET_ICON_SIZE,
                     );
                     text(
@@ -1683,35 +1688,38 @@ pub fn register_resources(resources: &mut RenderResources) {
             snapshot: Some(snapshot),
         });
     }
-    if let Some(atlas) = icon_atlas_image() {
-        resources.register_image(ImageResource {
-            id: ICON_ATLAS,
-            size: Size::new(ICON_ATLAS_WIDTH as f32, ICON_ATLAS_HEIGHT as f32),
-            sampling: RenderImageSampling::UiIcon,
-            pixels: Some(atlas),
-            atlas_region: None,
-        });
+    for atlas in ICON_ATLASES {
+        if let Some(snapshot) = RenderImage::rgba8(atlas.width, atlas.height, atlas.bytes.to_vec())
+        {
+            resources.register_image(ImageResource {
+                id: atlas.image,
+                size: Size::new(atlas.width as f32, atlas.height as f32),
+                sampling: RenderImageSampling::UiIcon,
+                pixels: Some(snapshot),
+                atlas_region: None,
+            });
+        }
     }
     for entry in ICON_ENTRIES {
         resources.register_image(ImageResource {
             id: entry.image,
-            size: Size::new(ICON_SIZE as f32, ICON_SIZE as f32),
+            size: Size::new(entry.logical_size as f32, entry.logical_size as f32),
             sampling: RenderImageSampling::UiIcon,
             pixels: None,
             atlas_region: Some(ImageAtlasRegion {
-                atlas: ICON_ATLAS,
+                atlas: entry.atlas,
                 source: entry.source,
             }),
         });
     }
 }
 
-fn icon_atlas_image() -> Option<RenderImage> {
-    RenderImage::rgba8(
-        ICON_ATLAS_WIDTH,
-        ICON_ATLAS_HEIGHT,
-        ICON_ATLAS_BYTES.to_vec(),
-    )
+#[cfg(test)]
+fn icon_atlas_image(physical_size: u32) -> Option<RenderImage> {
+    ICON_ATLASES
+        .iter()
+        .find(|atlas| atlas.physical_size == physical_size)
+        .and_then(|atlas| RenderImage::rgba8(atlas.width, atlas.height, atlas.bytes.to_vec()))
 }
 
 fn menu_header_rects() -> [(EditorMenuKind, &'static str, Rect); 7] {
@@ -2007,10 +2015,10 @@ fn run_toolbar_buttons(
 #[allow(clippy::float_cmp, clippy::items_after_test_module)]
 mod tests {
     use super::{
-        EditorMenuKind, EditorShowcase, EditorTool, FRAME_BOTTOM, FRAME_VIEWPORT, ICON_ATLAS,
-        ICON_CROSSHAIR, ICON_SIZE, PANEL_JOBS, TOOLBAR_BUTTON_SIZE, TOOLBAR_STRIDE, TOOLBAR_Y,
-        VIEWPORT_SIZE, WORKSPACE_TOP, frame_tab_rects, icon_atlas_image, inspector_label_width,
-        item_id, phosphor_icons, register_resources, rgb, rgba,
+        EditorMenuKind, EditorShowcase, EditorTool, FRAME_BOTTOM, FRAME_VIEWPORT, PANEL_JOBS,
+        TOOLBAR_BUTTON_SIZE, TOOLBAR_ICON_SIZE, TOOLBAR_STRIDE, TOOLBAR_Y, VIEWPORT_SIZE,
+        WORKSPACE_TOP, frame_tab_rects, icon_atlas_image, inspector_label_width, item_id,
+        phosphor_icons, register_resources, rgb, rgba,
     };
     use kinetik_ui::core::{
         Brush, CursorShape, FrameContext, PhysicalSize, PlatformRequest, Point, PointerButtonState,
@@ -2274,30 +2282,38 @@ mod tests {
 
     #[test]
     fn icon_atlas_duplicates_edge_pixels_into_gutters() {
-        let atlas = icon_atlas_image().expect("atlas");
-        let first = phosphor_icons::ICON_ENTRIES[0].source;
+        let first = phosphor_icons::ICON_ENTRIES
+            .iter()
+            .find(|entry| entry.logical_size == phosphor_icons::STANDARD_ICON_LOGICAL_SIZE)
+            .expect("standard icon entry");
+        let atlas = icon_atlas_image(first.physical_size).expect("atlas");
+        let source = first.source;
         let left_gutter = atlas_pixel(
             &atlas.data,
             atlas.width,
-            first.x as u32 - phosphor_icons::ICON_ATLAS_PADDING,
-            first.y as u32,
+            source.x as u32 - phosphor_icons::ICON_ATLAS_PADDING,
+            source.y as u32,
         );
-        let first_inner = atlas_pixel(&atlas.data, atlas.width, first.x as u32, first.y as u32);
+        let first_inner = atlas_pixel(&atlas.data, atlas.width, source.x as u32, source.y as u32);
         let bottom_gutter = atlas_pixel(
             &atlas.data,
             atlas.width,
-            first.max_x() as u32,
-            first.max_y() as u32,
+            source.max_x() as u32,
+            source.max_y() as u32,
         );
         let bottom_inner = atlas_pixel(
             &atlas.data,
             atlas.width,
-            first.max_x() as u32 - 1,
-            first.max_y() as u32 - 1,
+            source.max_x() as u32 - 1,
+            source.max_y() as u32 - 1,
         );
+        let atlas_entry = phosphor_icons::ICON_ATLASES
+            .iter()
+            .find(|atlas| atlas.image == first.atlas)
+            .expect("atlas entry");
 
-        assert_eq!(atlas.width, phosphor_icons::ICON_ATLAS_WIDTH);
-        assert_eq!(atlas.height, phosphor_icons::ICON_ATLAS_HEIGHT);
+        assert_eq!(atlas.width, atlas_entry.width);
+        assert_eq!(atlas.height, atlas_entry.height);
         assert_eq!(left_gutter, first_inner);
         assert_eq!(bottom_gutter, bottom_inner);
     }
@@ -2312,12 +2328,15 @@ mod tests {
             let resource = resources.image(entry.image).expect(entry.symbol);
             let region = resource.atlas_region.expect("icon atlas region");
 
-            assert_eq!(resource.size, Size::new(ICON_SIZE as f32, ICON_SIZE as f32));
+            assert_eq!(
+                resource.size,
+                Size::new(entry.logical_size as f32, entry.logical_size as f32)
+            );
             assert_eq!(
                 resource.sampling,
                 kinetik_ui::render::RenderImageSampling::UiIcon
             );
-            assert_eq!(region.atlas, ICON_ATLAS);
+            assert_eq!(region.atlas, entry.atlas);
             assert_eq!(region.source, entry.source, "{}", entry.source_name);
         }
     }
@@ -2328,17 +2347,21 @@ mod tests {
 
         register_resources(&mut resources);
 
-        let region = resources
-            .image(ICON_CROSSHAIR)
-            .and_then(|resource| resource.atlas_region)
-            .expect("icon region");
         let entry = phosphor_icons::ICON_ENTRIES
             .iter()
-            .find(|entry| entry.image == ICON_CROSSHAIR)
+            .find(|entry| {
+                entry.icon == phosphor_icons::PhosphorIcon::Crosshair
+                    && entry.logical_size == phosphor_icons::STANDARD_ICON_LOGICAL_SIZE
+                    && entry.physical_size == 24
+            })
             .expect("crosshair entry");
+        let region = resources
+            .image(entry.image)
+            .and_then(|resource| resource.atlas_region)
+            .expect("icon region");
 
-        assert_eq!(region.source.width, ICON_SIZE as f32);
-        assert_eq!(region.source.height, ICON_SIZE as f32);
+        assert_eq!(region.source.width, entry.physical_size as f32);
+        assert_eq!(region.source.height, entry.physical_size as f32);
         assert_eq!(region.source, entry.source);
         assert_eq!(entry.source_name, "crosshair");
     }
@@ -2419,12 +2442,71 @@ mod tests {
             }
             assert_eq!(image.rect.x, image.rect.x.round());
             assert_eq!(image.rect.y, image.rect.y.round());
-            assert_eq!(image.rect.width, ICON_SIZE as f32);
-            assert_eq!(image.rect.height, ICON_SIZE as f32);
+            assert_eq!(image.rect.width, TOOLBAR_ICON_SIZE);
+            assert_eq!(image.rect.height, TOOLBAR_ICON_SIZE);
             checked += 1;
         }
 
         assert!(checked >= 12);
+    }
+
+    #[test]
+    fn editor_icons_pick_exact_physical_atlas_for_dpi_scale() {
+        let dense = phosphor_icons::icon_image(
+            phosphor_icons::PhosphorIcon::Search,
+            super::DENSE_ICON_SIZE,
+            1.25,
+        );
+        let toolbar = phosphor_icons::icon_image(
+            phosphor_icons::PhosphorIcon::Cursor,
+            super::TOOLBAR_ICON_SIZE,
+            1.5,
+        );
+        let dense_entry = icon_entry(dense);
+        let toolbar_entry = icon_entry(toolbar);
+
+        assert_eq!(dense_entry.logical_size, 16);
+        assert_eq!(dense_entry.physical_size, 20);
+        assert_eq!(toolbar_entry.logical_size, 24);
+        assert_eq!(toolbar_entry.physical_size, 36);
+
+        let fallback = phosphor_icons::icon_image(
+            phosphor_icons::PhosphorIcon::Search,
+            super::DENSE_ICON_SIZE,
+            1.33,
+        );
+        assert_eq!(icon_entry(fallback).physical_size, 24);
+    }
+
+    #[test]
+    fn toolbar_icon_size_leaves_padding_inside_button() {
+        let theme = default_dark_theme();
+        let mut memory = UiMemory::new();
+        let context = editor_test_context(UiInput::default());
+        let mut ui = Ui::begin_frame(context, &mut memory, &theme);
+        let mut editor = EditorShowcase::new();
+        let first_button = Rect::new(10.0, TOOLBAR_Y, TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE);
+
+        editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+        let first_icon = output
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Image(image)
+                    if is_editor_icon(image.image)
+                        && first_button.contains_point(image.rect.center()) =>
+                {
+                    Some(image)
+                }
+                _ => None,
+            })
+            .expect("first toolbar icon");
+
+        assert!(first_icon.rect.x >= first_button.x + 4.0);
+        assert!(first_icon.rect.max_x() <= first_button.max_x() - 4.0);
+        assert!(first_icon.rect.y >= first_button.y + 4.0);
+        assert!(first_icon.rect.max_y() <= first_button.max_y() - 4.0);
     }
     #[test]
     fn editor_toolbar_atlas_icons_preserve_icon_button_semantics() {
@@ -2550,7 +2632,16 @@ mod tests {
     }
 
     fn is_editor_icon(image: kinetik_ui::core::ImageId) -> bool {
-        image.raw() > ICON_ATLAS.raw() && image.raw() <= ICON_CROSSHAIR.raw()
+        phosphor_icons::ICON_ENTRIES
+            .iter()
+            .any(|entry| entry.image == image)
+    }
+
+    fn icon_entry(image: kinetik_ui::core::ImageId) -> &'static phosphor_icons::PhosphorIconEntry {
+        phosphor_icons::ICON_ENTRIES
+            .iter()
+            .find(|entry| entry.image == image)
+            .expect("icon entry")
     }
 }
 
@@ -2569,49 +2660,49 @@ const fn item_id(raw: u64) -> ItemId {
 struct Asset {
     name: &'static str,
     kind: &'static str,
-    icon: ImageId,
+    icon: ToolbarIcon,
 }
 
 const ASSETS: &[Asset] = &[
     Asset {
         name: "camp_scene",
         kind: "scene",
-        icon: ICON_CUBE,
+        icon: ToolbarIcon::Cube,
     },
     Asset {
         name: "terrain_forest",
         kind: "mesh",
-        icon: ICON_BOX,
+        icon: ToolbarIcon::Box,
     },
     Asset {
         name: "van_body",
         kind: "mesh",
-        icon: ICON_COMPONENT,
+        icon: ToolbarIcon::Component,
     },
     Asset {
         name: "campfire",
         kind: "prefab",
-        icon: ICON_TOKENS,
+        icon: ToolbarIcon::Tokens,
     },
     Asset {
         name: "night_sky",
         kind: "texture",
-        icon: ICON_IMAGE,
+        icon: ToolbarIcon::Image,
     },
     Asset {
         name: "hero_ctrl",
         kind: "script",
-        icon: ICON_CODE,
+        icon: ToolbarIcon::Code,
     },
     Asset {
         name: "audio_loop",
         kind: "asset",
-        icon: ICON_ARCHIVE,
+        icon: ToolbarIcon::Archive,
     },
     Asset {
         name: "lighting_lut",
         kind: "texture",
-        icon: ICON_IMAGE,
+        icon: ToolbarIcon::Image,
     },
 ];
 
@@ -2630,7 +2721,7 @@ const LOGS: &[LogRow] = &[
     LogRow {
         time: "00:00.3",
         level: "Info",
-        message: "Registered 28 Radix toolbar icons",
+        message: "Registered 28 Phosphor toolbar icons",
     },
     LogRow {
         time: "00:01.2",
@@ -2677,23 +2768,6 @@ fn scene_icon(id: ItemId) -> ToolbarIcon {
         8 | 9 => ToolbarIcon::Cube,
         10 => ToolbarIcon::Rocket,
         11 => ToolbarIcon::Archive,
-        _ => ToolbarIcon::Box,
-    }
-}
-
-fn asset_icon(id: ImageId) -> ToolbarIcon {
-    match id.raw() {
-        raw if raw == ICON_LAYERS.raw() => ToolbarIcon::Layers,
-        raw if raw == ICON_CARET.raw() => ToolbarIcon::Caret,
-        raw if raw == ICON_EYE.raw() => ToolbarIcon::Eye,
-        raw if raw == ICON_CROSSHAIR.raw() => ToolbarIcon::Crosshair,
-        raw if raw == ICON_GRID.raw() => ToolbarIcon::Grid,
-        raw if raw == ICON_COMPONENT.raw() => ToolbarIcon::Component,
-        raw if raw == ICON_CUBE.raw() => ToolbarIcon::Cube,
-        raw if raw == ICON_ROCKET.raw() => ToolbarIcon::Rocket,
-        raw if raw == ICON_ARCHIVE.raw() => ToolbarIcon::Archive,
-        raw if raw == ICON_IMAGE.raw() => ToolbarIcon::Box,
-        raw if raw == ICON_CODE.raw() => ToolbarIcon::Scale,
         _ => ToolbarIcon::Box,
     }
 }
@@ -2831,18 +2905,8 @@ fn toolbar_icon_button_sized(
     };
 
     rect_fill(ui, rect, fill, Some(stroke), CornerRadius::all(4.0));
-    let icon_size = if icon_size.is_finite() && icon_size > 0.0 {
-        icon_size
-    } else {
-        DENSE_ICON_SIZE
-    };
-    let icon_rect = Rect::new(
-        rect.x + (rect.width - icon_size) * 0.5,
-        rect.y + (rect.height - icon_size) * 0.5,
-        icon_size,
-        icon_size,
-    );
-    draw_tinted_icon(ui, icon_rect, icon, icon_size, color);
+    let icon_size = clamped_icon_size(icon_size, rect);
+    draw_tinted_icon(ui, rect, icon, icon_size, color);
 
     let mut semantics = icon_button_semantics(id, rect, label, disabled);
     semantics.state.focused = response.state.focused;
@@ -2861,11 +2925,7 @@ fn draw_icon(ui: &mut Ui<'_>, bounds: Rect, icon: ToolbarIcon, size: f32) {
 }
 
 fn draw_tinted_icon(ui: &mut Ui<'_>, bounds: Rect, icon: ToolbarIcon, size: f32, color: Color) {
-    let size = if size.is_finite() && size > 0.0 {
-        size
-    } else {
-        DENSE_ICON_SIZE
-    };
+    let size = clamped_icon_size(size, bounds);
     let rect = Rect::new(
         bounds.x + (bounds.width - size) * 0.5,
         bounds.y + (bounds.height - size) * 0.5,
@@ -2873,11 +2933,26 @@ fn draw_tinted_icon(ui: &mut Ui<'_>, bounds: Rect, icon: ToolbarIcon, size: f32,
         size,
     );
     ui.primitive(Primitive::Image(ImagePrimitive {
-        image: icon.image(),
+        image: phosphor_icons::icon_image(
+            icon.phosphor(),
+            size,
+            ui.viewport().scale_factor.value(),
+        ),
         rect,
         tint: Some(color),
     }));
 }
+
+fn clamped_icon_size(size: f32, bounds: Rect) -> f32 {
+    let requested = if size.is_finite() && size > 0.0 {
+        size
+    } else {
+        DENSE_ICON_SIZE
+    };
+    let available = bounds.width.min(bounds.height).max(1.0);
+    requested.min(available)
+}
+
 fn text(ui: &mut Ui<'_>, x: f32, baseline: f32, value: &str, size: f32, fill: Color) {
     ui.primitive(Primitive::Text(TextPrimitive {
         layout: None,

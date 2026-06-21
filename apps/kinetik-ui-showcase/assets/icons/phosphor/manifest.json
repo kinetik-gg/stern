@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "source": {
     "package": "@phosphor-icons/core",
     "version": "2.1.1",
@@ -10,379 +10,4032 @@
   },
   "raster": {
     "format": "rgba8",
-    "iconSize": 32,
-    "padding": 1,
-    "cellSize": 34,
-    "columns": 7,
-    "rows": 4,
-    "atlasWidth": 238,
-    "atlasHeight": 136,
-    "colorModel": "white-alpha mask; runtime tint applies color"
+    "colorModel": "white-alpha mask; runtime tint applies color",
+    "logicalIconSizes": [
+      16,
+      24
+    ],
+    "scaleFactors": [
+      1,
+      1.25,
+      1.5,
+      1.75,
+      2
+    ],
+    "physicalIconSizes": [
+      16,
+      20,
+      24,
+      28,
+      30,
+      32,
+      36,
+      42,
+      48
+    ]
   },
+  "atlases": [
+    {
+      "idRaw": 70016,
+      "physicalSize": 16,
+      "padding": 1,
+      "cellSize": 18,
+      "columns": 7,
+      "rows": 4,
+      "atlasWidth": 126,
+      "atlasHeight": 72,
+      "rgba": "atlas-16.rgba",
+      "png": "atlas-16.png"
+    },
+    {
+      "idRaw": 70020,
+      "physicalSize": 20,
+      "padding": 1,
+      "cellSize": 22,
+      "columns": 7,
+      "rows": 4,
+      "atlasWidth": 154,
+      "atlasHeight": 88,
+      "rgba": "atlas-20.rgba",
+      "png": "atlas-20.png"
+    },
+    {
+      "idRaw": 70024,
+      "physicalSize": 24,
+      "padding": 1,
+      "cellSize": 26,
+      "columns": 7,
+      "rows": 4,
+      "atlasWidth": 182,
+      "atlasHeight": 104,
+      "rgba": "atlas-24.rgba",
+      "png": "atlas-24.png"
+    },
+    {
+      "idRaw": 70028,
+      "physicalSize": 28,
+      "padding": 1,
+      "cellSize": 30,
+      "columns": 7,
+      "rows": 4,
+      "atlasWidth": 210,
+      "atlasHeight": 120,
+      "rgba": "atlas-28.rgba",
+      "png": "atlas-28.png"
+    },
+    {
+      "idRaw": 70030,
+      "physicalSize": 30,
+      "padding": 1,
+      "cellSize": 32,
+      "columns": 7,
+      "rows": 4,
+      "atlasWidth": 224,
+      "atlasHeight": 128,
+      "rgba": "atlas-30.rgba",
+      "png": "atlas-30.png"
+    },
+    {
+      "idRaw": 70032,
+      "physicalSize": 32,
+      "padding": 1,
+      "cellSize": 34,
+      "columns": 7,
+      "rows": 4,
+      "atlasWidth": 238,
+      "atlasHeight": 136,
+      "rgba": "atlas-32.rgba",
+      "png": "atlas-32.png"
+    },
+    {
+      "idRaw": 70036,
+      "physicalSize": 36,
+      "padding": 1,
+      "cellSize": 38,
+      "columns": 7,
+      "rows": 4,
+      "atlasWidth": 266,
+      "atlasHeight": 152,
+      "rgba": "atlas-36.rgba",
+      "png": "atlas-36.png"
+    },
+    {
+      "idRaw": 70042,
+      "physicalSize": 42,
+      "padding": 1,
+      "cellSize": 44,
+      "columns": 7,
+      "rows": 4,
+      "atlasWidth": 308,
+      "atlasHeight": 176,
+      "rgba": "atlas-42.rgba",
+      "png": "atlas-42.png"
+    },
+    {
+      "idRaw": 70048,
+      "physicalSize": 48,
+      "padding": 1,
+      "cellSize": 50,
+      "columns": 7,
+      "rows": 4,
+      "atlasWidth": 350,
+      "atlasHeight": 200,
+      "rgba": "atlas-48.rgba",
+      "png": "atlas-48.png"
+    }
+  ],
   "icons": [
     {
-      "idRaw": 7001,
+      "variant": "Cursor",
       "symbol": "ICON_CURSOR",
       "alias": "cursor",
       "sourceName": "cursor",
       "sourceSvg": "assets/regular/cursor.svg",
-      "sourceRect": {
-        "x": 1,
-        "y": 1,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 71176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 1,
+            "y": 1,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 71180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 1,
+            "y": 1,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 71184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 1,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 71188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 1,
+            "y": 1,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 71192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 1,
+            "y": 1,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 71264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 1,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 71270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 1,
+            "y": 1,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 71276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 1,
+            "y": 1,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 71282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 71288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 1,
+            "y": 1,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7002,
+      "variant": "Move",
       "symbol": "ICON_MOVE",
       "alias": "move",
       "sourceName": "arrows-out-cardinal",
       "sourceSvg": "assets/regular/arrows-out-cardinal.svg",
-      "sourceRect": {
-        "x": 35,
-        "y": 1,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 72176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 19,
+            "y": 1,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 72180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 23,
+            "y": 1,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 72184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 27,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 72188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 31,
+            "y": 1,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 72192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 35,
+            "y": 1,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 72264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 27,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 72270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 33,
+            "y": 1,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 72276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 39,
+            "y": 1,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 72282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 45,
+            "y": 1,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 72288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 51,
+            "y": 1,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7003,
+      "variant": "Transform",
       "symbol": "ICON_TRANSFORM",
       "alias": "transform",
       "sourceName": "bounding-box",
       "sourceSvg": "assets/regular/bounding-box.svg",
-      "sourceRect": {
-        "x": 69,
-        "y": 1,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 73176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 37,
+            "y": 1,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 73180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 45,
+            "y": 1,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 73184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 53,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 73188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 61,
+            "y": 1,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 73192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 69,
+            "y": 1,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 73264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 53,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 73270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 65,
+            "y": 1,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 73276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 77,
+            "y": 1,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 73282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 89,
+            "y": 1,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 73288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 101,
+            "y": 1,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7004,
+      "variant": "Rotate",
       "symbol": "ICON_ROTATE",
       "alias": "rotate",
       "sourceName": "arrow-clockwise",
       "sourceSvg": "assets/regular/arrow-clockwise.svg",
-      "sourceRect": {
-        "x": 103,
-        "y": 1,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 74176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 55,
+            "y": 1,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 74180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 67,
+            "y": 1,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 74184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 79,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 74188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 91,
+            "y": 1,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 74192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 103,
+            "y": 1,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 74264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 79,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 74270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 97,
+            "y": 1,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 74276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 115,
+            "y": 1,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 74282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 133,
+            "y": 1,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 74288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 151,
+            "y": 1,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7005,
+      "variant": "Cube",
       "symbol": "ICON_CUBE",
       "alias": "cube",
       "sourceName": "cube",
       "sourceSvg": "assets/regular/cube.svg",
-      "sourceRect": {
-        "x": 137,
-        "y": 1,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 75176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 73,
+            "y": 1,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 75180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 89,
+            "y": 1,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 75184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 105,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 75188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 121,
+            "y": 1,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 75192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 137,
+            "y": 1,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 75264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 105,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 75270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 129,
+            "y": 1,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 75276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 153,
+            "y": 1,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 75282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 177,
+            "y": 1,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 75288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 201,
+            "y": 1,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7006,
+      "variant": "Play",
       "symbol": "ICON_PLAY",
       "alias": "play",
       "sourceName": "play",
       "sourceSvg": "assets/regular/play.svg",
-      "sourceRect": {
-        "x": 171,
-        "y": 1,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 76176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 91,
+            "y": 1,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 76180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 111,
+            "y": 1,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 76184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 131,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 76188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 151,
+            "y": 1,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 76192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 171,
+            "y": 1,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 76264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 131,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 76270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 161,
+            "y": 1,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 76276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 191,
+            "y": 1,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 76282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 221,
+            "y": 1,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 76288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 251,
+            "y": 1,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7007,
+      "variant": "Pause",
       "symbol": "ICON_PAUSE",
       "alias": "pause",
       "sourceName": "pause",
       "sourceSvg": "assets/regular/pause.svg",
-      "sourceRect": {
-        "x": 205,
-        "y": 1,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 77176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 109,
+            "y": 1,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 77180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 133,
+            "y": 1,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 77184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 157,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 77188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 181,
+            "y": 1,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 77192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 205,
+            "y": 1,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 77264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 157,
+            "y": 1,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 77270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 193,
+            "y": 1,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 77276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 229,
+            "y": 1,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 77282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 265,
+            "y": 1,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 77288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 301,
+            "y": 1,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7008,
+      "variant": "Stop",
       "symbol": "ICON_STOP",
       "alias": "stop",
       "sourceName": "stop",
       "sourceSvg": "assets/regular/stop.svg",
-      "sourceRect": {
-        "x": 1,
-        "y": 35,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 78176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 1,
+            "y": 19,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 78180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 1,
+            "y": 23,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 78184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 1,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 78188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 1,
+            "y": 31,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 78192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 1,
+            "y": 35,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 78264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 1,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 78270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 1,
+            "y": 33,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 78276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 1,
+            "y": 39,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 78282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 1,
+            "y": 45,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 78288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 1,
+            "y": 51,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7009,
+      "variant": "Plus",
       "symbol": "ICON_PLUS",
       "alias": "plus",
       "sourceName": "plus",
       "sourceSvg": "assets/regular/plus.svg",
-      "sourceRect": {
-        "x": 35,
-        "y": 35,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 79176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 19,
+            "y": 19,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 79180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 23,
+            "y": 23,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 79184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 27,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 79188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 31,
+            "y": 31,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 79192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 35,
+            "y": 35,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 79264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 27,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 79270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 33,
+            "y": 33,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 79276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 39,
+            "y": 39,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 79282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 45,
+            "y": 45,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 79288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 51,
+            "y": 51,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7010,
+      "variant": "Search",
       "symbol": "ICON_SEARCH",
       "alias": "search",
       "sourceName": "magnifying-glass",
       "sourceSvg": "assets/regular/magnifying-glass.svg",
-      "sourceRect": {
-        "x": 69,
-        "y": 35,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 80176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 37,
+            "y": 19,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 80180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 45,
+            "y": 23,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 80184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 53,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 80188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 61,
+            "y": 31,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 80192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 69,
+            "y": 35,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 80264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 53,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 80270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 65,
+            "y": 33,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 80276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 77,
+            "y": 39,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 80282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 89,
+            "y": 45,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 80288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 101,
+            "y": 51,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7011,
+      "variant": "Archive",
       "symbol": "ICON_ARCHIVE",
       "alias": "archive",
       "sourceName": "archive",
       "sourceSvg": "assets/regular/archive.svg",
-      "sourceRect": {
-        "x": 103,
-        "y": 35,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 81176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 55,
+            "y": 19,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 81180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 67,
+            "y": 23,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 81184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 79,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 81188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 91,
+            "y": 31,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 81192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 103,
+            "y": 35,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 81264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 79,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 81270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 97,
+            "y": 33,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 81276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 115,
+            "y": 39,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 81282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 133,
+            "y": 45,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 81288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 151,
+            "y": 51,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7012,
+      "variant": "File",
       "symbol": "ICON_FILE",
       "alias": "file",
       "sourceName": "file",
       "sourceSvg": "assets/regular/file.svg",
-      "sourceRect": {
-        "x": 137,
-        "y": 35,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 82176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 73,
+            "y": 19,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 82180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 89,
+            "y": 23,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 82184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 105,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 82188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 121,
+            "y": 31,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 82192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 137,
+            "y": 35,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 82264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 105,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 82270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 129,
+            "y": 33,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 82276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 153,
+            "y": 39,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 82282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 177,
+            "y": 45,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 82288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 201,
+            "y": 51,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7013,
+      "variant": "Image",
       "symbol": "ICON_IMAGE",
       "alias": "image",
       "sourceName": "image",
       "sourceSvg": "assets/regular/image.svg",
-      "sourceRect": {
-        "x": 171,
-        "y": 35,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 83176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 91,
+            "y": 19,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 83180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 111,
+            "y": 23,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 83184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 131,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 83188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 151,
+            "y": 31,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 83192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 171,
+            "y": 35,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 83264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 131,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 83270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 161,
+            "y": 33,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 83276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 191,
+            "y": 39,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 83282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 221,
+            "y": 45,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 83288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 251,
+            "y": 51,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7014,
+      "variant": "Gear",
       "symbol": "ICON_GEAR",
       "alias": "gear",
       "sourceName": "gear",
       "sourceSvg": "assets/regular/gear.svg",
-      "sourceRect": {
-        "x": 205,
-        "y": 35,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 84176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 109,
+            "y": 19,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 84180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 133,
+            "y": 23,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 84184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 157,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 84188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 181,
+            "y": 31,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 84192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 205,
+            "y": 35,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 84264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 157,
+            "y": 27,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 84270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 193,
+            "y": 33,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 84276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 229,
+            "y": 39,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 84282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 265,
+            "y": 45,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 84288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 301,
+            "y": 51,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7015,
+      "variant": "Grid",
       "symbol": "ICON_GRID",
       "alias": "grid",
       "sourceName": "grid-four",
       "sourceSvg": "assets/regular/grid-four.svg",
-      "sourceRect": {
-        "x": 1,
-        "y": 69,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 85176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 1,
+            "y": 37,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 85180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 1,
+            "y": 45,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 85184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 1,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 85188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 1,
+            "y": 61,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 85192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 1,
+            "y": 69,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 85264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 1,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 85270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 1,
+            "y": 65,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 85276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 1,
+            "y": 77,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 85282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 1,
+            "y": 89,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 85288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 1,
+            "y": 101,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7016,
+      "variant": "Layers",
       "symbol": "ICON_LAYERS",
       "alias": "layers",
       "sourceName": "stack",
       "sourceSvg": "assets/regular/stack.svg",
-      "sourceRect": {
-        "x": 35,
-        "y": 69,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 86176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 19,
+            "y": 37,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 86180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 23,
+            "y": 45,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 86184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 27,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 86188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 31,
+            "y": 61,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 86192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 35,
+            "y": 69,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 86264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 27,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 86270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 33,
+            "y": 65,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 86276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 39,
+            "y": 77,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 86282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 45,
+            "y": 89,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 86288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 51,
+            "y": 101,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7017,
+      "variant": "Code",
       "symbol": "ICON_CODE",
       "alias": "code",
       "sourceName": "code",
       "sourceSvg": "assets/regular/code.svg",
-      "sourceRect": {
-        "x": 69,
-        "y": 69,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 87176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 37,
+            "y": 37,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 87180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 45,
+            "y": 45,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 87184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 53,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 87188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 61,
+            "y": 61,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 87192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 69,
+            "y": 69,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 87264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 53,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 87270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 65,
+            "y": 65,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 87276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 77,
+            "y": 77,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 87282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 89,
+            "y": 89,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 87288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 101,
+            "y": 101,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7018,
+      "variant": "Box",
       "symbol": "ICON_BOX",
       "alias": "package",
       "sourceName": "package",
       "sourceSvg": "assets/regular/package.svg",
-      "sourceRect": {
-        "x": 103,
-        "y": 69,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 88176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 55,
+            "y": 37,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 88180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 67,
+            "y": 45,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 88184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 79,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 88188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 91,
+            "y": 61,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 88192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 103,
+            "y": 69,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 88264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 79,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 88270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 97,
+            "y": 65,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 88276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 115,
+            "y": 77,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 88282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 133,
+            "y": 89,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 88288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 151,
+            "y": 101,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7019,
+      "variant": "Rocket",
       "symbol": "ICON_ROCKET",
       "alias": "rocket",
       "sourceName": "rocket",
       "sourceSvg": "assets/regular/rocket.svg",
-      "sourceRect": {
-        "x": 137,
-        "y": 69,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 89176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 73,
+            "y": 37,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 89180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 89,
+            "y": 45,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 89184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 105,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 89188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 121,
+            "y": 61,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 89192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 137,
+            "y": 69,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 89264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 105,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 89270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 129,
+            "y": 65,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 89276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 153,
+            "y": 77,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 89282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 177,
+            "y": 89,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 89288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 201,
+            "y": 101,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7020,
+      "variant": "Download",
       "symbol": "ICON_DOWNLOAD",
       "alias": "download",
       "sourceName": "download",
       "sourceSvg": "assets/regular/download.svg",
-      "sourceRect": {
-        "x": 171,
-        "y": 69,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 90176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 91,
+            "y": 37,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 90180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 111,
+            "y": 45,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 90184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 131,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 90188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 151,
+            "y": 61,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 90192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 171,
+            "y": 69,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 90264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 131,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 90270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 161,
+            "y": 65,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 90276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 191,
+            "y": 77,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 90282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 221,
+            "y": 89,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 90288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 251,
+            "y": 101,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7021,
+      "variant": "Dots",
       "symbol": "ICON_DOTS",
       "alias": "more",
       "sourceName": "dots-three",
       "sourceSvg": "assets/regular/dots-three.svg",
-      "sourceRect": {
-        "x": 205,
-        "y": 69,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 91176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 109,
+            "y": 37,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 91180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 133,
+            "y": 45,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 91184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 157,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 91188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 181,
+            "y": 61,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 91192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 205,
+            "y": 69,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 91264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 157,
+            "y": 53,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 91270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 193,
+            "y": 65,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 91276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 229,
+            "y": 77,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 91282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 265,
+            "y": 89,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 91288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 301,
+            "y": 101,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7022,
+      "variant": "Chevron",
       "symbol": "ICON_CHEVRON",
       "alias": "chevron-right",
       "sourceName": "caret-right",
       "sourceSvg": "assets/regular/caret-right.svg",
-      "sourceRect": {
-        "x": 1,
-        "y": 103,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 92176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 1,
+            "y": 55,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 92180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 1,
+            "y": 67,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 92184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 1,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 92188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 1,
+            "y": 91,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 92192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 1,
+            "y": 103,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 92264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 1,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 92270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 1,
+            "y": 97,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 92276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 1,
+            "y": 115,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 92282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 1,
+            "y": 133,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 92288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 1,
+            "y": 151,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7023,
+      "variant": "Caret",
       "symbol": "ICON_CARET",
       "alias": "caret-down",
       "sourceName": "caret-down",
       "sourceSvg": "assets/regular/caret-down.svg",
-      "sourceRect": {
-        "x": 35,
-        "y": 103,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 93176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 19,
+            "y": 55,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 93180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 23,
+            "y": 67,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 93184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 27,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 93188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 31,
+            "y": 91,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 93192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 35,
+            "y": 103,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 93264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 27,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 93270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 33,
+            "y": 97,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 93276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 39,
+            "y": 115,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 93282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 45,
+            "y": 133,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 93288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 51,
+            "y": 151,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7024,
+      "variant": "Reset",
       "symbol": "ICON_RESET",
       "alias": "reset",
       "sourceName": "arrow-counter-clockwise",
       "sourceSvg": "assets/regular/arrow-counter-clockwise.svg",
-      "sourceRect": {
-        "x": 69,
-        "y": 103,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 94176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 37,
+            "y": 55,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 94180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 45,
+            "y": 67,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 94184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 53,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 94188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 61,
+            "y": 91,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 94192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 69,
+            "y": 103,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 94264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 53,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 94270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 65,
+            "y": 97,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 94276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 77,
+            "y": 115,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 94282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 89,
+            "y": 133,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 94288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 101,
+            "y": 151,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7025,
+      "variant": "Component",
       "symbol": "ICON_COMPONENT",
       "alias": "component",
       "sourceName": "circles-four",
       "sourceSvg": "assets/regular/circles-four.svg",
-      "sourceRect": {
-        "x": 103,
-        "y": 103,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 95176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 55,
+            "y": 55,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 95180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 67,
+            "y": 67,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 95184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 79,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 95188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 91,
+            "y": 91,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 95192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 103,
+            "y": 103,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 95264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 79,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 95270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 97,
+            "y": 97,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 95276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 115,
+            "y": 115,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 95282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 133,
+            "y": 133,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 95288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 151,
+            "y": 151,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7026,
+      "variant": "Tokens",
       "symbol": "ICON_TOKENS",
       "alias": "tokens",
       "sourceName": "swatches",
       "sourceSvg": "assets/regular/swatches.svg",
-      "sourceRect": {
-        "x": 137,
-        "y": 103,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 96176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 73,
+            "y": 55,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 96180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 89,
+            "y": 67,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 96184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 105,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 96188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 121,
+            "y": 91,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 96192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 137,
+            "y": 103,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 96264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 105,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 96270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 129,
+            "y": 97,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 96276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 153,
+            "y": 115,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 96282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 177,
+            "y": 133,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 96288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 201,
+            "y": 151,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7027,
+      "variant": "Eye",
       "symbol": "ICON_EYE",
       "alias": "visibility",
       "sourceName": "eye",
       "sourceSvg": "assets/regular/eye.svg",
-      "sourceRect": {
-        "x": 171,
-        "y": 103,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 97176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 91,
+            "y": 55,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 97180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 111,
+            "y": 67,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 97184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 131,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 97188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 151,
+            "y": 91,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 97192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 171,
+            "y": 103,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 97264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 131,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 97270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 161,
+            "y": 97,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 97276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 191,
+            "y": 115,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 97282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 221,
+            "y": 133,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 97288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 251,
+            "y": 151,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     },
     {
-      "idRaw": 7028,
+      "variant": "Crosshair",
       "symbol": "ICON_CROSSHAIR",
       "alias": "crosshair",
       "sourceName": "crosshair",
       "sourceSvg": "assets/regular/crosshair.svg",
-      "sourceRect": {
-        "x": 205,
-        "y": 103,
-        "width": 32,
-        "height": 32
-      }
+      "variants": [
+        {
+          "idRaw": 98176,
+          "logicalSize": 16,
+          "physicalSize": 16,
+          "scaleFactor": 1,
+          "atlas": 70016,
+          "sourceRect": {
+            "x": 109,
+            "y": 55,
+            "width": 16,
+            "height": 16
+          }
+        },
+        {
+          "idRaw": 98180,
+          "logicalSize": 16,
+          "physicalSize": 20,
+          "scaleFactor": 1.25,
+          "atlas": 70020,
+          "sourceRect": {
+            "x": 133,
+            "y": 67,
+            "width": 20,
+            "height": 20
+          }
+        },
+        {
+          "idRaw": 98184,
+          "logicalSize": 16,
+          "physicalSize": 24,
+          "scaleFactor": 1.5,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 157,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 98188,
+          "logicalSize": 16,
+          "physicalSize": 28,
+          "scaleFactor": 1.75,
+          "atlas": 70028,
+          "sourceRect": {
+            "x": 181,
+            "y": 91,
+            "width": 28,
+            "height": 28
+          }
+        },
+        {
+          "idRaw": 98192,
+          "logicalSize": 16,
+          "physicalSize": 32,
+          "scaleFactor": 2,
+          "atlas": 70032,
+          "sourceRect": {
+            "x": 205,
+            "y": 103,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "idRaw": 98264,
+          "logicalSize": 24,
+          "physicalSize": 24,
+          "scaleFactor": 1,
+          "atlas": 70024,
+          "sourceRect": {
+            "x": 157,
+            "y": 79,
+            "width": 24,
+            "height": 24
+          }
+        },
+        {
+          "idRaw": 98270,
+          "logicalSize": 24,
+          "physicalSize": 30,
+          "scaleFactor": 1.25,
+          "atlas": 70030,
+          "sourceRect": {
+            "x": 193,
+            "y": 97,
+            "width": 30,
+            "height": 30
+          }
+        },
+        {
+          "idRaw": 98276,
+          "logicalSize": 24,
+          "physicalSize": 36,
+          "scaleFactor": 1.5,
+          "atlas": 70036,
+          "sourceRect": {
+            "x": 229,
+            "y": 115,
+            "width": 36,
+            "height": 36
+          }
+        },
+        {
+          "idRaw": 98282,
+          "logicalSize": 24,
+          "physicalSize": 42,
+          "scaleFactor": 1.75,
+          "atlas": 70042,
+          "sourceRect": {
+            "x": 265,
+            "y": 133,
+            "width": 42,
+            "height": 42
+          }
+        },
+        {
+          "idRaw": 98288,
+          "logicalSize": 24,
+          "physicalSize": 48,
+          "scaleFactor": 2,
+          "atlas": 70048,
+          "sourceRect": {
+            "x": 301,
+            "y": 151,
+            "width": 48,
+            "height": 48
+          }
+        }
+      ]
     }
   ]
 }

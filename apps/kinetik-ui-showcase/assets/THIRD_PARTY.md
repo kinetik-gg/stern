@@ -1,11 +1,8 @@
 # Third-party showcase assets
 
 - Phosphor Icons, MIT License, https://github.com/phosphor-icons/phosphor-core.
-  The generated atlas, manifest, and Rust metadata in `icons/phosphor/` are
+  The generated atlases, manifest, and Rust metadata in `icons/phosphor/` are
   built from `@phosphor-icons/core` version 2.1.1 regular SVG assets.
-- Radix Icons, MIT License, https://github.com/radix-ui/icons. Legacy generated
-  PNG/RGBA files may remain in `icons/`; the showcase editor now uses the
-  Phosphor atlas above.
 
 ## Phosphor Icons License
 

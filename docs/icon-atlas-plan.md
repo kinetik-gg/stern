@@ -61,8 +61,11 @@ guaranteed single draw call.
 - The showcase editor consumes a 28-icon `regular` Phosphor subset from the
   official `@phosphor-icons/core` package.
 - `tools/icon-atlas/generate-phosphor-icons.mjs` rasterizes SVGs to white RGBA8,
-  packs a guttered atlas, and emits `manifest.json`, `atlas.rgba`, `atlas.png`,
-  and Rust metadata.
+  packs guttered per-DPI atlases, and emits `manifest.json`,
+  `atlas-<physical-size>.rgba`, `atlas-<physical-size>.png`, and Rust metadata.
+- The first generated logical sizes are 16 px for dense/panel icons and 24 px
+  for toolbar/asset icons, with exact physical buckets for 1.0x, 1.25x, 1.5x,
+  1.75x, and 2.0x scale factors.
 - Rebuild with `npm --prefix tools/icon-atlas ci --ignore-scripts` followed by
   `npm --prefix tools/icon-atlas run generate:phosphor`; the tool lockfile pins
   `@phosphor-icons/core` to 2.1.1.

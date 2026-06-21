@@ -1993,6 +1993,7 @@ fn sanitize_viewport_size(size: Size) -> Size {
 #[cfg(test)]
 mod tests {
     use super::{ShowcaseApp, ShowcaseInput, ShowcasePage, frame_context, static_render_resources};
+    use crate::editor::phosphor_icons;
     use kinetik_ui::{
         core::{
             ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point,
@@ -2224,7 +2225,11 @@ mod tests {
         let icon_images = primitives
             .iter()
             .filter_map(|primitive| match primitive {
-                Primitive::Image(image) if (7_001..=7_028).contains(&image.image.raw()) => {
+                Primitive::Image(image)
+                    if phosphor_icons::ICON_ENTRIES
+                        .iter()
+                        .any(|entry| entry.image == image.image) =>
+                {
                     Some(image)
                 }
                 _ => None,
@@ -2249,25 +2254,35 @@ mod tests {
     fn editor_icons_are_registered_as_atlas_regions() {
         let app = ShowcaseApp::new();
         let resources = app.render_resources();
-        let atlas = ImageId::from_raw(7_000);
 
-        assert!(
-            resources
-                .image(atlas)
-                .and_then(|resource| resource.pixels.as_ref())
-                .is_some_and(|pixels| pixels.width == 238 && pixels.height == 136)
-        );
-        let icon_regions = (7_001..=7_028)
-            .filter_map(|raw| resources.image(ImageId::from_raw(raw)))
-            .filter(|resource| resource.pixels.is_none())
-            .filter(|resource| {
-                resource
-                    .atlas_region
-                    .is_some_and(|region| region.atlas == atlas)
+        for atlas in phosphor_icons::ICON_ATLASES {
+            assert!(
+                resources
+                    .image(atlas.image)
+                    .and_then(|resource| resource.pixels.as_ref())
+                    .is_some_and(
+                        |pixels| pixels.width == atlas.width && pixels.height == atlas.height
+                    ),
+                "missing atlas {}",
+                atlas.physical_size
+            );
+        }
+        let icon_regions = phosphor_icons::ICON_ENTRIES
+            .iter()
+            .filter_map(|entry| {
+                resources
+                    .image(entry.image)
+                    .map(|resource| (entry, resource))
+            })
+            .filter(|(entry, resource)| {
+                resource.pixels.is_none()
+                    && resource
+                        .atlas_region
+                        .is_some_and(|region| region.atlas == entry.atlas)
             })
             .count();
 
-        assert_eq!(icon_regions, 28);
+        assert_eq!(icon_regions, phosphor_icons::ICON_ENTRIES.len());
     }
 
     #[test]
