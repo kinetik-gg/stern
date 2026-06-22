@@ -67,7 +67,7 @@ pub use theme::{
     SeparatorRecipe, ShadowRecipe, SliderRecipe, SpacingScale, TabRecipe, TextFieldRecipe,
     TextRecipe, TextRole, Theme, ThemeColors, ToggleRecipe, TypographyScale, default_dark_theme,
 };
-pub use units::{PhysicalPoint, PhysicalSize, ScaleFactor};
+pub use units::{PhysicalPoint, PhysicalRect, PhysicalSize, ScaleFactor};
 
 /// Returns the crate name.
 #[must_use]
