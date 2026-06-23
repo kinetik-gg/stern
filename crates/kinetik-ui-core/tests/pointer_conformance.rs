@@ -68,6 +68,29 @@ fn target_id(ui: &mut Ui<'_>) -> WidgetId {
     ui.id("target")
 }
 
+fn start_drag_over_target(harness: &mut UiTestHarness) -> WidgetId {
+    harness.set_pointer_position(Point::new(10.0, 10.0));
+    harness.pointer_press(MouseButton::Primary);
+    let _ = harness.run_frame(|ui| {
+        let source = source_id(ui);
+        let (input, memory) = ui.input_and_memory_mut();
+        draggable(source, source_rect(), input, memory, false)
+    });
+
+    harness.set_pointer_position(Point::new(90.0, 10.0));
+    let dragged = harness
+        .run_frame(|ui| {
+            let source = source_id(ui);
+            let (input, memory) = ui.input_and_memory_mut();
+            draggable(source, source_rect(), input, memory, false)
+        })
+        .0;
+
+    assert!(dragged.dragged);
+    assert_eq!(harness.memory().drag_source(), Some(dragged.id));
+    dragged.id
+}
+
 #[test]
 fn pointer_interaction_pressable_press_release_click_and_double_click_are_frame_driven() {
     let mut harness = UiTestHarness::new();
@@ -185,6 +208,7 @@ fn pointer_interaction_draggable_starts_updates_and_ends_with_capture_outside_re
     assert!(pressed.state.pressed);
     assert!(!pressed.dragged);
     assert!(harness.memory().has_pointer_capture(pressed.id));
+    assert_eq!(harness.memory().drag_source(), None);
 
     harness.set_pointer_position(Point::new(70.0, 10.0));
     let dragged = harness
@@ -200,6 +224,7 @@ fn pointer_interaction_draggable_starts_updates_and_ends_with_capture_outside_re
     assert!(dragged.dragged);
     assert_eq!(dragged.drag_delta, Vec2::new(60.0, 0.0));
     assert_eq!(harness.memory().drag_source(), Some(dragged.id));
+    assert_eq!(harness.memory().released_drag_source(), None);
 
     harness.pointer_release(MouseButton::Primary);
     let released = harness
@@ -396,41 +421,61 @@ fn pointer_interaction_release_all_clears_capture_without_participating_primitiv
 }
 
 #[test]
-fn pointer_interaction_drop_target_accepts_released_drag_source_over_target() {
+fn pointer_interaction_drop_target_reports_active_drag_source_over_target() {
     let mut harness = UiTestHarness::new();
+    let source = start_drag_over_target(&mut harness);
 
-    harness.set_pointer_position(Point::new(10.0, 10.0));
-    harness.pointer_press(MouseButton::Primary);
-    let _ = harness.run_frame(|ui| {
-        let source = source_id(ui);
-        let (input, memory) = ui.input_and_memory_mut();
-        draggable(source, source_rect(), input, memory, false)
-    });
-
-    harness.set_pointer_position(Point::new(50.0, 10.0));
-    let _ = harness.run_frame(|ui| {
-        let source = source_id(ui);
-        let (input, memory) = ui.input_and_memory_mut();
-        draggable(source, source_rect(), input, memory, false)
-    });
-
-    harness.set_pointer_position(Point::new(90.0, 10.0));
-    harness.pointer_release(MouseButton::Primary);
     let drop = harness
         .run_frame(|ui| {
-            let source = source_id(ui);
             let target = target_id(ui);
             let (input, memory) = ui.input_and_memory_mut();
-            let source_response = draggable(source, source_rect(), input, memory, false);
-            let target_response = drop_target(target, target_rect(), input, memory, false);
-            (source_response, target_response)
+            drop_target(target, target_rect(), input, memory, false)
         })
         .0;
 
-    assert_eq!(drop.1.source, Some(drop.0.id));
-    assert!(drop.1.dropped);
-    assert!(drop.1.response.state.hovered);
-    assert_eq!(harness.memory().released_drag_source(), Some(drop.0.id));
+    assert_eq!(drop.source, Some(source));
+    assert!(!drop.dropped);
+    assert!(drop.response.state.hovered);
+    assert_eq!(harness.memory().drag_source(), Some(source));
+    assert_eq!(harness.memory().released_drag_source(), None);
+}
+
+#[test]
+fn pointer_interaction_drop_target_accepts_released_drag_source_over_target() {
+    for source_first in [true, false] {
+        let mut harness = UiTestHarness::new();
+        let source = start_drag_over_target(&mut harness);
+
+        harness.pointer_release(MouseButton::Primary);
+        let (source_response, target_response) = harness
+            .run_frame(|ui| {
+                let source = source_id(ui);
+                let target = target_id(ui);
+                let (input, memory) = ui.input_and_memory_mut();
+
+                if source_first {
+                    let source_response = draggable(source, source_rect(), input, memory, false);
+                    let target_response = drop_target(target, target_rect(), input, memory, false);
+                    (source_response, target_response)
+                } else {
+                    let target_response = drop_target(target, target_rect(), input, memory, false);
+                    let source_response = draggable(source, source_rect(), input, memory, false);
+                    (source_response, target_response)
+                }
+            })
+            .0;
+
+        assert_eq!(source_response.id, source);
+        assert_eq!(target_response.source, Some(source));
+        assert!(target_response.dropped);
+        assert!(target_response.response.state.hovered);
+        assert_eq!(harness.memory().drag_source(), None);
+        assert_eq!(harness.memory().released_drag_source(), Some(source));
+
+        harness.advance_frame(Duration::from_millis(16));
+        let released_source = harness.run_frame(|ui| ui.memory().released_drag_source()).0;
+        assert_eq!(released_source, None);
+    }
 }
 
 #[test]
@@ -489,6 +534,7 @@ fn pointer_interaction_drop_target_rejects_self_disabled_and_missed_releases() {
         })
         .0;
     assert!(disabled_drop.response.state.disabled);
+    assert_eq!(disabled_drop.source, None);
     assert!(!disabled_drop.dropped);
 
     let mut missed = UiTestHarness::new();
@@ -507,7 +553,7 @@ fn pointer_interaction_drop_target_rejects_self_disabled_and_missed_releases() {
     });
     missed.set_pointer_position(Point::new(160.0, 10.0));
     missed.pointer_release(MouseButton::Primary);
-    let (missed_source, missed_drop) = missed
+    let (_, missed_drop) = missed
         .run_frame(|ui| {
             let source = source_id(ui);
             let target = target_id(ui);
@@ -518,7 +564,7 @@ fn pointer_interaction_drop_target_rejects_self_disabled_and_missed_releases() {
             )
         })
         .0;
-    assert_eq!(missed_drop.source, Some(missed_source.id));
+    assert_eq!(missed_drop.source, None);
     assert!(!missed_drop.dropped);
 }
 

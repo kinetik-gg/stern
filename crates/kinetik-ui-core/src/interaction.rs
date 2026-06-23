@@ -86,9 +86,9 @@ pub struct ScrollResponse {
 pub struct DropTargetResponse {
     /// Common interaction response for the target region.
     pub response: Response,
-    /// Captured drag source, if a different widget owns pointer capture.
+    /// Eligible active or released drag source over this target.
     pub source: Option<WidgetId>,
-    /// Whether a captured source was released over this target this frame.
+    /// Whether an eligible source was released over this target this frame.
     pub dropped: bool,
 }
 
@@ -301,18 +301,23 @@ pub fn drop_target(
     disabled: bool,
 ) -> DropTargetResponse {
     let pointer_cancelled = memory.pointer_interaction_cancelled();
-    let source = memory
+    let source_candidate = memory
         .released_drag_source()
         .or_else(|| memory.drag_source())
         .filter(|source| *source != id);
-    let release_drop_hit = !pointer_cancelled && input.pointer.primary.released && source.is_some();
+    let target_hit = hit_test(rect, input);
     let hovered = !pointer_cancelled
         && !disabled
-        && if release_drop_hit {
-            hit_test(rect, input)
+        && if source_candidate.is_some() {
+            target_hit
         } else {
             routed_hit_test(id, rect, input, memory)
         };
+    let source = if !pointer_cancelled && !disabled && source_candidate.is_some() && target_hit {
+        source_candidate
+    } else {
+        None
+    };
     if hovered {
         memory.set_hovered(id);
     }
