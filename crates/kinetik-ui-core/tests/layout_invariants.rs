@@ -136,8 +136,10 @@ fn layout_invariants_size_rule_resolution_sanitizes_invalid_inputs() {
             20.0,
         ),
         (SizeRule::AspectRatio(2.0), 100.0, 20.0, 30.0, 60.0),
+        (SizeRule::AspectRatio(0.0), 100.0, 20.0, 30.0, 0.0),
         (SizeRule::AspectRatio(-2.0), 100.0, 20.0, 30.0, 0.0),
         (SizeRule::AspectRatio(f32::NAN), 100.0, 20.0, 30.0, 0.0),
+        (SizeRule::AspectRatio(f32::INFINITY), 100.0, 20.0, 30.0, 0.0),
         (SizeRule::AspectRatio(2.0), 100.0, 20.0, f32::INFINITY, 0.0),
     ];
 
@@ -307,21 +309,41 @@ fn layout_invariants_zero_size_parent_produces_finite_non_negative_children() {
 }
 
 #[test]
-fn layout_invariants_aspect_ratio_row_policy_does_not_freeze_column_height() {
+fn layout_invariants_aspect_ratio_preserves_width_over_height_contract() {
     let row_items = [item(SizeRule::AspectRatio(2.0), SizeRule::Fill, Size::ZERO)];
+    let row_cross_items = [item(
+        SizeRule::Fixed(30.0),
+        SizeRule::AspectRatio(2.0),
+        Size::ZERO,
+    )];
     let column_items = [item(SizeRule::Fill, SizeRule::AspectRatio(2.0), Size::ZERO)];
+    let column_cross_items = [item(
+        SizeRule::AspectRatio(2.0),
+        SizeRule::Fixed(15.0),
+        Size::ZERO,
+    )];
 
     let row = row_layout(Rect::new(0.0, 0.0, 100.0, 30.0), &row_items, 0.0);
+    let row_cross = row_layout(Rect::new(0.0, 0.0, 100.0, 30.0), &row_cross_items, 0.0);
     let column = column_layout(Rect::new(0.0, 0.0, 30.0, 100.0), &column_items, 0.0);
+    let column_cross = column_layout(Rect::new(0.0, 0.0, 100.0, 100.0), &column_cross_items, 0.0);
 
     assert_rects_invariants(&row);
+    assert_rects_invariants(&row_cross);
     assert_rects_invariants(&column);
+    assert_rects_invariants(&column_cross);
     assert_approx(row[0].width, 60.0);
     assert_approx(row[0].height, 30.0);
+    assert_approx(row[0].width / row[0].height, 2.0);
+    assert_approx(row_cross[0].width, 30.0);
+    assert_approx(row_cross[0].height, 15.0);
+    assert_approx(row_cross[0].width / row_cross[0].height, 2.0);
     assert_approx(column[0].width, 30.0);
-    // TODO: vertical-axis aspect-ratio layout should preserve the documented
-    // width/height contract; conformance must not freeze the current column
-    // height behavior until that policy is implemented.
+    assert_approx(column[0].height, 15.0);
+    assert_approx(column[0].width / column[0].height, 2.0);
+    assert_approx(column_cross[0].width, 30.0);
+    assert_approx(column_cross[0].height, 15.0);
+    assert_approx(column_cross[0].width / column_cross[0].height, 2.0);
 }
 
 #[test]
