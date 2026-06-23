@@ -25,6 +25,8 @@ metadata:
 - shaped text layout handle, size, line count, and glyph count
 
 Do not snapshot raw pixel bytes, font bytes, or backend-native resource objects.
+Snapshot numbers are formatted to three decimals. Non-finite values and negative
+zero are normalized to `0.000` before text formatting.
 
 ## Command Snapshots
 
@@ -35,6 +37,9 @@ before Vello scene encoding. They include:
 - layer, clip, and transform state
 - geometry, brushes, strokes, text, image, and texture references
 - recoverable diagnostics
+
+Commands stay in translated primitive order, including when nested layer, clip,
+and transform scopes are active. Diagnostics are serialized as stable strings.
 
 Add or update a command snapshot when a primitive translation contract changes.
 Keep backend-neutral tests in `kinetik-ui-render` and Vello-specific snapshots in

@@ -192,6 +192,64 @@ fn render_translation_conformance_preserves_nested_context_geometry_and_brushes(
 }
 
 #[test]
+fn render_translation_conformance_preserves_nested_state_command_order() {
+    let primitives = vec![
+        Primitive::LayerBegin {
+            id: LayerId::from_raw(20),
+        },
+        Primitive::ClipBegin {
+            id: ClipId::from_raw(4),
+            rect: Rect::new(0.0, 0.0, 90.0, 60.0),
+        },
+        Primitive::Rect(RectPrimitive {
+            rect: Rect::new(1.0, 1.0, 10.0, 6.0),
+            fill: Some(Brush::Solid(Color::WHITE)),
+            stroke: None,
+            radius: CornerRadius::all(0.0),
+        }),
+        Primitive::LayerBegin {
+            id: LayerId::from_raw(1),
+        },
+        Primitive::TransformBegin(Transform::translation(Vec2::new(3.25, 4.75))),
+        Primitive::Rect(RectPrimitive {
+            rect: Rect::new(2.0, 3.0, 12.0, 8.0),
+            fill: Some(Brush::Solid(Color::BLACK)),
+            stroke: None,
+            radius: CornerRadius::all(1.0),
+        }),
+        Primitive::TransformEnd,
+        Primitive::LayerEnd {
+            id: LayerId::from_raw(1),
+        },
+        Primitive::Rect(RectPrimitive {
+            rect: Rect::new(5.0, 7.0, 14.0, 9.0),
+            fill: Some(Brush::Solid(Color::rgba(0.2, 0.4, 0.6, 1.0))),
+            stroke: None,
+            radius: CornerRadius::all(2.0),
+        }),
+        Primitive::ClipEnd {
+            id: ClipId::from_raw(4),
+        },
+        Primitive::LayerEnd {
+            id: LayerId::from_raw(20),
+        },
+        Primitive::Rect(RectPrimitive {
+            rect: Rect::new(8.0, 11.0, 16.0, 10.0),
+            fill: None,
+            stroke: Some(Stroke::new(1.25, Brush::Solid(Color::WHITE))),
+            radius: CornerRadius::all(0.0),
+        }),
+    ];
+
+    let translation = translate_primitives(&primitives, &RenderResources::new());
+
+    assert_eq!(
+        render_translation_snapshot(&translation),
+        "commands:\n  0: layer=20 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[{rect=(0.000, 0.000, 90.000, 60.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(1.000, 1.000, 10.000, 6.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(0.000, 0.000, 0.000, 0.000)\n  1: layer=1 transform=[1.000, 0.000, 0.000, 1.000, 3.250, 4.750] clips=[{rect=(0.000, 0.000, 90.000, 60.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(2.000, 3.000, 12.000, 8.000) fill=rgba(0.000, 0.000, 0.000, 1.000) stroke=none radius=(1.000, 1.000, 1.000, 1.000)\n  2: layer=20 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[{rect=(0.000, 0.000, 90.000, 60.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(5.000, 7.000, 14.000, 9.000) fill=rgba(0.200, 0.400, 0.600, 1.000) stroke=none radius=(2.000, 2.000, 2.000, 2.000)\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] rect rect=(8.000, 11.000, 16.000, 10.000) fill=none stroke=1.250 rgba(1.000, 1.000, 1.000, 1.000) radius=(0.000, 0.000, 0.000, 0.000)\ndiagnostics:"
+    );
+}
+
+#[test]
 fn render_translation_conformance_reports_recoverable_missing_resource_paths() {
     let mut resources = RenderResources::new();
     resources.register_image(ImageResource {
