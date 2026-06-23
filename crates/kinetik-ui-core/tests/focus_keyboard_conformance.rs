@@ -3,8 +3,8 @@
 use kinetik_ui_core::{
     ActionBinding, ActionContext, ActionDescriptor, ActionId, ActionPriority, ActionRouter,
     ActionRoutingContext, FocusTraversal, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
-    PhysicalKey, Rect, SemanticNode, SemanticRole, SemanticTree, Shortcut, Ui, UiTestHarness,
-    WidgetId, pressable,
+    MouseButton, PhysicalKey, Point, Rect, SemanticNode, SemanticRole, SemanticTree, Shortcut, Ui,
+    UiTestHarness, WidgetId, focusable, pressable,
 };
 
 fn ctrl() -> Modifiers {
@@ -113,6 +113,30 @@ fn emit_tree(ui: &mut Ui<'_>, tree: &SemanticTree) {
     for node in tree.nodes().iter().cloned() {
         ui.push_semantic_node(node);
     }
+}
+
+fn click_focusable(
+    harness: &mut UiTestHarness,
+    id: WidgetId,
+    rect: Rect,
+    disabled: bool,
+) -> kinetik_ui_core::Response {
+    harness.set_pointer_position(Point::new(
+        rect.min_x() + rect.width * 0.5,
+        rect.min_y() + rect.height * 0.5,
+    ));
+    harness.pointer_press(MouseButton::Primary);
+    let _ = harness.run_frame(|ui| {
+        let (input, memory) = ui.input_and_memory_mut();
+        focusable(id, rect, input, memory, disabled)
+    });
+    harness.pointer_release(MouseButton::Primary);
+    harness
+        .run_frame(|ui| {
+            let (input, memory) = ui.input_and_memory_mut();
+            focusable(id, rect, input, memory, disabled)
+        })
+        .0
 }
 
 #[test]
@@ -227,6 +251,54 @@ fn focus_keyboard_runtime_tab_skips_disabled_and_non_focusable_nodes() {
 }
 
 #[test]
+fn focus_keyboard_enabled_focusable_click_acquires_focus_ownership() {
+    let id = WidgetId::from_key("button");
+    let rect = Rect::new(10.0, 10.0, 40.0, 20.0);
+    let mut harness = UiTestHarness::new();
+
+    let response = click_focusable(&mut harness, id, rect, false);
+
+    assert!(response.clicked);
+    assert!(response.state.focused);
+    assert_eq!(harness.memory().focused(), Some(id));
+}
+
+#[test]
+fn focus_keyboard_disabled_focus_target_cannot_steal_existing_focus() {
+    let focused = WidgetId::from_key("focused");
+    let disabled = WidgetId::from_key("disabled");
+    let rect = Rect::new(10.0, 10.0, 40.0, 20.0);
+    let mut harness = UiTestHarness::new();
+    harness.memory_mut().focus(focused);
+
+    let response = click_focusable(&mut harness, disabled, rect, true);
+
+    assert!(!response.clicked);
+    assert!(response.state.disabled);
+    assert!(!response.state.focused);
+    assert_eq!(harness.memory().focused(), Some(focused));
+}
+
+#[test]
+fn focus_keyboard_explicit_focus_clear_leaves_pointer_capture_and_drag_state_untouched() {
+    let focused = WidgetId::from_key("focused");
+    let pointer_owner = WidgetId::from_key("pointer-owner");
+    let drag_owner = WidgetId::from_key("drag-owner");
+    let mut harness = UiTestHarness::new();
+    let memory = harness.memory_mut();
+    memory.focus(focused);
+    memory.capture_pointer(pointer_owner);
+    memory.start_drag(drag_owner);
+
+    memory.clear_focus();
+
+    assert_eq!(harness.memory().focused(), None);
+    assert_eq!(harness.memory().pointer_capture(), Some(pointer_owner));
+    assert_eq!(harness.memory().drag_source(), Some(drag_owner));
+    assert_eq!(harness.memory().released_drag_source(), None);
+}
+
+#[test]
 fn focus_keyboard_runtime_ignores_non_tab_and_released_tab_events() {
     let (_, first, _, _) = ids();
     let tree = focus_tree();
@@ -276,7 +348,9 @@ fn focus_keyboard_runtime_text_input_owner_blocks_tab_and_shift_tab_traversal() 
 fn focus_keyboard_accessibility_snapshot_filters_focused_identity_when_not_focusable() {
     let (_, first, second, third) = ids();
     let disabled = WidgetId::from_key("disabled");
+    let label = WidgetId::from_key("label");
     let tree = focus_tree();
+    let non_focusable_tree = focus_tree_with_non_focusable();
 
     let disabled_snapshot = tree
         .accessibility_snapshot(Some(disabled))
@@ -289,6 +363,39 @@ fn focus_keyboard_accessibility_snapshot_filters_focused_identity_when_not_focus
         .expect("valid snapshot");
     assert_eq!(missing_snapshot.focus_order, vec![second, first, third]);
     assert_eq!(missing_snapshot.focused, None);
+
+    let non_focusable_snapshot = non_focusable_tree
+        .accessibility_snapshot(Some(label))
+        .expect("valid snapshot");
+    assert_eq!(
+        non_focusable_snapshot.focus_order,
+        vec![second, first, third]
+    );
+    assert_eq!(non_focusable_snapshot.focused, None);
+}
+
+#[test]
+fn focus_keyboard_frame_output_snapshot_filters_missing_and_non_focusable_focus_ids() {
+    let (_, first, second, third) = ids();
+    let label = WidgetId::from_key("label");
+    let tree = focus_tree_with_non_focusable();
+    let mut harness = UiTestHarness::new();
+    let ((), output) = harness.run_frame(|ui| emit_tree(ui, &tree));
+
+    let missing_snapshot = output
+        .accessibility_snapshot(Some(WidgetId::from_key("missing")))
+        .expect("valid snapshot");
+    assert_eq!(missing_snapshot.focus_order, vec![second, first, third]);
+    assert_eq!(missing_snapshot.focused, None);
+
+    let non_focusable_snapshot = output
+        .accessibility_snapshot(Some(label))
+        .expect("valid snapshot");
+    assert_eq!(
+        non_focusable_snapshot.focus_order,
+        vec![second, first, third]
+    );
+    assert_eq!(non_focusable_snapshot.focused, None);
 }
 
 #[test]

@@ -297,6 +297,24 @@ mod tests {
     }
 
     #[test]
+    fn clear_focus_preserves_pointer_capture_and_drag_state() {
+        let focused = WidgetId::from_key("focused");
+        let pointer_owner = WidgetId::from_key("pointer-owner");
+        let drag_owner = WidgetId::from_key("drag-owner");
+        let mut memory = UiMemory::new();
+        memory.focus(focused);
+        memory.capture_pointer(pointer_owner);
+        memory.start_drag(drag_owner);
+
+        memory.clear_focus();
+
+        assert_eq!(memory.focused(), None);
+        assert_eq!(memory.pointer_capture(), Some(pointer_owner));
+        assert_eq!(memory.drag_source(), Some(drag_owner));
+        assert_eq!(memory.released_drag_source(), None);
+    }
+
+    #[test]
     fn clears_interaction_state() {
         let id = WidgetId::from_key("button");
         let mut memory = UiMemory::new();
