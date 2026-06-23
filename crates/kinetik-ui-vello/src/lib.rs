@@ -718,7 +718,10 @@ fn validate_image_resource(
         diagnostics.push(RenderDiagnostic::MissingImage(image));
         return;
     };
-    if resource.pixels.is_some() {
+    if let Some(pixels) = resource.pixels.as_ref() {
+        if !image_resource_size_matches_pixels(resource, pixels) {
+            diagnostics.push(RenderDiagnostic::InvalidGeometry("image_source_size"));
+        }
         return;
     }
     let Some(region) = resource.atlas_region else {
@@ -737,8 +740,16 @@ fn validate_image_resource(
         diagnostics.push(RenderDiagnostic::MissingImagePixels(region.atlas));
         return;
     };
+    if !image_resource_size_matches_pixels(atlas, pixels) {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("image_source_size"));
+        return;
+    }
     if !atlas_source_fits_image(region.source, pixels) {
         diagnostics.push(RenderDiagnostic::InvalidGeometry("image_atlas_source"));
+        return;
+    }
+    if !image_resource_size_matches_atlas_source(resource, region.source) {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("image_source_size"));
     }
 }
 
@@ -1731,7 +1742,7 @@ fn resolve_image_draw(
 ) -> Option<ResolvedImageDraw<'_>> {
     let resource = resources.image(image)?;
     if let Some(pixels) = resource.pixels.as_ref() {
-        return Some(ResolvedImageDraw {
+        return image_resource_size_matches_pixels(resource, pixels).then_some(ResolvedImageDraw {
             payload: image,
             pixels,
             source: full_image_source(pixels),
@@ -1741,7 +1752,10 @@ fn resolve_image_draw(
     let region = resource.atlas_region?;
     let atlas = resources.image(region.atlas)?;
     let pixels = atlas.pixels.as_ref()?;
-    atlas_source_fits_image(region.source, pixels).then_some(ResolvedImageDraw {
+    (image_resource_size_matches_pixels(atlas, pixels)
+        && atlas_source_fits_image(region.source, pixels)
+        && image_resource_size_matches_atlas_source(resource, region.source))
+    .then_some(ResolvedImageDraw {
         payload: region.atlas,
         pixels,
         source: region.source,
@@ -2362,6 +2376,14 @@ fn logical_size_matches_snapshot(size: Size, image: &RenderImage) -> bool {
     logical_size_matches(size, Size::new(image.width as f32, image.height as f32))
 }
 
+fn image_resource_size_matches_pixels(resource: &ImageResource, pixels: &RenderImage) -> bool {
+    logical_size_matches_snapshot(resource.size, pixels)
+}
+
+fn image_resource_size_matches_atlas_source(resource: &ImageResource, source: Rect) -> bool {
+    logical_size_matches(resource.size, Size::new(source.width, source.height))
+}
+
 fn image_quality(sampling: RenderImageSampling) -> ImageQuality {
     match sampling {
         RenderImageSampling::Pixelated | RenderImageSampling::UiIcon => ImageQuality::Low,
@@ -2766,7 +2788,7 @@ mod tests {
         let mut resources = RenderResources::new();
         resources.register_image(ImageResource {
             id: ImageId::from_raw(1),
-            size: Size::new(64.0, 64.0),
+            size: Size::new(2.0, 2.0),
             sampling: RenderImageSampling::default(),
             pixels: Some(tiny_image()),
             atlas_region: None,

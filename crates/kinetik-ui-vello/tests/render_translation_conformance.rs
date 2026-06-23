@@ -306,6 +306,121 @@ fn render_translation_conformance_translates_registered_image_and_texture_resour
 }
 
 #[test]
+fn render_translation_conformance_reports_invalid_image_source_metadata() {
+    let mut resources = RenderResources::new();
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(20),
+        size: Size::new(4.0, 2.0),
+        sampling: RenderImageSampling::Pixelated,
+        pixels: Some(tiny_image()),
+        atlas_region: None,
+    });
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(21),
+        size: Size::new(f32::NAN, 2.0),
+        sampling: RenderImageSampling::Pixelated,
+        pixels: Some(tiny_image()),
+        atlas_region: None,
+    });
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(22),
+        size: Size::new(2.0, 2.0),
+        sampling: RenderImageSampling::Pixelated,
+        pixels: Some(tiny_image()),
+        atlas_region: None,
+    });
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(23),
+        size: Size::new(2.0, 2.0),
+        sampling: RenderImageSampling::Pixelated,
+        pixels: None,
+        atlas_region: Some(ImageAtlasRegion {
+            atlas: ImageId::from_raw(22),
+            source: Rect::new(0.0, 0.0, 1.0, 1.0),
+        }),
+    });
+    let primitives = vec![
+        Primitive::Image(ImagePrimitive {
+            image: ImageId::from_raw(20),
+            rect: Rect::new(0.0, 0.0, 8.0, 8.0),
+            tint: None,
+        }),
+        Primitive::Image(ImagePrimitive {
+            image: ImageId::from_raw(21),
+            rect: Rect::new(10.0, 0.0, 8.0, 8.0),
+            tint: None,
+        }),
+        Primitive::Image(ImagePrimitive {
+            image: ImageId::from_raw(23),
+            rect: Rect::new(20.0, 0.0, 8.0, 8.0),
+            tint: None,
+        }),
+    ];
+
+    let translation = translate_primitives(&primitives, &resources);
+
+    assert_eq!(
+        render_translation_snapshot(&translation),
+        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#20 rect=(0.000, 0.000, 8.000, 8.000) tint=none\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#21 rect=(10.000, 0.000, 8.000, 8.000) tint=none\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#23 rect=(20.000, 0.000, 8.000, 8.000) tint=none\ndiagnostics:\n  invalid_geometry:image_source_size\n  invalid_geometry:image_source_size\n  invalid_geometry:image_source_size"
+    );
+}
+
+#[test]
+fn render_translation_conformance_reports_atlas_payload_diagnostics() {
+    let mut resources = RenderResources::new();
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(30),
+        size: Size::new(1.0, 1.0),
+        sampling: RenderImageSampling::Pixelated,
+        pixels: None,
+        atlas_region: Some(ImageAtlasRegion {
+            atlas: ImageId::from_raw(31),
+            source: Rect::new(0.0, 0.0, 1.0, 1.0),
+        }),
+    });
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(32),
+        size: Size::new(1.0, 1.0),
+        sampling: RenderImageSampling::Pixelated,
+        pixels: None,
+        atlas_region: Some(ImageAtlasRegion {
+            atlas: ImageId::from_raw(33),
+            source: Rect::new(0.0, 0.0, 1.0, 1.0),
+        }),
+    });
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(33),
+        size: Size::new(1.0, 1.0),
+        sampling: RenderImageSampling::Pixelated,
+        pixels: None,
+        atlas_region: None,
+    });
+    let primitives = vec![
+        Primitive::Image(ImagePrimitive {
+            image: ImageId::from_raw(30),
+            rect: Rect::new(0.0, 0.0, 8.0, 8.0),
+            tint: None,
+        }),
+        Primitive::Image(ImagePrimitive {
+            image: ImageId::from_raw(32),
+            rect: Rect::new(10.0, 0.0, 8.0, 8.0),
+            tint: None,
+        }),
+    ];
+
+    let translation = translate_primitives(&primitives, &resources);
+
+    assert_eq!(
+        translation.diagnostics,
+        vec![
+            RenderDiagnostic::MissingImage(ImageId::from_raw(31)),
+            RenderDiagnostic::MissingImagePixels(ImageId::from_raw(33)),
+        ]
+    );
+    assert_eq!(translation.commands.len(), 2);
+}
+
+#[test]
 fn render_translation_conformance_reports_invalid_geometry_for_skipped_primitives() {
     let primitives = vec![
         Primitive::Rect(RectPrimitive {
