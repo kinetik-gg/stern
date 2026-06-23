@@ -357,8 +357,10 @@ fn keyboard_activation_pressed(id: WidgetId, input: &UiInput, memory: &UiMemory)
     memory.is_focused(id)
         && input.keyboard.events.iter().any(|event| {
             event.state == KeyState::Pressed
+                && !event.repeat
                 && event.modifiers.is_empty()
                 && matches!(event.key, Key::Enter | Key::Space)
+                && !(memory.owns_text_input(id) && matches!(event.key, Key::Space))
         })
 }
 

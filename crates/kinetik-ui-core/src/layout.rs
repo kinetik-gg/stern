@@ -61,6 +61,28 @@ fn sanitize_size(value: f32) -> f32 {
     }
 }
 
+fn sanitize_origin(value: f32) -> f32 {
+    if value.is_finite() { value } else { 0.0 }
+}
+
+fn sanitize_rect(rect: Rect) -> Rect {
+    Rect::new(
+        sanitize_origin(rect.x),
+        sanitize_origin(rect.y),
+        sanitize_size(rect.width),
+        sanitize_size(rect.height),
+    )
+}
+
+fn sanitize_insets(insets: Insets) -> Insets {
+    Insets::new(
+        sanitize_size(insets.left),
+        sanitize_size(insets.right),
+        sanitize_size(insets.top),
+        sanitize_size(insets.bottom),
+    )
+}
+
 /// Measured intrinsic size for a layout item.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Measurement {
@@ -190,6 +212,9 @@ pub enum SeparatorKind {
 /// Applies padding to a rectangle.
 #[must_use]
 pub fn pad_rect(rect: Rect, insets: Insets) -> Rect {
+    let rect = sanitize_rect(rect);
+    let insets = sanitize_insets(insets);
+
     Rect::new(
         rect.x + insets.left,
         rect.y + insets.top,
@@ -202,12 +227,18 @@ pub fn pad_rect(rect: Rect, insets: Insets) -> Rect {
 /// Returns a rectangle whose origin is `(0, 0)` and size is `size`.
 #[must_use]
 pub fn rect_from_size(size: Size) -> Rect {
-    Rect::new(0.0, 0.0, size.width, size.height).max_zero()
+    Rect::new(
+        0.0,
+        0.0,
+        sanitize_size(size.width),
+        sanitize_size(size.height),
+    )
 }
 
 /// Splits a rectangle into a leading band and remaining body along `axis`.
 #[must_use]
 pub fn split_leading(rect: Rect, axis: Axis, amount: f32) -> (Rect, Rect) {
+    let rect = sanitize_rect(rect);
     let amount = sanitize_size(amount);
     match axis {
         Axis::Horizontal => {
@@ -240,6 +271,7 @@ pub fn split_leading(rect: Rect, axis: Axis, amount: f32) -> (Rect, Rect) {
 /// Splits a rectangle into a remaining body and trailing band along `axis`.
 #[must_use]
 pub fn split_trailing(rect: Rect, axis: Axis, amount: f32) -> (Rect, Rect) {
+    let rect = sanitize_rect(rect);
     let amount = sanitize_size(amount);
     match axis {
         Axis::Horizontal => {
@@ -272,6 +304,9 @@ pub fn split_trailing(rect: Rect, axis: Axis, amount: f32) -> (Rect, Rect) {
 /// Fits a size inside a rectangle according to alignment.
 #[must_use]
 pub fn fit_box(rect: Rect, size: Size, horizontal: Alignment, vertical: Alignment) -> Rect {
+    let rect = sanitize_rect(rect);
+    let size = Size::new(sanitize_size(size.width), sanitize_size(size.height));
+
     let width = if horizontal == Alignment::Stretch {
         rect.width
     } else {
@@ -292,6 +327,8 @@ pub fn fit_box(rect: Rect, size: Size, horizontal: Alignment, vertical: Alignmen
 /// Returns rectangles for children stacked over the same parent rectangle.
 #[must_use]
 pub fn stack_layout(rect: Rect, count: usize) -> Vec<Rect> {
+    let rect = sanitize_rect(rect);
+
     vec![rect; count]
 }
 
@@ -310,6 +347,8 @@ pub fn column_layout(rect: Rect, items: &[LayoutItem], spacing: f32) -> Vec<Rect
 /// Returns the measurement of a spacer along an axis.
 #[must_use]
 pub fn spacer(axis: Axis, amount: f32) -> Measurement {
+    let amount = sanitize_size(amount);
+
     match axis {
         Axis::Horizontal => Measurement::new(Size::new(amount, 0.0)),
         Axis::Vertical => Measurement::new(Size::new(0.0, amount)),
@@ -319,6 +358,8 @@ pub fn spacer(axis: Axis, amount: f32) -> Measurement {
 /// Returns the measurement of a separator.
 #[must_use]
 pub fn separator(kind: SeparatorKind, thickness: f32) -> Measurement {
+    let thickness = sanitize_size(thickness);
+
     match kind {
         SeparatorKind::Horizontal => Measurement::new(Size::new(0.0, thickness)),
         SeparatorKind::Vertical => Measurement::new(Size::new(thickness, 0.0)),
@@ -339,9 +380,11 @@ fn linear_layout(axis: Axis, rect: Rect, items: &[LayoutItem], spacing: f32) -> 
         return Vec::new();
     }
 
+    let rect = sanitize_rect(rect);
+    let spacing = sanitize_size(spacing);
     let main_available = axis_size(axis, rect.size());
     let cross_available = axis_cross_size(axis, rect.size());
-    let total_spacing = spacing.max(0.0) * (items.len().saturating_sub(1) as f32);
+    let total_spacing = spacing * (items.len().saturating_sub(1) as f32);
     let available_without_spacing = (main_available - total_spacing).max(0.0);
     let fill_count = items
         .iter()
@@ -380,7 +423,7 @@ fn linear_layout(axis: Axis, rect: Rect, items: &[LayoutItem], spacing: f32) -> 
             .max(0.0);
 
         output.push(rect_from_axes(axis, rect, cursor, main, cross));
-        cursor += main + spacing.max(0.0);
+        cursor += main + spacing;
     }
 
     output
