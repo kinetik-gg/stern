@@ -2943,6 +2943,107 @@ mod tests {
     }
 
     #[test]
+    fn text_field_ignores_text_input_while_unfocused() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("text");
+        let mut memory = UiMemory::new();
+        let mut state = TextEditState::new("base");
+        let input = UiInput {
+            text_events: vec![kinetik_ui_core::TextInputEvent::Commit(
+                "ignored".to_owned(),
+            )],
+            ..UiInput::default()
+        };
+
+        let output = text_field(
+            id,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(!output.changed);
+        assert_eq!(state.text, "base");
+        assert!(output.widget.platform_requests.is_empty());
+    }
+
+    #[test]
+    fn text_field_applies_editing_shortcuts_only_while_focused() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("text");
+        let mut memory = UiMemory::new();
+        let mut state = TextEditState::new("abcd");
+        let input = shortcut_input("a");
+
+        let unfocused = text_field(
+            id,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(!unfocused.changed);
+        assert_eq!(state.selection, TextSelection::new(4, 4));
+
+        memory.focus(id);
+        let focused = text_field(
+            id,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(!focused.changed);
+        assert_eq!(state.selection, TextSelection::new(0, 4));
+    }
+
+    #[test]
+    fn text_field_single_line_input_drops_newlines_and_enter_key() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("text");
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let mut state = TextEditState::new("");
+        let input = UiInput {
+            keyboard: KeyboardInput {
+                modifiers: Modifiers::default(),
+                events: vec![KeyEvent::new(
+                    Key::Enter,
+                    KeyState::Pressed,
+                    Modifiers::default(),
+                    false,
+                )],
+            },
+            text_events: vec![kinetik_ui_core::TextInputEvent::Commit(
+                "a\nb\r\nc".to_owned(),
+            )],
+            ..UiInput::default()
+        };
+
+        let output = text_field(
+            id,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(output.changed);
+        assert_eq!(state.text, "abc");
+    }
+
+    #[test]
     fn text_field_copies_selected_text_through_platform_request() {
         let theme = default_dark_theme();
         let id = WidgetId::from_key("text");
@@ -3140,6 +3241,49 @@ mod tests {
     }
 
     #[test]
+    fn clipboard_text_targets_focused_requesting_field() {
+        let theme = default_dark_theme();
+        let first = WidgetId::from_key("first");
+        let second = WidgetId::from_key("second");
+        let mut memory = UiMemory::new();
+        memory.focus(second);
+        let mut first_state = TextEditState::new("one");
+        let mut second_state = TextEditState::new("two");
+        second_state.set_caret(3);
+        let input = UiInput {
+            clipboard_text: vec![
+                ClipboardText::new(first, " wrong"),
+                ClipboardText::new(second, " pasted"),
+            ],
+            ..UiInput::default()
+        };
+
+        let first_output = text_field(
+            first,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut first_state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+        let second_output = text_field(
+            second,
+            Rect::new(0.0, 30.0, 80.0, 24.0),
+            &mut second_state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(!first_output.changed);
+        assert_eq!(first_state.text, "one");
+        assert!(second_output.changed);
+        assert_eq!(second_state.text, "two pasted");
+    }
+
+    #[test]
     fn ui_text_field_losing_focus_to_non_text_stops_platform_text_input() {
         let theme = default_dark_theme();
         let field = WidgetId::from_key("root").child("field");
@@ -3205,6 +3349,34 @@ mod tests {
                 .focused
         );
         assert!(!text_layouts.is_empty());
+    }
+
+    #[test]
+    fn multi_line_text_field_preserves_targeted_clipboard_newlines() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("multiline");
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let mut state = TextEditState::new("first");
+        state.set_caret(5);
+        let input = UiInput {
+            clipboard_text: vec![ClipboardText::new(id, "\r\nsecond\rthird")],
+            ..UiInput::default()
+        };
+
+        let output = multi_line_text_field(
+            id,
+            Rect::new(0.0, 0.0, 180.0, 80.0),
+            &mut state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(output.changed);
+        assert_eq!(state.text, "first\nsecond\nthird");
+        assert_eq!(output.visible_lines, 3);
     }
 
     #[test]
@@ -3307,6 +3479,54 @@ mod tests {
 
         assert_eq!(output.query, "media");
         assert!(!output.empty);
+    }
+
+    #[test]
+    fn text_and_search_fields_expose_semantic_role_label_focus_and_value() {
+        let theme = default_dark_theme();
+        let field = WidgetId::from_key("field");
+        let search = WidgetId::from_key("search");
+        let mut memory = UiMemory::new();
+        memory.focus(field);
+        let mut field_state = TextEditState::new("Project");
+        let mut search_state = TextEditState::new("media");
+
+        let field_output = text_field(
+            field,
+            Rect::new(0.0, 0.0, 120.0, 24.0),
+            &mut field_state,
+            &UiInput::default(),
+            &mut memory,
+            &theme,
+            false,
+        );
+        let search_output = search_field(
+            search,
+            Rect::new(0.0, 30.0, 120.0, 24.0),
+            &mut search_state,
+            &UiInput::default(),
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        let field_node = &field_output.widget.semantics[0];
+        assert_eq!(field_node.role, SemanticRole::TextField);
+        assert_eq!(field_node.label.as_deref(), Some("Text field"));
+        assert!(field_node.focusable);
+        assert!(field_node.state.focused);
+        assert!(
+            matches!(field_node.state.value, Some(SemanticValue::Text(ref text)) if text == "Project")
+        );
+
+        let search_node = &search_output.field.widget.semantics[0];
+        assert_eq!(search_node.role, SemanticRole::SearchField);
+        assert_eq!(search_node.label.as_deref(), Some("Search"));
+        assert!(search_node.focusable);
+        assert!(!search_node.state.focused);
+        assert!(
+            matches!(search_node.state.value, Some(SemanticValue::Text(ref text)) if text == "media")
+        );
     }
 
     #[test]
