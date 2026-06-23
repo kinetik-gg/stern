@@ -178,7 +178,7 @@ impl Shortcut {
     /// Returns true when the shortcut matches a complete keyboard event.
     #[must_use]
     pub fn matches_key_event(&self, event: &KeyEvent) -> bool {
-        if event.state != KeyState::Pressed || self.modifiers != event.modifiers {
+        if event.state != KeyState::Pressed || event.repeat || self.modifiers != event.modifiers {
             return false;
         }
 
