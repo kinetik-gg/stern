@@ -786,14 +786,18 @@ fn split_child_rects(
     let total = split_total(axis, bounds);
     let first_size = split_first_size(total, ratio, min_first, min_second);
     let second_size = (total - first_size).max(0.0);
+    let x = finite_coordinate(bounds.x);
+    let y = finite_coordinate(bounds.y);
+    let width = finite_non_negative(bounds.width);
+    let height = finite_non_negative(bounds.height);
     match axis {
         Axis::Horizontal => (
-            Rect::new(bounds.x, bounds.y, first_size, bounds.height),
-            Rect::new(bounds.x + first_size, bounds.y, second_size, bounds.height),
+            Rect::new(x, y, first_size, height),
+            Rect::new(x + first_size, y, second_size, height),
         ),
         Axis::Vertical => (
-            Rect::new(bounds.x, bounds.y, bounds.width, first_size),
-            Rect::new(bounds.x, bounds.y + first_size, bounds.width, second_size),
+            Rect::new(x, y, width, first_size),
+            Rect::new(x, y + first_size, width, second_size),
         ),
     }
 }
@@ -819,14 +823,23 @@ fn split_first_size(total: f32, ratio: f32, min_first: f32, min_second: f32) -> 
 
 fn splitter_rect(axis: Axis, first_rect: Rect, bounds: Rect, thickness: f32) -> Rect {
     let half = thickness * 0.5;
+    let x = finite_coordinate(bounds.x);
+    let y = finite_coordinate(bounds.y);
+    let width = finite_non_negative(bounds.width);
+    let height = finite_non_negative(bounds.height);
     match axis {
         Axis::Horizontal => Rect::new(
-            first_rect.max_x() - half,
-            bounds.y,
+            finite_coordinate(first_rect.max_x()) - half,
+            y,
             thickness,
-            bounds.height,
+            height,
         ),
-        Axis::Vertical => Rect::new(bounds.x, first_rect.max_y() - half, bounds.width, thickness),
+        Axis::Vertical => Rect::new(
+            x,
+            finite_coordinate(first_rect.max_y()) - half,
+            width,
+            thickness,
+        ),
     }
 }
 
@@ -864,6 +877,10 @@ pub fn split_ratio_from_drag(
 /// Resolves a frame-local drop zone for a pointer position.
 #[must_use]
 pub fn resolve_frame_drop_zone(rect: Rect, point: Point) -> Option<DockDropZone> {
+    if !valid_drop_rect(rect) || !valid_drop_point(point) {
+        return None;
+    }
+
     if !rect.contains_point(point) {
         return None;
     }
@@ -906,6 +923,18 @@ pub fn resolve_dock_drop_target(
     })
 }
 
+fn valid_drop_rect(rect: Rect) -> bool {
+    rect.x.is_finite()
+        && rect.y.is_finite()
+        && rect.width.is_finite()
+        && rect.height.is_finite()
+        && !rect.is_empty()
+}
+
+fn valid_drop_point(point: Point) -> bool {
+    point.x.is_finite() && point.y.is_finite()
+}
+
 fn finite_ratio(value: f32) -> f32 {
     if value.is_finite() {
         value.clamp(0.0, 1.0)
@@ -920,6 +949,10 @@ fn finite_non_negative(value: f32) -> f32 {
     } else {
         0.0
     }
+}
+
+fn finite_coordinate(value: f32) -> f32 {
+    if value.is_finite() { value } else { 0.0 }
 }
 
 /// Tab presentation data.
@@ -1144,10 +1177,10 @@ mod tests {
     use super::{
         Dock, DockDropTarget, DockDropZone, DockNode, DockPathElement, DockPlacement,
         DockRestoreError, DockSnapshot, DockSnapshotNode, DockSplitInsertion, DockSplitPath, Frame,
-        FrameId, Panel, PanelId, frame_tabs, resolve_dock_drop_target, resolve_frame_drop_zone,
-        solve_dock_layout, solve_dock_splitters, split_ratio_from_drag,
+        FrameId, FrameLayout, Panel, PanelId, frame_tabs, resolve_dock_drop_target,
+        resolve_frame_drop_zone, solve_dock_layout, solve_dock_splitters, split_ratio_from_drag,
     };
-    use kinetik_ui_core::{Axis, Point, Rect, Vec2};
+    use kinetik_ui_core::{Axis, Point, Rect, SemanticRole, Vec2};
 
     fn panel(id: u64, title: &str) -> Panel {
         Panel::new(PanelId::from_raw(id), title)
@@ -1470,6 +1503,33 @@ mod tests {
     }
 
     #[test]
+    fn dock_splitters_sanitize_non_finite_geometry() {
+        let area = Dock::new(DockNode::Split {
+            axis: Axis::Horizontal,
+            ratio: f32::NAN,
+            min_first: f32::INFINITY,
+            min_second: -100.0,
+            first: Box::new(DockNode::Frame(frame(1, vec![panel(1, "A")]))),
+            second: Box::new(DockNode::Frame(frame(2, vec![panel(2, "B")]))),
+        });
+
+        let splitters = solve_dock_splitters(
+            &area,
+            Rect::new(f32::NAN, f32::INFINITY, f32::INFINITY, f32::NAN),
+            f32::NAN,
+        );
+
+        assert_eq!(splitters.len(), 1);
+        assert!(splitters[0].rect.x.is_finite());
+        assert!(splitters[0].rect.y.is_finite());
+        assert!(splitters[0].rect.width.is_finite());
+        assert!(splitters[0].rect.height.is_finite());
+        assert!(splitters[0].ratio.is_finite());
+        assert!(splitters[0].min_first.is_finite());
+        assert!(splitters[0].min_second.is_finite());
+    }
+
+    #[test]
     fn frame_tabs_expose_presentation_state() {
         let mut frame = frame(1, vec![panel(1, "A"), panel(2, "B")]);
         frame.select_panel(PanelId::from_raw(2));
@@ -1529,6 +1589,29 @@ mod tests {
     }
 
     #[test]
+    fn drop_zone_resolution_rejects_invalid_geometry() {
+        let rect = Rect::new(10.0, 20.0, 200.0, 100.0);
+        for point in [
+            Point::new(f32::NAN, 70.0),
+            Point::new(f32::INFINITY, 70.0),
+            Point::new(100.0, f32::NEG_INFINITY),
+        ] {
+            assert_eq!(resolve_frame_drop_zone(rect, point), None);
+        }
+
+        for rect in [
+            Rect::new(f32::NAN, 20.0, 200.0, 100.0),
+            Rect::new(10.0, f32::INFINITY, 200.0, 100.0),
+            Rect::new(10.0, 20.0, f32::INFINITY, 100.0),
+            Rect::new(10.0, 20.0, 200.0, f32::NAN),
+            Rect::new(10.0, 20.0, 0.0, 100.0),
+            Rect::new(10.0, 20.0, 200.0, -1.0),
+        ] {
+            assert_eq!(resolve_frame_drop_zone(rect, Point::new(100.0, 70.0)), None);
+        }
+    }
+
+    #[test]
     fn dock_drop_target_resolution_returns_merge_or_split_targets() {
         let area = dock();
         let layout = solve_dock_layout(&area, Rect::new(0.0, 0.0, 1000.0, 500.0));
@@ -1545,6 +1628,88 @@ mod tests {
                 DockPlacement::Right,
                 new_frame
             ))
+        );
+    }
+
+    #[test]
+    fn dock_drop_target_resolution_rejects_invalid_geometry() {
+        let new_frame = FrameId::from_raw(9);
+        let invalid_layout = [FrameLayout {
+            frame: FrameId::from_raw(1),
+            rect: Rect::new(0.0, 0.0, f32::INFINITY, 100.0),
+        }];
+
+        assert_eq!(
+            resolve_dock_drop_target(&invalid_layout, Point::new(1.0, 50.0), new_frame),
+            None
+        );
+        assert_eq!(
+            resolve_dock_drop_target(
+                &[FrameLayout {
+                    frame: FrameId::from_raw(1),
+                    rect: Rect::new(0.0, 0.0, 100.0, 100.0),
+                }],
+                Point::new(f32::NAN, 50.0),
+                new_frame
+            ),
+            None
+        );
+
+        let mixed_layout = [
+            FrameLayout {
+                frame: FrameId::from_raw(1),
+                rect: Rect::new(0.0, 0.0, f32::INFINITY, 100.0),
+            },
+            FrameLayout {
+                frame: FrameId::from_raw(2),
+                rect: Rect::new(100.0, 0.0, 100.0, 100.0),
+            },
+        ];
+
+        let target = resolve_dock_drop_target(&mixed_layout, Point::new(198.0, 50.0), new_frame)
+            .expect("target");
+        match target {
+            DockDropTarget::Split {
+                frame,
+                placement,
+                new_frame: inserted_frame,
+                ratio,
+                min_first,
+                min_second,
+            } => {
+                assert_eq!(frame, FrameId::from_raw(2));
+                assert_eq!(placement, DockPlacement::Right);
+                assert_eq!(inserted_frame, new_frame);
+                assert!(ratio.is_finite());
+                assert!(min_first.is_finite());
+                assert!(min_second.is_finite());
+            }
+            DockDropTarget::Tab { .. } => panic!("expected split target"),
+        }
+    }
+
+    #[test]
+    fn dropping_tab_on_same_frame_selects_without_reordering() {
+        let mut area = dock();
+        let drag = area
+            .begin_tab_drag(FrameId::from_raw(2), PanelId::from_raw(3))
+            .expect("drag");
+
+        assert!(area.drop_tab(drag, DockDropTarget::tab(FrameId::from_raw(2))));
+
+        let frame = area.frame(FrameId::from_raw(2)).expect("frame");
+        assert_eq!(frame.panels.len(), 2);
+        assert_eq!(
+            frame
+                .panels
+                .iter()
+                .map(|panel| panel.id)
+                .collect::<Vec<_>>(),
+            vec![PanelId::from_raw(2), PanelId::from_raw(3)]
+        );
+        assert_eq!(
+            frame.active_panel().expect("active").id,
+            PanelId::from_raw(3)
         );
     }
 
@@ -1573,8 +1738,35 @@ mod tests {
     }
 
     #[test]
+    fn dropping_tab_preserves_dismissible_policy_through_snapshot() {
+        let mut area = dock();
+        area.frame_mut(FrameId::from_raw(2))
+            .expect("source")
+            .set_panel_dismissible(PanelId::from_raw(3), false);
+        let drag = area
+            .begin_tab_drag(FrameId::from_raw(2), PanelId::from_raw(3))
+            .expect("drag");
+
+        assert!(area.drop_tab(drag, DockDropTarget::tab(FrameId::from_raw(1))));
+
+        let target = area.frame(FrameId::from_raw(1)).expect("target");
+        assert!(!target.panel_dismissible(PanelId::from_raw(3)));
+
+        let restored = Dock::restore(area.snapshot()).expect("restore");
+        assert!(
+            !restored
+                .frame(FrameId::from_raw(1))
+                .expect("restored target")
+                .panel_dismissible(PanelId::from_raw(3))
+        );
+    }
+
+    #[test]
     fn dropping_tab_on_split_edge_inserts_new_frame_and_round_trips() {
         let mut area = dock();
+        area.frame_mut(FrameId::from_raw(2))
+            .expect("source")
+            .set_panel_dismissible(PanelId::from_raw(3), false);
         let drag = area
             .begin_tab_drag(FrameId::from_raw(2), PanelId::from_raw(3))
             .expect("drag");
@@ -1609,6 +1801,12 @@ mod tests {
                 .id,
             PanelId::from_raw(3)
         );
+        assert!(
+            !area
+                .frame(FrameId::from_raw(9))
+                .expect("inserted")
+                .panel_dismissible(PanelId::from_raw(3))
+        );
         let restored = Dock::restore(area.snapshot()).expect("restore");
         assert_eq!(restored.frames().len(), 3);
         assert_eq!(
@@ -1619,6 +1817,30 @@ mod tests {
                 .expect("panel")
                 .id,
             PanelId::from_raw(3)
+        );
+        assert!(
+            !restored
+                .frame(FrameId::from_raw(9))
+                .expect("restored inserted")
+                .panel_dismissible(PanelId::from_raw(3))
+        );
+    }
+
+    #[test]
+    fn invalid_tab_drop_does_not_remove_panel() {
+        let mut area = dock();
+        let drag = area
+            .begin_tab_drag(FrameId::from_raw(2), PanelId::from_raw(3))
+            .expect("drag");
+
+        assert!(!area.drop_tab(drag, DockDropTarget::tab(FrameId::from_raw(99))));
+
+        assert!(
+            area.frame(FrameId::from_raw(2))
+                .expect("source")
+                .panels
+                .iter()
+                .any(|panel| panel.id == PanelId::from_raw(3))
         );
     }
 
@@ -1645,6 +1867,39 @@ mod tests {
                 .iter()
                 .any(|panel| panel.id == PanelId::from_raw(3))
         );
+    }
+
+    #[test]
+    fn invalid_split_numbers_do_not_remove_panel() {
+        let mut area = dock();
+        let drag = area
+            .begin_tab_drag(FrameId::from_raw(2), PanelId::from_raw(3))
+            .expect("drag");
+
+        assert!(!area.drop_tab(
+            drag,
+            DockDropTarget::Split {
+                frame: FrameId::from_raw(1),
+                placement: DockPlacement::Left,
+                new_frame: FrameId::from_raw(9),
+                ratio: f32::NAN,
+                min_first: 0.0,
+                min_second: 0.0,
+            }
+        ));
+
+        assert!(
+            area.frame(FrameId::from_raw(2))
+                .expect("source")
+                .panels
+                .iter()
+                .any(|panel| panel.id == PanelId::from_raw(3))
+        );
+    }
+
+    #[test]
+    fn dock_semantic_role_uses_current_name() {
+        assert_eq!(format!("{:?}", SemanticRole::Dock), "Dock");
     }
 
     #[test]
