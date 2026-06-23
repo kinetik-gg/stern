@@ -479,6 +479,10 @@ impl<'a> Ui<'a> {
         {
             self.output.request_repaint(RepaintRequest::NextFrame);
         }
+        if self.memory.take_pending_text_input_stop().is_some() {
+            self.output
+                .push_platform_request(PlatformRequest::StopTextInput);
+        }
 
         let warnings = validate_primitive_stack(&self.output.primitives);
         self.output.warnings.extend(warnings);

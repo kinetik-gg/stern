@@ -27,6 +27,8 @@ pub struct UiMemory {
     released_drag_source: Option<WidgetId>,
     /// Text-editing widget currently owning platform text input or IME.
     text_input_owner: Option<WidgetId>,
+    /// Text-editing widget whose platform text input should be stopped.
+    pending_text_input_stop: Option<WidgetId>,
     scroll_offsets: HashMap<WidgetId, Vec2>,
     open_popovers: HashSet<WidgetId>,
 }
@@ -161,16 +163,19 @@ impl UiMemory {
     /// Moves keyboard focus to a widget.
     pub fn focus(&mut self, id: WidgetId) {
         self.focused = Some(id);
+        self.clear_stale_text_input_owner();
     }
 
     /// Sets keyboard focus explicitly.
     pub fn set_focused(&mut self, focused: Option<WidgetId>) {
         self.focused = focused;
+        self.clear_stale_text_input_owner();
     }
 
     /// Clears keyboard focus.
     pub fn clear_focus(&mut self) {
         self.focused = None;
+        self.clear_stale_text_input_owner();
     }
 
     /// Captures active pointer/modal interaction for a widget.
@@ -251,12 +256,33 @@ impl UiMemory {
 
     /// Records the widget that should receive platform text input or IME events.
     pub fn set_text_input_owner(&mut self, id: WidgetId) {
+        if self.pending_text_input_stop == Some(id) {
+            self.pending_text_input_stop = None;
+        }
         self.text_input_owner = Some(id);
     }
 
     /// Clears the active platform text input owner.
     pub fn clear_text_input_owner(&mut self) {
-        self.text_input_owner = None;
+        if let Some(owner) = self.text_input_owner.take() {
+            self.pending_text_input_stop = Some(owner);
+        }
+    }
+
+    /// Takes the text input owner waiting for a platform stop request.
+    #[doc(hidden)]
+    pub fn take_pending_text_input_stop(&mut self) -> Option<WidgetId> {
+        self.pending_text_input_stop.take()
+    }
+
+    fn clear_stale_text_input_owner(&mut self) {
+        let Some(owner) = self.text_input_owner else {
+            return;
+        };
+        if Some(owner) != self.focused {
+            self.text_input_owner = None;
+            self.pending_text_input_stop = Some(owner);
+        }
     }
 
     /// Returns the scroll offset for a widget.

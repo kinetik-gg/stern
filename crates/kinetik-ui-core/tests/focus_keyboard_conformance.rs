@@ -3,8 +3,8 @@
 use kinetik_ui_core::{
     ActionBinding, ActionContext, ActionDescriptor, ActionId, ActionPriority, ActionRouter,
     ActionRoutingContext, FocusTraversal, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
-    MouseButton, PhysicalKey, Point, Rect, SemanticNode, SemanticRole, SemanticTree, Shortcut, Ui,
-    UiTestHarness, WidgetId, focusable, pressable,
+    MouseButton, PhysicalKey, PlatformRequest, Point, Rect, SemanticNode, SemanticRole,
+    SemanticTree, Shortcut, Ui, UiTestHarness, WidgetId, focusable, pressable,
 };
 
 fn ctrl() -> Modifiers {
@@ -342,6 +342,28 @@ fn focus_keyboard_runtime_text_input_owner_blocks_tab_and_shift_tab_traversal() 
         assert_eq!(harness.memory().focused(), Some(second));
         assert_eq!(output.repaint, kinetik_ui_core::RepaintRequest::None);
     }
+}
+
+#[test]
+fn focus_keyboard_focus_change_retires_stale_text_input_owner() {
+    let field = WidgetId::from_key("field");
+    let button = WidgetId::from_key("button");
+    let mut harness = UiTestHarness::new();
+
+    harness.memory_mut().focus(field);
+    harness.memory_mut().set_text_input_owner(field);
+    harness.memory_mut().focus(button);
+
+    assert_eq!(harness.memory().focused(), Some(button));
+    assert_eq!(harness.memory().text_input_owner(), None);
+
+    let ((), output) = harness.run_frame(|_| {});
+
+    assert!(
+        output
+            .platform_requests
+            .contains(&PlatformRequest::StopTextInput)
+    );
 }
 
 #[test]
