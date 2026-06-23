@@ -208,11 +208,21 @@ fn text_input_platform_requests(
     memory: &mut UiMemory,
 ) -> Vec<PlatformRequest> {
     if response.state.focused && !response.state.disabled {
+        let stopped_owner = memory.take_pending_text_input_stop();
         memory.set_text_input_owner(id);
-        vec![PlatformRequest::StartTextInput { rect: Some(rect) }]
+        let mut requests = Vec::new();
+        if stopped_owner.is_some_and(|owner| owner != id) {
+            requests.push(PlatformRequest::StopTextInput);
+        }
+        requests.push(PlatformRequest::StartTextInput { rect: Some(rect) });
+        requests
     } else if memory.owns_text_input(id) {
         memory.clear_text_input_owner();
-        vec![PlatformRequest::StopTextInput]
+        if memory.take_pending_text_input_stop().is_some() {
+            vec![PlatformRequest::StopTextInput]
+        } else {
+            Vec::new()
+        }
     } else {
         Vec::new()
     }
@@ -2303,7 +2313,7 @@ pub(crate) fn search_field_with_text_layouts_and_caret_visibility(
 #[cfg(test)]
 mod tests {
     use super::{
-        IconId, PanelFrame, button, button_semantics, checkbox, checkbox_semantics,
+        IconId, PanelFrame, Ui, button, button_semantics, checkbox, checkbox_semantics,
         checkbox_with_label, icon_button, icon_button_with_label, icon_button_with_library, image,
         image_icon_button, image_icon_button_sized, image_icon_selectable_button, label, list_row,
         multi_line_text_field, multi_line_text_field_with_text_layouts, numeric_input, panel,
@@ -3016,6 +3026,59 @@ mod tests {
     }
 
     #[test]
+    fn text_field_switch_stops_previous_owner_before_starting_new_owner() {
+        let theme = default_dark_theme();
+        let first = WidgetId::from_key("first");
+        let second = WidgetId::from_key("second");
+        let mut first_state = TextEditState::new("one");
+        let mut second_state = TextEditState::new("two");
+        let mut memory = UiMemory::new();
+        memory.focus(first);
+        memory.set_text_input_owner(first);
+        let mut input = input_at(4.0, 34.0);
+        input.pointer.primary = PointerButtonState::new(true, true, false);
+
+        let first_output = text_field(
+            first,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut first_state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+        let second_output = text_field(
+            second,
+            Rect::new(0.0, 30.0, 80.0, 24.0),
+            &mut second_state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(first_output.widget.platform_requests.iter().any(|request| {
+            matches!(request, PlatformRequest::StartTextInput { rect: Some(rect) } if *rect == Rect::new(0.0, 0.0, 80.0, 24.0))
+        }));
+        let stop_index = second_output
+            .widget
+            .platform_requests
+            .iter()
+            .position(|request| matches!(request, PlatformRequest::StopTextInput))
+            .expect("previous text input stopped");
+        let start_index = second_output
+            .widget
+            .platform_requests
+            .iter()
+            .position(|request| {
+                matches!(request, PlatformRequest::StartTextInput { rect: Some(rect) } if *rect == Rect::new(0.0, 30.0, 80.0, 24.0))
+        })
+        .expect("new text input started");
+        assert!(stop_index < start_index);
+        assert_eq!(memory.text_input_owner(), Some(second));
+    }
+
+    #[test]
     fn text_field_applies_only_targeted_clipboard_text() {
         let theme = default_dark_theme();
         let id = WidgetId::from_key("text");
@@ -3046,6 +3109,67 @@ mod tests {
         assert_eq!(state.text, "abc");
         assert!(state.undo());
         assert_eq!(state.text, "a");
+    }
+
+    #[test]
+    fn text_field_ignores_clipboard_text_for_other_target() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("text");
+        let other = WidgetId::from_key("other");
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let mut state = TextEditState::new("a");
+        state.set_caret(1);
+        let input = UiInput {
+            clipboard_text: vec![ClipboardText::new(other, "wrong")],
+            ..UiInput::default()
+        };
+
+        let output = text_field(
+            id,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+            &mut state,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+
+        assert!(!output.changed);
+        assert_eq!(state.text, "a");
+    }
+
+    #[test]
+    fn ui_text_field_losing_focus_to_non_text_stops_platform_text_input() {
+        let theme = default_dark_theme();
+        let field = WidgetId::from_key("root").child("field");
+        let other = WidgetId::from_key("root").child("other");
+        let mut memory = UiMemory::new();
+        memory.focus(field);
+        memory.set_text_input_owner(field);
+        let mut state = TextEditState::new("abc");
+        let mut input = input_at(104.0, 4.0);
+        input.pointer.primary = PointerButtonState::new(true, true, false);
+
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.text_field("field", Rect::new(0.0, 0.0, 80.0, 24.0), &mut state, false);
+        ui.focusable("other", Rect::new(100.0, 0.0, 80.0, 24.0), false);
+        let _ = ui.finish_output();
+
+        let mut input = input_at(104.0, 4.0);
+        input.pointer.primary = PointerButtonState::new(false, false, true);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.text_field("field", Rect::new(0.0, 0.0, 80.0, 24.0), &mut state, false);
+        ui.focusable("other", Rect::new(100.0, 0.0, 80.0, 24.0), false);
+        let output = ui.finish_output();
+
+        assert_eq!(memory.focused(), Some(other));
+        assert_eq!(memory.text_input_owner(), None);
+        assert!(
+            output
+                .platform_requests
+                .contains(&PlatformRequest::StopTextInput)
+        );
     }
 
     #[test]
