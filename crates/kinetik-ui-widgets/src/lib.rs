@@ -1548,18 +1548,17 @@ pub fn slider_with_label(
     disabled: bool,
 ) -> WidgetOutput {
     let response = draggable(id, rect, input, memory, disabled);
+    let (start, end) = slider_range_bounds(&range);
     if !disabled
-        && (response.state.active || response.clicked)
+        && (response.state.active || (response.clicked && !response.keyboard_activated))
         && let Some(position) = input.pointer.position
     {
-        let start = *range.start();
-        let end = *range.end();
         let t = slider_position_fraction(position.x, rect);
         *value = slider_value_from_fraction(start, end, t);
     }
-    let start = *range.start();
-    let end = *range.end();
-    let t = slider_value_fraction(*value, start, end);
+    let display_value = slider_clamped_value(*value, start, end);
+    let t = slider_value_fraction(display_value, start, end);
+    let semantic_range = start.min(end)..=start.max(end);
     let fill_rect = Rect::new(rect.x, rect.y, rect.width * t, rect.height);
     let recipe = theme.slider(ComponentState {
         hovered: response.state.hovered,
@@ -1588,12 +1587,30 @@ pub fn slider_with_label(
             ],
         )
         .with_semantic(with_response_state(
-            slider_semantics(id, rect, label, *value, range, disabled),
+            slider_semantics(id, rect, label, display_value, semantic_range, disabled),
             &response,
         )),
         &response,
         CursorShape::ResizeHorizontal,
     )
+}
+
+fn slider_range_bounds(range: &core::ops::RangeInclusive<f32>) -> (f32, f32) {
+    let start = *range.start();
+    let end = *range.end();
+    match (start.is_finite(), end.is_finite()) {
+        (true, true) => (start, end),
+        (true, false) => (start, start),
+        (false, true) => (end, end),
+        (false, false) => (0.0, 0.0),
+    }
+}
+
+fn slider_clamped_value(value: f32, start: f32, end: f32) -> f32 {
+    if !value.is_finite() {
+        return start;
+    }
+    value.clamp(start.min(end), start.max(end))
 }
 
 fn slider_position_fraction(position_x: f32, rect: Rect) -> f32 {
@@ -2711,6 +2728,47 @@ mod tests {
     }
 
     #[test]
+    fn controls_emit_stable_response_flags_and_semantic_states() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("row");
+        let rect = Rect::new(0.0, 0.0, 140.0, 26.0);
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let input = input_at(4.0, 4.0);
+
+        let row = list_row(id, rect, "Asset", true, &input, &mut memory, &theme, true);
+        let response = row.response.expect("row response");
+
+        assert_eq!(response.id, id);
+        assert_eq!(response.rect, rect);
+        assert!(response.state.disabled);
+        assert!(response.state.selected);
+        assert!(response.state.focused);
+        assert!(!response.state.hovered);
+        assert!(!response.state.active);
+        assert!(!response.state.pressed);
+        assert!(!response.clicked);
+        assert!(!response.double_clicked);
+        assert!(!response.secondary_clicked);
+        assert!(!response.dragged);
+        assert!(!response.keyboard_activated);
+
+        let node = &row.semantics[0];
+        assert_eq!(node.role, SemanticRole::ListItem);
+        assert_eq!(node.label.as_deref(), Some("Asset"));
+        assert!(!node.focusable);
+        assert!(node.state.disabled);
+        assert!(node.state.selected);
+        assert!(node.state.focused);
+        assert!(!node.state.pressed);
+        assert!(
+            node.actions
+                .iter()
+                .any(|action| action.kind == SemanticActionKind::Invoke)
+        );
+    }
+
+    #[test]
     fn checkbox_and_toggle_reflect_clicked_selection_same_frame() {
         let theme = default_dark_theme();
         let mut checkbox_memory = UiMemory::new();
@@ -2861,6 +2919,50 @@ mod tests {
     }
 
     #[test]
+    fn focused_slider_keyboard_activation_does_not_write_from_stale_pointer() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("slider");
+        let rect = Rect::new(0.0, 0.0, 100.0, 12.0);
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let mut value = 2.0;
+        let mut input = input_at(rect.max_x() + 500.0, 6.0);
+        input.keyboard = KeyboardInput {
+            events: vec![KeyEvent::new(
+                Key::Enter,
+                KeyState::Pressed,
+                Modifiers::default(),
+                false,
+            )],
+            ..KeyboardInput::default()
+        };
+
+        let output = slider(
+            id,
+            rect,
+            &mut value,
+            0.0..=1.0,
+            &input,
+            &mut memory,
+            &theme,
+            false,
+        );
+        let response = output.response.expect("slider response");
+
+        assert!(response.clicked);
+        assert!(response.keyboard_activated);
+        assert!((value - 2.0).abs() < f32::EPSILON);
+        assert_approx(rect_width(&output.primitives[1]), rect.width);
+        assert!(matches!(
+            output.semantics[0].state.value,
+            Some(SemanticValue::Number { current, min, max })
+                if (current - 1.0).abs() < f32::EPSILON
+                    && min.abs() < f32::EPSILON
+                    && (max - 1.0).abs() < f32::EPSILON
+        ));
+    }
+
+    #[test]
     fn slider_degenerate_geometry_and_range_stay_finite() {
         let theme = default_dark_theme();
         let id = WidgetId::from_key("slider");
@@ -2895,6 +2997,76 @@ mod tests {
         );
         assert!((equal_range_value - 4.0).abs() < f32::EPSILON);
         assert!(rect_width(&equal_range.primitives[1]).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn slider_clamps_edge_values_for_display_semantics_and_mapping() {
+        let theme = default_dark_theme();
+        let id = WidgetId::from_key("slider");
+        let rect = Rect::new(0.0, 0.0, 100.0, 12.0);
+        let mut memory = UiMemory::new();
+
+        let mut above_range = 2.0;
+        let output = slider(
+            id,
+            rect,
+            &mut above_range,
+            0.0..=1.0,
+            &UiInput::default(),
+            &mut memory,
+            &theme,
+            false,
+        );
+        assert!((above_range - 2.0).abs() < f32::EPSILON);
+        assert_approx(rect_width(&output.primitives[1]), rect.width);
+        assert!(matches!(
+            output.semantics[0].state.value,
+            Some(SemanticValue::Number { current, min, max })
+                if (current - 1.0).abs() < f32::EPSILON
+                    && min.abs() < f32::EPSILON
+                    && (max - 1.0).abs() < f32::EPSILON
+        ));
+
+        let mut non_finite = f32::NAN;
+        let output = slider(
+            WidgetId::from_key("nan_slider"),
+            rect,
+            &mut non_finite,
+            f32::NAN..=f32::INFINITY,
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            &theme,
+            false,
+        );
+        assert!(non_finite.is_nan());
+        assert!(rect_width(&output.primitives[1]).is_finite());
+        assert!(matches!(
+            output.semantics[0].state.value,
+            Some(SemanticValue::Number { current, min, max })
+                if current.is_finite() && min.is_finite() && max.is_finite()
+        ));
+
+        let mut descending = 5.0;
+        let mut input = input_at(rect.max_x() - 0.001, 6.0);
+        input.pointer.primary = PointerButtonState::new(true, true, false);
+        let output = slider(
+            WidgetId::from_key("descending_slider"),
+            rect,
+            &mut descending,
+            10.0..=0.0,
+            &input,
+            &mut UiMemory::new(),
+            &theme,
+            false,
+        );
+        assert!(descending < 0.001);
+        assert!(matches!(
+            output.semantics[0].state.value,
+            Some(SemanticValue::Number { current, min, max })
+                if current < 0.001
+                    && min.abs() < f32::EPSILON
+                    && (max - 10.0).abs() < f32::EPSILON
+        ));
     }
 
     fn rect_width(primitive: &Primitive) -> f32 {
