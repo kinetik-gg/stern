@@ -37,6 +37,16 @@ impl SizeRule {
     /// Resolves this rule against available and measured sizes.
     #[must_use]
     pub fn resolve(self, available: f32, measured: f32, cross: f32) -> f32 {
+        self.resolve_dimension(SizeDimension::Width, available, measured, cross)
+    }
+
+    fn resolve_dimension(
+        self,
+        dimension: SizeDimension,
+        available: f32,
+        measured: f32,
+        cross: f32,
+    ) -> f32 {
         sanitize_size(match self {
             Self::Fixed(value) => value,
             Self::Fit => measured,
@@ -48,8 +58,29 @@ impl SizeRule {
                 let (min, max) = if min <= max { (min, max) } else { (max, min) };
                 sanitize_size(measured).clamp(min, max)
             }
-            Self::AspectRatio(ratio) => sanitize_size(cross) * sanitize_size(ratio),
+            Self::AspectRatio(ratio) => resolve_aspect_ratio(dimension, ratio, cross),
         })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SizeDimension {
+    Width,
+    Height,
+}
+
+fn resolve_aspect_ratio(dimension: SizeDimension, ratio: f32, cross: f32) -> f32 {
+    let cross = sanitize_size(cross);
+    let ratio = if ratio.is_finite() && ratio > 0.0 {
+        ratio
+    } else {
+        0.0
+    };
+
+    match dimension {
+        SizeDimension::Width => cross * ratio,
+        SizeDimension::Height if ratio > 0.0 => cross / ratio,
+        SizeDimension::Height => 0.0,
     }
 }
 
@@ -395,8 +426,12 @@ fn linear_layout(axis: Axis, rect: Rect, items: &[LayoutItem], spacing: f32) -> 
         .iter()
         .filter(|item| item.main_rule(axis) != SizeRule::Fill)
         .map(|item| {
-            item.main_rule(axis)
-                .resolve(main_available, item.measured_main(axis), cross_available)
+            item.main_rule(axis).resolve_dimension(
+                main_dimension(axis),
+                main_available,
+                item.measured_main(axis),
+                cross_available,
+            )
         })
         .sum::<f32>();
 
@@ -413,12 +448,21 @@ fn linear_layout(axis: Axis, rect: Rect, items: &[LayoutItem], spacing: f32) -> 
         let main = if item.main_rule(axis) == SizeRule::Fill {
             fill_size
         } else {
-            item.main_rule(axis)
-                .resolve(main_available, item.measured_main(axis), cross_available)
+            item.main_rule(axis).resolve_dimension(
+                main_dimension(axis),
+                main_available,
+                item.measured_main(axis),
+                cross_available,
+            )
         };
         let cross = item
             .cross_rule(axis)
-            .resolve(cross_available, item.measured_cross(axis), main)
+            .resolve_dimension(
+                cross_dimension(axis),
+                cross_available,
+                item.measured_cross(axis),
+                main,
+            )
             .min(cross_available)
             .max(0.0);
 
@@ -427,6 +471,20 @@ fn linear_layout(axis: Axis, rect: Rect, items: &[LayoutItem], spacing: f32) -> 
     }
 
     output
+}
+
+fn main_dimension(axis: Axis) -> SizeDimension {
+    match axis {
+        Axis::Horizontal => SizeDimension::Width,
+        Axis::Vertical => SizeDimension::Height,
+    }
+}
+
+fn cross_dimension(axis: Axis) -> SizeDimension {
+    match axis {
+        Axis::Horizontal => SizeDimension::Height,
+        Axis::Vertical => SizeDimension::Width,
+    }
 }
 
 fn axis_size(axis: Axis, size: Size) -> f32 {
