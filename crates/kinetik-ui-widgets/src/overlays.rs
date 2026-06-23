@@ -638,6 +638,13 @@ impl CommandPalette {
             .collect()
     }
 
+    /// Clamps the selected index to the current match set.
+    ///
+    /// Empty result sets deterministically reset selection to zero.
+    pub fn clamp_selection(&mut self) {
+        self.selected = clamped_selection(self.selected, self.matches().len());
+    }
+
     /// Moves selection by a signed amount.
     pub fn move_selection(&mut self, delta: isize) {
         let count = self.matches().len();
@@ -654,7 +661,7 @@ impl CommandPalette {
     /// Invokes the selected command palette entry.
     pub fn invoke_selected(&self, queue: &mut ActionQueue, context: ActionContext) -> bool {
         let matches = self.matches();
-        let Some(entry) = matches.get(self.selected) else {
+        let Some(entry) = matches.get(clamped_selection(self.selected, matches.len())) else {
             return false;
         };
         if !entry.enabled {
@@ -666,6 +673,14 @@ impl CommandPalette {
             context,
         );
         true
+    }
+}
+
+fn clamped_selection(selected: usize, count: usize) -> usize {
+    if count == 0 {
+        0
+    } else {
+        selected.min(count - 1)
     }
 }
 
