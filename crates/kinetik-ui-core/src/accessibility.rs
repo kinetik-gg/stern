@@ -573,6 +573,73 @@ impl AccessibilitySnapshot {
     pub fn node(&self, id: WidgetId) -> Option<&AccessibilityNode> {
         self.nodes.iter().find(|node| node.id == id)
     }
+
+    /// Returns exported nodes with the requested semantic role.
+    pub fn nodes_by_role<'a>(
+        &'a self,
+        role: &'a SemanticRole,
+    ) -> impl Iterator<Item = &'a AccessibilityNode> + 'a {
+        self.nodes.iter().filter(move |node| &node.role == role)
+    }
+
+    /// Returns exported nodes with the requested exact accessible label.
+    pub fn nodes_by_label<'a>(
+        &'a self,
+        label: &'a str,
+    ) -> impl Iterator<Item = &'a AccessibilityNode> + 'a {
+        self.nodes
+            .iter()
+            .filter(move |node| node.label.as_deref() == Some(label))
+    }
+
+    /// Finds the first exported node with the requested exact accessible label.
+    #[must_use]
+    pub fn find_by_label(&self, label: &str) -> Option<&AccessibilityNode> {
+        self.nodes
+            .iter()
+            .find(|node| node.label.as_deref() == Some(label))
+    }
+
+    /// Returns exported nodes with both the requested role and exact label.
+    pub fn nodes_by_role_and_label<'a>(
+        &'a self,
+        role: &'a SemanticRole,
+        label: &'a str,
+    ) -> impl Iterator<Item = &'a AccessibilityNode> + 'a {
+        self.nodes
+            .iter()
+            .filter(move |node| &node.role == role && node.label.as_deref() == Some(label))
+    }
+
+    /// Finds the first exported node with both the requested role and exact label.
+    #[must_use]
+    pub fn find_by_role_and_label(
+        &self,
+        role: &SemanticRole,
+        label: &str,
+    ) -> Option<&AccessibilityNode> {
+        self.nodes
+            .iter()
+            .find(|node| &node.role == role && node.label.as_deref() == Some(label))
+    }
+
+    /// Returns exported nodes with the requested semantic value.
+    pub fn nodes_by_value<'a>(
+        &'a self,
+        value: &'a SemanticValue,
+    ) -> impl Iterator<Item = &'a AccessibilityNode> + 'a {
+        self.nodes
+            .iter()
+            .filter(move |node| node.state.value.as_ref() == Some(value))
+    }
+
+    /// Finds the first exported node with the requested semantic value.
+    #[must_use]
+    pub fn find_by_value(&self, value: &SemanticValue) -> Option<&AccessibilityNode> {
+        self.nodes
+            .iter()
+            .find(|node| node.state.value.as_ref() == Some(value))
+    }
 }
 
 fn validate_semantic_cycles(
