@@ -47,6 +47,27 @@ fn finite_positive(value: f32) -> Option<f32> {
         .filter(|value| *value > 0.0)
 }
 
+fn finite_coordinate(value: f32) -> f32 {
+    if value.is_finite() { value } else { 0.0 }
+}
+
+fn finite_sum(lhs: f32, rhs: f32) -> f32 {
+    let sum = lhs + rhs;
+    if sum.is_finite() {
+        sum
+    } else if sum.is_sign_negative() {
+        f32::MIN
+    } else {
+        f32::MAX
+    }
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn finite_index_extent(index: usize, extent: f32) -> f32 {
+    let offset = index as f32 * extent;
+    if offset.is_finite() { offset } else { f32::MAX }
+}
+
 /// List layout model.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ListLayout {
@@ -117,8 +138,11 @@ impl ListLayout {
     pub fn row_rect(self, bounds: Rect, index: usize) -> Option<Rect> {
         let row_height = self.effective_row_height()?;
         Some(Rect::new(
-            bounds.x,
-            bounds.y + index as f32 * row_height,
+            finite_coordinate(bounds.x),
+            finite_sum(
+                finite_coordinate(bounds.y),
+                finite_index_extent(index, row_height),
+            ),
             finite_non_negative(bounds.width),
             row_height,
         ))
@@ -153,8 +177,8 @@ impl ListLayout {
             clamp_virtual_scroll_offset(scroll_offset, rows, row_height, bounds.height);
         self.row_rects(
             Rect::new(
-                bounds.x,
-                bounds.y - clamped_scroll,
+                finite_coordinate(bounds.x),
+                finite_sum(finite_coordinate(bounds.y), -clamped_scroll),
                 finite_non_negative(bounds.width),
                 finite_non_negative(bounds.height),
             ),
@@ -417,14 +441,15 @@ impl TableLayout {
     /// Computes header cell rectangles with table-specific metadata.
     #[must_use]
     pub fn header_cells(&self, bounds: Rect) -> Vec<TableHeaderRect> {
-        let mut x = bounds.x;
+        let mut x = finite_coordinate(bounds.x);
+        let y = finite_coordinate(bounds.y);
         self.columns
             .iter()
             .enumerate()
             .map(|(index, column)| {
                 let width = finite_non_negative(column.width);
-                let rect = Rect::new(x, bounds.y, width, self.effective_header_height());
-                x += width;
+                let rect = Rect::new(x, y, width, self.effective_header_height());
+                x = finite_sum(x, width);
                 TableHeaderRect {
                     column: index,
                     column_id: column.id,
@@ -461,22 +486,27 @@ impl TableLayout {
         };
         let mut rects = Vec::new();
         for row in visible.take_while(|row| *row < rows) {
-            let mut x = bounds.x;
+            let mut x = finite_coordinate(bounds.x);
             for (column, model) in self.columns.iter().enumerate() {
                 let width = finite_non_negative(model.width);
                 rects.push(TableCellRect {
                     row,
                     column,
                     column_id: model.id,
-                    index: row * self.columns.len() + column,
+                    index: row
+                        .saturating_mul(self.columns.len())
+                        .saturating_add(column),
                     rect: Rect::new(
                         x,
-                        bounds.y + self.effective_header_height() + row as f32 * row_height,
+                        finite_sum(
+                            finite_sum(finite_coordinate(bounds.y), self.effective_header_height()),
+                            finite_index_extent(row, row_height),
+                        ),
                         width,
                         row_height,
                     ),
                 });
-                x += width;
+                x = finite_sum(x, width);
             }
         }
         rects
@@ -498,8 +528,8 @@ impl TableLayout {
             self.clamp_scroll_offset(rows, finite_non_negative(bounds.height), scroll_offset);
         self.body_cells(
             Rect::new(
-                bounds.x,
-                bounds.y - clamped_scroll,
+                finite_coordinate(bounds.x),
+                finite_sum(finite_coordinate(bounds.y), -clamped_scroll),
                 finite_non_negative(bounds.width),
                 finite_non_negative(bounds.height),
             ),
@@ -923,8 +953,8 @@ impl TreeLayout {
         let clamped_scroll =
             clamp_virtual_scroll_offset(scroll_offset, rows.len(), row_height, bounds.height);
         let row_bounds = Rect::new(
-            bounds.x,
-            bounds.y - clamped_scroll,
+            finite_coordinate(bounds.x),
+            finite_sum(finite_coordinate(bounds.y), -clamped_scroll),
             finite_non_negative(bounds.width),
             finite_non_negative(bounds.height),
         );
@@ -937,13 +967,13 @@ impl TreeLayout {
         .into_iter()
         .map(|item| {
             let row = rows[item.index];
-            let indent = row.depth as f32 * indent_width;
+            let indent = finite_index_extent(row.depth, indent_width);
             let rect = item.rect;
             TreeRowRect {
                 row,
                 rect,
                 content_rect: Rect::new(
-                    rect.x + indent,
+                    finite_sum(rect.x, indent),
                     rect.y,
                     (rect.width - indent).max(0.0),
                     rect.height,
@@ -1136,6 +1166,21 @@ mod tests {
         );
     }
 
+    fn assert_rect_finite(rect: Rect) {
+        assert!(rect.x.is_finite(), "rect x must be finite: {rect:?}");
+        assert!(rect.y.is_finite(), "rect y must be finite: {rect:?}");
+        assert!(
+            rect.width.is_finite(),
+            "rect width must be finite: {rect:?}"
+        );
+        assert!(
+            rect.height.is_finite(),
+            "rect height must be finite: {rect:?}"
+        );
+        assert!(rect.width >= 0.0, "rect width must be bounded: {rect:?}");
+        assert!(rect.height >= 0.0, "rect height must be bounded: {rect:?}");
+    }
+
     #[test]
     fn list_layout_computes_row_rectangles() {
         let rows = ListLayout::new(20.0).row_rects(Rect::new(0.0, 0.0, 100.0, 200.0), 10, 2..5);
@@ -1168,6 +1213,26 @@ mod tests {
             list.row_rects(Rect::new(0.0, 0.0, 200.0, 30.0), 100, 0..3)
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn list_layout_sanitizes_visible_rect_inputs() {
+        let list = ListLayout::new(10.0);
+
+        let direct = list.row_rect(Rect::new(f32::NAN, f32::INFINITY, f32::INFINITY, 30.0), 2);
+        assert_rect_finite(direct.expect("valid row height"));
+
+        let rows = list.visible_row_rects(
+            Rect::new(f32::NAN, f32::NEG_INFINITY, f32::INFINITY, 30.0),
+            8,
+            f32::INFINITY,
+            0,
+        );
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows[0].index, 0);
+        for row in rows {
+            assert_rect_finite(row.rect);
+        }
     }
 
     #[test]
@@ -1311,6 +1376,46 @@ mod tests {
         );
     }
 
+    #[test]
+    fn table_layout_sanitizes_visible_ranges_and_rects() {
+        let table = TableLayout {
+            columns: vec![
+                TableColumn {
+                    id: ItemId::from_raw(1),
+                    header: "Name".to_owned(),
+                    width: 100.0,
+                },
+                TableColumn {
+                    id: ItemId::from_raw(2),
+                    header: "Bad".to_owned(),
+                    width: f32::INFINITY,
+                },
+            ],
+            header_height: f32::NAN,
+            row_height: 20.0,
+            sort: None,
+        };
+
+        let headers = table.header_cells(Rect::new(f32::NAN, f32::INFINITY, 200.0, 80.0));
+        assert_eq!(headers.len(), 2);
+        for header in headers {
+            assert_rect_finite(header.rect);
+        }
+
+        let cells = table.visible_body_cells(
+            Rect::new(f32::NAN, f32::NEG_INFINITY, f32::INFINITY, 60.0),
+            10,
+            f32::INFINITY,
+            0,
+        );
+        assert_eq!(cells.len(), 8);
+        assert_eq!(cells[0].row, 0);
+        assert_eq!(cells[0].index, 0);
+        for cell in cells {
+            assert_rect_finite(cell.rect);
+        }
+    }
+
     fn tree_model() -> TreeModel {
         TreeModel::new(vec![
             TreeItem {
@@ -1372,6 +1477,18 @@ mod tests {
             })
         );
 
+        let self_parent = TreeModel::new(vec![TreeItem {
+            id: ItemId::from_raw(7),
+            parent: Some(ItemId::from_raw(7)),
+            has_children: false,
+        }]);
+        assert_eq!(
+            self_parent.validate(),
+            Err(TreeModelError::SelfParent {
+                id: ItemId::from_raw(7)
+            })
+        );
+
         let cycle = TreeModel::new(vec![
             TreeItem {
                 id: ItemId::from_raw(1),
@@ -1390,6 +1507,17 @@ mod tests {
                 id: ItemId::from_raw(1)
             })
         );
+    }
+
+    #[test]
+    fn invalid_tree_models_have_empty_visible_rows() {
+        let invalid = TreeModel::new(vec![TreeItem {
+            id: ItemId::from_raw(1),
+            parent: Some(ItemId::from_raw(99)),
+            has_children: false,
+        }]);
+
+        assert!(invalid.visible_rows(&TreeExpansion::new()).is_empty());
     }
 
     #[test]
@@ -1450,6 +1578,53 @@ mod tests {
     }
 
     #[test]
+    fn tree_expansion_toggle_clear_and_visible_rows_are_deterministic() {
+        let tree = tree_model();
+        let mut expansion = TreeExpansion::new();
+
+        assert!(expansion.toggle(ItemId::from_raw(2)));
+        assert_eq!(expansion.expanded(), vec![ItemId::from_raw(2)]);
+        assert!(
+            tree.visible_rows(&expansion)
+                .iter()
+                .all(|row| row.id != ItemId::from_raw(3))
+        );
+
+        assert!(expansion.toggle(ItemId::from_raw(1)));
+        let rows = tree.visible_rows(&expansion);
+        assert_eq!(
+            rows.iter().map(|row| row.id).collect::<Vec<_>>(),
+            vec![
+                ItemId::from_raw(1),
+                ItemId::from_raw(2),
+                ItemId::from_raw(3),
+                ItemId::from_raw(4)
+            ]
+        );
+
+        assert!(!expansion.toggle(ItemId::from_raw(2)));
+        let rows = tree.visible_rows(&expansion);
+        assert_eq!(
+            rows.iter().map(|row| row.id).collect::<Vec<_>>(),
+            vec![
+                ItemId::from_raw(1),
+                ItemId::from_raw(2),
+                ItemId::from_raw(4)
+            ]
+        );
+
+        expansion.clear();
+        assert!(expansion.expanded().is_empty());
+        assert_eq!(
+            tree.visible_rows(&expansion)
+                .iter()
+                .map(|row| row.id)
+                .collect::<Vec<_>>(),
+            vec![ItemId::from_raw(1), ItemId::from_raw(4)]
+        );
+    }
+
+    #[test]
     fn tree_layout_virtualizes_indented_visible_rows() {
         let tree = tree_model();
         let mut expansion = TreeExpansion::new();
@@ -1490,6 +1665,27 @@ mod tests {
     }
 
     #[test]
+    fn tree_layout_sanitizes_visible_row_rects() {
+        let tree = tree_model();
+        let mut expansion = TreeExpansion::new();
+        expansion.expand(ItemId::from_raw(1));
+        let rows = tree.visible_rows(&expansion);
+        let layout = TreeLayout::new(20.0, 12.0);
+
+        let rects = layout.visible_row_rects(
+            Rect::new(f32::NAN, f32::INFINITY, f32::INFINITY, 40.0),
+            &rows,
+            f32::NEG_INFINITY,
+            usize::MAX,
+        );
+        assert_eq!(rects.len(), rows.len());
+        for rect in rects {
+            assert_rect_finite(rect.rect);
+            assert_rect_finite(rect.content_rect);
+        }
+    }
+
+    #[test]
     fn virtual_range_applies_overscan_and_bounds() {
         let range = virtual_range(VirtualRangeRequest {
             item_count: 100,
@@ -1514,6 +1710,30 @@ mod tests {
 
         assert_eq!(range, 96..100);
         assert_approx(clamp_virtual_scroll_offset(5000.0, 100, 10.0, 40.0), 960.0);
+    }
+
+    #[test]
+    fn virtual_range_clamps_negative_and_extreme_overscan() {
+        assert_eq!(
+            virtual_range(VirtualRangeRequest {
+                item_count: 6,
+                scroll_offset: -200.0,
+                viewport_extent: 20.0,
+                item_extent: 10.0,
+                overscan: usize::MAX,
+            }),
+            0..6
+        );
+        assert_eq!(
+            virtual_range(VirtualRangeRequest {
+                item_count: 6,
+                scroll_offset: f32::INFINITY,
+                viewport_extent: 20.0,
+                item_extent: 10.0,
+                overscan: 0,
+            }),
+            0..3
+        );
     }
 
     #[test]
@@ -1554,13 +1774,20 @@ mod tests {
     fn selection_supports_replace_toggle_clear() {
         let mut selection = Selection::new();
         let one = ItemId::from_raw(1);
+        let two = ItemId::from_raw(2);
 
         selection.replace(one);
         assert!(selection.contains(one));
+        assert_eq!(selection.active, Some(one));
+        assert_eq!(selection.selected(), vec![one]);
+        selection.toggle(two);
+        assert_eq!(selection.selected(), vec![one, two]);
+        assert_eq!(selection.active, Some(two));
         selection.toggle(one);
         assert!(!selection.contains(one));
         selection.clear();
         assert!(selection.selected().is_empty());
+        assert_eq!(selection.active, None);
     }
 
     #[test]
@@ -1583,6 +1810,30 @@ mod tests {
                 ItemId::from_raw(3),
                 ItemId::from_raw(4)
             ]
+        );
+    }
+
+    #[test]
+    fn selection_range_failure_preserves_deterministic_state() {
+        let items = [
+            ItemId::from_raw(5),
+            ItemId::from_raw(3),
+            ItemId::from_raw(9),
+            ItemId::from_raw(1),
+        ];
+        let mut selection = Selection::new();
+
+        selection.replace(ItemId::from_raw(3));
+        selection.toggle(ItemId::from_raw(1));
+        assert_eq!(
+            selection.selected(),
+            vec![ItemId::from_raw(1), ItemId::from_raw(3)]
+        );
+        assert!(!selection.select_range(&items, ItemId::from_raw(99)));
+        assert_eq!(selection.active, Some(ItemId::from_raw(1)));
+        assert_eq!(
+            selection.selected(),
+            vec![ItemId::from_raw(1), ItemId::from_raw(3)]
         );
     }
 }
