@@ -185,3 +185,49 @@ fn resource_snapshot_conformance_keeps_mixed_inventory_stable_and_payload_free()
     assert!(!snapshot.contains("9, 8, 7, 6"));
     assert!(!snapshot.contains("RenderImage"));
 }
+
+#[test]
+fn resource_snapshot_conformance_sanitizes_and_rounds_unstable_values() {
+    let mut resources = RenderResources::new();
+
+    resources.register_text_layout(TextLayoutResource {
+        id: TextLayoutId::from_raw(8),
+        key: TextLayoutKey::new(
+            "Text payload stays out",
+            TextStyle::new("sans-serif", 12.0, 16.0),
+            200.0,
+            false,
+        ),
+        layout: empty_layout(12.3456, -0.0, 1),
+    });
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(3),
+        size: Size::new(f32::NAN, 2.3456),
+        sampling: RenderImageSampling::Smooth,
+        pixels: Some(RenderImage::rgba8(1, 1, vec![10, 20, 30, 40]).expect("valid pixels")),
+        atlas_region: Some(ImageAtlasRegion {
+            atlas: ImageId::from_raw(1),
+            source: Rect::new(-0.0, f32::INFINITY, 3.4567, f32::NEG_INFINITY),
+        }),
+    });
+    resources.register_texture(TextureResource {
+        id: TextureId::from_raw(2),
+        size: Size::new(-0.0, 4.5678),
+        sampling: RenderImageSampling::HighQuality,
+        snapshot: Some(RenderImage::rgba8(1, 1, vec![50, 60, 70, 80]).expect("valid snapshot")),
+    });
+
+    let snapshot = resources.snapshot().to_text();
+
+    assert_eq!(
+        snapshot,
+        "resources:\n  image#3 size=0.000x2.346 sampling=smooth pixels=true atlas=1:(0.000,0.000,3.457,0.000)\n  texture#2 size=0.000x4.568 sampling=high_quality snapshot=true\n  text_layout#8 size=12.346x0.000 lines=1 glyphs=0"
+    );
+    assert_eq!(snapshot, resources.snapshot().to_text());
+    assert!(!snapshot.contains("Text payload stays out"));
+    assert!(!snapshot.contains("10, 20, 30, 40"));
+    assert!(!snapshot.contains("50, 60, 70, 80"));
+    assert!(!snapshot.contains("NaN"));
+    assert!(!snapshot.contains("inf"));
+    assert!(!snapshot.contains("-0.000"));
+}
