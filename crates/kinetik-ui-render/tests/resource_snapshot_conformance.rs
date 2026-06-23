@@ -117,3 +117,71 @@ fn resource_snapshot_conformance_omits_raw_payloads_and_backend_objects() {
     assert!(!snapshot.contains("RenderImage"));
     assert!(!snapshot.contains("Arc"));
 }
+
+#[test]
+fn resource_snapshot_conformance_keeps_mixed_inventory_stable_and_payload_free() {
+    let mut resources = RenderResources::new();
+
+    resources.register_texture(TextureResource {
+        id: TextureId::from_raw(102),
+        size: Size::new(320.0, 180.0),
+        sampling: RenderImageSampling::HighQuality,
+        snapshot: Some(RenderImage::rgba8(1, 1, vec![9, 8, 7, 6]).expect("valid snapshot")),
+    });
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(24),
+        size: Size::new(64.0, 64.0),
+        sampling: RenderImageSampling::Smooth,
+        pixels: None,
+        atlas_region: Some(ImageAtlasRegion {
+            atlas: ImageId::from_raw(7),
+            source: Rect::new(4.0, 8.0, 16.0, 12.0),
+        }),
+    });
+    resources.register_text_layout(TextLayoutResource {
+        id: TextLayoutId::from_raw(88),
+        key: TextLayoutKey::new(
+            "Hidden snapshot payload",
+            TextStyle::new("sans-serif", 13.0, 18.0),
+            140.0,
+            true,
+        ),
+        layout: empty_layout(92.0, 36.0, 2),
+    });
+    resources.register_texture(TextureResource {
+        id: TextureId::from_raw(3),
+        size: Size::new(8.0, 8.0),
+        sampling: RenderImageSampling::Pixelated,
+        snapshot: None,
+    });
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(7),
+        size: Size::new(128.0, 128.0),
+        sampling: RenderImageSampling::UiIcon,
+        pixels: Some(RenderImage::rgba8(1, 1, vec![1, 3, 5, 7]).expect("valid image pixels")),
+        atlas_region: None,
+    });
+    resources.register_text_layout(TextLayoutResource {
+        id: TextLayoutId::from_raw(2),
+        key: TextLayoutKey::new(
+            "First hidden payload",
+            TextStyle::new("monospace", 11.0, 15.0),
+            80.0,
+            false,
+        ),
+        layout: empty_layout(48.0, 15.0, 1),
+    });
+
+    let snapshot = resources.snapshot().to_text();
+
+    assert_eq!(
+        snapshot,
+        "resources:\n  image#7 size=128.000x128.000 sampling=ui_icon pixels=true atlas=none\n  image#24 size=64.000x64.000 sampling=smooth pixels=false atlas=7:(4.000,8.000,16.000,12.000)\n  texture#3 size=8.000x8.000 sampling=pixelated snapshot=false\n  texture#102 size=320.000x180.000 sampling=high_quality snapshot=true\n  text_layout#2 size=48.000x15.000 lines=1 glyphs=0\n  text_layout#88 size=92.000x36.000 lines=2 glyphs=0"
+    );
+    assert_eq!(snapshot, resources.snapshot().to_text());
+    assert!(!snapshot.contains("Hidden snapshot payload"));
+    assert!(!snapshot.contains("First hidden payload"));
+    assert!(!snapshot.contains("1, 3, 5, 7"));
+    assert!(!snapshot.contains("9, 8, 7, 6"));
+    assert!(!snapshot.contains("RenderImage"));
+}
