@@ -347,6 +347,99 @@ fn layout_invariants_aspect_ratio_preserves_width_over_height_contract() {
 }
 
 #[test]
+fn layout_invariants_aspect_ratio_resolves_symmetrically_across_axes() {
+    let width_from_height_row = row_layout(
+        Rect::new(0.0, 0.0, 200.0, 40.0),
+        &[item(
+            SizeRule::AspectRatio(1.5),
+            SizeRule::Fixed(40.0),
+            Size::ZERO,
+        )],
+        0.0,
+    );
+    let width_from_height_column = column_layout(
+        Rect::new(0.0, 0.0, 200.0, 200.0),
+        &[item(
+            SizeRule::AspectRatio(1.5),
+            SizeRule::Fixed(40.0),
+            Size::ZERO,
+        )],
+        0.0,
+    );
+    let height_from_width_row = row_layout(
+        Rect::new(0.0, 0.0, 200.0, 200.0),
+        &[item(
+            SizeRule::Fixed(60.0),
+            SizeRule::AspectRatio(1.5),
+            Size::ZERO,
+        )],
+        0.0,
+    );
+    let height_from_width_column = column_layout(
+        Rect::new(0.0, 0.0, 60.0, 200.0),
+        &[item(
+            SizeRule::Fixed(60.0),
+            SizeRule::AspectRatio(1.5),
+            Size::ZERO,
+        )],
+        0.0,
+    );
+
+    assert_rects_invariants(&width_from_height_row);
+    assert_rects_invariants(&width_from_height_column);
+    assert_rects_invariants(&height_from_width_row);
+    assert_rects_invariants(&height_from_width_column);
+
+    for rect in [
+        width_from_height_row[0],
+        width_from_height_column[0],
+        height_from_width_row[0],
+        height_from_width_column[0],
+    ] {
+        assert_approx(rect.width, 60.0);
+        assert_approx(rect.height, 40.0);
+        assert_approx(rect.width / rect.height, 1.5);
+    }
+}
+
+#[test]
+fn layout_invariants_aspect_ratio_edge_outputs_remain_finite_non_negative() {
+    let items = [
+        item(
+            SizeRule::AspectRatio(f32::NAN),
+            SizeRule::AspectRatio(f32::INFINITY),
+            Size::new(f32::NAN, f32::INFINITY),
+        ),
+        item(
+            SizeRule::AspectRatio(-1.0),
+            SizeRule::AspectRatio(0.0),
+            Size::new(-10.0, -20.0),
+        ),
+        item(
+            SizeRule::AspectRatio(2.0),
+            SizeRule::AspectRatio(0.5),
+            Size::new(8.0, 4.0),
+        ),
+    ];
+
+    let row = row_layout(
+        Rect::new(f32::NAN, f32::INFINITY, f32::INFINITY, 24.0),
+        &items,
+        f32::NAN,
+    );
+    let column = column_layout(
+        Rect::new(f32::INFINITY, f32::NAN, 24.0, f32::INFINITY),
+        &items,
+        f32::INFINITY,
+    );
+
+    assert_rects_invariants(&row);
+    assert_rects_invariants(&column);
+    assert_horizontal_monotonic(&row);
+    assert_vertical_monotonic(&column);
+}
+
+#[test]
 fn layout_invariants_primitive_helpers_sanitize_invalid_rect_inputs() {
     let invalid_rect = Rect::new(f32::NAN, f32::INFINITY, -10.0, f32::NAN);
 

@@ -5,8 +5,37 @@
 use kinetik_ui_core::{
     Brush, Color, CornerRadius, FrameWarning, Primitive, Rect, RectPrimitive, SemanticAction,
     SemanticActionKind, SemanticNode, SemanticRole, SemanticState, SemanticTree, SemanticTreeError,
-    SemanticValue, UiTestHarness, WidgetId,
+    SemanticValue, Ui, UiTestHarness, WidgetId,
 };
+
+fn assert_snapshot_rejects(tree: &SemanticTree, expected: SemanticTreeError) {
+    assert_eq!(tree.validate().expect_err("validation error"), expected);
+    assert_eq!(
+        tree.accessibility_snapshot(None)
+            .expect_err("snapshot must reject invalid tree"),
+        expected
+    );
+}
+
+fn assert_frame_warns_about_invalid_semantics(
+    build: impl FnOnce(&mut Ui<'_>),
+    expected: SemanticTreeError,
+) {
+    let mut harness = UiTestHarness::new();
+
+    let ((), output) = harness.run_frame(build);
+
+    assert_eq!(
+        output.warnings,
+        vec![FrameWarning::InvalidSemanticTree { error: expected }]
+    );
+    assert_eq!(
+        output
+            .accessibility_snapshot(None)
+            .expect_err("invalid frame snapshot"),
+        expected
+    );
+}
 
 #[test]
 fn semantic_query_finds_button_by_role_and_label() {
@@ -198,36 +227,24 @@ fn semantic_query_preserves_traversal_and_filters_focus_order() {
 
 #[test]
 fn semantic_query_invalid_semantic_tree_warns_at_frame_end() {
-    let mut harness = UiTestHarness::new();
     let root = WidgetId::from_key("root");
     let missing = WidgetId::from_key("missing");
 
-    let ((), output) = harness.run_frame(|ui| {
-        ui.push_semantic_node(
-            SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([missing]),
-        );
-    });
-
-    assert_eq!(
-        output.warnings,
-        vec![FrameWarning::InvalidSemanticTree {
-            error: SemanticTreeError::UnknownChild {
-                parent: root,
-                child: missing,
-            }
-        }]
-    );
-    assert_eq!(
-        output.accessibility_snapshot(None).expect_err("invalid"),
+    assert_frame_warns_about_invalid_semantics(
+        |ui| {
+            ui.push_semantic_node(
+                SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([missing]),
+            );
+        },
         SemanticTreeError::UnknownChild {
             parent: root,
             child: missing,
-        }
+        },
     );
 }
 
 #[test]
-fn semantic_query_validation_rejects_structural_failures() {
+fn semantic_query_snapshots_reject_structural_failures_before_queries() {
     let root = WidgetId::from_key("root");
     let other = WidgetId::from_key("other");
     let child = WidgetId::from_key("child");
@@ -236,29 +253,43 @@ fn semantic_query_validation_rejects_structural_failures() {
     let mut duplicate = SemanticTree::new();
     duplicate.push(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO));
     duplicate.push(SemanticNode::new(root, SemanticRole::Button, Rect::ZERO));
-    assert_eq!(
-        duplicate.validate().expect_err("duplicate"),
-        SemanticTreeError::DuplicateNodeId { id: root }
-    );
+    assert_snapshot_rejects(&duplicate, SemanticTreeError::DuplicateNodeId { id: root });
 
     let mut unknown_root = SemanticTree::new();
     unknown_root.push(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO));
     unknown_root.set_root(missing);
-    assert_eq!(
-        unknown_root.validate().expect_err("unknown root"),
-        SemanticTreeError::UnknownRoot { id: missing }
+    assert_snapshot_rejects(
+        &unknown_root,
+        SemanticTreeError::UnknownRoot { id: missing },
     );
 
     let mut unknown_child = SemanticTree::new();
     unknown_child
         .push(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([missing]));
-    assert_eq!(
-        unknown_child.validate().expect_err("unknown child"),
+    assert_snapshot_rejects(
+        &unknown_child,
         SemanticTreeError::UnknownChild {
             parent: root,
             child: missing,
-        }
+        },
     );
+
+    let mut duplicate_child = SemanticTree::new();
+    duplicate_child.push(
+        SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([child, child]),
+    );
+    duplicate_child.push(SemanticNode::new(child, SemanticRole::Button, Rect::ZERO));
+    assert_snapshot_rejects(
+        &duplicate_child,
+        SemanticTreeError::DuplicateChild {
+            parent: root,
+            child,
+        },
+    );
+
+    let mut self_child = SemanticTree::new();
+    self_child.push(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([root]));
+    assert_snapshot_rejects(&self_child, SemanticTreeError::SelfChild { id: root });
 
     let mut multiple_parents = SemanticTree::new();
     multiple_parents
@@ -266,21 +297,94 @@ fn semantic_query_validation_rejects_structural_failures() {
     multiple_parents
         .push(SemanticNode::new(other, SemanticRole::Panel, Rect::ZERO).with_children([child]));
     multiple_parents.push(SemanticNode::new(child, SemanticRole::Button, Rect::ZERO));
-    assert_eq!(
-        multiple_parents.validate().expect_err("multiple parents"),
+    assert_snapshot_rejects(
+        &multiple_parents,
         SemanticTreeError::MultipleParents {
             child,
             first_parent: root,
             second_parent: other,
-        }
+        },
     );
 
     let mut cycle = SemanticTree::new();
     cycle.push(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([child]));
     cycle.push(SemanticNode::new(child, SemanticRole::Panel, Rect::ZERO).with_children([root]));
-    assert_eq!(
-        cycle.validate().expect_err("cycle"),
-        SemanticTreeError::Cycle { id: root }
+    assert_snapshot_rejects(&cycle, SemanticTreeError::Cycle { id: root });
+}
+
+#[test]
+fn semantic_query_runtime_warnings_match_structural_validation_failures() {
+    let root = WidgetId::from_key("root");
+    let other = WidgetId::from_key("other");
+    let child = WidgetId::from_key("child");
+    let missing = WidgetId::from_key("missing");
+
+    assert_frame_warns_about_invalid_semantics(
+        |ui| {
+            ui.push_semantic_node(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO));
+            ui.push_semantic_node(SemanticNode::new(root, SemanticRole::Button, Rect::ZERO));
+        },
+        SemanticTreeError::DuplicateNodeId { id: root },
+    );
+
+    assert_frame_warns_about_invalid_semantics(
+        |ui| {
+            ui.set_semantic_root(missing);
+            ui.push_semantic_node(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO));
+        },
+        SemanticTreeError::UnknownRoot { id: missing },
+    );
+
+    assert_frame_warns_about_invalid_semantics(
+        |ui| {
+            ui.push_semantic_node(
+                SemanticNode::new(root, SemanticRole::Root, Rect::ZERO)
+                    .with_children([child, child]),
+            );
+            ui.push_semantic_node(SemanticNode::new(child, SemanticRole::Button, Rect::ZERO));
+        },
+        SemanticTreeError::DuplicateChild {
+            parent: root,
+            child,
+        },
+    );
+
+    assert_frame_warns_about_invalid_semantics(
+        |ui| {
+            ui.push_semantic_node(
+                SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([root]),
+            );
+        },
+        SemanticTreeError::SelfChild { id: root },
+    );
+
+    assert_frame_warns_about_invalid_semantics(
+        |ui| {
+            ui.push_semantic_node(
+                SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([child]),
+            );
+            ui.push_semantic_node(
+                SemanticNode::new(other, SemanticRole::Panel, Rect::ZERO).with_children([child]),
+            );
+            ui.push_semantic_node(SemanticNode::new(child, SemanticRole::Button, Rect::ZERO));
+        },
+        SemanticTreeError::MultipleParents {
+            child,
+            first_parent: root,
+            second_parent: other,
+        },
+    );
+
+    assert_frame_warns_about_invalid_semantics(
+        |ui| {
+            ui.push_semantic_node(
+                SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([child]),
+            );
+            ui.push_semantic_node(
+                SemanticNode::new(child, SemanticRole::Panel, Rect::ZERO).with_children([root]),
+            );
+        },
+        SemanticTreeError::Cycle { id: root },
     );
 }
 
