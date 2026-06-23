@@ -3,12 +3,13 @@
 use std::hash::Hash;
 use std::time::Duration;
 
-use crate::input::UiInput;
+use crate::input::{Key, KeyEvent, KeyState, UiInput};
 use crate::memory::UiMemory;
 use crate::render::{ClipId, LayerId, Primitive};
 use crate::{
     AccessibilitySnapshot, ActionContext, ActionId, ActionInvocation, ActionQueue, ActionSource,
-    PhysicalSize, Rect, ScaleFactor, SemanticNode, SemanticTree, SemanticTreeError, Size, WidgetId,
+    FocusTraversal, PhysicalSize, Rect, ScaleFactor, SemanticNode, SemanticTree, SemanticTreeError,
+    Size, WidgetId,
 };
 use crate::{IdStack, Transform};
 
@@ -458,14 +459,96 @@ impl<'a> Ui<'a> {
                 .push_warning(FrameWarning::DuplicateWidgetId { id: duplicate.id });
         }
 
-        if let Err(error) = self.output.semantics.validate() {
-            self.output
-                .push_warning(FrameWarning::InvalidSemanticTree { error });
+        let semantic_tree_valid = match self.output.semantics.validate() {
+            Ok(()) => true,
+            Err(error) => {
+                self.output
+                    .push_warning(FrameWarning::InvalidSemanticTree { error });
+                false
+            }
+        };
+        if semantic_tree_valid
+            && apply_keyboard_focus_traversal(
+                &self.context.input,
+                self.memory,
+                &self.output.semantics,
+            )
+        {
+            self.output.request_repaint(RepaintRequest::NextFrame);
         }
 
         let warnings = validate_primitive_stack(&self.output.primitives);
         self.output.warnings.extend(warnings);
         self.output
+    }
+}
+
+fn apply_keyboard_focus_traversal(
+    input: &UiInput,
+    memory: &mut UiMemory,
+    semantics: &SemanticTree,
+) -> bool {
+    if memory.text_input_owner().is_some() {
+        return false;
+    }
+
+    let directions: Vec<_> = input
+        .keyboard
+        .events
+        .iter()
+        .filter_map(tab_focus_direction)
+        .collect();
+    if directions.is_empty() {
+        return false;
+    }
+
+    let order = semantics.focus_order();
+    if order.is_empty() {
+        return false;
+    }
+
+    let mut focused = memory.focused().filter(|id| order.contains(id));
+    let initial = focused;
+    for direction in directions {
+        let traversal = FocusTraversal {
+            order: order.clone(),
+            focused,
+        };
+        focused = match direction {
+            TabFocusDirection::Forward => traversal.next(),
+            TabFocusDirection::Backward => traversal.previous(),
+        };
+    }
+
+    if focused == initial {
+        return false;
+    }
+
+    memory.set_focused(focused);
+    true
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TabFocusDirection {
+    Forward,
+    Backward,
+}
+
+fn tab_focus_direction(event: &KeyEvent) -> Option<TabFocusDirection> {
+    if event.state != KeyState::Pressed || event.repeat || !matches!(event.key, Key::Tab) {
+        return None;
+    }
+
+    if event.modifiers.is_empty() {
+        Some(TabFocusDirection::Forward)
+    } else if event.modifiers.shift
+        && !event.modifiers.ctrl
+        && !event.modifiers.alt
+        && !event.modifiers.super_key
+    {
+        Some(TabFocusDirection::Backward)
+    } else {
+        None
     }
 }
 

@@ -3,8 +3,8 @@
 use kinetik_ui_core::{
     ActionBinding, ActionContext, ActionDescriptor, ActionId, ActionPriority, ActionRouter,
     ActionRoutingContext, FocusTraversal, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
-    PhysicalKey, Rect, SemanticNode, SemanticRole, SemanticTree, Shortcut, UiTestHarness, WidgetId,
-    pressable,
+    PhysicalKey, Rect, SemanticNode, SemanticRole, SemanticTree, Shortcut, Ui, UiTestHarness,
+    WidgetId, pressable,
 };
 
 fn ctrl() -> Modifiers {
@@ -85,9 +85,36 @@ fn focus_tree() -> SemanticTree {
     tree
 }
 
-// Runtime Tab/Shift+Tab focus movement is intentionally not implemented or
-// tested in this slice; wiring key events to focus movement remains a follow-up
-// for a future focus manager/action-routing task.
+fn focus_tree_with_non_focusable() -> SemanticTree {
+    let (root, first, second, third) = ids();
+    let disabled = WidgetId::from_key("disabled");
+    let label = WidgetId::from_key("label");
+    let mut disabled_node =
+        SemanticNode::new(disabled, SemanticRole::Button, Rect::ZERO).focusable(true);
+    disabled_node.state.disabled = true;
+
+    let mut tree = SemanticTree::new();
+    tree.push(
+        SemanticNode::new(root, SemanticRole::Root, Rect::ZERO)
+            .with_children([second, disabled, label, first, third]),
+    );
+    tree.push(SemanticNode::new(first, SemanticRole::Button, Rect::ZERO).focusable(true));
+    tree.push(SemanticNode::new(second, SemanticRole::Button, Rect::ZERO).focusable(true));
+    tree.push(disabled_node);
+    tree.push(SemanticNode::new(label, SemanticRole::Label, Rect::ZERO));
+    tree.push(SemanticNode::new(third, SemanticRole::Button, Rect::ZERO).focusable(true));
+    tree
+}
+
+fn emit_tree(ui: &mut Ui<'_>, tree: &SemanticTree) {
+    if let Some(root) = tree.root() {
+        ui.set_semantic_root(root);
+    }
+    for node in tree.nodes().iter().cloned() {
+        ui.push_semantic_node(node);
+    }
+}
+
 #[test]
 fn focus_keyboard_focus_traversal_wraps_forward_and_backward() {
     let (_, first, second, third) = ids();
@@ -135,6 +162,114 @@ fn focus_keyboard_focus_traversal_uses_semantic_child_order_and_skips_disabled_f
     assert_eq!(traversal.order, vec![second, first, third]);
     assert_eq!(traversal.focused, Some(second));
     assert_eq!(traversal.next(), Some(first));
+}
+
+#[test]
+fn focus_keyboard_runtime_tab_traverses_forward_from_none_through_middle_and_wraps() {
+    let (_, first, second, third) = ids();
+    let tree = focus_tree();
+    let mut harness = UiTestHarness::new();
+
+    harness.key_press(Key::Tab);
+    let ((), first_output) = harness.run_frame(|ui| emit_tree(ui, &tree));
+    assert_eq!(harness.memory().focused(), Some(second));
+    assert!(first_output.warnings.is_empty());
+
+    harness.key_press(Key::Tab);
+    let _ = harness.run_frame(|ui| emit_tree(ui, &tree));
+    assert_eq!(harness.memory().focused(), Some(first));
+
+    harness.key_press(Key::Tab);
+    let _ = harness.run_frame(|ui| emit_tree(ui, &tree));
+    assert_eq!(harness.memory().focused(), Some(third));
+
+    harness.key_press(Key::Tab);
+    let _ = harness.run_frame(|ui| emit_tree(ui, &tree));
+    assert_eq!(harness.memory().focused(), Some(second));
+}
+
+#[test]
+fn focus_keyboard_runtime_shift_tab_traverses_backward_from_none_through_middle_and_wraps() {
+    let (_, first, second, third) = ids();
+    let tree = focus_tree();
+    let mut harness = UiTestHarness::new();
+    harness.set_modifiers(Modifiers::new(true, false, false, false));
+
+    harness.key_press(Key::Tab);
+    let ((), first_output) = harness.run_frame(|ui| emit_tree(ui, &tree));
+    assert_eq!(harness.memory().focused(), Some(third));
+    assert!(first_output.warnings.is_empty());
+
+    harness.key_press(Key::Tab);
+    let _ = harness.run_frame(|ui| emit_tree(ui, &tree));
+    assert_eq!(harness.memory().focused(), Some(first));
+
+    harness.key_press(Key::Tab);
+    let _ = harness.run_frame(|ui| emit_tree(ui, &tree));
+    assert_eq!(harness.memory().focused(), Some(second));
+
+    harness.key_press(Key::Tab);
+    let _ = harness.run_frame(|ui| emit_tree(ui, &tree));
+    assert_eq!(harness.memory().focused(), Some(third));
+}
+
+#[test]
+fn focus_keyboard_runtime_tab_skips_disabled_and_non_focusable_nodes() {
+    let (_, first, second, _) = ids();
+    let tree = focus_tree_with_non_focusable();
+    let mut harness = UiTestHarness::new();
+    harness.memory_mut().focus(second);
+    harness.key_press(Key::Tab);
+
+    let _ = harness.run_frame(|ui| emit_tree(ui, &tree));
+
+    assert_eq!(harness.memory().focused(), Some(first));
+}
+
+#[test]
+fn focus_keyboard_runtime_ignores_non_tab_and_released_tab_events() {
+    let (_, first, _, _) = ids();
+    let tree = focus_tree();
+    let mut harness = UiTestHarness::new();
+    harness.memory_mut().focus(first);
+    harness.key_release(Key::Tab);
+
+    let ((), released_output) = harness.run_frame(|ui| emit_tree(ui, &tree));
+    assert_eq!(harness.memory().focused(), Some(first));
+    assert_eq!(
+        released_output.repaint,
+        kinetik_ui_core::RepaintRequest::None
+    );
+
+    harness.key_press(Key::Enter);
+    let ((), non_tab_output) = harness.run_frame(|ui| emit_tree(ui, &tree));
+    assert_eq!(harness.memory().focused(), Some(first));
+    assert_eq!(
+        non_tab_output.repaint,
+        kinetik_ui_core::RepaintRequest::None
+    );
+}
+
+#[test]
+fn focus_keyboard_runtime_text_input_owner_blocks_tab_and_shift_tab_traversal() {
+    let (_, _, second, _) = ids();
+    let tree = focus_tree();
+
+    for modifiers in [
+        Modifiers::default(),
+        Modifiers::new(true, false, false, false),
+    ] {
+        let mut harness = UiTestHarness::new();
+        harness.memory_mut().focus(second);
+        harness.memory_mut().set_text_input_owner(second);
+        harness.set_modifiers(modifiers);
+        harness.key_press(Key::Tab);
+
+        let ((), output) = harness.run_frame(|ui| emit_tree(ui, &tree));
+
+        assert_eq!(harness.memory().focused(), Some(second));
+        assert_eq!(output.repaint, kinetik_ui_core::RepaintRequest::None);
+    }
 }
 
 #[test]
@@ -272,6 +407,16 @@ fn focus_keyboard_text_input_blocks_reserved_global_shortcuts() {
         "global.space",
         Shortcut::new(Modifiers::default(), Key::Space),
     );
+    bind_global(
+        &mut router,
+        "global.tab",
+        Shortcut::new(Modifiers::default(), Key::Tab),
+    );
+    bind_global(
+        &mut router,
+        "global.shift.tab",
+        Shortcut::new(Modifiers::new(true, false, false, false), Key::Tab),
+    );
 
     for character in ["a", "c", "v", "x", "y", "z"] {
         bind_global(
@@ -296,6 +441,17 @@ fn focus_keyboard_text_input_blocks_reserved_global_shortcuts() {
     );
     assert_eq!(
         router.resolve_shortcut_in_context(&key_input(Key::Space, Modifiers::default()), routing),
+        None
+    );
+    assert_eq!(
+        router.resolve_shortcut_in_context(&key_input(Key::Tab, Modifiers::default()), routing),
+        None
+    );
+    assert_eq!(
+        router.resolve_shortcut_in_context(
+            &key_input(Key::Tab, Modifiers::new(true, false, false, false)),
+            routing,
+        ),
         None
     );
 
