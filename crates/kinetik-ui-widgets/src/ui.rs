@@ -225,7 +225,10 @@ impl<'a> Ui<'a> {
         self.runtime.push_semantic_node(node);
     }
 
-    /// Adds a platform request for custom application-drawn UI.
+    /// Adds a raw platform request for custom application-drawn UI.
+    ///
+    /// Built-in widget cursor requests are routed through the widget response
+    /// owner. This escape hatch stays direct for custom low-level app surfaces.
     pub fn push_platform_request(&mut self, request: PlatformRequest) {
         self.runtime.push_platform_request(request);
     }
@@ -1115,9 +1118,10 @@ impl<'a> Ui<'a> {
         for node in &output.semantics {
             self.runtime.push_semantic_node(node.clone());
         }
-        for request in &output.platform_requests {
-            self.runtime.push_platform_request(request.clone());
-        }
+        self.push_widget_platform_requests(
+            output.response,
+            output.platform_requests.iter().cloned(),
+        );
     }
 
     fn push_interactive(&mut self, output: WidgetOutput) -> Response {
@@ -1129,10 +1133,28 @@ impl<'a> Ui<'a> {
         for node in output.semantics {
             self.runtime.push_semantic_node(node);
         }
-        for request in output.platform_requests {
-            self.runtime.push_platform_request(request);
-        }
+        self.push_widget_platform_requests(Some(response), output.platform_requests);
         response
+    }
+
+    fn push_widget_platform_requests(
+        &mut self,
+        response: Option<Response>,
+        requests: impl IntoIterator<Item = PlatformRequest>,
+    ) {
+        for request in requests {
+            match request {
+                PlatformRequest::SetCursor(cursor) => {
+                    if let Some(response) = response {
+                        self.runtime.request_cursor_for(response.id, cursor);
+                    } else {
+                        self.runtime
+                            .push_platform_request(PlatformRequest::SetCursor(cursor));
+                    }
+                }
+                request => self.runtime.push_platform_request(request),
+            }
+        }
     }
 
     fn request_repaint_if_text_visual_changed(
@@ -1278,6 +1300,16 @@ mod tests {
             pointer: PointerInput {
                 position: Some(Point::new(x, y)),
                 primary: PointerButtonState::new(false, false, true),
+                ..PointerInput::default()
+            },
+            ..UiInput::default()
+        }
+    }
+
+    fn input_at(x: f32, y: f32) -> UiInput {
+        UiInput {
+            pointer: PointerInput {
+                position: Some(Point::new(x, y)),
                 ..PointerInput::default()
             },
             ..UiInput::default()
@@ -2185,7 +2217,7 @@ mod tests {
     fn ui_forwards_widget_platform_requests() {
         let theme = default_dark_theme();
         let mut memory = UiMemory::new();
-        let input = pressed_at(4.0, 4.0);
+        let input = input_at(4.0, 4.0);
         let mut ui = Ui::new(&input, &mut memory, &theme);
 
         ui.button("run", Rect::new(0.0, 0.0, 80.0, 28.0), "Run", false);
@@ -2195,6 +2227,84 @@ mod tests {
             output
                 .platform_requests
                 .contains(&PlatformRequest::SetCursor(CursorShape::PointingHand))
+        );
+    }
+
+    #[test]
+    fn ui_widget_cursor_requests_respect_pointer_capture_owner() {
+        let theme = default_dark_theme();
+        let capture_owner = WidgetId::from_key("root").child("drag-source");
+        let mut memory = UiMemory::new();
+        memory.capture_pointer(capture_owner);
+        let input = input_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+
+        ui.button("run", Rect::new(0.0, 0.0, 80.0, 28.0), "Run", false);
+        let output = ui.finish_output();
+
+        assert!(
+            !output
+                .platform_requests
+                .iter()
+                .any(|request| matches!(request, PlatformRequest::SetCursor(_)))
+        );
+    }
+
+    #[test]
+    fn ui_widget_cursor_requests_are_suppressed_on_cancellation_frame() {
+        let theme = default_dark_theme();
+        let owner = WidgetId::from_key("root").child("run");
+        let mut memory = UiMemory::new();
+        memory.activate(owner);
+        memory.press(owner);
+        memory.capture_pointer(owner);
+        let mut input = input_at(4.0, 4.0);
+        input.release_pointer_buttons();
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+
+        ui.button("run", Rect::new(0.0, 0.0, 80.0, 28.0), "Run", false);
+        let output = ui.finish_output();
+
+        assert!(
+            !output
+                .platform_requests
+                .iter()
+                .any(|request| matches!(request, PlatformRequest::SetCursor(_)))
+        );
+    }
+
+    #[test]
+    fn ui_widget_cursor_routing_preserves_resize_and_text_cursors() {
+        let theme = default_dark_theme();
+
+        let mut value = 0.5;
+        let mut memory = UiMemory::new();
+        let input = input_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.slider(
+            "gain",
+            Rect::new(0.0, 0.0, 120.0, 12.0),
+            &mut value,
+            0.0..=1.0,
+            false,
+        );
+        let output = ui.finish_output();
+        assert!(
+            output
+                .platform_requests
+                .contains(&PlatformRequest::SetCursor(CursorShape::ResizeHorizontal))
+        );
+
+        let mut state = TextEditState::new("abc");
+        let mut memory = UiMemory::new();
+        let input = input_at(4.0, 4.0);
+        let mut ui = Ui::new(&input, &mut memory, &theme);
+        ui.text_field("field", Rect::new(0.0, 0.0, 120.0, 24.0), &mut state, false);
+        let output = ui.finish_output();
+        assert!(
+            output
+                .platform_requests
+                .contains(&PlatformRequest::SetCursor(CursorShape::Text))
         );
     }
 
