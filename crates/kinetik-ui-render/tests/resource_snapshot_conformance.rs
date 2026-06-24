@@ -1,11 +1,14 @@
 //! Backend-neutral resource snapshot conformance tests.
 
-use std::{fs, sync::Arc};
+use std::{convert::Infallible, fs, path::Component, sync::Arc};
 
-use kinetik_ui_core::{ImageId, Rect, Size, TextLayoutId, TextureId};
+use kinetik_ui_core::{
+    ImageId, PhysicalSize, Rect, ScaleFactor, Size, TextLayoutId, TextureId, ViewportInfo,
+};
 use kinetik_ui_render::{
-    ImageAtlasRegion, ImageResource, RenderImage, RenderImageSampling, RenderResources,
-    TextLayoutResource, TextureResource,
+    ImageAtlasRegion, ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput,
+    RenderImage, RenderImageSampling, RenderResources, RendererBackend, TextLayoutResource,
+    TextureResource,
 };
 use kinetik_ui_text::{ShapedTextLayout, TextLayoutKey, TextLayoutStore, TextStyle};
 
@@ -22,6 +25,54 @@ fn empty_layout(width: f32, height: f32, line_count: usize) -> Arc<ShapedTextLay
         lines: Vec::new(),
         runs: Vec::new(),
     })
+}
+
+#[derive(Default)]
+struct DiagnosticRenderer;
+
+impl RendererBackend for DiagnosticRenderer {
+    type Error = Infallible;
+
+    fn render_frame(
+        &mut self,
+        input: RenderFrameInput<'_>,
+    ) -> Result<RenderFrameOutput, Self::Error> {
+        Ok(RenderFrameOutput {
+            primitive_count: input.primitives.len(),
+            diagnostics: vec![
+                RenderDiagnostic::MissingImage(ImageId::from_raw(11)),
+                RenderDiagnostic::MissingTexture(TextureId::from_raw(12)),
+            ],
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FatalRendererError;
+
+struct FatalRenderer;
+
+impl RendererBackend for FatalRenderer {
+    type Error = FatalRendererError;
+
+    fn render_frame(
+        &mut self,
+        _input: RenderFrameInput<'_>,
+    ) -> Result<RenderFrameOutput, Self::Error> {
+        Err(FatalRendererError)
+    }
+}
+
+fn empty_frame_input(resources: &RenderResources) -> RenderFrameInput<'_> {
+    RenderFrameInput {
+        viewport: ViewportInfo::new(
+            Size::new(100.0, 50.0),
+            PhysicalSize::new(200, 100),
+            ScaleFactor::new(2.0),
+        ),
+        primitives: &[],
+        resources,
+    }
 }
 
 #[test]
@@ -127,6 +178,66 @@ fn resource_snapshot_conformance_omits_raw_payloads_and_backend_objects() {
 }
 
 #[test]
+fn resource_snapshot_conformance_exposes_missing_payload_metadata() {
+    let mut resources = RenderResources::new();
+
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(21),
+        size: Size::new(1920.0, 1080.0),
+        sampling: RenderImageSampling::HighQuality,
+        pixels: None,
+        atlas_region: None,
+    });
+    resources.register_texture(TextureResource {
+        id: TextureId::from_raw(22),
+        size: Size::new(640.0, 360.0),
+        sampling: RenderImageSampling::Smooth,
+        snapshot: None,
+    });
+
+    let snapshot = resources.snapshot();
+
+    assert_eq!(snapshot.len(), 2);
+    assert!(!snapshot.is_empty());
+    assert_eq!(snapshot.images[0].id, 21);
+    assert!(!snapshot.images[0].has_pixels);
+    assert_eq!(snapshot.textures[0].id, 22);
+    assert!(!snapshot.textures[0].has_snapshot);
+    assert_snapshot_text(
+        "resource_snapshot_conformance_exposes_missing_payload_metadata",
+        "resources:\n  image#21 size=1920.000x1080.000 sampling=high_quality pixels=false atlas=none\n  texture#22 size=640.000x360.000 sampling=smooth snapshot=false",
+        &snapshot.to_text(),
+    );
+}
+
+#[test]
+fn resource_snapshot_conformance_normalizes_atlas_region_metadata() {
+    let mut resources = RenderResources::new();
+
+    resources.register_image(ImageResource {
+        id: ImageId::from_raw(4),
+        size: Size::new(16.0, 16.0),
+        sampling: RenderImageSampling::UiIcon,
+        pixels: None,
+        atlas_region: Some(ImageAtlasRegion {
+            atlas: ImageId::from_raw(2),
+            source: Rect::new(-0.0, f32::NAN, f32::INFINITY, 7.8912),
+        }),
+    });
+
+    let snapshot = resources.snapshot().to_text();
+
+    assert_snapshot_text(
+        "resource_snapshot_conformance_normalizes_atlas_region_metadata",
+        "resources:\n  image#4 size=16.000x16.000 sampling=ui_icon pixels=false atlas=2:(0.000,0.000,0.000,7.891)",
+        &snapshot,
+    );
+    assert!(!snapshot.contains("NaN"));
+    assert!(!snapshot.contains("inf"));
+    assert!(!snapshot.contains("-0.000"));
+}
+
+#[test]
 fn resource_snapshot_conformance_registers_shaped_text_store_exports() {
     let mut store = TextLayoutStore::new();
     let key = TextLayoutKey::new(
@@ -167,6 +278,80 @@ fn resource_snapshot_conformance_registers_shaped_text_store_exports() {
     assert!(!snapshot_text.contains("ShapedGlyph"));
     assert!(!snapshot_text.contains("PenikoFont"));
     assert!(!snapshot_text.contains("Inter"));
+}
+
+#[test]
+fn resource_snapshot_conformance_preserves_shaped_text_layout_sharing() {
+    let mut store = TextLayoutStore::new();
+    let first = store.layout_id(TextLayoutKey::new(
+        "Shared layout",
+        TextStyle::new("sans-serif", 12.0, 16.0),
+        200.0,
+        false,
+    ));
+    let second = store.layout_id(TextLayoutKey::new(
+        "Shared layout\nSecond line",
+        TextStyle::new("sans-serif", 12.0, 16.0),
+        120.0,
+        true,
+    ));
+    let exported = store.layouts().collect::<Vec<_>>();
+    let first_export = exported
+        .iter()
+        .find(|layout| layout.id == first)
+        .expect("first layout export");
+    let second_export = exported
+        .iter()
+        .find(|layout| layout.id == second)
+        .expect("second layout export");
+    let first_layout = Arc::clone(&first_export.layout);
+    let second_layout = Arc::clone(&second_export.layout);
+    let mut resources = RenderResources::new();
+
+    resources.register_text_layouts(exported);
+
+    assert!(Arc::ptr_eq(
+        &first_layout,
+        &resources
+            .text_layout_resource(first)
+            .expect("first registered layout")
+            .layout
+    ));
+    assert!(Arc::ptr_eq(
+        &second_layout,
+        &resources
+            .text_layout_resource(second)
+            .expect("second registered layout")
+            .layout
+    ));
+    assert_eq!(resources.snapshot().text_layouts.len(), 2);
+}
+
+#[test]
+fn renderer_backend_contract_distinguishes_diagnostics_from_fatal_errors() {
+    let resources = RenderResources::new();
+    let input = empty_frame_input(&resources);
+    let mut diagnostic_renderer = DiagnosticRenderer;
+
+    let output = diagnostic_renderer
+        .render_frame(input)
+        .expect("diagnostic renderer should submit");
+
+    assert_eq!(output.primitive_count, 0);
+    assert_eq!(
+        output.diagnostics,
+        vec![
+            RenderDiagnostic::MissingImage(ImageId::from_raw(11)),
+            RenderDiagnostic::MissingTexture(TextureId::from_raw(12)),
+        ]
+    );
+
+    let mut fatal_renderer = FatalRenderer;
+    let error = fatal_renderer
+        .render_frame(empty_frame_input(&resources))
+        .expect_err("fatal renderer should return its error type");
+
+    assert_eq!(error, FatalRendererError);
 }
 
 #[test]
@@ -290,6 +475,13 @@ fn resource_snapshot_artifact_helper_formats_paths_under_target() {
     let paths = artifact_paths("Resource Snapshot: Example/Case");
     let directory = paths.directory.to_string_lossy().replace('\\', "/");
 
+    assert!(paths.directory.is_absolute());
+    assert!(
+        paths
+            .directory
+            .components()
+            .all(|component| { !matches!(component, Component::ParentDir | Component::CurDir) })
+    );
     assert!(directory.ends_with(
         "target/kinetik-ui-artifacts/kinetik-ui-render/resource-snapshots/resource-snapshot-example-case"
     ));

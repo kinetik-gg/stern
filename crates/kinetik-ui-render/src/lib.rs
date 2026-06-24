@@ -274,7 +274,11 @@ impl RenderResources {
     }
 }
 
-/// Deterministic resource inventory used by renderer snapshot tests.
+/// Deterministic, payload-free resource inventory used by renderer snapshot tests.
+///
+/// Snapshots are sorted by raw handle within each resource class and contain
+/// metadata only. Raw image pixels, font bytes, shaped glyph payloads, and
+/// backend-native objects are intentionally excluded.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RenderResourceSnapshot {
     /// Image resources sorted by handle.
@@ -314,10 +318,22 @@ impl RenderResourceSnapshot {
         }
     }
 
+    /// Returns the number of resources included in this snapshot.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.images.len() + self.textures.len() + self.text_layouts.len()
+    }
+
+    /// Returns true when the snapshot contains no resources.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Renders the resource inventory as stable line-oriented text.
     #[must_use]
     pub fn to_text(&self) -> String {
-        let mut lines = Vec::new();
+        let mut lines = Vec::with_capacity(self.len() + 1);
         lines.push("resources:".to_owned());
         for image in &self.images {
             lines.push(format!(
