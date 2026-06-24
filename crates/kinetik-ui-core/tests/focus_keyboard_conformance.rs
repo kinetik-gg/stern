@@ -107,6 +107,31 @@ fn focus_tree_with_non_focusable() -> SemanticTree {
     tree
 }
 
+fn focus_tree_with_disabled_parent_subtree() -> SemanticTree {
+    let (root, first, second, third) = ids();
+    let disabled_parent = WidgetId::from_key("disabled-parent");
+    let disabled_child = WidgetId::from_key("disabled-child");
+    let mut disabled_parent_node =
+        SemanticNode::new(disabled_parent, SemanticRole::Panel, Rect::ZERO)
+            .with_children([disabled_child, first]);
+    disabled_parent_node.state.disabled = true;
+
+    let mut tree = SemanticTree::new();
+    tree.push(
+        SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([
+            second,
+            disabled_parent,
+            third,
+        ]),
+    );
+    tree.push(SemanticNode::new(first, SemanticRole::Button, Rect::ZERO).focusable(true));
+    tree.push(SemanticNode::new(second, SemanticRole::Button, Rect::ZERO).focusable(true));
+    tree.push(disabled_parent_node);
+    tree.push(SemanticNode::new(disabled_child, SemanticRole::Button, Rect::ZERO).focusable(true));
+    tree.push(SemanticNode::new(third, SemanticRole::Button, Rect::ZERO).focusable(true));
+    tree
+}
+
 fn emit_tree(ui: &mut Ui<'_>, tree: &SemanticTree) {
     if let Some(root) = tree.root() {
         ui.set_semantic_root(root);
@@ -187,6 +212,23 @@ fn focus_keyboard_focus_traversal_uses_semantic_child_order_and_skips_disabled_f
     assert_eq!(traversal.order, vec![second, first, third]);
     assert_eq!(traversal.focused, Some(second));
     assert_eq!(traversal.next(), Some(first));
+}
+
+#[test]
+fn focus_keyboard_focus_traversal_skips_disabled_parent_subtrees() {
+    let (_, first, second, third) = ids();
+    let disabled_parent = WidgetId::from_key("disabled-parent");
+    let disabled_child = WidgetId::from_key("disabled-child");
+    let tree = focus_tree_with_disabled_parent_subtree();
+    let traversal = FocusTraversal::from_tree(&tree, Some(first));
+
+    assert_eq!(
+        tree.traversal_order()[1..],
+        [second, disabled_parent, disabled_child, first, third]
+    );
+    assert_eq!(traversal.order, vec![second, third]);
+    assert_eq!(traversal.focused, None);
+    assert_eq!(traversal.next(), Some(second));
 }
 
 #[test]
@@ -309,6 +351,19 @@ fn focus_keyboard_runtime_tab_skips_disabled_and_non_focusable_nodes() {
     let _ = harness.run_frame(|ui| emit_tree(ui, &tree));
 
     assert_eq!(harness.memory().focused(), Some(first));
+}
+
+#[test]
+fn focus_keyboard_runtime_tab_skips_disabled_parent_subtree_descendants() {
+    let (_, _, second, third) = ids();
+    let tree = focus_tree_with_disabled_parent_subtree();
+    let mut harness = UiTestHarness::new();
+    harness.memory_mut().focus(second);
+    harness.key_press(Key::Tab);
+
+    let _ = harness.run_frame(|ui| emit_tree(ui, &tree));
+
+    assert_eq!(harness.memory().focused(), Some(third));
 }
 
 #[test]

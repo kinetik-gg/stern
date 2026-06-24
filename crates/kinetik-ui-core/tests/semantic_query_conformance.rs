@@ -310,6 +310,111 @@ fn semantic_query_preserves_traversal_and_filters_focus_order() {
 }
 
 #[test]
+fn semantic_query_preserves_disabled_subtree_queries_while_filtering_focus_participation() {
+    let root = WidgetId::from_key("root");
+    let before = WidgetId::from_key("before");
+    let disabled_parent = WidgetId::from_key("disabled-parent");
+    let inside = WidgetId::from_key("inside");
+    let disabled_inside = WidgetId::from_key("disabled-inside");
+    let after = WidgetId::from_key("after");
+    let mut disabled_parent_node = SemanticNode::new(
+        disabled_parent,
+        SemanticRole::Panel,
+        Rect::new(0.0, 32.0, 200.0, 80.0),
+    )
+    .with_label("Disabled parent")
+    .with_children([inside, disabled_inside]);
+    disabled_parent_node.state.disabled = true;
+    let mut disabled_inside_node = SemanticNode::new(
+        disabled_inside,
+        SemanticRole::Button,
+        Rect::new(0.0, 64.0, 80.0, 24.0),
+    )
+    .focusable(true)
+    .with_label("Disabled inside");
+    disabled_inside_node.state.disabled = true;
+
+    let mut tree = SemanticTree::new();
+    tree.push(
+        SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([
+            before,
+            disabled_parent,
+            after,
+        ]),
+    );
+    tree.push(
+        SemanticNode::new(
+            before,
+            SemanticRole::Button,
+            Rect::new(0.0, 0.0, 80.0, 24.0),
+        )
+        .focusable(true)
+        .with_label("Before"),
+    );
+    tree.push(disabled_parent_node);
+    tree.push(
+        SemanticNode::new(
+            inside,
+            SemanticRole::Button,
+            Rect::new(0.0, 36.0, 80.0, 24.0),
+        )
+        .focusable(true)
+        .with_label("Inside disabled parent"),
+    );
+    tree.push(disabled_inside_node);
+    tree.push(
+        SemanticNode::new(
+            after,
+            SemanticRole::Button,
+            Rect::new(0.0, 116.0, 80.0, 24.0),
+        )
+        .focusable(true)
+        .with_label("After"),
+    );
+
+    let snapshot = tree
+        .accessibility_snapshot(Some(inside))
+        .expect("valid snapshot");
+
+    assert_eq!(
+        snapshot
+            .nodes
+            .iter()
+            .map(|node| node.id)
+            .collect::<Vec<_>>(),
+        vec![
+            root,
+            before,
+            disabled_parent,
+            inside,
+            disabled_inside,
+            after
+        ]
+    );
+    assert_eq!(snapshot.focus_order, vec![before, after]);
+    assert_eq!(snapshot.focused, None);
+    assert_eq!(
+        snapshot
+            .find_by_label("Inside disabled parent")
+            .map(|node| node.id),
+        Some(inside)
+    );
+    assert_eq!(
+        snapshot
+            .find_by_role_and_label(&SemanticRole::Button, "Disabled inside")
+            .map(|node| node.id),
+        Some(disabled_inside)
+    );
+    assert_eq!(
+        snapshot
+            .nodes_by_state(|state| state.disabled)
+            .map(|node| node.id)
+            .collect::<Vec<_>>(),
+        vec![disabled_parent, disabled_inside]
+    );
+}
+
+#[test]
 fn semantic_query_invalid_semantic_tree_warns_at_frame_end() {
     let root = WidgetId::from_key("root");
     let missing = WidgetId::from_key("missing");

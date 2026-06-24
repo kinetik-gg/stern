@@ -318,13 +318,15 @@ impl SemanticTree {
     /// Returns focusable node IDs in traversal order.
     #[must_use]
     pub fn focus_order(&self) -> Vec<WidgetId> {
-        self.traversal_order()
-            .into_iter()
-            .filter(|id| {
-                self.get(*id)
-                    .is_some_and(|node| node.focusable && !node.state.disabled)
-            })
-            .collect()
+        let mut order = Vec::new();
+        let mut visited = BTreeSet::new();
+        if let Some(root) = self.root.filter(|root| self.get(*root).is_some()) {
+            self.push_focus_order(root, false, &mut visited, &mut order);
+        }
+        for node in &self.nodes {
+            self.push_focus_order(node.id, false, &mut visited, &mut order);
+        }
+        order
     }
 
     /// Exports a validated accessibility snapshot for platform adapters.
@@ -424,6 +426,28 @@ impl SemanticTree {
         order.push(id);
         for child in &node.children {
             self.push_traversal(*child, visited, order);
+        }
+    }
+
+    fn push_focus_order(
+        &self,
+        id: WidgetId,
+        disabled_ancestor: bool,
+        visited: &mut BTreeSet<WidgetId>,
+        order: &mut Vec<WidgetId>,
+    ) {
+        if !visited.insert(id) {
+            return;
+        }
+        let Some(node) = self.get(id) else {
+            return;
+        };
+        let disabled = disabled_ancestor || node.state.disabled;
+        if node.focusable && !disabled {
+            order.push(id);
+        }
+        for child in &node.children {
+            self.push_focus_order(*child, disabled, visited, order);
         }
     }
 }
