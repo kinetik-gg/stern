@@ -3,8 +3,10 @@
 mod collections_virtualization_conformance {
     use std::ops::Range;
 
+    use kinetik_ui_core::Rect;
     use kinetik_ui_widgets::{
-        VirtualRangeRequest, VirtualWindow, VirtualWindowRequest, virtual_range, virtual_window,
+        ItemId, ListLayout, TableColumn, TableLayout, TreeLayout, TreeRow, VirtualRangeRequest,
+        VirtualWindow, VirtualWindowRequest, virtual_range, virtual_window,
     };
 
     fn request(
@@ -50,6 +52,85 @@ mod collections_virtualization_conformance {
 
     fn assert_range(range: Range<usize>, expected: Range<usize>) {
         assert_eq!(range, expected);
+    }
+
+    fn table_layout() -> TableLayout {
+        TableLayout {
+            columns: vec![
+                TableColumn {
+                    id: ItemId::from_raw(1),
+                    header: "Name".to_owned(),
+                    width: 80.0,
+                },
+                TableColumn {
+                    id: ItemId::from_raw(2),
+                    header: "State".to_owned(),
+                    width: 40.0,
+                },
+            ],
+            header_height: 25.0,
+            row_height: 10.0,
+            sort: None,
+        }
+    }
+
+    fn tree_rows() -> Vec<TreeRow> {
+        vec![
+            TreeRow {
+                row: 0,
+                item_index: 0,
+                id: ItemId::from_raw(1),
+                parent: None,
+                depth: 0,
+                has_children: true,
+                expanded: true,
+            },
+            TreeRow {
+                row: 1,
+                item_index: 1,
+                id: ItemId::from_raw(2),
+                parent: Some(ItemId::from_raw(1)),
+                depth: 1,
+                has_children: true,
+                expanded: true,
+            },
+            TreeRow {
+                row: 2,
+                item_index: 2,
+                id: ItemId::from_raw(3),
+                parent: Some(ItemId::from_raw(2)),
+                depth: 2,
+                has_children: false,
+                expanded: false,
+            },
+            TreeRow {
+                row: 3,
+                item_index: 3,
+                id: ItemId::from_raw(4),
+                parent: None,
+                depth: 0,
+                has_children: false,
+                expanded: false,
+            },
+            TreeRow {
+                row: 4,
+                item_index: 4,
+                id: ItemId::from_raw(5),
+                parent: None,
+                depth: 0,
+                has_children: false,
+                expanded: false,
+            },
+            TreeRow {
+                row: 5,
+                item_index: 5,
+                id: ItemId::from_raw(6),
+                parent: None,
+                depth: 0,
+                has_children: false,
+                expanded: false,
+            },
+        ]
     }
 
     #[test]
@@ -166,5 +247,96 @@ mod collections_virtualization_conformance {
                 virtual_window(request).materialized_range
             );
         }
+    }
+
+    #[test]
+    fn list_layout_adapter_exposes_strict_and_materialized_ranges() {
+        let list = ListLayout::new(10.0);
+        let window = list.virtual_window(100, 50.0, 35.0, 2);
+
+        assert_window_finite(&window);
+        assert_approx(window.content_extent, 1000.0);
+        assert_approx(window.max_scroll_offset, 965.0);
+        assert_approx(window.clamped_scroll_offset, 50.0);
+        assert_range(window.visible_range, 5..9);
+        assert_range(window.materialized_range.clone(), 3..12);
+        assert_eq!(
+            list.visible_range(100, 50.0, 35.0, 2),
+            window.materialized_range
+        );
+
+        let rects = list.visible_row_rects(Rect::new(0.0, 0.0, 120.0, 35.0), 100, 50.0, 2);
+        assert_eq!(rects.len(), 9);
+        assert_eq!(rects[0].index, 3);
+        assert_eq!(rects[8].index, 11);
+        assert_approx(rects[0].rect.y, -20.0);
+    }
+
+    #[test]
+    fn table_body_adapter_subtracts_header_height_for_rows() {
+        let table = table_layout();
+        let window = table.body_virtual_window(100, 20.0, 55.0, 1);
+
+        assert_window_finite(&window);
+        assert_approx(window.content_extent, 1000.0);
+        assert_approx(window.max_scroll_offset, 970.0);
+        assert_approx(window.clamped_scroll_offset, 20.0);
+        assert_range(window.visible_range, 2..5);
+        assert_range(window.materialized_range.clone(), 1..7);
+        assert_eq!(
+            table.visible_row_range(100, 20.0, 55.0, 1),
+            window.materialized_range
+        );
+
+        let full_height_window = virtual_window(request(100, 20.0, 55.0, 10.0, 1));
+        assert_range(full_height_window.visible_range, 2..8);
+
+        let cells = table.visible_body_cells(Rect::new(0.0, 0.0, 120.0, 55.0), 100, 20.0, 1);
+        assert_eq!(cells.len(), 12);
+        assert_eq!(cells[0].row, 1);
+        assert_eq!(cells[0].column, 0);
+        assert_approx(cells[0].rect.y, 15.0);
+    }
+
+    #[test]
+    fn tree_layout_adapter_preserves_materialized_row_rects() {
+        let layout = TreeLayout::new(10.0, 6.0);
+        let rows = tree_rows();
+        let window = layout.virtual_window(rows.len(), 15.0, 25.0, 1);
+
+        assert_window_finite(&window);
+        assert_approx(window.content_extent, 60.0);
+        assert_approx(window.max_scroll_offset, 35.0);
+        assert_approx(window.clamped_scroll_offset, 15.0);
+        assert_range(window.visible_range, 1..4);
+        assert_range(window.materialized_range.clone(), 0..6);
+        assert_eq!(
+            layout.visible_range(rows.len(), 15.0, 25.0, 1),
+            window.materialized_range
+        );
+
+        let rects = layout.visible_row_rects(Rect::new(10.0, 100.0, 120.0, 25.0), &rows, 15.0, 1);
+        assert_eq!(rects.len(), rows.len());
+        assert_eq!(rects[0].row.id, ItemId::from_raw(1));
+        assert_eq!(rects[2].row.id, ItemId::from_raw(3));
+        assert_approx(rects[0].rect.y, 85.0);
+        assert_approx(rects[2].content_rect.x, 22.0);
+    }
+
+    #[test]
+    fn adapters_return_empty_finite_windows_for_invalid_extents() {
+        let list = ListLayout::new(f32::NAN);
+        assert_empty_finite_window(&list.virtual_window(10, 0.0, 30.0, 0));
+
+        let mut table = table_layout();
+        table.header_height = 60.0;
+        assert_empty_finite_window(&table.body_virtual_window(10, 0.0, 50.0, 0));
+
+        table.header_height = 20.0;
+        table.row_height = 0.0;
+        assert_empty_finite_window(&table.body_virtual_window(10, 0.0, 50.0, 0));
+
+        let tree = TreeLayout::new(f32::INFINITY, 12.0);
+        assert_empty_finite_window(&tree.virtual_window(10, 0.0, 50.0, 0));
     }
 }

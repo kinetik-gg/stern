@@ -112,6 +112,24 @@ impl ListLayout {
         })
     }
 
+    /// Computes the virtual window for a viewport.
+    #[must_use]
+    pub fn virtual_window(
+        self,
+        rows: usize,
+        scroll_offset: f32,
+        viewport_height: f32,
+        overscan: usize,
+    ) -> VirtualWindow {
+        virtual_window(VirtualWindowRequest {
+            item_count: rows,
+            scroll_offset,
+            viewport_extent: viewport_height,
+            item_extent: self.row_height,
+            overscan,
+        })
+    }
+
     /// Computes the virtualized row range for a viewport.
     #[must_use]
     pub fn visible_range(
@@ -121,15 +139,8 @@ impl ListLayout {
         viewport_height: f32,
         overscan: usize,
     ) -> Range<usize> {
-        self.effective_row_height().map_or(0..0, |row_height| {
-            virtual_range(VirtualRangeRequest {
-                item_count: rows,
-                scroll_offset,
-                viewport_extent: viewport_height,
-                item_extent: row_height,
-                overscan,
-            })
-        })
+        self.virtual_window(rows, scroll_offset, viewport_height, overscan)
+            .materialized_range
     }
 
     /// Computes one row rectangle in content coordinates.
@@ -404,6 +415,24 @@ impl TableLayout {
         })
     }
 
+    /// Computes the virtual window for body rows, excluding the header height from the viewport.
+    #[must_use]
+    pub fn body_virtual_window(
+        &self,
+        rows: usize,
+        scroll_offset: f32,
+        viewport_height: f32,
+        overscan: usize,
+    ) -> VirtualWindow {
+        virtual_window(VirtualWindowRequest {
+            item_count: rows,
+            scroll_offset,
+            viewport_extent: finite_non_negative(viewport_height) - self.effective_header_height(),
+            item_extent: self.row_height,
+            overscan,
+        })
+    }
+
     /// Computes the virtualized body row range for a viewport.
     #[must_use]
     pub fn visible_row_range(
@@ -413,17 +442,8 @@ impl TableLayout {
         viewport_height: f32,
         overscan: usize,
     ) -> Range<usize> {
-        self.effective_row_height().map_or(0..0, |row_height| {
-            let body_viewport =
-                finite_non_negative(viewport_height) - self.effective_header_height();
-            virtual_range(VirtualRangeRequest {
-                item_count: rows,
-                scroll_offset,
-                viewport_extent: body_viewport,
-                item_extent: row_height,
-                overscan,
-            })
-        })
+        self.body_virtual_window(rows, scroll_offset, viewport_height, overscan)
+            .materialized_range
     }
 
     /// Computes header cell rectangles.
@@ -521,9 +541,6 @@ impl TableLayout {
         scroll_offset: f32,
         overscan: usize,
     ) -> Vec<TableCellRect> {
-        let Some(row_height) = self.effective_row_height() else {
-            return Vec::new();
-        };
         let clamped_scroll =
             self.clamp_scroll_offset(rows, finite_non_negative(bounds.height), scroll_offset);
         self.body_cells(
@@ -534,14 +551,12 @@ impl TableLayout {
                 finite_non_negative(bounds.height),
             ),
             rows,
-            virtual_range(VirtualRangeRequest {
-                item_count: rows,
-                scroll_offset: clamped_scroll,
-                viewport_extent: finite_non_negative(bounds.height)
-                    - self.effective_header_height(),
-                item_extent: row_height,
+            self.visible_row_range(
+                rows,
+                clamped_scroll,
+                finite_non_negative(bounds.height),
                 overscan,
-            }),
+            ),
         )
     }
 }
@@ -916,6 +931,24 @@ impl TreeLayout {
         })
     }
 
+    /// Computes the virtual window for visible tree rows.
+    #[must_use]
+    pub fn virtual_window(
+        self,
+        rows: usize,
+        scroll_offset: f32,
+        viewport_height: f32,
+        overscan: usize,
+    ) -> VirtualWindow {
+        virtual_window(VirtualWindowRequest {
+            item_count: rows,
+            scroll_offset,
+            viewport_extent: viewport_height,
+            item_extent: self.row_height,
+            overscan,
+        })
+    }
+
     /// Computes the virtualized row range for a visible tree.
     #[must_use]
     pub fn visible_range(
@@ -925,15 +958,8 @@ impl TreeLayout {
         viewport_height: f32,
         overscan: usize,
     ) -> Range<usize> {
-        self.effective_row_height().map_or(0..0, |row_height| {
-            virtual_range(VirtualRangeRequest {
-                item_count: rows,
-                scroll_offset,
-                viewport_extent: viewport_height,
-                item_extent: row_height,
-                overscan,
-            })
-        })
+        self.virtual_window(rows, scroll_offset, viewport_height, overscan)
+            .materialized_range
     }
 
     /// Computes visible row rectangles in viewport coordinates.
