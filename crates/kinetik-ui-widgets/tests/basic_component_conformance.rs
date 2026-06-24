@@ -1,0 +1,771 @@
+//! Windowless conformance tests for the Stage 9 basic component set.
+
+use kinetik_ui_core::{
+    CursorShape, IconId, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect,
+    RepaintRequest, SemanticRole, SemanticValue, Theme, UiInput, UiMemory, WidgetId,
+    default_dark_theme,
+};
+use kinetik_ui_widgets::{
+    Ui, WidgetOutput, button, checkbox_with_label, icon_button_with_label, label, panel,
+    radio_button_with_label, slider_with_label, toggle_with_label,
+};
+
+fn pointer_input(x: f32, y: f32, down: bool, pressed: bool, released: bool) -> UiInput {
+    UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(x, y)),
+            primary: PointerButtonState::new(down, pressed, released),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    }
+}
+
+fn pressed_at(x: f32, y: f32) -> UiInput {
+    pointer_input(x, y, true, true, false)
+}
+
+fn released_at(x: f32, y: f32) -> UiInput {
+    pointer_input(x, y, false, false, true)
+}
+
+fn stage9_rect() -> Rect {
+    Rect::new(0.0, 0.0, 120.0, 28.0)
+}
+
+fn interactive_request(output: &kinetik_ui_widgets::WidgetOutput, cursor: CursorShape) -> bool {
+    output
+        .platform_requests
+        .contains(&PlatformRequest::SetCursor(cursor))
+}
+
+#[derive(Clone, Copy)]
+enum BasicComponentCase {
+    Button,
+    IconButton,
+    Checkbox,
+    Radio,
+    Toggle,
+    Slider,
+}
+
+impl BasicComponentCase {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Button => "button",
+            Self::IconButton => "icon button",
+            Self::Checkbox => "checkbox",
+            Self::Radio => "radio",
+            Self::Toggle => "toggle",
+            Self::Slider => "slider",
+        }
+    }
+
+    const fn key(self) -> &'static str {
+        match self {
+            Self::Button => "button",
+            Self::IconButton => "icon",
+            Self::Checkbox => "checkbox",
+            Self::Radio => "radio",
+            Self::Toggle => "toggle",
+            Self::Slider => "slider",
+        }
+    }
+}
+
+fn component_output(
+    case: BasicComponentCase,
+    id: WidgetId,
+    rect: Rect,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    disabled: bool,
+) -> WidgetOutput {
+    match case {
+        BasicComponentCase::Button => button(id, rect, "Run", input, memory, theme, disabled),
+        BasicComponentCase::IconButton => icon_button_with_label(
+            id,
+            rect,
+            IconId::from_raw(7),
+            "Save",
+            input,
+            memory,
+            theme,
+            disabled,
+        ),
+        BasicComponentCase::Checkbox => {
+            checkbox_with_label(id, rect, "Snap", false, input, memory, theme, disabled)
+        }
+        BasicComponentCase::Radio => {
+            radio_button_with_label(id, rect, "Mode", false, input, memory, theme, disabled)
+        }
+        BasicComponentCase::Toggle => {
+            toggle_with_label(id, rect, "Loop", false, input, memory, theme, disabled)
+        }
+        BasicComponentCase::Slider => {
+            let mut value = 0.25;
+            slider_with_label(
+                id,
+                rect,
+                "Opacity",
+                &mut value,
+                0.0..=1.0,
+                input,
+                memory,
+                theme,
+                disabled,
+            )
+        }
+    }
+}
+
+fn assert_disabled_not_focused(name: &str, output: &kinetik_ui_widgets::WidgetOutput) {
+    let response = output.response.as_ref().expect(name);
+    assert!(response.state.disabled, "{name}");
+    assert!(!response.state.focused, "{name}");
+    assert!(!response.state.active, "{name}");
+    assert!(!response.state.pressed, "{name}");
+    assert!(!output.semantics[0].state.focused, "{name}");
+    assert!(!output.semantics[0].state.pressed, "{name}");
+}
+
+fn assert_disabled_after_enabled_press<F, G, H>(
+    name: &str,
+    mut enabled_press: F,
+    mut disabled_held: G,
+    mut fresh_disabled: H,
+) where
+    F: FnMut(&mut UiMemory) -> kinetik_ui_widgets::WidgetOutput,
+    G: FnMut(&mut UiMemory) -> kinetik_ui_widgets::WidgetOutput,
+    H: FnMut(&mut UiMemory) -> kinetik_ui_widgets::WidgetOutput,
+{
+    let mut memory = UiMemory::new();
+    let enabled = enabled_press(&mut memory);
+    let enabled_response = enabled.response.as_ref().expect(name);
+    assert!(enabled_response.state.active, "{name}");
+    assert!(enabled_response.state.pressed, "{name}");
+
+    let disabled = disabled_held(&mut memory);
+    let mut fresh_memory = UiMemory::new();
+    let fresh = fresh_disabled(&mut fresh_memory);
+
+    let response = disabled.response.as_ref().expect(name);
+    assert!(response.state.disabled, "{name}");
+    assert!(!response.state.active, "{name}");
+    assert!(!response.state.pressed, "{name}");
+    assert!(!response.state.focused, "{name}");
+    assert!(!response.clicked, "{name}");
+    assert!(!response.dragged, "{name}");
+    assert!(disabled.platform_requests.is_empty(), "{name}");
+
+    assert!(disabled.semantics[0].state.disabled, "{name}");
+    assert!(!disabled.semantics[0].state.focused, "{name}");
+    assert!(!disabled.semantics[0].state.pressed, "{name}");
+    assert_eq!(disabled.primitives, fresh.primitives, "{name}");
+    assert_eq!(disabled.semantics, fresh.semantics, "{name}");
+}
+
+fn assert_disabled_component_clears_retained_active(case: BasicComponentCase) {
+    let theme = default_dark_theme();
+    let rect = stage9_rect();
+    let held = pointer_input(4.0, 4.0, true, false, false);
+    let pressed = pressed_at(4.0, 4.0);
+    let key = format!("retained-{}", case.key());
+
+    assert_disabled_after_enabled_press(
+        case.name(),
+        |memory| {
+            component_output(
+                case,
+                WidgetId::from_key(&key),
+                rect,
+                &pressed,
+                memory,
+                &theme,
+                false,
+            )
+        },
+        |memory| {
+            component_output(
+                case,
+                WidgetId::from_key(&key),
+                rect,
+                &held,
+                memory,
+                &theme,
+                true,
+            )
+        },
+        |memory| {
+            component_output(
+                case,
+                WidgetId::from_key(&key),
+                rect,
+                &held,
+                memory,
+                &theme,
+                true,
+            )
+        },
+    );
+}
+
+fn assert_selection_control_clicks_and_respects_disabled(case: BasicComponentCase) {
+    let name = case.name();
+    let theme = default_dark_theme();
+    let rect = stage9_rect();
+    let id = WidgetId::from_key(case.key());
+    let mut memory = UiMemory::new();
+    let pressed = pressed_at(4.0, 4.0);
+
+    component_output(case, id, rect, &pressed, &mut memory, &theme, false);
+
+    let released = released_at(4.0, 4.0);
+    let output = component_output(case, id, rect, &released, &mut memory, &theme, false);
+    let response = output.response.expect(name);
+    assert!(response.clicked, "{name}");
+    assert!(response.state.selected, "{name}");
+    assert_eq!(output.semantics[0].state.checked, Some(true), "{name}");
+
+    let disabled = component_output(
+        case,
+        WidgetId::from_key(format!("{}-disabled", case.key())),
+        rect,
+        &pressed_at(4.0, 4.0),
+        &mut UiMemory::new(),
+        &theme,
+        true,
+    );
+    let response = disabled.response.expect(name);
+    assert!(response.state.disabled, "{name}");
+    assert!(!response.clicked, "{name}");
+    assert!(!response.state.pressed, "{name}");
+    assert!(!response.state.selected, "{name}");
+    assert_eq!(disabled.semantics[0].state.checked, Some(false), "{name}");
+    assert!(disabled.platform_requests.is_empty(), "{name}");
+}
+
+#[test]
+fn stage9_basic_components_emit_stable_primitive_categories() {
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    let id = WidgetId::from_key("component");
+    let rect = stage9_rect();
+    let mut value = 0.5;
+
+    let label = label(rect, "Project", &theme);
+    assert!(matches!(label.primitives.as_slice(), [Primitive::Text(_)]));
+
+    let button = button(id, rect, "Run", &input, &mut memory, &theme, false);
+    assert!(matches!(
+        button.primitives.as_slice(),
+        [Primitive::Rect(_), Primitive::Text(_)]
+    ));
+
+    let icon = icon_button_with_label(
+        id,
+        rect,
+        IconId::from_raw(7),
+        "Save",
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(matches!(icon.primitives.first(), Some(Primitive::Rect(_))));
+    assert!(
+        icon.primitives[1..]
+            .iter()
+            .any(|primitive| { matches!(primitive, Primitive::Path(_) | Primitive::Line(_)) })
+    );
+
+    let checkbox = checkbox_with_label(id, rect, "Snap", true, &input, &mut memory, &theme, false);
+    assert!(matches!(
+        checkbox.primitives.as_slice(),
+        [Primitive::Rect(_)]
+    ));
+
+    let radio = radio_button_with_label(id, rect, "Mode", true, &input, &mut memory, &theme, false);
+    assert!(matches!(radio.primitives.as_slice(), [Primitive::Rect(_)]));
+
+    let toggle = toggle_with_label(id, rect, "Loop", true, &input, &mut memory, &theme, false);
+    assert!(matches!(
+        toggle.primitives.as_slice(),
+        [Primitive::Rect(_), Primitive::Rect(_)]
+    ));
+
+    let slider = slider_with_label(
+        id,
+        rect,
+        "Opacity",
+        &mut value,
+        0.0..=1.0,
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(matches!(
+        slider.primitives.as_slice(),
+        [Primitive::Rect(_), Primitive::Rect(_)]
+    ));
+
+    let panel = panel(rect, &theme);
+    assert!(matches!(panel.primitives.last(), Some(Primitive::Rect(_))));
+    assert!(
+        panel
+            .primitives
+            .iter()
+            .take(panel.primitives.len().saturating_sub(1))
+            .all(|primitive| matches!(primitive, Primitive::Shadow(_)))
+    );
+}
+
+#[test]
+fn stage9_basic_components_expose_semantic_roles_states_and_values() {
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    let mut slider_value = 0.62;
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+
+    ui.label(Rect::new(0.0, 0.0, 80.0, 18.0), "Title");
+    ui.button("button", Rect::new(0.0, 24.0, 90.0, 28.0), "Run", false);
+    ui.icon_button_with_label(
+        "icon",
+        Rect::new(0.0, 56.0, 28.0, 28.0),
+        IconId::from_raw(7),
+        "Save project",
+        false,
+    );
+    ui.checkbox_with_label(
+        "checkbox",
+        Rect::new(0.0, 92.0, 20.0, 20.0),
+        "Enable snapping",
+        true,
+        false,
+    );
+    ui.radio_button_with_label(
+        "radio",
+        Rect::new(0.0, 120.0, 20.0, 20.0),
+        "Blend mode",
+        true,
+        false,
+    );
+    ui.toggle_with_label(
+        "toggle",
+        Rect::new(0.0, 148.0, 36.0, 18.0),
+        "Loop playback",
+        true,
+        false,
+    );
+    ui.slider_with_label(
+        "slider",
+        Rect::new(0.0, 176.0, 120.0, 12.0),
+        "Opacity",
+        &mut slider_value,
+        0.0..=1.0,
+        false,
+    );
+    ui.panel(Rect::new(0.0, 200.0, 160.0, 80.0));
+
+    let output = ui.finish_output();
+    let nodes = output.semantics.nodes();
+    assert!(nodes.iter().any(|node| {
+        node.role == SemanticRole::Label && node.label.as_deref() == Some("Title")
+    }));
+    assert!(nodes.iter().any(|node| {
+        node.role == SemanticRole::Button
+            && node.label.as_deref() == Some("Run")
+            && node.focusable
+            && !node.state.disabled
+    }));
+    assert!(nodes.iter().any(|node| {
+        node.role == SemanticRole::IconButton && node.label.as_deref() == Some("Save project")
+    }));
+    assert!(nodes.iter().any(|node| {
+        node.role == SemanticRole::CheckBox
+            && node.label.as_deref() == Some("Enable snapping")
+            && node.state.checked == Some(true)
+    }));
+    assert!(nodes.iter().any(|node| {
+        node.role == SemanticRole::RadioButton
+            && node.label.as_deref() == Some("Blend mode")
+            && node.state.selected
+            && node.state.checked == Some(true)
+    }));
+    assert!(nodes.iter().any(|node| {
+        node.role == SemanticRole::Toggle
+            && node.label.as_deref() == Some("Loop playback")
+            && node.state.checked == Some(true)
+    }));
+    assert!(nodes.iter().any(|node| {
+        node.role == SemanticRole::Slider
+            && node.label.as_deref() == Some("Opacity")
+            && matches!(
+                node.state.value,
+                Some(SemanticValue::Number { current, min, max })
+                    if (current - 0.62).abs() < f32::EPSILON
+                        && (min - 0.0).abs() < f32::EPSILON
+                        && (max - 1.0).abs() < f32::EPSILON
+            )
+    }));
+    assert!(nodes.iter().any(|node| {
+        node.role == SemanticRole::Panel && node.label.as_deref() == Some("Panel")
+    }));
+}
+
+#[test]
+fn stage9_button_and_icon_button_click_and_disabled_paths_are_deterministic() {
+    let theme = default_dark_theme();
+    let rect = stage9_rect();
+
+    let mut memory = UiMemory::new();
+    let input = pressed_at(4.0, 4.0);
+    let pressed = button(
+        WidgetId::from_key("button"),
+        rect,
+        "Run",
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(pressed.response.unwrap().state.pressed);
+    assert!(interactive_request(&pressed, CursorShape::PointingHand));
+
+    let input = released_at(4.0, 4.0);
+    let released = button(
+        WidgetId::from_key("button"),
+        rect,
+        "Run",
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(released.response.unwrap().clicked);
+
+    let icon_id = WidgetId::from_key("icon-button");
+    let mut icon_memory = UiMemory::new();
+    let pressed = icon_button_with_label(
+        icon_id,
+        rect,
+        IconId::from_raw(7),
+        "Save",
+        &pressed_at(4.0, 4.0),
+        &mut icon_memory,
+        &theme,
+        false,
+    );
+    assert!(pressed.response.unwrap().state.pressed);
+    assert!(interactive_request(&pressed, CursorShape::PointingHand));
+
+    let released = icon_button_with_label(
+        icon_id,
+        rect,
+        IconId::from_raw(7),
+        "Save",
+        &released_at(4.0, 4.0),
+        &mut icon_memory,
+        &theme,
+        false,
+    );
+    assert!(released.response.unwrap().clicked);
+
+    for (name, output) in [
+        (
+            "button",
+            button(
+                WidgetId::from_key("button-disabled"),
+                rect,
+                "Run",
+                &pressed_at(4.0, 4.0),
+                &mut UiMemory::new(),
+                &theme,
+                true,
+            ),
+        ),
+        (
+            "icon button",
+            icon_button_with_label(
+                WidgetId::from_key("icon-disabled"),
+                rect,
+                IconId::from_raw(7),
+                "Save",
+                &pressed_at(4.0, 4.0),
+                &mut UiMemory::new(),
+                &theme,
+                true,
+            ),
+        ),
+    ] {
+        let response = output.response.expect(name);
+        assert!(response.state.disabled, "{name}");
+        assert!(!response.clicked, "{name}");
+        assert!(!response.state.hovered, "{name}");
+        assert!(!response.state.pressed, "{name}");
+        assert!(output.platform_requests.is_empty(), "{name}");
+        assert!(output.semantics[0].state.disabled, "{name}");
+    }
+}
+
+#[test]
+fn stage9_disabled_components_do_not_report_focus_when_already_focused() {
+    let theme = default_dark_theme();
+    let rect = stage9_rect();
+
+    let id = WidgetId::from_key("focused-disabled-button");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    let output = button(
+        id,
+        rect,
+        "Run",
+        &UiInput::default(),
+        &mut memory,
+        &theme,
+        true,
+    );
+    assert_disabled_not_focused("button", &output);
+
+    let id = WidgetId::from_key("focused-disabled-icon");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    let output = icon_button_with_label(
+        id,
+        rect,
+        IconId::from_raw(7),
+        "Save",
+        &UiInput::default(),
+        &mut memory,
+        &theme,
+        true,
+    );
+    assert_disabled_not_focused("icon button", &output);
+
+    let id = WidgetId::from_key("focused-disabled-checkbox");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    let output = checkbox_with_label(
+        id,
+        rect,
+        "Snap",
+        false,
+        &UiInput::default(),
+        &mut memory,
+        &theme,
+        true,
+    );
+    assert_disabled_not_focused("checkbox", &output);
+
+    let id = WidgetId::from_key("focused-disabled-radio");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    let output = radio_button_with_label(
+        id,
+        rect,
+        "Mode",
+        false,
+        &UiInput::default(),
+        &mut memory,
+        &theme,
+        true,
+    );
+    assert_disabled_not_focused("radio", &output);
+
+    let id = WidgetId::from_key("focused-disabled-toggle");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    let output = toggle_with_label(
+        id,
+        rect,
+        "Loop",
+        false,
+        &UiInput::default(),
+        &mut memory,
+        &theme,
+        true,
+    );
+    assert_disabled_not_focused("toggle", &output);
+
+    let id = WidgetId::from_key("focused-disabled-slider");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    let mut value = 0.25;
+    let output = slider_with_label(
+        id,
+        rect,
+        "Opacity",
+        &mut value,
+        0.0..=1.0,
+        &UiInput::default(),
+        &mut memory,
+        &theme,
+        true,
+    );
+    assert_disabled_not_focused("slider", &output);
+}
+
+#[test]
+fn stage9_disabled_components_do_not_report_retained_active_or_pressed() {
+    for case in [
+        BasicComponentCase::Button,
+        BasicComponentCase::IconButton,
+        BasicComponentCase::Checkbox,
+        BasicComponentCase::Radio,
+        BasicComponentCase::Toggle,
+        BasicComponentCase::Slider,
+    ] {
+        assert_disabled_component_clears_retained_active(case);
+    }
+}
+
+#[test]
+fn stage9_selection_controls_click_toggle_and_respect_disabled_state() {
+    for case in [
+        BasicComponentCase::Checkbox,
+        BasicComponentCase::Radio,
+        BasicComponentCase::Toggle,
+    ] {
+        assert_selection_control_clicks_and_respects_disabled(case);
+    }
+}
+
+#[test]
+fn stage9_slider_updates_finitely_and_respects_disabled_state() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("slider");
+    let rect = Rect::new(0.0, 0.0, 100.0, 12.0);
+    let mut memory = UiMemory::new();
+    let mut value = 0.0;
+
+    let output = slider_with_label(
+        id,
+        rect,
+        "Opacity",
+        &mut value,
+        0.0..=1.0,
+        &pressed_at(75.0, 6.0),
+        &mut memory,
+        &theme,
+        false,
+    );
+    let response = output.response.expect("slider response");
+    assert!(response.state.active);
+    assert!((value - 0.75).abs() < f32::EPSILON);
+    assert!(interactive_request(&output, CursorShape::ResizeHorizontal));
+    assert!(
+        matches!(output.semantics[0].state.value, Some(SemanticValue::Number { current, .. }) if (current - 0.75).abs() < f32::EPSILON)
+    );
+
+    let mut degenerate_value = f32::NAN;
+    let output = slider_with_label(
+        WidgetId::from_key("degenerate-slider"),
+        Rect::new(0.0, 0.0, 0.0, 12.0),
+        "Degenerate",
+        &mut degenerate_value,
+        f32::NAN..=f32::INFINITY,
+        &pressed_at(75.0, 6.0),
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    assert!(
+        matches!(output.semantics[0].state.value, Some(SemanticValue::Number { current, min, max })
+            if current.is_finite() && min.is_finite() && max.is_finite())
+    );
+
+    let mut disabled_value = 0.25;
+    let disabled = slider_with_label(
+        WidgetId::from_key("disabled-slider"),
+        rect,
+        "Opacity",
+        &mut disabled_value,
+        0.0..=1.0,
+        &pressed_at(80.0, 6.0),
+        &mut UiMemory::new(),
+        &theme,
+        true,
+    );
+    let response = disabled.response.expect("disabled slider response");
+    assert!(response.state.disabled);
+    assert!(!response.state.active);
+    assert!(!response.clicked);
+    assert!(!response.dragged);
+    assert!((disabled_value - 0.25).abs() < f32::EPSILON);
+    assert!(disabled.platform_requests.is_empty());
+}
+
+#[test]
+fn stage9_value_helpers_reflect_same_frame_changes_and_request_repaint() {
+    let theme = default_dark_theme();
+    let rect = stage9_rect();
+
+    let mut checkbox_value = false;
+    let mut memory = UiMemory::new();
+    let input = pressed_at(4.0, 4.0);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    ui.checkbox_value("checkbox", rect, &mut checkbox_value, false);
+    assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
+    let input = released_at(4.0, 4.0);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let response = ui.checkbox_value("checkbox", rect, &mut checkbox_value, false);
+    let output = ui.finish_output();
+    assert!(response.clicked);
+    assert!(response.state.selected);
+    assert!(checkbox_value);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+    let mut radio_value = 0_u8;
+    let mut memory = UiMemory::new();
+    let input = pressed_at(4.0, 4.0);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    ui.radio_button_value("radio", rect, &mut radio_value, 2, false);
+    let input = released_at(4.0, 4.0);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let response = ui.radio_button_value("radio", rect, &mut radio_value, 2, false);
+    let output = ui.finish_output();
+    assert!(response.clicked);
+    assert!(response.state.selected);
+    assert_eq!(radio_value, 2);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+    let mut toggle_value = false;
+    let mut memory = UiMemory::new();
+    let input = pressed_at(4.0, 4.0);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    ui.toggle_value("toggle", rect, &mut toggle_value, false);
+    let input = released_at(4.0, 4.0);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let response = ui.toggle_value("toggle", rect, &mut toggle_value, false);
+    let output = ui.finish_output();
+    assert!(response.clicked);
+    assert!(response.state.selected);
+    assert!(toggle_value);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+    let mut slider_value = 0.0;
+    let mut memory = UiMemory::new();
+    let input = pressed_at(60.0, 6.0);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let response = ui.slider(
+        "slider",
+        Rect::new(0.0, 0.0, 100.0, 12.0),
+        &mut slider_value,
+        0.0..=1.0,
+        false,
+    );
+    let output = ui.finish_output();
+    assert!(response.state.active);
+    assert!((slider_value - 0.6).abs() < f32::EPSILON);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+    assert!(
+        output.semantics.nodes().iter().any(|node| {
+            node.role == SemanticRole::Slider
+                && matches!(node.state.value, Some(SemanticValue::Number { current, .. }) if (current - 0.6).abs() < f32::EPSILON)
+        })
+    );
+}
