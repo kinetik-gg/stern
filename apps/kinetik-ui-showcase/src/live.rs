@@ -519,15 +519,15 @@ fn resolve_repaint_schedule(
     continuous: bool,
     now: Instant,
 ) -> RepaintSchedule {
+    let shell_repaint = delay.map_or(RepaintRequest::None, RepaintRequest::After);
+    let repaint = repaint.merge(shell_repaint);
     if continuous || repaint == RepaintRequest::Continuous {
         return RepaintSchedule::Continuous;
     }
     match repaint {
         RepaintRequest::NextFrame => RepaintSchedule::Immediate,
         RepaintRequest::After(delay) => RepaintSchedule::At(now + delay),
-        RepaintRequest::None => delay.map_or(RepaintSchedule::Idle, |delay| {
-            RepaintSchedule::At(now + delay)
-        }),
+        RepaintRequest::None => RepaintSchedule::Idle,
         RepaintRequest::Continuous => RepaintSchedule::Continuous,
     }
 }
@@ -626,6 +626,45 @@ mod tests {
                 now,
             ),
             RepaintSchedule::At(now + Duration::from_millis(12))
+        );
+    }
+
+    #[test]
+    fn app_next_frame_repaint_replaces_stale_shell_delay() {
+        let now = Instant::now();
+
+        assert_eq!(
+            resolve_repaint_schedule(
+                RepaintRequest::NextFrame,
+                Some(Duration::from_secs(1)),
+                false,
+                now,
+            ),
+            RepaintSchedule::Immediate
+        );
+    }
+
+    #[test]
+    fn app_and_shell_delayed_repaints_keep_earliest_deadline() {
+        let now = Instant::now();
+
+        assert_eq!(
+            resolve_repaint_schedule(
+                RepaintRequest::After(Duration::from_millis(40)),
+                Some(Duration::from_millis(12)),
+                false,
+                now,
+            ),
+            RepaintSchedule::At(now + Duration::from_millis(12))
+        );
+        assert_eq!(
+            resolve_repaint_schedule(
+                RepaintRequest::After(Duration::from_millis(8)),
+                Some(Duration::from_millis(12)),
+                false,
+                now,
+            ),
+            RepaintSchedule::At(now + Duration::from_millis(8))
         );
     }
 
