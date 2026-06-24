@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use kinetik_ui_core::{
     ActionContext, ActionId, ActionSource, Brush, Color, CornerRadius, CursorShape, FrameWarning,
-    Key, KeyState, Modifiers, MouseButton, PlatformRequest, Point, Primitive, Rect, RectPrimitive,
-    RepaintRequest, ScaleFactor, SemanticNode, SemanticRole, Size, TextInputEvent, TextRange,
-    UiTestHarness, Vec2, WidgetId,
+    HarnessPhase, Key, KeyState, Modifiers, MouseButton, PlatformRequest, Point, Primitive, Rect,
+    RectPrimitive, RepaintRequest, ScaleFactor, ScriptedInput, SemanticNode, SemanticRole,
+    SettlePendingCause, Size, TextInputEvent, TextRange, UiTestHarness, Vec2, WidgetId,
 };
 
 #[test]
@@ -202,4 +202,225 @@ fn frame_output_channels_are_inspectable_and_deterministic() {
     );
     assert_eq!(harness.last_repaint(), Some(output.repaint));
     assert_eq!(harness.last_warnings(), Some(output.warnings.as_slice()));
+}
+
+#[test]
+fn traced_frame_records_deterministic_phase_order_without_mutating_output() {
+    let mut harness = UiTestHarness::new();
+
+    let (_, output, trace) = harness.run_frame_with_trace(|ui| {
+        let id = ui.id("run");
+        ui.invoke_action(
+            ActionId::new("project.run"),
+            ActionSource::Button,
+            ActionContext::Widget(id),
+        );
+        id
+    });
+
+    assert_eq!(
+        trace.phases(),
+        &[
+            HarnessPhase::FrameBegin,
+            HarnessPhase::Build,
+            HarnessPhase::FrameFinalization,
+            HarnessPhase::InspectSemantics,
+            HarnessPhase::InspectActions,
+            HarnessPhase::InspectPlatformRequests,
+            HarnessPhase::InspectRepaint,
+            HarnessPhase::InspectWarnings,
+        ]
+    );
+    assert_eq!(output.actions.len(), 1);
+    assert_eq!(harness.last_output(), Some(&output));
+    assert_eq!(harness.last_actions(), Some(&output.actions));
+}
+
+#[test]
+fn traced_scripted_frame_records_input_preparation_when_applicable() {
+    let mut harness = UiTestHarness::new();
+
+    let (pointer, _, trace) = harness
+        .run_scripted_frame_with_trace([ScriptedInput::PointerMove(Point::new(4.0, 8.0))], |ui| {
+            ui.input().pointer.position
+        });
+
+    assert_eq!(pointer, Some(Point::new(4.0, 8.0)));
+    assert_eq!(
+        trace.phases(),
+        &[
+            HarnessPhase::ScriptedInputPrep,
+            HarnessPhase::FrameBegin,
+            HarnessPhase::Build,
+            HarnessPhase::FrameFinalization,
+            HarnessPhase::InspectSemantics,
+            HarnessPhase::InspectActions,
+            HarnessPhase::InspectPlatformRequests,
+            HarnessPhase::InspectRepaint,
+            HarnessPhase::InspectWarnings,
+        ]
+    );
+}
+
+#[test]
+fn idle_frame_settles_immediately_within_budget() {
+    let mut harness = UiTestHarness::new();
+    let mut builds = 0;
+
+    let result = harness.settle_frames(4, |_| {
+        builds += 1;
+    });
+
+    assert!(result.is_idle());
+    assert_eq!(result.frames_run(), 1);
+    assert_eq!(builds, 1);
+    assert_eq!(result.pending_cause(), None);
+    assert_eq!(
+        result.trace().phases(),
+        &[
+            HarnessPhase::FrameBegin,
+            HarnessPhase::Build,
+            HarnessPhase::FrameFinalization,
+            HarnessPhase::InspectSemantics,
+            HarnessPhase::InspectActions,
+            HarnessPhase::InspectPlatformRequests,
+            HarnessPhase::InspectRepaint,
+            HarnessPhase::InspectWarnings,
+        ]
+    );
+}
+
+#[test]
+fn repaint_request_exhausts_settle_budget_without_sleeping() {
+    let mut harness = UiTestHarness::new();
+    let delay = Duration::from_millis(50);
+
+    let result = harness.settle_frames(2, |ui| {
+        ui.request_repaint(RepaintRequest::After(delay));
+    });
+
+    assert!(!result.is_idle());
+    assert_eq!(result.frames_run(), 2);
+    assert_eq!(
+        result.pending_cause(),
+        Some(SettlePendingCause::Repaint(RepaintRequest::After(delay)))
+    );
+    assert_eq!(harness.last_repaint(), Some(RepaintRequest::After(delay)));
+}
+
+#[test]
+fn continuous_repaint_reports_repaint_pending_cause() {
+    let mut harness = UiTestHarness::new();
+
+    let result = harness.settle_frames(1, |ui| {
+        ui.request_repaint(RepaintRequest::Continuous);
+    });
+
+    assert_eq!(
+        result.pending_cause(),
+        Some(SettlePendingCause::Repaint(RepaintRequest::Continuous))
+    );
+}
+
+#[test]
+fn next_frame_repaint_reports_repaint_pending_cause() {
+    let mut harness = UiTestHarness::new();
+
+    let result = harness.settle_frames(2, |ui| {
+        ui.request_repaint(RepaintRequest::NextFrame);
+    });
+
+    assert!(!result.is_idle());
+    assert_eq!(result.frames_run(), 2);
+    assert_eq!(
+        result.pending_cause(),
+        Some(SettlePendingCause::Repaint(RepaintRequest::NextFrame))
+    );
+    assert_eq!(harness.last_repaint(), Some(RepaintRequest::NextFrame));
+}
+
+#[test]
+fn action_output_reports_actions_pending_cause_and_remains_inspectable() {
+    let mut harness = UiTestHarness::new();
+
+    let result = harness.settle_frames(1, |ui| {
+        ui.invoke_action(
+            ActionId::new("project.run"),
+            ActionSource::Button,
+            ActionContext::Global,
+        );
+    });
+
+    assert_eq!(result.pending_cause(), Some(SettlePendingCause::Actions));
+    assert_eq!(harness.last_actions().expect("actions").len(), 1);
+    assert_eq!(harness.last_repaint(), Some(RepaintRequest::NextFrame));
+}
+
+#[test]
+fn platform_request_output_reports_platform_pending_cause() {
+    let mut harness = UiTestHarness::new();
+
+    let result = harness.settle_frames(1, |ui| {
+        ui.push_platform_request(PlatformRequest::SetCursor(CursorShape::PointingHand));
+    });
+
+    assert_eq!(
+        result.pending_cause(),
+        Some(SettlePendingCause::PlatformRequests)
+    );
+    assert_eq!(
+        harness.last_platform_requests(),
+        Some([PlatformRequest::SetCursor(CursorShape::PointingHand)].as_slice())
+    );
+}
+
+#[test]
+fn warning_output_reports_warnings_pending_cause() {
+    let mut harness = UiTestHarness::new();
+    let mut duplicate = None;
+
+    let result = harness.settle_frames(1, |ui| {
+        let id = ui.id("duplicate");
+        ui.register_id(id);
+        duplicate = Some(id);
+    });
+
+    assert_eq!(result.pending_cause(), Some(SettlePendingCause::Warnings));
+    assert_eq!(
+        harness.last_warnings(),
+        Some(
+            [FrameWarning::DuplicateWidgetId {
+                id: duplicate.expect("duplicate id"),
+            }]
+            .as_slice()
+        )
+    );
+}
+
+#[test]
+fn scripted_settle_applies_script_once_then_runs_until_idle() {
+    let mut harness = UiTestHarness::new();
+    let mut builds = 0;
+    harness.set_pointer_position(Point::new(8.0, 16.0));
+
+    let result = harness.settle_scripted_frames(
+        [ScriptedInput::PointerMove(Point::new(12.0, 24.0))],
+        3,
+        |ui| {
+            builds += 1;
+            if ui.input().pointer.delta != Vec2::ZERO {
+                ui.request_repaint(RepaintRequest::NextFrame);
+            }
+        },
+    );
+
+    assert!(result.is_idle());
+    assert_eq!(result.frames_run(), 2);
+    assert_eq!(builds, 2);
+    assert_eq!(
+        harness.input().pointer.position,
+        Some(Point::new(12.0, 24.0))
+    );
+    assert_eq!(harness.input().pointer.delta, Vec2::ZERO);
+    assert_eq!(result.trace().phases()[0], HarnessPhase::ScriptedInputPrep);
 }

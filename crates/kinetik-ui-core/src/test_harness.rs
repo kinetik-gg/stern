@@ -9,6 +9,128 @@ use crate::{
     TextInputEvent, TextRange, TimeInfo, Ui, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId,
 };
 
+/// Deterministic harness-visible phases recorded by frame trace helpers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HarnessPhase {
+    /// Typed scripted input was applied before the frame.
+    ScriptedInputPrep,
+    /// The harness began constructing a frame context and UI runtime.
+    FrameBegin,
+    /// The caller-provided frame build closure ran.
+    Build,
+    /// The runtime finalized frame output.
+    FrameFinalization,
+    /// Semantic output was inspected.
+    InspectSemantics,
+    /// Action output was inspected.
+    InspectActions,
+    /// Platform request output was inspected.
+    InspectPlatformRequests,
+    /// Repaint output was inspected.
+    InspectRepaint,
+    /// Warning output was inspected.
+    InspectWarnings,
+}
+
+/// Ordered harness phase trace for one or more deterministic test frames.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FrameTrace {
+    phases: Vec<HarnessPhase>,
+}
+
+impl FrameTrace {
+    /// Creates an empty phase trace.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Returns recorded phases in order.
+    #[must_use]
+    pub fn phases(&self) -> &[HarnessPhase] {
+        &self.phases
+    }
+
+    fn push(&mut self, phase: HarnessPhase) {
+        self.phases.push(phase);
+    }
+
+    fn extend(&mut self, other: Self) {
+        self.phases.extend(other.phases);
+    }
+}
+
+/// Deterministic reason a bounded settle run still has pending work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettlePendingCause {
+    /// One or more action invocations remain visible in the frame output.
+    Actions,
+    /// One or more platform requests remain visible in the frame output.
+    PlatformRequests,
+    /// One or more runtime warnings remain visible in the frame output.
+    Warnings,
+    /// The frame requested another repaint.
+    Repaint(RepaintRequest),
+}
+
+/// Result of running bounded harness frames until idle or budget exhaustion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettleResult {
+    frames_run: usize,
+    pending_cause: Option<SettlePendingCause>,
+    trace: FrameTrace,
+}
+
+impl SettleResult {
+    /// Creates a result for an idle settle run.
+    #[must_use]
+    pub fn idle(frames_run: usize, trace: FrameTrace) -> Self {
+        Self {
+            frames_run,
+            pending_cause: None,
+            trace,
+        }
+    }
+
+    /// Creates a result for a settle run that exhausted its frame budget.
+    #[must_use]
+    pub fn pending(
+        frames_run: usize,
+        pending_cause: SettlePendingCause,
+        trace: FrameTrace,
+    ) -> Self {
+        Self {
+            frames_run,
+            pending_cause: Some(pending_cause),
+            trace,
+        }
+    }
+
+    /// Returns true when the settle run reached idle output.
+    #[must_use]
+    pub const fn is_idle(&self) -> bool {
+        self.pending_cause.is_none()
+    }
+
+    /// Returns how many frames were run.
+    #[must_use]
+    pub const fn frames_run(&self) -> usize {
+        self.frames_run
+    }
+
+    /// Returns the pending cause when the frame budget was exhausted.
+    #[must_use]
+    pub const fn pending_cause(&self) -> Option<SettlePendingCause> {
+        self.pending_cause
+    }
+
+    /// Returns the collected phase trace for all frames run.
+    #[must_use]
+    pub const fn trace(&self) -> &FrameTrace {
+        &self.trace
+    }
+}
+
 /// Typed test input operation applied to a [`UiTestHarness`] before a frame.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScriptedInput {
@@ -323,10 +445,41 @@ impl UiTestHarness {
     /// and window focus remains available for later frames.
     #[must_use]
     pub fn run_frame<T>(&mut self, build: impl FnOnce(&mut Ui<'_>) -> T) -> (T, FrameOutput) {
+        self.run_frame_observed(build, None)
+    }
+
+    /// Runs one UI frame and returns a deterministic trace of harness-visible phases.
+    #[must_use]
+    pub fn run_frame_with_trace<T>(
+        &mut self,
+        build: impl FnOnce(&mut Ui<'_>) -> T,
+    ) -> (T, FrameOutput, FrameTrace) {
+        let mut trace = FrameTrace::new();
+        let (result, output) = self.run_frame_observed(build, Some(&mut trace));
+        (result, output, trace)
+    }
+
+    fn run_frame_observed<T>(
+        &mut self,
+        build: impl FnOnce(&mut Ui<'_>) -> T,
+        mut trace: Option<&mut FrameTrace>,
+    ) -> (T, FrameOutput) {
+        if let Some(trace) = &mut trace {
+            trace.push(HarnessPhase::FrameBegin);
+        }
         let context = FrameContext::new(self.viewport, self.input.clone(), self.time);
         let mut ui = Ui::begin_frame(context, &mut self.memory);
+        if let Some(trace) = &mut trace {
+            trace.push(HarnessPhase::Build);
+        }
         let result = build(&mut ui);
+        if let Some(trace) = &mut trace {
+            trace.push(HarnessPhase::FrameFinalization);
+        }
         let output = ui.end_frame();
+        if let Some(trace) = &mut trace {
+            inspect_frame_output(trace, &output);
+        }
 
         self.last_output = Some(output.clone());
         self.input.begin_frame();
@@ -343,6 +496,77 @@ impl UiTestHarness {
     ) -> (T, FrameOutput) {
         self.apply_script(script);
         self.run_frame(build)
+    }
+
+    /// Runs one traced frame after applying typed scripted input operations.
+    #[must_use]
+    pub fn run_scripted_frame_with_trace<T>(
+        &mut self,
+        script: impl IntoIterator<Item = ScriptedInput>,
+        build: impl FnOnce(&mut Ui<'_>) -> T,
+    ) -> (T, FrameOutput, FrameTrace) {
+        let mut trace = FrameTrace::new();
+        trace.push(HarnessPhase::ScriptedInputPrep);
+        self.apply_script(script);
+        let (result, output) = self.run_frame_observed(build, Some(&mut trace));
+        (result, output, trace)
+    }
+
+    /// Runs frames until output is idle or the explicit frame budget is exhausted.
+    #[must_use]
+    pub fn settle_frames<T>(
+        &mut self,
+        max_frames: usize,
+        mut build: impl FnMut(&mut Ui<'_>) -> T,
+    ) -> SettleResult {
+        self.settle_frames_inner(
+            max_frames,
+            None::<std::iter::Empty<ScriptedInput>>,
+            &mut build,
+        )
+    }
+
+    /// Applies scripted input once, then runs frames until idle or budget exhaustion.
+    #[must_use]
+    pub fn settle_scripted_frames<T>(
+        &mut self,
+        script: impl IntoIterator<Item = ScriptedInput>,
+        max_frames: usize,
+        mut build: impl FnMut(&mut Ui<'_>) -> T,
+    ) -> SettleResult {
+        self.settle_frames_inner(max_frames, Some(script), &mut build)
+    }
+
+    fn settle_frames_inner<T>(
+        &mut self,
+        max_frames: usize,
+        script: Option<impl IntoIterator<Item = ScriptedInput>>,
+        build: &mut impl FnMut(&mut Ui<'_>) -> T,
+    ) -> SettleResult {
+        let mut trace = FrameTrace::new();
+        if let Some(script) = script {
+            trace.push(HarnessPhase::ScriptedInputPrep);
+            self.apply_script(script);
+        }
+
+        let mut pending_cause = None;
+        let mut frames_run = 0;
+        for _ in 0..max_frames {
+            let mut frame_trace = FrameTrace::new();
+            let (_, output) = self.run_frame_observed(|ui| build(ui), Some(&mut frame_trace));
+            trace.extend(frame_trace);
+            frames_run += 1;
+
+            pending_cause = pending_cause_for_output(&output);
+            if pending_cause.is_none() {
+                return SettleResult::idle(frames_run, trace);
+            }
+        }
+
+        match pending_cause {
+            Some(cause) => SettleResult::pending(frames_run, cause, trace),
+            None => SettleResult::idle(frames_run, trace),
+        }
     }
 
     /// Runs one frame and emits a routed shortcut invocation into frame output.
@@ -527,5 +751,34 @@ impl UiTestHarness {
     /// Sets whether the synthetic window is focused.
     pub const fn set_window_focused(&mut self, focused: bool) {
         self.input.window_focused = focused;
+    }
+}
+
+fn inspect_frame_output(trace: &mut FrameTrace, output: &FrameOutput) {
+    trace.push(HarnessPhase::InspectSemantics);
+    let _ = &output.semantics;
+    trace.push(HarnessPhase::InspectActions);
+    let _ = &output.actions;
+    trace.push(HarnessPhase::InspectPlatformRequests);
+    let _ = &output.platform_requests;
+    trace.push(HarnessPhase::InspectRepaint);
+    let _ = output.repaint;
+    trace.push(HarnessPhase::InspectWarnings);
+    let _ = &output.warnings;
+}
+
+fn pending_cause_for_output(output: &FrameOutput) -> Option<SettlePendingCause> {
+    if !output.actions.is_empty() {
+        return Some(SettlePendingCause::Actions);
+    }
+    if !output.platform_requests.is_empty() {
+        return Some(SettlePendingCause::PlatformRequests);
+    }
+    if !output.warnings.is_empty() {
+        return Some(SettlePendingCause::Warnings);
+    }
+    match output.repaint {
+        RepaintRequest::None => None,
+        request => Some(SettlePendingCause::Repaint(request)),
     }
 }

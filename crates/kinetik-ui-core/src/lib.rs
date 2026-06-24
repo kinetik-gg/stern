@@ -62,7 +62,10 @@ pub use runtime::{
     CursorShape, FrameContext, FrameOutput, FrameWarning, PlatformRequest, RepaintRequest,
     TimeInfo, Ui, ViewportInfo,
 };
-pub use test_harness::{ScriptedInput, ScriptedKeyEvent, UiTestHarness};
+pub use test_harness::{
+    FrameTrace, HarnessPhase, ScriptedInput, ScriptedKeyEvent, SettlePendingCause, SettleResult,
+    UiTestHarness,
+};
 pub use theme::{
     ButtonRecipe, ButtonVariant, CheckRecipe, ComponentState, ControlMetrics, DurationScale,
     ElevationScale, FontToken, OpacityScale, PanelRecipe, RadiusScale, RowRecipe, SemanticColor,
