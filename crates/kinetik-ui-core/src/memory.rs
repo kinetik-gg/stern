@@ -2,7 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{Vec2, WidgetId};
+use crate::{
+    LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus, Vec2, WidgetId,
+};
 
 /// Retained interaction and widget state owned by the UI runtime.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -33,6 +35,7 @@ pub struct UiMemory {
     pending_text_input_stop: Option<WidgetId>,
     scroll_offsets: HashMap<WidgetId, Vec2>,
     open_popovers: HashSet<WidgetId>,
+    liveness: LivenessRegistry,
 }
 
 impl UiMemory {
@@ -48,6 +51,12 @@ impl UiMemory {
         self.pointer_capture_released = None;
         self.released_drag_source = None;
         self.pointer_interaction_cancelled = false;
+        self.liveness.begin_frame();
+    }
+
+    /// Removes liveness targets not seen during the current frame.
+    pub(crate) fn end_frame(&mut self) {
+        self.liveness.end_frame();
     }
 
     /// Returns the widget hovered during the current frame.
@@ -323,6 +332,36 @@ impl UiMemory {
     pub fn close_popover(&mut self, id: WidgetId) {
         self.open_popovers.remove(&id);
     }
+
+    /// Returns the retained liveness registry.
+    #[must_use]
+    pub const fn liveness(&self) -> &LivenessRegistry {
+        &self.liveness
+    }
+
+    /// Returns mutable access to the retained liveness registry.
+    pub fn liveness_mut(&mut self) -> &mut LivenessRegistry {
+        &mut self.liveness
+    }
+
+    /// Marks a liveness target live and returns a renewed token.
+    pub fn mark_live_target(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
+        self.liveness.mark_live(target)
+    }
+
+    /// Removes a liveness target from the retained registry.
+    pub fn remove_live_target(&mut self, target: impl Into<LivenessTargetId>) -> bool {
+        self.liveness.remove(target)
+    }
+
+    /// Runs `update` only when the token matches a currently live target.
+    pub fn apply_liveness_update(
+        &self,
+        token: LivenessToken,
+        update: impl FnOnce(),
+    ) -> LivenessUpdateStatus {
+        self.liveness.apply_update(token, update)
+    }
 }
 
 #[cfg(test)]
@@ -344,6 +383,7 @@ mod tests {
         assert_eq!(memory.drag_source(), None);
         assert_eq!(memory.released_drag_source(), None);
         assert_eq!(memory.text_input_owner(), None);
+        assert!(memory.liveness().is_empty());
     }
 
     #[test]

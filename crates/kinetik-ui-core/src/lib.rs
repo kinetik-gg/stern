@@ -11,6 +11,7 @@ pub mod identity;
 pub mod input;
 pub mod interaction;
 pub mod layout;
+pub mod liveness;
 pub mod memory;
 pub mod perf;
 pub mod render;
@@ -50,6 +51,9 @@ pub use interaction::{
 pub use layout::{
     Alignment, Axis, Insets, LayoutItem, Measurement, SeparatorKind, SizeRule, column_layout,
     fit_box, pad_rect, rect_from_size, row_layout, split_leading, split_trailing, stack_layout,
+};
+pub use liveness::{
+    LivenessGeneration, LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus,
 };
 pub use memory::UiMemory;
 pub use perf::{

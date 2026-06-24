@@ -12,6 +12,7 @@ use crate::{
     Size, WidgetId,
 };
 use crate::{IdStack, Transform};
+use crate::{LivenessTargetId, LivenessToken};
 
 /// Information about the current rendering viewport.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -495,6 +496,14 @@ impl<'a> Ui<'a> {
         true
     }
 
+    /// Marks a target live for deterministic external update validation.
+    ///
+    /// Calling this again for the same target renews its generation, making
+    /// older tokens for that target stale.
+    pub fn mark_live_target(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
+        self.memory.mark_live_target(target)
+    }
+
     /// Appends one runtime warning.
     pub fn push_warning(&mut self, warning: FrameWarning) {
         self.output.push_warning(warning);
@@ -530,6 +539,7 @@ impl<'a> Ui<'a> {
                 .push_platform_request(PlatformRequest::StopTextInput);
         }
 
+        self.memory.end_frame();
         let warnings = validate_primitive_stack(&self.output.primitives);
         self.output.warnings.extend(warnings);
         self.output
