@@ -1,8 +1,8 @@
 //! Overlay, menu, popover, and command palette models.
 
 use kinetik_ui_core::{
-    ActionContext, ActionDescriptor, ActionId, ActionQueue, ActionSource, Point, Rect,
-    SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, Size, WidgetId,
+    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionQueue, ActionSource, Point,
+    Rect, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, Size, WidgetId,
 };
 
 /// Stable overlay identity.
@@ -369,14 +369,128 @@ impl Menu {
         source: ActionSource,
         context: ActionContext,
     ) -> bool {
-        let Some(MenuItem::Action(action)) = self.visible_items().get(visible_index).copied()
-        else {
+        let Some(invocation) = self.invocation_for_visible(visible_index, source, context) else {
             return false;
         };
+        queue.push(invocation);
+        true
+    }
+
+    /// Creates an invocation for an enabled visible action item by visible index.
+    #[must_use]
+    pub fn invocation_for_visible(
+        &self,
+        visible_index: usize,
+        source: ActionSource,
+        context: ActionContext,
+    ) -> Option<ActionInvocation> {
+        let Some(MenuItem::Action(action)) = self.visible_items().get(visible_index).copied()
+        else {
+            return None;
+        };
         if !action.can_invoke() {
-            return false;
+            return None;
         }
-        queue.invoke(action.id.clone(), source, context);
+        Some(ActionInvocation::new(action.id.clone(), source, context))
+    }
+}
+
+/// Action-backed menu-like overlay model.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MenuOverlay {
+    /// Overlay stack entry for placement, z-order, focus, and dismissal.
+    pub entry: OverlayEntry,
+    /// Menu items displayed by the overlay.
+    pub menu: Menu,
+    /// Source used for action invocations emitted by this surface.
+    pub source: ActionSource,
+    /// Context captured for action invocations emitted by this surface.
+    pub context: ActionContext,
+}
+
+impl MenuOverlay {
+    /// Creates a menu overlay from an existing stack entry and menu model.
+    #[must_use]
+    pub const fn new(
+        entry: OverlayEntry,
+        menu: Menu,
+        source: ActionSource,
+        context: ActionContext,
+    ) -> Self {
+        Self {
+            entry,
+            menu,
+            source,
+            context,
+        }
+    }
+
+    /// Creates a placed menu-like overlay from an anchor rectangle.
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub fn anchored(
+        id: OverlayId,
+        kind: OverlayKind,
+        menu: Menu,
+        anchor: Rect,
+        size: Size,
+        placement: PopoverPlacement,
+        offset: f32,
+        fit_viewport: bool,
+        viewport: Rect,
+        dismissal: OverlayDismissal,
+        source: ActionSource,
+        context: ActionContext,
+    ) -> Self {
+        Self::new(
+            placed_entry(
+                id,
+                kind,
+                PopoverRequest {
+                    anchor,
+                    size,
+                    placement,
+                    offset,
+                    fit_viewport,
+                },
+                viewport,
+            )
+            .dismiss_on(dismissal),
+            menu,
+            source,
+            context,
+        )
+    }
+
+    /// Opens this overlay at the top of an overlay stack.
+    pub fn open_in(&self, stack: &mut OverlayStack) {
+        stack.open(self.entry.clone());
+    }
+
+    /// Opens this overlay as a child of an existing overlay.
+    pub fn open_child_in(&self, stack: &mut OverlayStack, parent: OverlayId) -> bool {
+        stack.open_child(parent, self.entry.clone())
+    }
+
+    /// Returns visible menu items.
+    #[must_use]
+    pub fn visible_items(&self) -> Vec<&MenuItem> {
+        self.menu.visible_items()
+    }
+
+    /// Creates an invocation for an enabled visible action item.
+    #[must_use]
+    pub fn invocation_for_visible(&self, visible_index: usize) -> Option<ActionInvocation> {
+        self.menu
+            .invocation_for_visible(visible_index, self.source, self.context.clone())
+    }
+
+    /// Invokes an enabled visible action item into an action queue.
+    pub fn invoke_visible(&self, visible_index: usize, queue: &mut ActionQueue) -> bool {
+        let Some(invocation) = self.invocation_for_visible(visible_index) else {
+            return false;
+        };
+        queue.push(invocation);
         true
     }
 }
@@ -435,6 +549,15 @@ pub fn place_popover(request: PopoverRequest, viewport: Rect) -> Rect {
     }
 
     clamp_rect_to_viewport(rect, viewport)
+}
+
+fn placed_entry(
+    id: OverlayId,
+    kind: OverlayKind,
+    request: PopoverRequest,
+    viewport: Rect,
+) -> OverlayEntry {
+    OverlayEntry::new(id, kind, place_popover(request, viewport))
 }
 
 fn popover_rect(anchor: Rect, size: Size, placement: PopoverPlacement, offset: f32) -> Rect {
@@ -671,18 +794,119 @@ impl CommandPalette {
 
     /// Invokes the selected command palette entry.
     pub fn invoke_selected(&self, queue: &mut ActionQueue, context: ActionContext) -> bool {
-        let matches = self.matches();
-        let Some(entry) = matches.get(clamped_selection(self.selected, matches.len())) else {
+        let Some(invocation) = self.invocation_for_selected(context) else {
             return false;
         };
+        queue.push(invocation);
+        true
+    }
+
+    /// Creates an invocation for the selected command palette entry.
+    #[must_use]
+    pub fn invocation_for_selected(&self, context: ActionContext) -> Option<ActionInvocation> {
+        let matches = self.matches();
+        let entry = matches.get(clamped_selection(self.selected, matches.len()))?;
         if !entry.enabled {
-            return false;
+            return None;
         }
-        queue.invoke(
+        Some(ActionInvocation::new(
             entry.action_id.clone(),
             ActionSource::CommandPalette,
             context,
-        );
+        ))
+    }
+}
+
+/// Command palette overlay model.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommandPaletteOverlay {
+    /// Overlay stack entry for placement, z-order, focus, and dismissal.
+    pub entry: OverlayEntry,
+    /// Filterable command palette model.
+    pub palette: CommandPalette,
+    /// Context captured for action invocations emitted by this surface.
+    pub context: ActionContext,
+}
+
+impl CommandPaletteOverlay {
+    /// Creates a command palette overlay from an existing stack entry and palette model.
+    #[must_use]
+    pub const fn new(entry: OverlayEntry, palette: CommandPalette, context: ActionContext) -> Self {
+        Self {
+            entry,
+            palette,
+            context,
+        }
+    }
+
+    /// Creates a command palette overlay from action descriptors.
+    #[must_use]
+    pub fn from_actions(
+        entry: OverlayEntry,
+        actions: &[ActionDescriptor],
+        context: ActionContext,
+    ) -> Self {
+        Self::new(entry, CommandPalette::from_actions(actions), context)
+    }
+
+    /// Creates a placed command palette overlay from an anchor rectangle.
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub fn anchored_from_actions(
+        id: OverlayId,
+        actions: &[ActionDescriptor],
+        anchor: Rect,
+        size: Size,
+        placement: PopoverPlacement,
+        offset: f32,
+        fit_viewport: bool,
+        viewport: Rect,
+        dismissal: OverlayDismissal,
+        context: ActionContext,
+    ) -> Self {
+        Self::from_actions(
+            placed_entry(
+                id,
+                OverlayKind::CommandPalette,
+                PopoverRequest {
+                    anchor,
+                    size,
+                    placement,
+                    offset,
+                    fit_viewport,
+                },
+                viewport,
+            )
+            .modal(true)
+            .dismiss_on(dismissal),
+            actions,
+            context,
+        )
+    }
+
+    /// Opens this overlay at the top of an overlay stack.
+    pub fn open_in(&self, stack: &mut OverlayStack) {
+        stack.open(self.entry.clone());
+    }
+
+    /// Returns entries matching the current query.
+    #[must_use]
+    pub fn matches(&self) -> Vec<&CommandPaletteEntry> {
+        self.palette.matches()
+    }
+
+    /// Creates an invocation for the selected command palette entry.
+    #[must_use]
+    pub fn invocation_for_selected(&self) -> Option<ActionInvocation> {
+        self.palette.invocation_for_selected(self.context.clone())
+    }
+
+    /// Invokes the selected command palette entry into an action queue.
+    pub fn invoke_selected(&self, queue: &mut ActionQueue) -> bool {
+        let Some(invocation) = self.invocation_for_selected() else {
+            return false;
+        };
+        queue.push(invocation);
         true
     }
 }

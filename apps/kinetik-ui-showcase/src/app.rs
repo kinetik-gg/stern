@@ -20,11 +20,12 @@ use kinetik_ui::render::{
 };
 use kinetik_ui::text::{TextEditState, TextLayoutStore};
 use kinetik_ui::widgets::{
-    CommandPalette, Crosshair, Dock, DockDropTarget, DockNode, DockPlacement, Frame, FrameId,
-    GridColumns, GridLayout, Guide, IconId, ItemId, ListLayout, Menu, OverlayDismissal,
-    OverlayEntry, OverlayId, OverlayKind, OverlayStack, PanZoom, Panel, PanelId, PopoverPlacement,
-    PopoverRequest, TableColumn, TableLayout, Ui, ViewportComposition, ViewportSurface, frame_tabs,
-    overlay_semantics, place_popover, solve_dock_layout, solve_dock_splitters,
+    CommandPaletteOverlay, Crosshair, Dock, DockDropTarget, DockNode, DockPlacement, Frame,
+    FrameId, GridColumns, GridLayout, Guide, IconId, ItemId, ListLayout, Menu, MenuOverlay,
+    OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayStack, PanZoom, Panel, PanelId,
+    PopoverPlacement, PopoverRequest, TableColumn, TableLayout, Ui, ViewportComposition,
+    ViewportSurface, frame_tabs, overlay_semantics, place_popover, solve_dock_layout,
+    solve_dock_splitters,
 };
 
 use crate::editor::{self as editor_showcase, EditorShowcase};
@@ -1491,7 +1492,17 @@ impl ShowcaseApp {
 
     fn systems_action_panel(&mut self, ui: &mut Ui<'_>, panel: Rect, actions: &[ActionDescriptor]) {
         panel_title(ui, panel, "Action Router");
-        let menu = Menu::from_actions(actions.to_vec());
+        let menu_overlay = MenuOverlay::new(
+            OverlayEntry::new(
+                OverlayId::from_raw(101),
+                OverlayKind::Menu,
+                Rect::new(panel.x + 20.0, panel.y + 88.0, 140.0, 28.0),
+            )
+            .dismiss_on(OverlayDismissal::OutsideClickOrEscape),
+            Menu::from_actions(actions.to_vec()),
+            ActionSource::Menu,
+            ActionContext::Global,
+        );
         let mut queue = ActionQueue::new();
         let dispatch_action = ActionDescriptor::new("systems.dispatch", "Dispatch");
         let x = panel.x + 20.0;
@@ -1516,7 +1527,7 @@ impl ShowcaseApp {
             false,
         );
         if menu_item.clicked {
-            menu.invoke_visible_from(0, &mut queue, ActionSource::Menu, ActionContext::Global);
+            menu_overlay.invoke_visible(0, &mut queue);
         }
         let invocations = self.handle_action_queue(&mut queue);
         text(
@@ -1565,31 +1576,7 @@ impl ShowcaseApp {
             palette_width,
             64.0,
         );
-        let mut stack = OverlayStack::new();
-        stack.open(OverlayEntry {
-            id: OverlayId::from_raw(1),
-            parent: None,
-            kind: OverlayKind::Menu,
-            rect: menu_rect,
-            modal: false,
-            dismissal: OverlayDismissal::OutsideClick,
-        });
-        stack.open(OverlayEntry {
-            id: OverlayId::from_raw(2),
-            parent: Some(OverlayId::from_raw(1)),
-            kind: OverlayKind::Popover,
-            rect: popover_rect,
-            modal: false,
-            dismissal: OverlayDismissal::OutsideClick,
-        });
-        stack.open(OverlayEntry {
-            id: OverlayId::from_raw(3),
-            parent: None,
-            kind: OverlayKind::CommandPalette,
-            rect: palette_rect,
-            modal: true,
-            dismissal: OverlayDismissal::Manual,
-        });
+        let stack = Self::systems_overlay_stack(panel, menu_rect, popover_rect, palette_rect);
         for (index, entry) in stack.entries().iter().enumerate() {
             let label = match entry.kind {
                 OverlayKind::Popover => "Popover",
@@ -1619,6 +1606,69 @@ impl ShowcaseApp {
         }
     }
 
+    fn systems_overlay_stack(
+        panel: Rect,
+        menu_rect: Rect,
+        popover_rect: Rect,
+        palette_rect: Rect,
+    ) -> OverlayStack {
+        let menu_overlay = MenuOverlay::new(
+            OverlayEntry::new(OverlayId::from_raw(1), OverlayKind::Menu, menu_rect)
+                .dismiss_on(OverlayDismissal::OutsideClick),
+            Menu::new(),
+            ActionSource::Menu,
+            ActionContext::Global,
+        );
+        let palette_overlay = CommandPaletteOverlay::from_actions(
+            OverlayEntry::new(
+                OverlayId::from_raw(3),
+                OverlayKind::CommandPalette,
+                palette_rect,
+            )
+            .modal(true),
+            &[],
+            ActionContext::Global,
+        );
+        let dropdown_rect = place_popover(
+            PopoverRequest {
+                anchor: Rect::new(menu_rect.max_x() - 52.0, menu_rect.y + 8.0, 42.0, 20.0),
+                size: Size::new(130.0, 42.0),
+                placement: PopoverPlacement::Right,
+                offset: 6.0,
+                fit_viewport: true,
+            },
+            panel,
+        );
+        let tooltip_rect = place_popover(
+            PopoverRequest {
+                anchor: Rect::new(menu_rect.x + 8.0, menu_rect.y, 80.0, 18.0),
+                size: Size::new(120.0, 24.0),
+                placement: PopoverPlacement::Above,
+                offset: 4.0,
+                fit_viewport: true,
+            },
+            panel,
+        );
+        let mut stack = OverlayStack::new();
+        menu_overlay.open_in(&mut stack);
+        let _ = stack.open_child(
+            menu_overlay.entry.id,
+            OverlayEntry::new(OverlayId::from_raw(2), OverlayKind::Popover, popover_rect)
+                .dismiss_on(OverlayDismissal::OutsideClick),
+        );
+        stack.open(
+            OverlayEntry::new(OverlayId::from_raw(4), OverlayKind::Dropdown, dropdown_rect)
+                .dismiss_on(OverlayDismissal::OutsideClickOrEscape),
+        );
+        stack.open(OverlayEntry::new(
+            OverlayId::from_raw(5),
+            OverlayKind::Tooltip,
+            tooltip_rect,
+        ));
+        palette_overlay.open_in(&mut stack);
+        stack
+    }
+
     fn systems_palette_panel(
         &mut self,
         ui: &mut Ui<'_>,
@@ -1626,11 +1676,26 @@ impl ShowcaseApp {
         actions: &[ActionDescriptor],
     ) {
         panel_title(ui, panel, "Command Palette");
-        let mut palette = CommandPalette::from_actions(actions);
-        palette.query = String::new();
+        let mut palette_overlay = CommandPaletteOverlay::from_actions(
+            OverlayEntry::new(
+                OverlayId::from_raw(201),
+                OverlayKind::CommandPalette,
+                Rect::new(
+                    panel.x + 20.0,
+                    panel.y + 42.0,
+                    (panel.width - 40.0).max(160.0),
+                    132.0,
+                ),
+            )
+            .modal(true)
+            .dismiss_on(OverlayDismissal::OutsideClickOrEscape),
+            actions,
+            ActionContext::Global,
+        );
+        palette_overlay.palette.query = String::new();
         let x = panel.x + 20.0;
         let row_width = (panel.width - 40.0).max(160.0);
-        let entries = palette
+        let entries = palette_overlay
             .matches()
             .into_iter()
             .take(4)
@@ -1647,8 +1712,8 @@ impl ShowcaseApp {
             );
             if response.clicked {
                 let mut queue = ActionQueue::new();
-                palette.selected = index;
-                palette.invoke_selected(&mut queue, ActionContext::Global);
+                palette_overlay.palette.selected = index;
+                palette_overlay.invoke_selected(&mut queue);
                 self.handle_action_queue(&mut queue);
             }
         }
