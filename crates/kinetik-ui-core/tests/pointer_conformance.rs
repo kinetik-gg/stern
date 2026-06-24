@@ -4,8 +4,10 @@ use std::time::Duration;
 
 use kinetik_ui_core::{
     CursorShape, Key, Modifiers, MouseButton, PlatformRequest, Point, Rect, Response,
-    ScrollResponse, Size, Ui, UiTestHarness, Vec2, WidgetId, context_menu_trigger, draggable,
-    drop_target, pressable, scrollable, tooltip_trigger,
+    ScrollResponse, Size, Transform, Ui, UiTestHarness, Vec2, WidgetId, context_menu_trigger,
+    context_menu_trigger_transformed, draggable, draggable_transformed, drop_target,
+    drop_target_transformed, focusable_transformed, pressable, pressable_transformed, scrollable,
+    scrollable_transformed, selectable_transformed, tooltip_trigger, tooltip_trigger_transformed,
 };
 
 fn rect() -> Rect {
@@ -18,6 +20,26 @@ fn source_rect() -> Rect {
 
 fn target_rect() -> Rect {
     Rect::new(80.0, 0.0, 40.0, 40.0)
+}
+
+fn local_target_rect() -> Rect {
+    Rect::new(0.0, 0.0, 40.0, 40.0)
+}
+
+fn translated(offset_x: f32, offset_y: f32) -> Transform {
+    Transform::translation(Vec2::new(offset_x, offset_y))
+}
+
+fn press_transform() -> Transform {
+    translated(100.0, 50.0)
+}
+
+fn transformed_source_transform() -> Transform {
+    translated(100.0, 0.0)
+}
+
+fn transformed_target_transform() -> Transform {
+    translated(200.0, 0.0)
 }
 
 fn pressable_response(harness: &mut UiTestHarness, disabled: bool) -> Response {
@@ -91,6 +113,50 @@ fn start_drag_over_target(harness: &mut UiTestHarness) -> WidgetId {
     dragged.id
 }
 
+fn start_transformed_drag_over_target(harness: &mut UiTestHarness) -> WidgetId {
+    press_transformed_source(harness, Point::new(110.0, 10.0));
+    drag_transformed_source_to(harness, Point::new(210.0, 10.0))
+}
+
+fn press_transformed_source(harness: &mut UiTestHarness, point: Point) {
+    harness.set_pointer_position(point);
+    harness.pointer_press(MouseButton::Primary);
+    let _ = harness.run_frame(|ui| {
+        let source = source_id(ui);
+        let (input, memory) = ui.input_and_memory_mut();
+        draggable_transformed(
+            source,
+            source_rect(),
+            transformed_source_transform(),
+            input,
+            memory,
+            false,
+        )
+    });
+}
+
+fn drag_transformed_source_to(harness: &mut UiTestHarness, point: Point) -> WidgetId {
+    harness.set_pointer_position(point);
+    let dragged = harness
+        .run_frame(|ui| {
+            let source = source_id(ui);
+            let (input, memory) = ui.input_and_memory_mut();
+            draggable_transformed(
+                source,
+                source_rect(),
+                transformed_source_transform(),
+                input,
+                memory,
+                false,
+            )
+        })
+        .0;
+
+    assert!(dragged.dragged);
+    assert_eq!(harness.memory().drag_source(), Some(dragged.id));
+    dragged.id
+}
+
 #[test]
 fn pointer_interaction_pressable_press_release_click_and_double_click_are_frame_driven() {
     let mut harness = UiTestHarness::new();
@@ -139,6 +205,84 @@ fn pointer_interaction_pressable_release_outside_does_not_click() {
     harness.set_pointer_position(Point::new(140.0, 10.0));
     harness.pointer_release(MouseButton::Primary);
     let released_outside = pressable_response(&mut harness, false);
+
+    assert!(!released_outside.state.hovered);
+    assert!(!released_outside.clicked);
+    assert!(!released_outside.double_clicked);
+    assert_eq!(harness.memory().active(), None);
+    assert_eq!(harness.memory().pointer_capture(), None);
+}
+
+#[test]
+fn pointer_interaction_transformed_pressable_clicks_hits_and_rejects_misses() {
+    let mut harness = UiTestHarness::new();
+
+    harness.set_pointer_position(Point::new(110.0, 60.0));
+    harness.pointer_press(MouseButton::Primary);
+    let pressed = harness
+        .run_frame(|ui| {
+            let id = ui.id("pressable");
+            let (input, memory) = ui.input_and_memory_mut();
+            pressable_transformed(id, rect(), press_transform(), input, memory, false)
+        })
+        .0;
+
+    assert!(pressed.state.hovered);
+    assert!(pressed.state.pressed);
+    assert!(harness.memory().has_pointer_capture(pressed.id));
+
+    harness.pointer_release(MouseButton::Primary);
+    let clicked = harness
+        .run_frame(|ui| {
+            let id = ui.id("pressable");
+            let (input, memory) = ui.input_and_memory_mut();
+            pressable_transformed(id, rect(), press_transform(), input, memory, false)
+        })
+        .0;
+
+    assert!(clicked.clicked);
+    assert_eq!(harness.memory().pointer_capture(), None);
+
+    let mut missed = UiTestHarness::new();
+    missed.set_pointer_position(Point::new(90.0, 60.0));
+    missed.pointer_press(MouseButton::Primary);
+    let miss = missed
+        .run_frame(|ui| {
+            let id = ui.id("pressable");
+            let (input, memory) = ui.input_and_memory_mut();
+            pressable_transformed(id, rect(), press_transform(), input, memory, false)
+        })
+        .0;
+
+    assert!(!miss.state.hovered);
+    assert!(!miss.state.pressed);
+    assert_eq!(missed.memory().pointer_capture(), None);
+}
+
+#[test]
+fn pointer_interaction_transformed_pressable_release_outside_does_not_click() {
+    let mut harness = UiTestHarness::new();
+
+    harness.set_pointer_position(Point::new(110.0, 60.0));
+    harness.pointer_press(MouseButton::Primary);
+    let pressed = harness
+        .run_frame(|ui| {
+            let id = ui.id("pressable");
+            let (input, memory) = ui.input_and_memory_mut();
+            pressable_transformed(id, rect(), press_transform(), input, memory, false)
+        })
+        .0;
+    assert!(pressed.state.pressed);
+
+    harness.set_pointer_position(Point::new(205.0, 60.0));
+    harness.pointer_release(MouseButton::Primary);
+    let released_outside = harness
+        .run_frame(|ui| {
+            let id = ui.id("pressable");
+            let (input, memory) = ui.input_and_memory_mut();
+            pressable_transformed(id, rect(), press_transform(), input, memory, false)
+        })
+        .0;
 
     assert!(!released_outside.state.hovered);
     assert!(!released_outside.clicked);
@@ -269,6 +413,66 @@ fn pointer_interaction_drag_capture_suppresses_other_hover() {
 
     assert!(source.dragged);
     assert!(!other.state.hovered);
+    assert_eq!(harness.memory().hovered(), None);
+    assert_eq!(harness.memory().pointer_capture(), Some(source.id));
+}
+
+#[test]
+fn pointer_interaction_transformed_drag_capture_uses_screen_delta_and_suppresses_other() {
+    let mut harness = UiTestHarness::new();
+
+    harness.set_pointer_position(Point::new(110.0, 10.0));
+    harness.pointer_press(MouseButton::Primary);
+    let pressed = harness
+        .run_frame(|ui| {
+            let source = source_id(ui);
+            let (input, memory) = ui.input_and_memory_mut();
+            draggable_transformed(
+                source,
+                source_rect(),
+                transformed_source_transform(),
+                input,
+                memory,
+                false,
+            )
+        })
+        .0;
+
+    assert!(pressed.state.pressed);
+    assert!(harness.memory().has_pointer_capture(pressed.id));
+
+    harness.set_pointer_position(Point::new(210.0, 10.0));
+    let (source, other) = harness
+        .run_frame(|ui| {
+            let source = source_id(ui);
+            let other = target_id(ui);
+            let (input, memory) = ui.input_and_memory_mut();
+            (
+                draggable_transformed(
+                    source,
+                    source_rect(),
+                    transformed_source_transform(),
+                    input,
+                    memory,
+                    false,
+                ),
+                pressable_transformed(
+                    other,
+                    local_target_rect(),
+                    transformed_target_transform(),
+                    input,
+                    memory,
+                    false,
+                ),
+            )
+        })
+        .0;
+
+    assert!(source.dragged);
+    assert_eq!(source.drag_delta, Vec2::new(100.0, 0.0));
+    assert_eq!(harness.memory().drag_source(), Some(source.id));
+    assert!(!other.state.hovered);
+    assert!(!other.clicked);
     assert_eq!(harness.memory().hovered(), None);
     assert_eq!(harness.memory().pointer_capture(), Some(source.id));
 }
@@ -695,6 +899,91 @@ fn pointer_interaction_drop_target_accepts_released_drag_source_over_target() {
 }
 
 #[test]
+fn pointer_interaction_transformed_drop_target_reports_active_and_released_sources() {
+    let mut harness = UiTestHarness::new();
+    let source = start_transformed_drag_over_target(&mut harness);
+
+    let active = harness
+        .run_frame(|ui| {
+            let target = target_id(ui);
+            let (input, memory) = ui.input_and_memory_mut();
+            drop_target_transformed(
+                target,
+                local_target_rect(),
+                transformed_target_transform(),
+                input,
+                memory,
+                false,
+            )
+        })
+        .0;
+
+    assert_eq!(active.source, Some(source));
+    assert!(!active.dropped);
+    assert!(active.response.state.hovered);
+    assert_eq!(harness.memory().pointer_capture(), Some(source));
+    assert_eq!(harness.memory().drag_source(), Some(source));
+
+    for source_first in [true, false] {
+        let mut released = UiTestHarness::new();
+        let source = start_transformed_drag_over_target(&mut released);
+
+        released.pointer_release(MouseButton::Primary);
+        let (source_response, target_response) = released
+            .run_frame(|ui| {
+                let source = source_id(ui);
+                let target = target_id(ui);
+                let (input, memory) = ui.input_and_memory_mut();
+
+                if source_first {
+                    let source_response = draggable_transformed(
+                        source,
+                        source_rect(),
+                        transformed_source_transform(),
+                        input,
+                        memory,
+                        false,
+                    );
+                    let target_response = drop_target_transformed(
+                        target,
+                        local_target_rect(),
+                        transformed_target_transform(),
+                        input,
+                        memory,
+                        false,
+                    );
+                    (source_response, target_response)
+                } else {
+                    let target_response = drop_target_transformed(
+                        target,
+                        local_target_rect(),
+                        transformed_target_transform(),
+                        input,
+                        memory,
+                        false,
+                    );
+                    let source_response = draggable_transformed(
+                        source,
+                        source_rect(),
+                        transformed_source_transform(),
+                        input,
+                        memory,
+                        false,
+                    );
+                    (source_response, target_response)
+                }
+            })
+            .0;
+
+        assert_eq!(source_response.id, source);
+        assert_eq!(target_response.source, Some(source));
+        assert!(target_response.dropped);
+        assert!(target_response.response.state.hovered);
+        assert_eq!(released.memory().released_drag_source(), Some(source));
+    }
+}
+
+#[test]
 fn pointer_interaction_drop_target_rejects_self_disabled_and_missed_releases() {
     let mut harness = UiTestHarness::new();
 
@@ -785,6 +1074,114 @@ fn pointer_interaction_drop_target_rejects_self_disabled_and_missed_releases() {
 }
 
 #[test]
+fn pointer_interaction_transformed_drop_target_rejects_self_source() {
+    let mut harness = UiTestHarness::new();
+    press_transformed_source(&mut harness, Point::new(110.0, 10.0));
+    drag_transformed_source_to(&mut harness, Point::new(120.0, 10.0));
+    harness.pointer_release(MouseButton::Primary);
+
+    let (_, target_response) = harness
+        .run_frame(|ui| {
+            let source = source_id(ui);
+            let (input, memory) = ui.input_and_memory_mut();
+            (
+                draggable_transformed(
+                    source,
+                    source_rect(),
+                    transformed_source_transform(),
+                    input,
+                    memory,
+                    false,
+                ),
+                drop_target_transformed(
+                    source,
+                    source_rect(),
+                    transformed_source_transform(),
+                    input,
+                    memory,
+                    false,
+                ),
+            )
+        })
+        .0;
+
+    assert_eq!(target_response.source, None);
+    assert!(!target_response.dropped);
+}
+
+#[test]
+fn pointer_interaction_transformed_drop_target_rejects_disabled_target() {
+    let mut harness = UiTestHarness::new();
+    let _ = start_transformed_drag_over_target(&mut harness);
+    harness.pointer_release(MouseButton::Primary);
+
+    let disabled_drop = harness
+        .run_frame(|ui| {
+            let source = source_id(ui);
+            let target = target_id(ui);
+            let (input, memory) = ui.input_and_memory_mut();
+            draggable_transformed(
+                source,
+                source_rect(),
+                transformed_source_transform(),
+                input,
+                memory,
+                false,
+            );
+            drop_target_transformed(
+                target,
+                local_target_rect(),
+                transformed_target_transform(),
+                input,
+                memory,
+                true,
+            )
+        })
+        .0;
+
+    assert!(disabled_drop.response.state.disabled);
+    assert_eq!(disabled_drop.source, None);
+    assert!(!disabled_drop.dropped);
+}
+
+#[test]
+fn pointer_interaction_transformed_drop_target_rejects_missed_target() {
+    let mut harness = UiTestHarness::new();
+    press_transformed_source(&mut harness, Point::new(110.0, 10.0));
+    drag_transformed_source_to(&mut harness, Point::new(400.0, 10.0));
+    harness.pointer_release(MouseButton::Primary);
+
+    let (_, missed_drop) = harness
+        .run_frame(|ui| {
+            let source = source_id(ui);
+            let target = target_id(ui);
+            let (input, memory) = ui.input_and_memory_mut();
+            (
+                draggable_transformed(
+                    source,
+                    source_rect(),
+                    transformed_source_transform(),
+                    input,
+                    memory,
+                    false,
+                ),
+                drop_target_transformed(
+                    target,
+                    local_target_rect(),
+                    transformed_target_transform(),
+                    input,
+                    memory,
+                    false,
+                ),
+            )
+        })
+        .0;
+
+    assert_eq!(missed_drop.source, None);
+    assert!(!missed_drop.dropped);
+}
+
+#[test]
 fn pointer_interaction_tooltip_idle_hover_requires_no_active_buttons_and_enabled_target() {
     let mut harness = UiTestHarness::new();
 
@@ -841,6 +1238,132 @@ fn pointer_interaction_scrollable_wheel_only_when_hovered_and_clamps_offset() {
     assert!(!disabled.response.state.hovered);
     assert_eq!(disabled.offset, Vec2::new(50.0, 160.0));
     assert_eq!(disabled.delta, Vec2::ZERO);
+}
+
+#[test]
+fn pointer_interaction_transformed_scrollable_wheel_only_when_hit_and_clamps_offset() {
+    let mut harness = UiTestHarness::new();
+
+    harness.set_pointer_position(Point::new(110.0, 60.0));
+    harness.wheel(Vec2::new(-80.0, -500.0));
+    let scrolled = harness
+        .run_frame(|ui| {
+            let id = ui.id("scroll");
+            let (input, memory) = ui.input_and_memory_mut();
+            scrollable_transformed(
+                id,
+                rect(),
+                press_transform(),
+                Size::new(150.0, 200.0),
+                input,
+                memory,
+                false,
+            )
+        })
+        .0;
+
+    assert!(scrolled.response.state.hovered);
+    assert_eq!(scrolled.max_offset, Vec2::new(50.0, 160.0));
+    assert_eq!(scrolled.offset, Vec2::new(50.0, 160.0));
+    assert_eq!(scrolled.delta, Vec2::new(50.0, 160.0));
+
+    harness.set_pointer_position(Point::new(90.0, 60.0));
+    harness.wheel(Vec2::new(80.0, 500.0));
+    let outside = harness
+        .run_frame(|ui| {
+            let id = ui.id("scroll");
+            let (input, memory) = ui.input_and_memory_mut();
+            scrollable_transformed(
+                id,
+                rect(),
+                press_transform(),
+                Size::new(150.0, 200.0),
+                input,
+                memory,
+                false,
+            )
+        })
+        .0;
+
+    assert!(!outside.response.state.hovered);
+    assert_eq!(outside.offset, Vec2::new(50.0, 160.0));
+    assert_eq!(outside.delta, Vec2::ZERO);
+}
+
+#[test]
+fn pointer_interaction_transformed_focus_select_context_and_tooltip_use_transformed_hits() {
+    let mut focus = UiTestHarness::new();
+    focus.set_pointer_position(Point::new(110.0, 60.0));
+    focus.pointer_press(MouseButton::Primary);
+    let _ = focus.run_frame(|ui| {
+        let id = ui.id("field");
+        let (input, memory) = ui.input_and_memory_mut();
+        focusable_transformed(id, rect(), press_transform(), input, memory, false)
+    });
+    focus.pointer_release(MouseButton::Primary);
+    let focused = focus
+        .run_frame(|ui| {
+            let id = ui.id("field");
+            let (input, memory) = ui.input_and_memory_mut();
+            focusable_transformed(id, rect(), press_transform(), input, memory, false)
+        })
+        .0;
+    assert!(focused.state.focused);
+    assert_eq!(focus.memory().focused(), Some(focused.id));
+
+    let mut selectable = UiTestHarness::new();
+    selectable.set_pointer_position(Point::new(110.0, 60.0));
+    let selected = selectable
+        .run_frame(|ui| {
+            let id = ui.id("row");
+            let (input, memory) = ui.input_and_memory_mut();
+            selectable_transformed(id, rect(), press_transform(), input, memory, true, false)
+        })
+        .0;
+    assert!(selected.state.hovered);
+    assert!(selected.state.selected);
+
+    let mut menu = UiTestHarness::new();
+    menu.set_pointer_position(Point::new(110.0, 60.0));
+    menu.pointer_press(MouseButton::Secondary);
+    let _ = menu.run_frame(|ui| {
+        let id = ui.id("menu");
+        let (input, memory) = ui.input_and_memory_mut();
+        context_menu_trigger_transformed(id, rect(), press_transform(), input, memory, false)
+    });
+    menu.pointer_release(MouseButton::Secondary);
+    let context = menu
+        .run_frame(|ui| {
+            let id = ui.id("menu");
+            let (input, memory) = ui.input_and_memory_mut();
+            context_menu_trigger_transformed(id, rect(), press_transform(), input, memory, false)
+        })
+        .0;
+    assert!(context.secondary_clicked);
+    assert!(context.context_requested);
+
+    let mut tooltip = UiTestHarness::new();
+    tooltip.set_pointer_position(Point::new(110.0, 60.0));
+    let shown = tooltip
+        .run_frame(|ui| {
+            let id = ui.id("tooltip");
+            let (input, memory) = ui.input_and_memory_mut();
+            tooltip_trigger_transformed(id, rect(), press_transform(), input, memory, false)
+        })
+        .0;
+    assert!(shown.state.hovered);
+    assert!(shown.tooltip_requested);
+
+    tooltip.set_pointer_position(Point::new(90.0, 60.0));
+    let missed = tooltip
+        .run_frame(|ui| {
+            let id = ui.id("tooltip");
+            let (input, memory) = ui.input_and_memory_mut();
+            tooltip_trigger_transformed(id, rect(), press_transform(), input, memory, false)
+        })
+        .0;
+    assert!(!missed.state.hovered);
+    assert!(!missed.tooltip_requested);
 }
 
 #[test]

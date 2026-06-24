@@ -122,8 +122,39 @@ pub fn pressable(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> Response {
+    pressable_with_hit_target(id, rect, HitTarget::Rect, input, memory, disabled)
+}
+
+/// Resolves neutral press/click behavior with transformed local-space hit testing.
+pub fn pressable_transformed(
+    id: WidgetId,
+    rect: Rect,
+    local_to_screen: Transform,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> Response {
+    pressable_with_hit_target(
+        id,
+        rect,
+        HitTarget::Transformed(local_to_screen),
+        input,
+        memory,
+        disabled,
+    )
+}
+
+fn pressable_with_hit_target(
+    id: WidgetId,
+    rect: Rect,
+    hit_target: HitTarget,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> Response {
     let pointer_cancelled = memory.pointer_interaction_cancelled();
-    let hovered = !pointer_cancelled && !disabled && routed_hit_test(id, rect, input, memory);
+    let hovered =
+        !pointer_cancelled && !disabled && hit_target.routed_hit_test(id, rect, input, memory);
 
     if hovered {
         memory.set_hovered(id);
@@ -200,6 +231,25 @@ pub fn focusable(
     response
 }
 
+/// Resolves neutral focus behavior with transformed local-space hit testing.
+pub fn focusable_transformed(
+    id: WidgetId,
+    rect: Rect,
+    local_to_screen: Transform,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> Response {
+    let mut response = pressable_transformed(id, rect, local_to_screen, input, memory, disabled);
+
+    if response.clicked {
+        memory.focus(id);
+        response.state.focused = true;
+    }
+
+    response
+}
+
 /// Resolves neutral scroll behavior and stores a clamped offset in memory.
 ///
 /// Wheel deltas follow the platform input convention. The retained scroll
@@ -214,7 +264,53 @@ pub fn scrollable(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> ScrollResponse {
-    let hovered = !disabled && routed_hit_test(id, rect, input, memory);
+    scrollable_with_hit_target(
+        id,
+        rect,
+        HitTarget::Rect,
+        content_size,
+        input,
+        memory,
+        disabled,
+    )
+}
+
+/// Resolves neutral scroll behavior with transformed local-space hit testing.
+///
+/// Wheel deltas follow the platform input convention. The retained scroll
+/// offset increases in the opposite direction so a negative vertical wheel
+/// delta, the usual "scroll down" event, moves content down by increasing the
+/// stored y offset.
+pub fn scrollable_transformed(
+    id: WidgetId,
+    rect: Rect,
+    local_to_screen: Transform,
+    content_size: Size,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> ScrollResponse {
+    scrollable_with_hit_target(
+        id,
+        rect,
+        HitTarget::Transformed(local_to_screen),
+        content_size,
+        input,
+        memory,
+        disabled,
+    )
+}
+
+fn scrollable_with_hit_target(
+    id: WidgetId,
+    rect: Rect,
+    hit_target: HitTarget,
+    content_size: Size,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> ScrollResponse {
+    let hovered = !disabled && hit_target.routed_hit_test(id, rect, input, memory);
     if hovered {
         memory.set_hovered(id);
     }
@@ -273,6 +369,21 @@ pub fn context_menu_trigger(
     response
 }
 
+/// Resolves neutral context-menu trigger behavior with transformed local-space hit testing.
+pub fn context_menu_trigger_transformed(
+    id: WidgetId,
+    rect: Rect,
+    local_to_screen: Transform,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> Response {
+    let mut response = pressable_transformed(id, rect, local_to_screen, input, memory, disabled);
+    response.context_requested =
+        !disabled && (response.secondary_clicked || keyboard_context_requested(id, input, memory));
+    response
+}
+
 /// Resolves neutral tooltip trigger behavior.
 pub fn tooltip_trigger(
     id: WidgetId,
@@ -281,7 +392,37 @@ pub fn tooltip_trigger(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> Response {
-    let hovered = !disabled && routed_hit_test(id, rect, input, memory);
+    tooltip_trigger_with_hit_target(id, rect, HitTarget::Rect, input, memory, disabled)
+}
+
+/// Resolves neutral tooltip trigger behavior with transformed local-space hit testing.
+pub fn tooltip_trigger_transformed(
+    id: WidgetId,
+    rect: Rect,
+    local_to_screen: Transform,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> Response {
+    tooltip_trigger_with_hit_target(
+        id,
+        rect,
+        HitTarget::Transformed(local_to_screen),
+        input,
+        memory,
+        disabled,
+    )
+}
+
+fn tooltip_trigger_with_hit_target(
+    id: WidgetId,
+    rect: Rect,
+    hit_target: HitTarget,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> Response {
+    let hovered = !disabled && hit_target.routed_hit_test(id, rect, input, memory);
     if hovered {
         memory.set_hovered(id);
     }
@@ -313,18 +454,48 @@ pub fn drop_target(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> DropTargetResponse {
+    drop_target_with_hit_target(id, rect, HitTarget::Rect, input, memory, disabled)
+}
+
+/// Resolves neutral drop-target behavior for active drags with transformed local-space hit testing.
+pub fn drop_target_transformed(
+    id: WidgetId,
+    rect: Rect,
+    local_to_screen: Transform,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> DropTargetResponse {
+    drop_target_with_hit_target(
+        id,
+        rect,
+        HitTarget::Transformed(local_to_screen),
+        input,
+        memory,
+        disabled,
+    )
+}
+
+fn drop_target_with_hit_target(
+    id: WidgetId,
+    rect: Rect,
+    hit_target: HitTarget,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> DropTargetResponse {
     let pointer_cancelled = memory.pointer_interaction_cancelled();
     let source_candidate = memory
         .released_drag_source()
         .or_else(|| memory.drag_source())
         .filter(|source| *source != id);
-    let target_hit = hit_test(rect, input);
+    let target_hit = hit_target.hit_test(rect, input);
     let hovered = !pointer_cancelled
         && !disabled
         && if source_candidate.is_some() {
             target_hit
         } else {
-            routed_hit_test(id, rect, input, memory)
+            hit_target.routed_hit_test(id, rect, input, memory)
         };
     let source = if !pointer_cancelled && !disabled && source_candidate.is_some() && target_hit {
         source_candidate
@@ -393,11 +564,28 @@ fn keyboard_activation_pressed(id: WidgetId, input: &UiInput, memory: &UiMemory)
         })
 }
 
-fn routed_hit_test(id: WidgetId, rect: Rect, input: &UiInput, memory: &UiMemory) -> bool {
-    memory
-        .pointer_routing_owner()
-        .is_none_or(|captured| captured == id)
-        && hit_test(rect, input)
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum HitTarget {
+    Rect,
+    Transformed(Transform),
+}
+
+impl HitTarget {
+    fn hit_test(self, rect: Rect, input: &UiInput) -> bool {
+        match self {
+            Self::Rect => hit_test(rect, input),
+            Self::Transformed(local_to_screen) => {
+                hit_test_transformed(rect, local_to_screen, input)
+            }
+        }
+    }
+
+    fn routed_hit_test(self, id: WidgetId, rect: Rect, input: &UiInput, memory: &UiMemory) -> bool {
+        memory
+            .pointer_routing_owner()
+            .is_none_or(|captured| captured == id)
+            && self.hit_test(rect, input)
+    }
 }
 
 fn keyboard_context_requested(id: WidgetId, input: &UiInput, memory: &UiMemory) -> bool {
@@ -429,7 +617,37 @@ pub fn draggable(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> Response {
-    let mut response = pressable(id, rect, input, memory, disabled);
+    draggable_with_hit_target(id, rect, HitTarget::Rect, input, memory, disabled)
+}
+
+/// Resolves neutral draggable behavior with transformed local-space hit testing.
+pub fn draggable_transformed(
+    id: WidgetId,
+    rect: Rect,
+    local_to_screen: Transform,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> Response {
+    draggable_with_hit_target(
+        id,
+        rect,
+        HitTarget::Transformed(local_to_screen),
+        input,
+        memory,
+        disabled,
+    )
+}
+
+fn draggable_with_hit_target(
+    id: WidgetId,
+    rect: Rect,
+    hit_target: HitTarget,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> Response {
+    let mut response = pressable_with_hit_target(id, rect, hit_target, input, memory, disabled);
     let active = memory.is_active(id);
 
     response.dragged =
@@ -455,6 +673,21 @@ pub fn selectable(
     disabled: bool,
 ) -> Response {
     let mut response = pressable(id, rect, input, memory, disabled);
+    response.state.selected = selected;
+    response
+}
+
+/// Resolves neutral selectable behavior with transformed local-space hit testing.
+pub fn selectable_transformed(
+    id: WidgetId,
+    rect: Rect,
+    local_to_screen: Transform,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    selected: bool,
+    disabled: bool,
+) -> Response {
+    let mut response = pressable_transformed(id, rect, local_to_screen, input, memory, disabled);
     response.state.selected = selected;
     response
 }
