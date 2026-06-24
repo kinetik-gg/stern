@@ -41,8 +41,8 @@ pub use input::{
 };
 pub use interaction::{
     DropTargetResponse, InteractionState, Response, ScrollResponse, clamp_scroll_offset,
-    context_menu_trigger, draggable, drop_target, focusable, hit_test, max_scroll_offset,
-    pressable, scrollable, selectable, tooltip_trigger,
+    context_menu_trigger, draggable, drop_target, focusable, hit_test, hit_test_transformed,
+    max_scroll_offset, pressable, scrollable, selectable, tooltip_trigger,
 };
 pub use layout::{
     Alignment, Axis, Insets, LayoutItem, Measurement, SeparatorKind, SizeRule, column_layout,

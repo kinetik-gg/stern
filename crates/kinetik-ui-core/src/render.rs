@@ -375,6 +375,97 @@ impl Transform {
             ..Self::IDENTITY
         }
     }
+
+    /// Creates a scale transform.
+    #[must_use]
+    pub const fn scale(scale: Vec2) -> Self {
+        Self {
+            m11: scale.x,
+            m22: scale.y,
+            ..Self::IDENTITY
+        }
+    }
+
+    /// Returns true when every transform component is finite.
+    #[must_use]
+    pub fn is_finite(self) -> bool {
+        self.m11.is_finite()
+            && self.m12.is_finite()
+            && self.m21.is_finite()
+            && self.m22.is_finite()
+            && self.dx.is_finite()
+            && self.dy.is_finite()
+    }
+
+    /// Applies this transform to a point.
+    #[must_use]
+    pub fn transform_point(self, point: Point) -> Point {
+        Point::new(
+            self.m11
+                .mul_add(point.x, self.m21.mul_add(point.y, self.dx)),
+            self.m12
+                .mul_add(point.x, self.m22.mul_add(point.y, self.dy)),
+        )
+    }
+
+    /// Composes a parent transform with a child transform.
+    #[must_use]
+    pub fn compose(parent: Self, child: Self) -> Self {
+        Self {
+            m11: parent.m11.mul_add(child.m11, parent.m21 * child.m12),
+            m12: parent.m12.mul_add(child.m11, parent.m22 * child.m12),
+            m21: parent.m11.mul_add(child.m21, parent.m21 * child.m22),
+            m22: parent.m12.mul_add(child.m21, parent.m22 * child.m22),
+            dx: parent
+                .m11
+                .mul_add(child.dx, parent.m21.mul_add(child.dy, parent.dx)),
+            dy: parent
+                .m12
+                .mul_add(child.dx, parent.m22.mul_add(child.dy, parent.dy)),
+        }
+    }
+
+    /// Returns this transform followed by a child transform.
+    #[must_use]
+    pub fn then(self, child: Self) -> Self {
+        Self::compose(self, child)
+    }
+
+    /// Returns the inverse transform when this transform is finite and invertible.
+    #[must_use]
+    pub fn try_inverse(self) -> Option<Self> {
+        if !self.is_finite() {
+            return None;
+        }
+
+        let determinant = self.m11.mul_add(self.m22, -(self.m21 * self.m12));
+        if !determinant.is_finite() || determinant == 0.0 {
+            return None;
+        }
+
+        let inverse_determinant = determinant.recip();
+        let inverse = Self {
+            m11: self.m22 * inverse_determinant,
+            m12: -self.m12 * inverse_determinant,
+            m21: -self.m21 * inverse_determinant,
+            m22: self.m11 * inverse_determinant,
+            dx: 0.0,
+            dy: 0.0,
+        };
+        let inverse = Self {
+            dx: -(inverse.m11.mul_add(self.dx, inverse.m21 * self.dy)),
+            dy: -(inverse.m12.mul_add(self.dx, inverse.m22 * self.dy)),
+            ..inverse
+        };
+
+        inverse.is_finite().then_some(inverse)
+    }
+
+    /// Returns the inverse transform when this transform is finite and invertible.
+    #[must_use]
+    pub fn inverse(self) -> Option<Self> {
+        self.try_inverse()
+    }
 }
 
 /// Rectangle draw command.

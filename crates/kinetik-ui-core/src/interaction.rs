@@ -1,6 +1,6 @@
 //! Visually neutral interaction primitives.
 
-use crate::{Key, KeyState, Rect, Size, UiInput, UiMemory, Vec2, WidgetId};
+use crate::{Key, KeyState, Point, Rect, Size, Transform, UiInput, UiMemory, Vec2, WidgetId};
 
 /// Interaction state flags for a widget.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -99,6 +99,19 @@ pub fn hit_test(rect: Rect, input: &UiInput) -> bool {
         .pointer
         .position
         .is_some_and(|position| rect.contains_point(position))
+}
+
+/// Returns true when pointer input is inside a rectangle after applying an inverse transform.
+#[must_use]
+pub fn hit_test_transformed(rect: Rect, local_to_screen: Transform, input: &UiInput) -> bool {
+    input.pointer.position.is_some_and(|position| {
+        local_to_screen
+            .try_inverse()
+            .is_some_and(|screen_to_local| {
+                let local_position = screen_to_local.transform_point(position);
+                point_is_finite(local_position) && rect.contains_point(local_position)
+            })
+    })
 }
 
 /// Resolves neutral press/click behavior.
@@ -402,6 +415,10 @@ fn sanitize_scroll_component(value: f32) -> f32 {
     } else {
         0.0
     }
+}
+
+fn point_is_finite(point: Point) -> bool {
+    point.x.is_finite() && point.y.is_finite()
 }
 
 /// Resolves neutral draggable behavior.
