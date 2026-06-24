@@ -6,10 +6,10 @@
 )]
 
 use kinetik_ui::core::{
-    ActionBinding, ActionContext, ActionDescriptor, ActionPriority, ActionQueue, ActionRouter,
-    ActionRoutingContext, ActionSource, Axis, Brush, ClipId, Color, CornerRadius, FrameContext,
-    FrameOutput, ImageId, Insets, Key, KeyEvent, KeyState, LayoutItem, LinePrimitive, Measurement,
-    Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput, Primitive, Rect,
+    ActionBinding, ActionContext, ActionDescriptor, ActionInvocation, ActionPriority, ActionQueue,
+    ActionRouter, ActionRoutingContext, ActionSource, Axis, Brush, ClipId, Color, CornerRadius,
+    FrameContext, FrameOutput, ImageId, Insets, Key, KeyEvent, KeyState, LayoutItem, LinePrimitive,
+    Measurement, Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput, Primitive, Rect,
     RectPrimitive, RepaintRequest, ScaleFactor, SemanticNode, SemanticRole, Shortcut, Size,
     SizeRule, Stroke, TextInputEvent, TextPrimitive, TextureId, TexturePrimitive, TimeInfo,
     UiInput, UiMemory, Vec2, ViewportInfo, column_layout, default_dark_theme, inspect_primitives,
@@ -299,7 +299,7 @@ impl ShowcaseApp {
         };
         let editor_invoked = !editor_invocations.is_empty();
         for invocation in editor_invocations {
-            self.record_action(invocation.action_id, invocation.source);
+            self.record_action(invocation.action_id.as_str(), invocation.source);
         }
         if editor_invoked {
             output.request_repaint(RepaintRequest::NextFrame);
@@ -364,6 +364,18 @@ impl ShowcaseApp {
     fn invoke_action(&mut self, id: &str, source: ActionSource) {
         self.editor.apply_action(id);
         self.record_action(id, source);
+    }
+
+    fn handle_action_invocation(&mut self, invocation: &ActionInvocation) {
+        self.invoke_action(invocation.action_id.as_str(), invocation.source);
+    }
+
+    fn handle_action_queue(&mut self, queue: &mut ActionQueue) -> Vec<ActionInvocation> {
+        let invocations = queue.drain().collect::<Vec<_>>();
+        for invocation in &invocations {
+            self.handle_action_invocation(invocation);
+        }
+        invocations
     }
 
     fn record_action(&mut self, action_id: &str, source: ActionSource) {
@@ -1481,16 +1493,21 @@ impl ShowcaseApp {
         panel_title(ui, panel, "Action Router");
         let menu = Menu::from_actions(actions.to_vec());
         let mut queue = ActionQueue::new();
+        let dispatch_action = ActionDescriptor::new("systems.dispatch", "Dispatch");
         let x = panel.x + 20.0;
         let y = panel.y + 46.0;
         let dispatch = ui.button(
             "systems.dispatch",
             Rect::new(x, y, 140.0, 30.0),
-            "Dispatch",
-            false,
+            dispatch_action.label.clone(),
+            !dispatch_action.state.enabled,
         );
         if dispatch.clicked {
-            self.invoke_action("systems.dispatch", ActionSource::Button);
+            queue.invoke(
+                dispatch_action.id.clone(),
+                ActionSource::Button,
+                ActionContext::Global,
+            );
         }
         let menu_item = ui.button(
             "systems.menu-save",
@@ -1498,9 +1515,10 @@ impl ShowcaseApp {
             "Menu Save",
             false,
         );
-        if menu_item.clicked && menu.invoke_visible(0, &mut queue, ActionContext::Global) {
-            self.invoke_action("workspace.save", ActionSource::Menu);
+        if menu_item.clicked {
+            menu.invoke_visible_from(0, &mut queue, ActionSource::Menu, ActionContext::Global);
         }
+        let invocations = self.handle_action_queue(&mut queue);
         text(
             ui,
             x + 160.0,
@@ -1509,7 +1527,7 @@ impl ShowcaseApp {
             11.0,
             rgb(144, 184, 255),
         );
-        for invocation in queue.drain() {
+        for invocation in invocations {
             text(
                 ui,
                 x,
@@ -1612,17 +1630,26 @@ impl ShowcaseApp {
         palette.query = String::new();
         let x = panel.x + 20.0;
         let row_width = (panel.width - 40.0).max(160.0);
-        for (index, entry) in palette.matches().into_iter().take(4).enumerate() {
+        let entries = palette
+            .matches()
+            .into_iter()
+            .take(4)
+            .map(|entry| entry.label.clone())
+            .collect::<Vec<_>>();
+        for (index, label) in entries.into_iter().enumerate() {
             let y = panel.y + 50.0 + index as f32 * 32.0;
             let response = ui.list_row(
                 ("systems.palette", index),
                 Rect::new(x, y, row_width, 28.0),
-                &entry.label,
+                &label,
                 false,
                 false,
             );
             if response.clicked {
-                self.invoke_action(entry.action_id.as_str(), ActionSource::CommandPalette);
+                let mut queue = ActionQueue::new();
+                palette.selected = index;
+                palette.invoke_selected(&mut queue, ActionContext::Global);
+                self.handle_action_queue(&mut queue);
             }
         }
     }

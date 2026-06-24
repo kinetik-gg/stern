@@ -159,6 +159,33 @@ fn action_surface_conformance_menu_invokes_enabled_visible_items_only() {
 }
 
 #[test]
+fn action_surface_conformance_menu_like_surfaces_preserve_explicit_context() {
+    let action = descriptor("inspect.open", "Open Inspector");
+    let menu = Menu::from_actions([action]);
+    let menu_context = ActionContext::Frame(WidgetId::from_key("editor-frame"));
+    let context_menu_context = ActionContext::Widget(WidgetId::from_key("scene-node"));
+    let mut queue = ActionQueue::new();
+
+    assert!(menu.invoke_visible_from(0, &mut queue, ActionSource::Menu, menu_context.clone(),));
+    assert!(menu.invoke_visible_from(
+        0,
+        &mut queue,
+        ActionSource::Menu,
+        context_menu_context.clone(),
+    ));
+
+    let menu_invocation = queue.pop_front().expect("menu invocation");
+    let context_invocation = queue.pop_front().expect("context menu invocation");
+    assert_eq!(menu_invocation.action_id, ActionId::new("inspect.open"));
+    assert_eq!(context_invocation.action_id, ActionId::new("inspect.open"));
+    assert_eq!(menu_invocation.source, ActionSource::Menu);
+    assert_eq!(context_invocation.source, ActionSource::Menu);
+    assert_eq!(menu_invocation.context, menu_context);
+    assert_eq!(context_invocation.context, context_menu_context);
+    assert!(queue.is_empty());
+}
+
+#[test]
 fn action_surface_conformance_command_palette_filters_and_invokes_selected_entry_only() {
     let context = ActionContext::Global;
     let mut save = descriptor("save", "Save Project");

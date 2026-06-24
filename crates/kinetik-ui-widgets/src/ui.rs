@@ -454,7 +454,7 @@ impl<'a> Ui<'a> {
 
         let response = self.button(key, rect, action.label.clone(), !action.state.enabled);
         if response.clicked || response.keyboard_activated {
-            self.invoke_action(action.id.clone(), ActionSource::Button, context);
+            self.invoke_action_descriptor(action, ActionSource::Button, context);
         }
         Some(response)
     }

@@ -7,10 +7,10 @@
 )]
 
 use kinetik_ui::core::{
-    ActionDescriptor, ActionSource, Axis, Brush, ClipId, Color, CornerRadius, CursorShape,
-    ImagePrimitive, Key, KeyState, LinePrimitive, Modifiers, PlatformRequest, Point, Primitive,
-    Rect, RectPrimitive, RepaintRequest, SemanticNode, SemanticRole, Shortcut, Size, Stroke,
-    TextPrimitive, TextureId, Theme, Vec2,
+    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionQueue, ActionSource, Axis,
+    Brush, ClipId, Color, CornerRadius, CursorShape, ImagePrimitive, Key, KeyState, LinePrimitive,
+    Modifiers, PlatformRequest, Point, Primitive, Rect, RectPrimitive, RepaintRequest,
+    SemanticNode, SemanticRole, Shortcut, Size, Stroke, TextPrimitive, TextureId, Theme, Vec2,
 };
 use kinetik_ui::render::{
     ImageAtlasRegion, ImageResource, RenderImage, RenderImageSampling, RenderResources,
@@ -255,13 +255,7 @@ impl EditorMenuKind {
 }
 
 /// Action emitted by the editor UI to the application-owned action system.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct EditorInvocation {
-    /// Application-owned action identity.
-    pub action_id: &'static str,
-    /// UI surface that requested the action.
-    pub source: ActionSource,
-}
+pub type EditorInvocation = ActionInvocation;
 
 /// Interactive DCC/editor showcase state.
 pub struct EditorShowcase {
@@ -417,7 +411,11 @@ impl EditorShowcase {
         source: ActionSource,
     ) {
         if self.apply_action(action_id) {
-            invocations.push(EditorInvocation { action_id, source });
+            invocations.push(ActionInvocation::new(
+                ActionId::new(action_id),
+                source,
+                ActionContext::Editor,
+            ));
         }
     }
 
@@ -660,10 +658,18 @@ impl EditorShowcase {
                         !enabled,
                     );
                     if response.clicked && enabled {
-                        self.trigger_menu_action(invocations, action.id.as_str());
-                        self.open_menu = None;
-                        ui.request_repaint(RepaintRequest::NextFrame);
-                        return true;
+                        let mut queue = ActionQueue::new();
+                        if menu.invoke_visible_from(
+                            index,
+                            &mut queue,
+                            ActionSource::Menu,
+                            ActionContext::Editor,
+                        ) {
+                            self.handle_action_queue(invocations, &mut queue);
+                            self.open_menu = None;
+                            ui.request_repaint(RepaintRequest::NextFrame);
+                            return true;
+                        }
                     }
                     y += 24.0;
                 }
@@ -820,16 +826,16 @@ impl EditorShowcase {
         }
     }
 
-    fn trigger_menu_action(&mut self, invocations: &mut Vec<EditorInvocation>, action_id: &str) {
-        let action_id = match action_id {
-            ACTION_SAVE => ACTION_SAVE,
-            ACTION_PLAY => ACTION_PLAY,
-            ACTION_STOP => ACTION_STOP,
-            ACTION_GRID => ACTION_GRID,
-            ACTION_BUILD => ACTION_BUILD,
-            _ => ACTION_PALETTE,
-        };
-        self.trigger(invocations, action_id, ActionSource::Menu);
+    fn handle_action_queue(
+        &mut self,
+        invocations: &mut Vec<EditorInvocation>,
+        queue: &mut ActionQueue,
+    ) {
+        for invocation in queue.drain() {
+            if self.apply_action(invocation.action_id.as_str()) {
+                invocations.push(invocation);
+            }
+        }
     }
 
     fn tool_bar(
@@ -917,23 +923,12 @@ impl EditorShowcase {
     ) {
         let chrome = EditorChromeMetrics::from_theme(ui.theme());
         let mut x = 10.0;
-        for (tool, _icon, _label, action) in EDITOR_TOOL_BUTTONS {
+        for (_tool, _icon, _label, action) in EDITOR_TOOL_BUTTONS {
             let button = Rect::new(x, TOOLBAR_Y, chrome.toolbar_button, chrome.toolbar_button);
             let response = ui.pressable(("editor.tool.prepass", action), button, false);
             if response.clicked {
-                self.selected_tool = tool;
                 ui.request_repaint(RepaintRequest::NextFrame);
-                let status = match tool {
-                    EditorTool::Select => "Select tool active",
-                    EditorTool::Move => "Move tool active",
-                    EditorTool::Rotate => "Rotate tool active",
-                    EditorTool::Scale => "Scale tool active",
-                };
-                status.clone_into(&mut self.status);
-                invocations.push(EditorInvocation {
-                    action_id: action,
-                    source: ActionSource::Button,
-                });
+                self.trigger(invocations, action, ActionSource::Button);
             }
             x += chrome.toolbar_stride;
         }

@@ -358,6 +358,17 @@ impl Menu {
         queue: &mut ActionQueue,
         context: ActionContext,
     ) -> bool {
+        self.invoke_visible_from(visible_index, queue, ActionSource::Menu, context)
+    }
+
+    /// Invokes an enabled visible action item by visible index from a menu-like source.
+    pub fn invoke_visible_from(
+        &self,
+        visible_index: usize,
+        queue: &mut ActionQueue,
+        source: ActionSource,
+        context: ActionContext,
+    ) -> bool {
         let Some(MenuItem::Action(action)) = self.visible_items().get(visible_index).copied()
         else {
             return false;
@@ -365,7 +376,7 @@ impl Menu {
         if !action.can_invoke() {
             return false;
         }
-        queue.invoke(action.id.clone(), ActionSource::Menu, context);
+        queue.invoke(action.id.clone(), source, context);
         true
     }
 }
