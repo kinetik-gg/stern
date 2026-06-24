@@ -15,10 +15,10 @@ use kinetik_ui_text::{
 };
 
 use crate::{
-    IconId, IconLibrary, MultiLineTextFieldOutput, NumericInputOutput, PanelFrame,
-    SearchFieldOutput, TextFieldOutput, WidgetOutput, button as button_widget,
-    checkbox as checkbox_widget, checkbox_with_label as checkbox_with_label_widget,
-    icon_button as fallback_icon_button_widget,
+    CommandPaletteOverlay, IconId, IconLibrary, MenuOverlay, MultiLineTextFieldOutput,
+    NumericInputOutput, PanelFrame, SearchFieldOutput, TextFieldOutput, WidgetOutput,
+    button as button_widget, checkbox as checkbox_widget,
+    checkbox_with_label as checkbox_with_label_widget, icon_button as fallback_icon_button_widget,
     icon_button_with_label as fallback_icon_button_with_label_widget,
     icon_button_with_library as icon_button_with_library_widget, image as image_widget,
     image_icon_button as image_icon_button_widget,
@@ -247,6 +247,32 @@ impl<'a> Ui<'a> {
         }
 
         self.invoke_action(action.id.clone(), source, context);
+        true
+    }
+
+    /// Emits an invocation for an enabled visible menu-overlay item.
+    ///
+    /// Returns false when the visible index is not an enabled action item.
+    pub fn invoke_menu_overlay_item(
+        &mut self,
+        overlay: &MenuOverlay,
+        visible_index: usize,
+    ) -> bool {
+        let Some(invocation) = overlay.invocation_for_visible(visible_index) else {
+            return false;
+        };
+        self.push_action(invocation);
+        true
+    }
+
+    /// Emits an invocation for the selected command-palette overlay item.
+    ///
+    /// Returns false when no enabled matching command is selected.
+    pub fn invoke_command_palette_overlay(&mut self, overlay: &CommandPaletteOverlay) -> bool {
+        let Some(invocation) = overlay.invocation_for_selected() else {
+            return false;
+        };
+        self.push_action(invocation);
         true
     }
 

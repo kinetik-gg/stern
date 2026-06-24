@@ -19,9 +19,9 @@ use kinetik_ui::render::{
 use kinetik_ui::text::TextEditState;
 use kinetik_ui::widgets::{
     Dock, DockNode, Frame, FrameId, FrameTab, GridColumns, GridLayout, Guide, ItemId, ListLayout,
-    Menu, MenuItem, OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayStack, PanZoom,
-    Panel, PanelId, PopoverPlacement, PopoverRequest, PropertyGridLayout, PropertyGridRow,
-    TableColumn, TableLayout, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
+    Menu, MenuItem, MenuOverlay, OverlayDismissal, OverlayEntry, OverlayId, OverlayKind,
+    OverlayStack, PanZoom, Panel, PanelId, PopoverPlacement, PopoverRequest, PropertyGridLayout,
+    PropertyGridRow, TableColumn, TableLayout, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
     ViewportComposition, ViewportFit, ViewportSurface, frame_tabs, icon_button_semantics,
     place_popover, solve_dock_layout, solve_dock_splitters,
 };
@@ -516,8 +516,9 @@ impl EditorShowcase {
         let outside_activation = ui.input().pointer.position.filter(|point| {
             ui.input().pointer.primary.released && !menu_bar_rect().contains_point(*point)
         });
+        let overlay = self.menu_overlay_model(kind, viewport);
         let mut stack = OverlayStack::new();
-        stack.open(Self::menu_overlay_entry(kind, viewport));
+        overlay.open_in(&mut stack);
         if !stack
             .dismissal_requests(outside_activation, escape_pressed)
             .is_empty()
@@ -536,34 +537,33 @@ impl EditorShowcase {
         let Some(kind) = self.open_menu else {
             return;
         };
-        let entry = Self::menu_overlay_entry(kind, viewport);
-        let menu = self.menu_model(kind);
-        if self.menu_overlay_interactions(ui, kind, &entry, &menu, invocations) {
+        let overlay = self.menu_overlay_model(kind, viewport);
+        if self.menu_overlay_interactions(ui, kind, &overlay, invocations) {
             return;
         }
-        let visible_items = menu.visible_items();
+        let visible_items = overlay.visible_items();
         rect_fill(
             ui,
-            entry.rect.translate(Vec2::new(0.0, 2.0)),
+            overlay.entry.rect.translate(Vec2::new(0.0, 2.0)),
             rgb(0, 0, 0),
             None,
             CornerRadius::all(0.0),
         );
         rect_fill(
             ui,
-            entry.rect,
+            overlay.entry.rect,
             rgb(28, 30, 33),
             Some(rgb(74, 78, 86)),
             CornerRadius::all(0.0),
         );
 
-        let mut y = entry.rect.y + 6.0;
+        let mut y = overlay.entry.rect.y + 6.0;
         for (index, item) in visible_items.into_iter().enumerate() {
             match item {
                 MenuItem::Label(label) => {
                     text(
                         ui,
-                        entry.rect.x + 10.0,
+                        overlay.entry.rect.x + 10.0,
                         y + 15.0,
                         label,
                         10.0,
@@ -574,14 +574,24 @@ impl EditorShowcase {
                 MenuItem::Separator => {
                     rect(
                         ui,
-                        Rect::new(entry.rect.x + 8.0, y + 4.0, entry.rect.width - 16.0, 1.0),
+                        Rect::new(
+                            overlay.entry.rect.x + 8.0,
+                            y + 4.0,
+                            overlay.entry.rect.width - 16.0,
+                            1.0,
+                        ),
                         rgb(60, 63, 70),
                         None,
                     );
                     y += 9.0;
                 }
                 MenuItem::Action(action) => {
-                    let row = Rect::new(entry.rect.x + 4.0, y, entry.rect.width - 8.0, 24.0);
+                    let row = Rect::new(
+                        overlay.entry.rect.x + 4.0,
+                        y,
+                        overlay.entry.rect.width - 8.0,
+                        24.0,
+                    );
                     let enabled = action.can_invoke();
                     let response = ui.pressable(
                         ("editor.menu-row", kind, index, action.id.as_str()),
@@ -636,12 +646,11 @@ impl EditorShowcase {
         &mut self,
         ui: &mut Ui<'_>,
         kind: EditorMenuKind,
-        entry: &OverlayEntry,
-        menu: &Menu,
+        overlay: &MenuOverlay,
         invocations: &mut Vec<EditorInvocation>,
     ) -> bool {
-        let mut y = entry.rect.y + 6.0;
-        for (index, item) in menu.visible_items().into_iter().enumerate() {
+        let mut y = overlay.entry.rect.y + 6.0;
+        for (index, item) in overlay.visible_items().into_iter().enumerate() {
             match item {
                 MenuItem::Label(_) => {
                     y += 22.0;
@@ -650,7 +659,12 @@ impl EditorShowcase {
                     y += 9.0;
                 }
                 MenuItem::Action(action) => {
-                    let row = Rect::new(entry.rect.x + 4.0, y, entry.rect.width - 8.0, 24.0);
+                    let row = Rect::new(
+                        overlay.entry.rect.x + 4.0,
+                        y,
+                        overlay.entry.rect.width - 8.0,
+                        24.0,
+                    );
                     let enabled = action.can_invoke();
                     let response = ui.pressable(
                         ("editor.menu-row.prepass", kind, index, action.id.as_str()),
@@ -659,12 +673,7 @@ impl EditorShowcase {
                     );
                     if response.clicked && enabled {
                         let mut queue = ActionQueue::new();
-                        if menu.invoke_visible_from(
-                            index,
-                            &mut queue,
-                            ActionSource::Menu,
-                            ActionContext::Editor,
-                        ) {
+                        if overlay.invoke_visible(index, &mut queue) {
                             self.handle_action_queue(invocations, &mut queue);
                             self.open_menu = None;
                             ui.request_repaint(RepaintRequest::NextFrame);
@@ -676,6 +685,15 @@ impl EditorShowcase {
             }
         }
         false
+    }
+
+    fn menu_overlay_model(&self, kind: EditorMenuKind, viewport: Rect) -> MenuOverlay {
+        MenuOverlay::new(
+            Self::menu_overlay_entry(kind, viewport),
+            self.menu_model(kind),
+            ActionSource::Menu,
+            ActionContext::Editor,
+        )
     }
 
     fn menu_overlay_entry(kind: EditorMenuKind, viewport: Rect) -> OverlayEntry {
