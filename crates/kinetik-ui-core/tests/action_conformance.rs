@@ -3,7 +3,8 @@
 use kinetik_ui_core::{
     ActionBinding, ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation,
     ActionPriority, ActionQueue, ActionRouter, ActionRoutingContext, ActionSource, ActionState,
-    Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalKey, Shortcut, WidgetId,
+    FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalKey, RepaintRequest,
+    ScriptedInput, Shortcut, UiTestHarness, WidgetId,
 };
 
 fn ctrl() -> Modifiers {
@@ -76,6 +77,15 @@ fn assert_shortcut_routes_to(
             .action_id,
         ActionId::new(expected)
     );
+}
+
+fn frame_action_ids(output: &FrameOutput) -> Vec<ActionId> {
+    output
+        .actions
+        .clone()
+        .drain()
+        .map(|invocation| invocation.action_id)
+        .collect()
 }
 
 #[test]
@@ -375,6 +385,146 @@ fn action_conformance_router_preserves_first_registered_equal_priority() {
         .expect("shortcut invocation");
 
     assert_eq!(invocation.action_id, ActionId::new("first"));
+}
+
+#[test]
+fn action_conformance_scripted_ctrl_s_routes_to_global_frame_action() {
+    let mut router = ActionRouter::new();
+    bind(
+        &mut router,
+        action_with_shortcut("file.save", ctrl_shortcut("s")),
+        ActionContext::Global,
+        ActionPriority::Global,
+    );
+
+    let mut harness = UiTestHarness::new();
+    let ((), output) = harness.run_scripted_frame_with_action_router(
+        [ScriptedInput::key_press(
+            Key::Character("s".to_owned()),
+            ctrl(),
+        )],
+        &router,
+        ActionRoutingContext::new(),
+        |_| {},
+    );
+
+    assert_eq!(frame_action_ids(&output), vec![ActionId::new("file.save")]);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+    assert!(harness.input().keyboard.events.is_empty());
+}
+
+#[test]
+fn action_conformance_scripted_text_input_blocks_reserved_global_but_allows_text_binding() {
+    let field = WidgetId::from_key("field");
+    let mut router = ActionRouter::new();
+    bind(
+        &mut router,
+        action_with_shortcut("global.select.all", ctrl_shortcut("a")),
+        ActionContext::Global,
+        ActionPriority::Global,
+    );
+    bind(
+        &mut router,
+        action_with_shortcut("text.select.all", ctrl_shortcut("a")),
+        ActionContext::TextInput(field),
+        ActionPriority::TextInput,
+    );
+    bind(
+        &mut router,
+        action_with_shortcut("global.save", ctrl_shortcut("s")),
+        ActionContext::Global,
+        ActionPriority::Global,
+    );
+
+    let mut harness = UiTestHarness::new();
+    let routing = ActionRoutingContext::new().with_text_input(field);
+    let ((), select_output) = harness.run_scripted_frame_with_action_router(
+        [ScriptedInput::key_press(
+            Key::Character("a".to_owned()),
+            ctrl(),
+        )],
+        &router,
+        routing,
+        |_| {},
+    );
+
+    assert_eq!(
+        frame_action_ids(&select_output),
+        vec![ActionId::new("text.select.all")]
+    );
+
+    let ((), typing_output) = harness.run_scripted_frame_with_action_router(
+        [ScriptedInput::key_press(
+            Key::Character("x".to_owned()),
+            Modifiers::default(),
+        )],
+        &router,
+        routing,
+        |_| {},
+    );
+    assert!(frame_action_ids(&typing_output).is_empty());
+
+    let ((), save_output) = harness.run_scripted_frame_with_action_router(
+        [ScriptedInput::key_press(
+            Key::Character("s".to_owned()),
+            ctrl(),
+        )],
+        &router,
+        routing,
+        |_| {},
+    );
+    assert_eq!(
+        frame_action_ids(&save_output),
+        vec![ActionId::new("global.save")]
+    );
+}
+
+#[test]
+fn action_conformance_scripted_modal_shortcut_beats_text_widget_and_global() {
+    let modal = WidgetId::from_key("modal");
+    let field = WidgetId::from_key("field");
+    let widget = WidgetId::from_key("widget");
+    let mut router = ActionRouter::new();
+    bind(
+        &mut router,
+        action_with_shortcut("global", ctrl_shortcut("k")),
+        ActionContext::Global,
+        ActionPriority::Global,
+    );
+    bind(
+        &mut router,
+        action_with_shortcut("widget", ctrl_shortcut("k")),
+        ActionContext::Widget(widget),
+        ActionPriority::FocusedWidget,
+    );
+    bind(
+        &mut router,
+        action_with_shortcut("text", ctrl_shortcut("k")),
+        ActionContext::TextInput(field),
+        ActionPriority::TextInput,
+    );
+    bind(
+        &mut router,
+        action_with_shortcut("modal", ctrl_shortcut("k")),
+        ActionContext::Modal(modal),
+        ActionPriority::Modal,
+    );
+
+    let mut harness = UiTestHarness::new();
+    let ((), output) = harness.run_scripted_frame_with_action_router(
+        [ScriptedInput::key_press(
+            Key::Character("k".to_owned()),
+            ctrl(),
+        )],
+        &router,
+        ActionRoutingContext::new()
+            .with_focused_widget(widget)
+            .with_text_input(field)
+            .with_modal(modal),
+        |_| {},
+    );
+
+    assert_eq!(frame_action_ids(&output), vec![ActionId::new("modal")]);
 }
 
 #[test]

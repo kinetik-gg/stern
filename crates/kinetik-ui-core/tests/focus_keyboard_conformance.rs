@@ -3,8 +3,9 @@
 use kinetik_ui_core::{
     ActionBinding, ActionContext, ActionDescriptor, ActionId, ActionPriority, ActionRouter,
     ActionRoutingContext, FocusTraversal, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
-    MouseButton, PhysicalKey, PlatformRequest, Point, Rect, SemanticNode, SemanticRole,
-    SemanticTree, Shortcut, Ui, UiTestHarness, WidgetId, focusable, pressable,
+    MouseButton, PhysicalKey, PlatformRequest, Point, Rect, ScriptedInput, SemanticNode,
+    SemanticRole, SemanticTree, Shortcut, TextInputEvent, TextRange, Ui, UiTestHarness, Vec2,
+    WidgetId, focusable, pressable,
 };
 
 fn ctrl() -> Modifiers {
@@ -210,6 +211,66 @@ fn focus_keyboard_runtime_tab_traverses_forward_from_none_through_middle_and_wra
     harness.key_press(Key::Tab);
     let _ = harness.run_frame(|ui| emit_tree(ui, &tree));
     assert_eq!(harness.memory().focused(), Some(second));
+}
+
+#[test]
+fn focus_keyboard_scripted_input_is_typed_and_frame_based() {
+    let mut harness = UiTestHarness::new();
+    let delta = std::time::Duration::from_millis(16);
+
+    harness.apply_script([
+        ScriptedInput::PointerMove(Point::new(12.0, 24.0)),
+        ScriptedInput::PointerDown(MouseButton::Primary),
+        ScriptedInput::PointerUp(MouseButton::Primary),
+        ScriptedInput::Wheel(Vec2::new(0.0, -3.0)),
+        ScriptedInput::key_press(Key::Character("s".to_owned()), ctrl()),
+        ScriptedInput::key_release(Key::Character("s".to_owned()), ctrl()),
+        ScriptedInput::TextCompositionStart,
+        ScriptedInput::TextComposition {
+            text: "ka".to_owned(),
+            selection: Some(TextRange::new(1, 2)),
+        },
+        ScriptedInput::TextCommit("か".to_owned()),
+        ScriptedInput::TextCompositionEnd,
+        ScriptedInput::AdvanceFrame(delta),
+    ]);
+
+    assert_eq!(harness.time().delta, delta);
+    assert_eq!(harness.time().frame_index, 1);
+    assert_eq!(
+        harness.input().pointer.position,
+        Some(Point::new(12.0, 24.0))
+    );
+    assert_eq!(harness.input().pointer.wheel_delta, Vec2::new(0.0, -3.0));
+    assert!(harness.input().pointer.primary.pressed);
+    assert!(harness.input().pointer.primary.released);
+    assert_eq!(harness.input().keyboard.modifiers, ctrl());
+    assert_eq!(harness.input().keyboard.events.len(), 2);
+    assert_eq!(
+        harness.input().text_events,
+        vec![
+            TextInputEvent::CompositionStart,
+            TextInputEvent::Composition {
+                text: "ka".to_owned(),
+                selection: Some(TextRange::new(1, 2)),
+            },
+            TextInputEvent::Commit("か".to_owned()),
+            TextInputEvent::CompositionEnd,
+        ]
+    );
+
+    let ((), output) = harness.run_frame(|_| {});
+
+    assert!(output.actions.is_empty());
+    assert_eq!(
+        harness.input().pointer.position,
+        Some(Point::new(12.0, 24.0))
+    );
+    assert_eq!(harness.input().pointer.wheel_delta, Vec2::ZERO);
+    assert!(!harness.input().pointer.primary.pressed);
+    assert!(!harness.input().pointer.primary.released);
+    assert!(harness.input().keyboard.events.is_empty());
+    assert!(harness.input().text_events.is_empty());
 }
 
 #[test]

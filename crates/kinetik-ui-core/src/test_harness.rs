@@ -3,11 +3,166 @@
 use std::time::Duration;
 
 use crate::{
-    ActionQueue, ClipboardText, FrameContext, FrameOutput, FrameWarning, Key, KeyEvent, KeyState,
-    Modifiers, MouseButton, PhysicalKey, PlatformRequest, Point, Primitive, RepaintRequest,
-    ScaleFactor, SemanticTree, Size, TextInputEvent, TextRange, TimeInfo, Ui, UiInput, UiMemory,
-    Vec2, ViewportInfo, WidgetId,
+    ActionInvocation, ActionQueue, ActionRouter, ActionRoutingContext, ClipboardText, FrameContext,
+    FrameOutput, FrameWarning, Key, KeyEvent, KeyState, Modifiers, MouseButton, PhysicalKey,
+    PlatformRequest, Point, Primitive, RepaintRequest, ScaleFactor, SemanticTree, Size,
+    TextInputEvent, TextRange, TimeInfo, Ui, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId,
 };
+
+/// Typed test input operation applied to a [`UiTestHarness`] before a frame.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScriptedInput {
+    /// Move the pointer to a logical UI position.
+    PointerMove(Point),
+    /// Press a pointer button.
+    PointerDown(MouseButton),
+    /// Release a pointer button.
+    PointerUp(MouseButton),
+    /// Add a scroll-wheel delta.
+    Wheel(Vec2),
+    /// Queue a keyboard event.
+    Key(ScriptedKeyEvent),
+    /// Commit text input.
+    TextCommit(String),
+    /// Start text composition.
+    TextCompositionStart,
+    /// Update text composition.
+    TextComposition {
+        /// Current preedit text.
+        text: String,
+        /// Optional selected byte range inside the preedit text.
+        selection: Option<TextRange>,
+    },
+    /// End text composition.
+    TextCompositionEnd,
+    /// Advance controlled frame time.
+    AdvanceFrame(Duration),
+}
+
+impl ScriptedInput {
+    /// Creates a logical key press operation with explicit modifiers.
+    #[must_use]
+    pub fn key_press(key: Key, modifiers: Modifiers) -> Self {
+        Self::Key(ScriptedKeyEvent::press(key, modifiers))
+    }
+
+    /// Creates a logical key release operation with explicit modifiers.
+    #[must_use]
+    pub fn key_release(key: Key, modifiers: Modifiers) -> Self {
+        Self::Key(ScriptedKeyEvent::release(key, modifiers))
+    }
+
+    /// Creates a physical-key press operation with explicit modifiers.
+    #[must_use]
+    pub fn physical_key_press(key: Key, physical_key: PhysicalKey, modifiers: Modifiers) -> Self {
+        Self::Key(ScriptedKeyEvent::physical_press(
+            key,
+            physical_key,
+            modifiers,
+        ))
+    }
+
+    /// Creates a physical-key release operation with explicit modifiers.
+    #[must_use]
+    pub fn physical_key_release(key: Key, physical_key: PhysicalKey, modifiers: Modifiers) -> Self {
+        Self::Key(ScriptedKeyEvent::physical_release(
+            key,
+            physical_key,
+            modifiers,
+        ))
+    }
+
+    /// Creates a repeated logical key press operation.
+    #[must_use]
+    pub fn key_repeat(key: Key, modifiers: Modifiers) -> Self {
+        Self::Key(ScriptedKeyEvent {
+            key,
+            physical_key: PhysicalKey::Unidentified,
+            state: KeyState::Pressed,
+            modifiers,
+            repeat: true,
+        })
+    }
+}
+
+/// Typed keyboard operation used by [`ScriptedInput::Key`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScriptedKeyEvent {
+    /// Layout-resolved logical key.
+    pub key: Key,
+    /// Platform-independent physical key.
+    pub physical_key: PhysicalKey,
+    /// Pressed or released state.
+    pub state: KeyState,
+    /// Modifiers active for this event.
+    pub modifiers: Modifiers,
+    /// Whether this event is an auto-repeat.
+    pub repeat: bool,
+}
+
+impl ScriptedKeyEvent {
+    /// Creates a logical key press.
+    #[must_use]
+    pub const fn press(key: Key, modifiers: Modifiers) -> Self {
+        Self {
+            key,
+            physical_key: PhysicalKey::Unidentified,
+            state: KeyState::Pressed,
+            modifiers,
+            repeat: false,
+        }
+    }
+
+    /// Creates a logical key release.
+    #[must_use]
+    pub const fn release(key: Key, modifiers: Modifiers) -> Self {
+        Self {
+            key,
+            physical_key: PhysicalKey::Unidentified,
+            state: KeyState::Released,
+            modifiers,
+            repeat: false,
+        }
+    }
+
+    /// Creates a physical-key press.
+    #[must_use]
+    pub const fn physical_press(key: Key, physical_key: PhysicalKey, modifiers: Modifiers) -> Self {
+        Self {
+            key,
+            physical_key,
+            state: KeyState::Pressed,
+            modifiers,
+            repeat: false,
+        }
+    }
+
+    /// Creates a physical-key release.
+    #[must_use]
+    pub const fn physical_release(
+        key: Key,
+        physical_key: PhysicalKey,
+        modifiers: Modifiers,
+    ) -> Self {
+        Self {
+            key,
+            physical_key,
+            state: KeyState::Released,
+            modifiers,
+            repeat: false,
+        }
+    }
+
+    fn into_key_event(self) -> KeyEvent {
+        KeyEvent::with_physical_key(
+            self.key,
+            self.physical_key,
+            self.state,
+            self.modifiers,
+            self.repeat,
+        )
+    }
+}
 
 /// Small core-only harness for building deterministic UI frames in tests.
 ///
@@ -177,6 +332,90 @@ impl UiTestHarness {
         self.input.begin_frame();
 
         (result, output)
+    }
+
+    /// Runs one frame after applying typed scripted input operations.
+    #[must_use]
+    pub fn run_scripted_frame<T>(
+        &mut self,
+        script: impl IntoIterator<Item = ScriptedInput>,
+        build: impl FnOnce(&mut Ui<'_>) -> T,
+    ) -> (T, FrameOutput) {
+        self.apply_script(script);
+        self.run_frame(build)
+    }
+
+    /// Runs one frame and emits a routed shortcut invocation into frame output.
+    ///
+    /// The router only resolves shortcut intent. Applications remain
+    /// responsible for executing the resulting action invocation.
+    #[must_use]
+    pub fn run_frame_with_action_router<T>(
+        &mut self,
+        router: &ActionRouter,
+        routing: ActionRoutingContext,
+        build: impl FnOnce(&mut Ui<'_>) -> T,
+    ) -> (T, FrameOutput) {
+        let shortcut_invocation = self.route_shortcut(router, routing);
+        self.run_frame(|ui| {
+            let result = build(ui);
+            if let Some(invocation) = shortcut_invocation {
+                ui.push_action(invocation);
+            }
+            result
+        })
+    }
+
+    /// Runs one scripted frame and emits a routed shortcut invocation into frame output.
+    #[must_use]
+    pub fn run_scripted_frame_with_action_router<T>(
+        &mut self,
+        script: impl IntoIterator<Item = ScriptedInput>,
+        router: &ActionRouter,
+        routing: ActionRoutingContext,
+        build: impl FnOnce(&mut Ui<'_>) -> T,
+    ) -> (T, FrameOutput) {
+        self.apply_script(script);
+        self.run_frame_with_action_router(router, routing, build)
+    }
+
+    /// Resolves the pending keyboard input through an action router.
+    #[must_use]
+    pub fn route_shortcut(
+        &self,
+        router: &ActionRouter,
+        routing: ActionRoutingContext,
+    ) -> Option<ActionInvocation> {
+        router.resolve_shortcut_in_context(&self.input.keyboard, routing)
+    }
+
+    /// Applies one typed scripted input operation to the pending frame.
+    pub fn apply_scripted_input(&mut self, input: ScriptedInput) {
+        match input {
+            ScriptedInput::PointerMove(position) => self.set_pointer_position(position),
+            ScriptedInput::PointerDown(button) => self.pointer_press(button),
+            ScriptedInput::PointerUp(button) => self.pointer_release(button),
+            ScriptedInput::Wheel(delta) => self.wheel(delta),
+            ScriptedInput::Key(event) => {
+                let modifiers = event.modifiers;
+                self.input.keyboard.modifiers = modifiers;
+                self.input.keyboard.events.push(event.into_key_event());
+            }
+            ScriptedInput::TextCommit(text) => self.text_commit(text),
+            ScriptedInput::TextCompositionStart => self.text_composition_start(),
+            ScriptedInput::TextComposition { text, selection } => {
+                self.text_composition(text, selection);
+            }
+            ScriptedInput::TextCompositionEnd => self.text_composition_end(),
+            ScriptedInput::AdvanceFrame(delta) => self.advance_frame(delta),
+        }
+    }
+
+    /// Applies typed scripted input operations to the pending frame in order.
+    pub fn apply_script(&mut self, script: impl IntoIterator<Item = ScriptedInput>) {
+        for input in script {
+            self.apply_scripted_input(input);
+        }
     }
 
     /// Sets the pointer position in logical UI coordinates.
