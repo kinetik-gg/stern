@@ -60,6 +60,22 @@ Add or update a command snapshot when a primitive translation contract changes.
 Keep backend-neutral tests in `kinetik-ui-render` and Vello-specific snapshots in
 `kinetik-ui-vello`.
 
+Command conformance tests keep expected text inline in the test source. The
+inline literal or inline constant is the source of truth; tests do not bless,
+update, or rewrite source files. Matching comparisons do not write artifacts.
+
+When a Vello command snapshot mismatch occurs, the test helper writes review
+artifacts under `target/kinetik-ui-artifacts/kinetik-ui-vello/command-snapshots/`:
+
+- `expected.txt`
+- `actual.txt`
+- `diff.txt`
+
+The panic message includes these paths. To accept an intentional command stream
+change, inspect the generated `target/` artifacts and then manually update the
+inline expected literal or inline expected constant in the test source. There is
+no automatic bless/update workflow for command snapshots.
+
 ## Pixel Tests
 
 Pixel tests should not be the default renderer regression strategy. Use them only

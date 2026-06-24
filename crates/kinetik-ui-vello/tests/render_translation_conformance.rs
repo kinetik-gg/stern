@@ -1,5 +1,7 @@
 //! Vello render translation conformance tests.
 
+mod support;
+
 use kinetik_ui_core::{
     Brush, ClipId, Color, CornerRadius, GradientStop, ImageId, ImagePrimitive, LayerId,
     LinePrimitive, LinearGradient, PathElement, PathPrimitive, Point, Primitive, Rect,
@@ -9,6 +11,10 @@ use kinetik_ui_core::{
 use kinetik_ui_vello::{
     ImageAtlasRegion, ImageResource, RenderDiagnostic, RenderImage, RenderImageSampling,
     RenderResources, TextureResource, render_translation_snapshot, translate_primitives,
+};
+use support::command_snapshots::{
+    assert_command_snapshot, command_snapshot_artifact_paths, command_snapshot_root,
+    emit_command_snapshot_artifacts, remove_command_snapshot_artifacts,
 };
 
 fn tiny_image() -> RenderImage {
@@ -37,6 +43,60 @@ fn red_to_blue_gradient() -> Brush {
         )
         .expect("valid gradient"),
     )
+}
+
+#[test]
+fn command_snapshot_artifact_paths_are_stable_under_target() {
+    let paths = command_snapshot_artifact_paths("helper path/with spaces");
+
+    assert!(
+        paths
+            .expected
+            .starts_with(command_snapshot_root().join("helper_path_with_spaces"))
+    );
+    assert!(paths.expected.ends_with("expected.txt"));
+    assert!(paths.actual.ends_with("actual.txt"));
+    assert!(paths.diff.ends_with("diff.txt"));
+}
+
+#[test]
+fn command_snapshot_helper_writes_explicit_artifacts() {
+    let snapshot_name = "helper explicit emission";
+    remove_command_snapshot_artifacts(snapshot_name).expect("clean previous artifacts");
+
+    let artifacts = emit_command_snapshot_artifacts(
+        snapshot_name,
+        "commands:\n  expected",
+        "commands:\n  actual",
+    )
+    .expect("write artifacts");
+
+    assert_eq!(
+        std::fs::read_to_string(&artifacts.expected).expect("read expected artifact"),
+        "commands:\n  expected"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&artifacts.actual).expect("read actual artifact"),
+        "commands:\n  actual"
+    );
+    assert!(
+        std::fs::read_to_string(&artifacts.diff)
+            .expect("read diff artifact")
+            .contains("-   expected")
+    );
+}
+
+#[test]
+fn command_snapshot_helper_does_not_write_matching_artifacts() {
+    let snapshot_name = "helper matching comparison";
+    let artifacts = command_snapshot_artifact_paths(snapshot_name);
+    remove_command_snapshot_artifacts(snapshot_name).expect("clean previous artifacts");
+
+    assert_command_snapshot(snapshot_name, "commands:\n  same", "commands:\n  same");
+
+    assert!(!artifacts.expected.exists());
+    assert!(!artifacts.actual.exists());
+    assert!(!artifacts.diff.exists());
 }
 
 #[test]
@@ -88,9 +148,10 @@ fn render_translation_conformance_preserves_primitive_order_and_context() {
 
     let translation = translate_primitives(&primitives, &RenderResources::new());
 
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        "commands:\n  0: layer=3 transform=[1.000, 0.000, 0.000, 1.000, 2.500, 3.500] clips=[{rect=(0.000, 0.000, 40.000, 24.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(1.000, 2.000, 10.000, 6.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(1.500, 1.500, 1.500, 1.500)\n  1: layer=3 transform=[1.000, 0.000, 0.000, 1.000, 2.500, 3.500] clips=[{rect=(0.000, 0.000, 40.000, 24.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] text layout=77 origin=(4.000, 14.000) family=\"monospace\" size=12.000 line_height=17.000 color=rgba(0.000, 0.000, 0.000, 1.000) text=\"Hi\"\n  2: layer=3 transform=[1.000, 0.000, 0.000, 1.000, 2.500, 3.500] clips=[{rect=(0.000, 0.000, 40.000, 24.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] image#88 rect=(16.000, 4.000, 8.000, 8.000) tint=rgba(0.250, 0.500, 0.750, 1.000)\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#9 rect=(0.000, 30.000, 16.000, 16.000) source_size=2.000x2.000\ndiagnostics:\n  missing_text_layout#77\n  missing_image#88\n  missing_texture#9"
+    assert_command_snapshot(
+        "primitive_order_and_context",
+        "commands:\n  0: layer=3 transform=[1.000, 0.000, 0.000, 1.000, 2.500, 3.500] clips=[{rect=(0.000, 0.000, 40.000, 24.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(1.000, 2.000, 10.000, 6.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(1.500, 1.500, 1.500, 1.500)\n  1: layer=3 transform=[1.000, 0.000, 0.000, 1.000, 2.500, 3.500] clips=[{rect=(0.000, 0.000, 40.000, 24.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] text layout=77 origin=(4.000, 14.000) family=\"monospace\" size=12.000 line_height=17.000 color=rgba(0.000, 0.000, 0.000, 1.000) text=\"Hi\"\n  2: layer=3 transform=[1.000, 0.000, 0.000, 1.000, 2.500, 3.500] clips=[{rect=(0.000, 0.000, 40.000, 24.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] image#88 rect=(16.000, 4.000, 8.000, 8.000) tint=rgba(0.250, 0.500, 0.750, 1.000)\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#9 rect=(0.000, 30.000, 16.000, 16.000) source_size=2.000x2.000\ndiagnostics:\n  missing_text_layout#77\n  missing_image#88\n  missing_texture#9",
+        &render_translation_snapshot(&translation),
     );
 }
 
@@ -186,9 +247,10 @@ fn render_translation_conformance_preserves_nested_context_geometry_and_brushes(
 
     let translation = translate_primitives(&primitives, &RenderResources::new());
 
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        NESTED_CONTEXT_SNAPSHOT
+    assert_command_snapshot(
+        "nested_context_geometry_and_brushes",
+        NESTED_CONTEXT_SNAPSHOT,
+        &render_translation_snapshot(&translation),
     );
 }
 
@@ -255,9 +317,10 @@ fn render_translation_conformance_preserves_fractional_snapped_texture_overlay_c
     let translation = translate_primitives(&primitives, &resources);
 
     assert!(translation.diagnostics.is_empty());
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        FRACTIONAL_SNAP_TEXTURE_OVERLAY_SNAPSHOT
+    assert_command_snapshot(
+        "fractional_snapped_texture_overlay_context",
+        FRACTIONAL_SNAP_TEXTURE_OVERLAY_SNAPSHOT,
+        &render_translation_snapshot(&translation),
     );
 }
 
@@ -313,9 +376,10 @@ fn render_translation_conformance_preserves_nested_state_command_order() {
 
     let translation = translate_primitives(&primitives, &RenderResources::new());
 
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        "commands:\n  0: layer=20 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[{rect=(0.000, 0.000, 90.000, 60.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(1.000, 1.000, 10.000, 6.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(0.000, 0.000, 0.000, 0.000)\n  1: layer=1 transform=[1.000, 0.000, 0.000, 1.000, 3.250, 4.750] clips=[{rect=(0.000, 0.000, 90.000, 60.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(2.000, 3.000, 12.000, 8.000) fill=rgba(0.000, 0.000, 0.000, 1.000) stroke=none radius=(1.000, 1.000, 1.000, 1.000)\n  2: layer=20 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[{rect=(0.000, 0.000, 90.000, 60.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(5.000, 7.000, 14.000, 9.000) fill=rgba(0.200, 0.400, 0.600, 1.000) stroke=none radius=(2.000, 2.000, 2.000, 2.000)\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] rect rect=(8.000, 11.000, 16.000, 10.000) fill=none stroke=1.250 rgba(1.000, 1.000, 1.000, 1.000) radius=(0.000, 0.000, 0.000, 0.000)\ndiagnostics:"
+    assert_command_snapshot(
+        "nested_state_command_order",
+        "commands:\n  0: layer=20 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[{rect=(0.000, 0.000, 90.000, 60.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(1.000, 1.000, 10.000, 6.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(0.000, 0.000, 0.000, 0.000)\n  1: layer=1 transform=[1.000, 0.000, 0.000, 1.000, 3.250, 4.750] clips=[{rect=(0.000, 0.000, 90.000, 60.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(2.000, 3.000, 12.000, 8.000) fill=rgba(0.000, 0.000, 0.000, 1.000) stroke=none radius=(1.000, 1.000, 1.000, 1.000)\n  2: layer=20 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[{rect=(0.000, 0.000, 90.000, 60.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(5.000, 7.000, 14.000, 9.000) fill=rgba(0.200, 0.400, 0.600, 1.000) stroke=none radius=(2.000, 2.000, 2.000, 2.000)\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] rect rect=(8.000, 11.000, 16.000, 10.000) fill=none stroke=1.250 rgba(1.000, 1.000, 1.000, 1.000) radius=(0.000, 0.000, 0.000, 0.000)\ndiagnostics:",
+        &render_translation_snapshot(&translation),
     );
 }
 
@@ -389,9 +453,10 @@ fn render_translation_conformance_reports_recoverable_missing_resource_paths() {
         ]
     );
     assert_eq!(translation.commands.len(), 6);
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] text layout=6 origin=(0.000, 10.000) family=\"sans-serif\" size=12.000 line_height=16.000 color=rgba(1.000, 1.000, 1.000, 1.000) text=\"Missing layout\"\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] text layout=none origin=(0.000, 30.000) family=\"sans-serif\" size=12.000 line_height=16.000 color=rgba(1.000, 1.000, 1.000, 1.000) text=\"Fallback text\"\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#1 rect=(0.000, 0.000, 8.000, 8.000) tint=none\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#2 rect=(10.000, 0.000, 8.000, 8.000) tint=none\n  4: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#3 rect=(20.000, 0.000, 8.000, 8.000) source_size=2.000x2.000\n  5: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#4 rect=(30.000, 0.000, 8.000, 8.000) source_size=2.000x2.000\ndiagnostics:\n  missing_text_layout#6\n  missing_image#1\n  missing_image_pixels#2\n  missing_texture#3\n  missing_texture_snapshot#4"
+    assert_command_snapshot(
+        "recoverable_missing_resource_paths",
+        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] text layout=6 origin=(0.000, 10.000) family=\"sans-serif\" size=12.000 line_height=16.000 color=rgba(1.000, 1.000, 1.000, 1.000) text=\"Missing layout\"\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] text layout=none origin=(0.000, 30.000) family=\"sans-serif\" size=12.000 line_height=16.000 color=rgba(1.000, 1.000, 1.000, 1.000) text=\"Fallback text\"\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#1 rect=(0.000, 0.000, 8.000, 8.000) tint=none\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#2 rect=(10.000, 0.000, 8.000, 8.000) tint=none\n  4: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#3 rect=(20.000, 0.000, 8.000, 8.000) source_size=2.000x2.000\n  5: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#4 rect=(30.000, 0.000, 8.000, 8.000) source_size=2.000x2.000\ndiagnostics:\n  missing_text_layout#6\n  missing_image#1\n  missing_image_pixels#2\n  missing_texture#3\n  missing_texture_snapshot#4",
+        &render_translation_snapshot(&translation),
     );
 }
 
@@ -427,9 +492,10 @@ fn render_translation_conformance_translates_registered_image_and_texture_resour
     let translation = translate_primitives(&primitives, &resources);
 
     assert!(translation.diagnostics.is_empty());
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#10 rect=(0.000, 0.000, 8.000, 8.000) tint=rgba(1.000, 0.500, 0.250, 0.750)\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#11 rect=(12.000, 0.000, 8.000, 8.000) source_size=2.000x2.000\ndiagnostics:"
+    assert_command_snapshot(
+        "registered_image_and_texture_resources",
+        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#10 rect=(0.000, 0.000, 8.000, 8.000) tint=rgba(1.000, 0.500, 0.250, 0.750)\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#11 rect=(12.000, 0.000, 8.000, 8.000) source_size=2.000x2.000\ndiagnostics:",
+        &render_translation_snapshot(&translation),
     );
 }
 
@@ -487,9 +553,10 @@ fn render_translation_conformance_reports_invalid_image_source_metadata() {
 
     let translation = translate_primitives(&primitives, &resources);
 
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#20 rect=(0.000, 0.000, 8.000, 8.000) tint=none\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#21 rect=(10.000, 0.000, 8.000, 8.000) tint=none\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#23 rect=(20.000, 0.000, 8.000, 8.000) tint=none\ndiagnostics:\n  invalid_geometry:image_source_size\n  invalid_geometry:image_source_size\n  invalid_geometry:image_source_size"
+    assert_command_snapshot(
+        "invalid_image_source_metadata",
+        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#20 rect=(0.000, 0.000, 8.000, 8.000) tint=none\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#21 rect=(10.000, 0.000, 8.000, 8.000) tint=none\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#23 rect=(20.000, 0.000, 8.000, 8.000) tint=none\ndiagnostics:\n  invalid_geometry:image_source_size\n  invalid_geometry:image_source_size\n  invalid_geometry:image_source_size",
+        &render_translation_snapshot(&translation),
     );
 }
 
@@ -594,9 +661,10 @@ fn render_translation_conformance_reports_invalid_geometry_for_skipped_primitive
 
     let translation = translate_primitives(&primitives, &RenderResources::new());
 
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        "commands:\ndiagnostics:\n  invalid_geometry:rect\n  invalid_geometry:line\n  invalid_geometry:path\n  invalid_geometry:text_size\n  invalid_geometry:text_line_height\n  invalid_geometry:texture_source_size"
+    assert_command_snapshot(
+        "invalid_geometry_for_skipped_primitives",
+        "commands:\ndiagnostics:\n  invalid_geometry:rect\n  invalid_geometry:line\n  invalid_geometry:path\n  invalid_geometry:text_size\n  invalid_geometry:text_line_height\n  invalid_geometry:texture_source_size",
+        &render_translation_snapshot(&translation),
     );
 }
 
@@ -658,9 +726,10 @@ fn render_translation_conformance_reports_invalid_geometry_for_sanitized_primiti
             RenderDiagnostic::InvalidGeometry("image_tint"),
         ]
     );
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] shadow rect=(0.000, 0.000, 10.000, 10.000) offset=(0.000, 1.000) blur=0.000 spread=0.000 radius=0.000 color=rgba(0.000, 0.500, 0.250, 1.000)\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] rect rect=(20.000, 0.000, 10.000, 10.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(0.000, 0.000, 2.000, 3.000)\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#12 rect=(40.000, 0.000, 8.000, 8.000) tint=rgba(1.000, 0.000, 0.000, 1.000)\ndiagnostics:\n  invalid_geometry:shadow_offset\n  invalid_geometry:shadow_blur\n  invalid_geometry:shadow_spread\n  invalid_geometry:shadow_radius\n  invalid_geometry:shadow_color\n  invalid_geometry:rect_fill\n  invalid_geometry:rect_stroke\n  invalid_geometry:rect_radius\n  invalid_geometry:image_tint"
+    assert_command_snapshot(
+        "invalid_geometry_for_sanitized_primitives",
+        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] shadow rect=(0.000, 0.000, 10.000, 10.000) offset=(0.000, 1.000) blur=0.000 spread=0.000 radius=0.000 color=rgba(0.000, 0.500, 0.250, 1.000)\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] rect rect=(20.000, 0.000, 10.000, 10.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(0.000, 0.000, 2.000, 3.000)\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#12 rect=(40.000, 0.000, 8.000, 8.000) tint=rgba(1.000, 0.000, 0.000, 1.000)\ndiagnostics:\n  invalid_geometry:shadow_offset\n  invalid_geometry:shadow_blur\n  invalid_geometry:shadow_spread\n  invalid_geometry:shadow_radius\n  invalid_geometry:shadow_color\n  invalid_geometry:rect_fill\n  invalid_geometry:rect_stroke\n  invalid_geometry:rect_radius\n  invalid_geometry:image_tint",
+        &render_translation_snapshot(&translation),
     );
 }
 
@@ -697,9 +766,10 @@ fn render_translation_conformance_reports_invalid_stack_primitives() {
 
     let translation = translate_primitives(&primitives, &RenderResources::new());
 
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        "commands:\n  0: layer=2 transform=[1.000, 0.000, 0.000, 1.000, 4.000, 5.000] clips=[{rect=(1.000, 2.000, 30.000, 20.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(6.000, 7.000, 8.000, 9.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(0.000, 0.000, 0.000, 0.000)\ndiagnostics:\n  invalid_geometry:clip\n  invalid_geometry:transform\n  invalid_geometry:layer_stack\n  invalid_geometry:transform_stack\n  invalid_geometry:clip_stack\n  invalid_geometry:layer_stack\n  invalid_geometry:transform_stack"
+    assert_command_snapshot(
+        "invalid_stack_primitives",
+        "commands:\n  0: layer=2 transform=[1.000, 0.000, 0.000, 1.000, 4.000, 5.000] clips=[{rect=(1.000, 2.000, 30.000, 20.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(6.000, 7.000, 8.000, 9.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(0.000, 0.000, 0.000, 0.000)\ndiagnostics:\n  invalid_geometry:clip\n  invalid_geometry:transform\n  invalid_geometry:layer_stack\n  invalid_geometry:transform_stack\n  invalid_geometry:clip_stack\n  invalid_geometry:layer_stack\n  invalid_geometry:transform_stack",
+        &render_translation_snapshot(&translation),
     );
 }
 
@@ -749,8 +819,9 @@ fn render_translation_conformance_drops_invalid_resource_source_geometry() {
 
     let translation = translate_primitives(&primitives, &resources);
 
-    assert_eq!(
-        render_translation_snapshot(&translation),
-        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#3 rect=(20.000, 0.000, 8.000, 8.000) tint=none\ndiagnostics:\n  invalid_geometry:texture_source_size\n  invalid_geometry:texture_snapshot_size\n  invalid_geometry:image_atlas_source"
+    assert_command_snapshot(
+        "invalid_resource_source_geometry",
+        "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#3 rect=(20.000, 0.000, 8.000, 8.000) tint=none\ndiagnostics:\n  invalid_geometry:texture_source_size\n  invalid_geometry:texture_snapshot_size\n  invalid_geometry:image_atlas_source",
+        &render_translation_snapshot(&translation),
     );
 }
