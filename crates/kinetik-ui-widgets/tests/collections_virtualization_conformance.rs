@@ -5,8 +5,8 @@ mod collections_virtualization_conformance {
 
     use kinetik_ui_core::Rect;
     use kinetik_ui_widgets::{
-        ItemId, ListLayout, TableColumn, TableLayout, TreeLayout, TreeRow, VirtualRangeRequest,
-        VirtualWindow, VirtualWindowRequest, virtual_range, virtual_window,
+        ItemId, ListLayout, Selection, TableColumn, TableLayout, TreeLayout, TreeRow,
+        VirtualRangeRequest, VirtualWindow, VirtualWindowRequest, virtual_range, virtual_window,
     };
 
     fn request(
@@ -131,6 +131,10 @@ mod collections_virtualization_conformance {
                 expanded: false,
             },
         ]
+    }
+
+    fn id(raw: u64) -> ItemId {
+        ItemId::from_raw(raw)
     }
 
     #[test]
@@ -321,6 +325,72 @@ mod collections_virtualization_conformance {
         assert_eq!(rects[2].row.id, ItemId::from_raw(3));
         assert_approx(rects[0].rect.y, 85.0);
         assert_approx(rects[2].content_rect.x, 22.0);
+    }
+
+    #[test]
+    fn selection_range_survives_reorder_and_uses_visible_id_order() {
+        let mut selection = Selection::new();
+        selection.replace(id(20));
+
+        let visible_after_reorder = [id(40), id(10), id(20), id(50), id(30)];
+        assert!(selection.select_range(&visible_after_reorder, id(40)));
+
+        assert_eq!(selection.anchor(), Some(id(20)));
+        assert_eq!(selection.active, Some(id(40)));
+        assert_eq!(selection.selected(), vec![id(10), id(20), id(40)]);
+    }
+
+    #[test]
+    fn selection_retain_visible_removes_hidden_selection_active_and_anchor() {
+        let mut selection = Selection::new();
+        selection.replace(id(2));
+        selection.toggle(id(4));
+
+        assert!(selection.retain_visible(&[id(1), id(2), id(3)]));
+
+        assert_eq!(selection.selected(), vec![id(2)]);
+        assert_eq!(selection.active, None);
+        assert_eq!(selection.anchor(), None);
+        assert!(!selection.anchor_visible(&[id(1), id(2), id(3)]));
+    }
+
+    #[test]
+    fn selection_retain_visible_reports_noop_when_everything_remains_visible() {
+        let mut selection = Selection::new();
+        selection.replace(id(2));
+        selection.toggle(id(4));
+
+        assert!(!selection.retain_visible(&[id(4), id(2), id(9)]));
+
+        assert_eq!(selection.selected(), vec![id(2), id(4)]);
+        assert_eq!(selection.active, Some(id(4)));
+        assert_eq!(selection.anchor(), Some(id(4)));
+        assert!(selection.anchor_visible(&[id(4), id(2), id(9)]));
+    }
+
+    #[test]
+    fn selection_range_failure_preserves_state_when_endpoint_is_missing() {
+        let mut selection = Selection::new();
+        selection.replace(id(3));
+        selection.toggle(id(1));
+
+        assert!(!selection.select_range(&[id(5), id(3), id(9), id(1)], id(99)));
+
+        assert_eq!(selection.selected(), vec![id(1), id(3)]);
+        assert_eq!(selection.active, Some(id(1)));
+        assert_eq!(selection.anchor(), Some(id(1)));
+    }
+
+    #[test]
+    fn selection_range_failure_preserves_state_when_anchor_is_missing() {
+        let mut selection = Selection::new();
+        selection.replace(id(3));
+
+        assert!(!selection.select_range(&[id(5), id(9), id(1)], id(9)));
+
+        assert_eq!(selection.selected(), vec![id(3)]);
+        assert_eq!(selection.active, Some(id(3)));
+        assert_eq!(selection.anchor(), Some(id(3)));
     }
 
     #[test]
