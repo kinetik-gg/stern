@@ -12,6 +12,7 @@ use kinetik_ui::{
 };
 use kinetik_ui_showcase::{
     app::ShowcaseApp,
+    artifacts::{ReviewDumpRequest, dump_review_artifacts},
     raster::{Pixel, RasterFrame, write_bmp},
 };
 use vello::{
@@ -54,6 +55,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    if let Some(label) = dump_review_artifacts_label(&args) {
+        let target = render_once_target(&args)?;
+        let mut request =
+            ReviewDumpRequest::new(label, target.physical_width, target.physical_height)
+                .with_logical_size(target.logical_size);
+        if let Some(page) = page_arg(&args).and_then(ShowcaseApp::page_from_name) {
+            request = request.with_page(page);
+        }
+
+        let dump = dump_review_artifacts(&request)?;
+        println!("review artifact dump: {}", dump.directory.display());
+        println!("manifest: {}", dump.manifest_path.display());
+        for frame in dump.frames {
+            println!(
+                "{}: {} primitives, {} warnings, {}",
+                frame.page_name,
+                frame.primitive_count,
+                frame.warning_count,
+                frame.bmp_path.display()
+            );
+        }
+        return Ok(());
+    }
+
     if let Some(path) = render_once_path(&args) {
         let target = render_once_target(&args)?;
         let mut app = ShowcaseApp::new();
@@ -79,6 +104,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn render_once_path(args: &[String]) -> Option<&str> {
     args.windows(2)
         .find_map(|window| (window[0] == "--render-once").then_some(window[1].as_str()))
+}
+
+fn dump_review_artifacts_label(args: &[String]) -> Option<&str> {
+    args.windows(2)
+        .find_map(|window| (window[0] == "--dump-review-artifacts").then_some(window[1].as_str()))
 }
 
 fn page_arg(args: &[String]) -> Option<&str> {
@@ -404,8 +434,9 @@ impl From<vello::Error> for RenderOnceVelloError {
 #[cfg(test)]
 mod tests {
     use super::{
-        Size, align_to, f64_arg, logical_size_from_pixels, render_once_target,
-        render_once_viewport, showcase_antialiasing_method, submit_render_once_to_vello, usize_arg,
+        Size, align_to, dump_review_artifacts_label, f64_arg, logical_size_from_pixels,
+        render_once_target, render_once_viewport, showcase_antialiasing_method,
+        submit_render_once_to_vello, usize_arg,
     };
     use kinetik_ui_showcase::app::ShowcaseApp;
     use vello::AaConfig;
@@ -427,6 +458,28 @@ mod tests {
         assert_eq!(usize_arg(&args, "--width"), Some(1440));
         assert_eq!(usize_arg(&args, "--height"), Some(900));
         assert_eq!(f64_arg(&args, "--scale"), Some(1.25));
+    }
+
+    #[test]
+    fn dump_review_artifacts_cli_parses_label_without_render_once() {
+        let args = [
+            "showcase".to_owned(),
+            "--dump-review-artifacts".to_owned(),
+            "s8-12c".to_owned(),
+            "--page".to_owned(),
+            "components".to_owned(),
+            "--width".to_owned(),
+            "320".to_owned(),
+            "--height".to_owned(),
+            "200".to_owned(),
+        ];
+
+        assert_eq!(dump_review_artifacts_label(&args), Some("s8-12c"));
+        let target = render_once_target(&args).expect("dump target");
+
+        assert_eq!(target.physical_width, 320);
+        assert_eq!(target.physical_height, 200);
+        assert_eq!(target.logical_size, Size::new(320.0, 200.0));
     }
 
     #[test]

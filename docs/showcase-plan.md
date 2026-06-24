@@ -48,3 +48,16 @@ cargo check --workspace --examples --all-features
 
 For visual changes, also render at least one full-size frame and one smaller
 frame through `--render-once` and inspect the resulting bitmaps.
+
+For review packages that need inspectable CPU raster artifacts without invoking a
+GPU renderer, generate an explicit review dump:
+
+```text
+cargo run -p kinetik-ui-showcase -- --dump-review-artifacts review-label --page components --width 1440 --height 900
+```
+
+Review dumps are written under
+`target/kinetik-ui-artifacts/kinetik-ui-showcase/review-dumps/` and include a
+`manifest.txt` plus CPU raster BMP frames for the selected page, or all showcase
+pages when `--page` is omitted. They are manual review outputs only; they are not
+committed baselines and there is no bless/update workflow.

@@ -81,3 +81,17 @@ no automatic bless/update workflow for command snapshots.
 Pixel tests should not be the default renderer regression strategy. Use them only
 when the test can remain stable without a GPU and when the assertion is about
 visible end-to-end output rather than primitive translation details.
+
+Showcase review dumps are manual inspection artifacts, not bless/update
+baselines. Generate them explicitly with the showcase CLI when a human needs BMP
+frames and a manifest for review:
+
+```text
+cargo run -p kinetik-ui-showcase -- --dump-review-artifacts s8-12c --page components --width 1440 --height 900
+```
+
+The dump helper writes below
+`target/kinetik-ui-artifacts/kinetik-ui-showcase/review-dumps/`. It records the
+selected page, logical and raster dimensions, primitive count, warning count, and
+written BMP artifact paths in `manifest.txt`. These files are disposable review
+outputs under `target/`; do not commit them as baselines.
