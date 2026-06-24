@@ -24,7 +24,7 @@ use kinetik_ui::widgets::{
     GridColumns, GridLayout, Guide, IconId, ItemId, ListLayout, Menu, OverlayDismissal,
     OverlayEntry, OverlayId, OverlayKind, OverlayStack, PanZoom, Panel, PanelId, PopoverPlacement,
     PopoverRequest, TableColumn, TableLayout, Ui, ViewportComposition, ViewportSurface, frame_tabs,
-    place_popover, solve_dock_layout, solve_dock_splitters,
+    overlay_semantics, place_popover, solve_dock_layout, solve_dock_splitters,
 };
 
 use crate::editor::{self as editor_showcase, EditorShowcase};
@@ -1553,12 +1553,6 @@ impl ShowcaseApp {
             dismissal: OverlayDismissal::Manual,
         });
         for (index, entry) in stack.entries().iter().enumerate() {
-            rect(
-                ui,
-                entry.rect,
-                rgb(30 + index as u8 * 10, 32, 38),
-                Some(rgb(90, 90, 98)),
-            );
             let label = match entry.kind {
                 OverlayKind::Popover => "Popover",
                 OverlayKind::Dropdown => "Dropdown",
@@ -1569,6 +1563,13 @@ impl ShowcaseApp {
                 OverlayKind::Modal => "Modal",
                 OverlayKind::DragPreview => "Drag Preview",
             };
+            ui.push_semantic_node(overlay_semantics(entry, label));
+            rect(
+                ui,
+                entry.rect,
+                rgb(30 + index as u8 * 10, 32, 38),
+                Some(rgb(90, 90, 98)),
+            );
             text(
                 ui,
                 entry.rect.x + 14.0,
@@ -2002,8 +2003,10 @@ mod tests {
     use crate::editor::phosphor_icons;
     use kinetik_ui::{
         core::{
-            ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point,
-            Primitive, Rect, RepaintRequest, ScaleFactor, Size, TextureId, UiInput, ViewportInfo,
+            ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize,
+            PlatformRequest, Point, Primitive, Rect, RepaintRequest, ScaleFactor,
+            SemanticActionKind, SemanticRole, SemanticValue, Size, TextureId, UiInput,
+            ViewportInfo,
         },
         render::{RenderFrameInput, RenderImageSampling},
         render_vello::VelloRenderer,
@@ -2028,6 +2031,58 @@ mod tests {
             .any(|primitive| matches!(primitive, Primitive::Text(text) if text.text == value))
     }
 
+    fn count_primitives(app: &ShowcaseApp, predicate: impl Fn(&Primitive) -> bool) -> usize {
+        app.output()
+            .primitives
+            .iter()
+            .filter(|primitive| predicate(primitive))
+            .count()
+    }
+
+    fn count_semantic_role(app: &ShowcaseApp, role: &SemanticRole) -> usize {
+        app.output()
+            .semantics
+            .nodes()
+            .iter()
+            .filter(|node| &node.role == role)
+            .count()
+    }
+
+    fn semantic_node(app: &ShowcaseApp, role: &SemanticRole, label: &str) -> bool {
+        app.output()
+            .semantics
+            .nodes()
+            .iter()
+            .any(|node| &node.role == role && node.label.as_deref() == Some(label))
+    }
+
+    fn text_labels(app: &ShowcaseApp) -> Vec<&str> {
+        app.output()
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                Primitive::Text(text) => Some(text.text.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn contains_text_in_order(app: &ShowcaseApp, expected: &[&str]) -> bool {
+        let mut cursor = 0;
+        for label in text_labels(app) {
+            if expected
+                .get(cursor)
+                .is_some_and(|expected| *expected == label)
+            {
+                cursor += 1;
+                if cursor == expected.len() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     fn viewport_texture_rect(app: &ShowcaseApp) -> Rect {
         app.primitives()
             .iter()
@@ -2048,6 +2103,68 @@ mod tests {
         click(&mut app, Point::new(70.0, 154.0));
 
         assert_eq!(app.action_count(), 1);
+    }
+
+    #[test]
+    fn components_page_structural_smoke_emits_controls_semantics_and_platform_requests() {
+        let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Components);
+
+        assert_eq!(app.output().warnings, Vec::new());
+        assert!(app.output().primitives.len() > 120);
+        assert!(count_primitives(&app, |primitive| matches!(primitive, Primitive::Rect(_))) > 40);
+        assert!(count_primitives(&app, |primitive| matches!(primitive, Primitive::Text(_))) > 25);
+        assert!(count_primitives(&app, |primitive| matches!(primitive, Primitive::Image(_))) >= 2);
+        assert!(count_primitives(&app, |primitive| matches!(primitive, Primitive::Line(_))) >= 1);
+        assert!(contains_text_in_order(
+            &app,
+            &[
+                "Component Gallery",
+                "Controls",
+                "Text Input",
+                "Lists, Grids, Tables",
+                "Reusable Panel States",
+                "Primitive Stream",
+            ]
+        ));
+
+        assert_eq!(count_semantic_role(&app, &SemanticRole::Button), 2);
+        assert_eq!(count_semantic_role(&app, &SemanticRole::IconButton), 1);
+        assert_eq!(count_semantic_role(&app, &SemanticRole::CheckBox), 1);
+        assert_eq!(count_semantic_role(&app, &SemanticRole::Toggle), 1);
+        assert_eq!(count_semantic_role(&app, &SemanticRole::RadioButton), 2);
+        assert_eq!(count_semantic_role(&app, &SemanticRole::Slider), 1);
+        assert_eq!(count_semantic_role(&app, &SemanticRole::SearchField), 1);
+        assert!(count_semantic_role(&app, &SemanticRole::TextField) >= 3);
+        assert!(count_semantic_role(&app, &SemanticRole::ListItem) >= 4);
+        assert!(count_semantic_role(&app, &SemanticRole::Tab) >= 3);
+        assert!(semantic_node(&app, &SemanticRole::Button, "Run Action"));
+        assert!(semantic_node(&app, &SemanticRole::Button, "Disabled"));
+
+        let slider = app
+            .output()
+            .semantics
+            .nodes()
+            .iter()
+            .find(|node| node.role == SemanticRole::Slider)
+            .expect("slider semantics");
+        assert!(
+            slider
+                .actions
+                .iter()
+                .any(|action| action.kind == SemanticActionKind::SetValue)
+        );
+        assert!(matches!(
+            slider.state.value,
+            Some(SemanticValue::Number { current, min: 0.0, max: 1.0 })
+                if (current - app.strength()).abs() < f32::EPSILON
+        ));
+
+        click(&mut app, Point::new(940.0, 160.0));
+
+        assert!(app.output().platform_requests.iter().any(|request| {
+            matches!(request, PlatformRequest::StartTextInput { rect: Some(rect) } if !rect.is_empty())
+        }));
     }
 
     #[test]
@@ -2535,6 +2652,69 @@ mod tests {
         });
 
         assert!(has_snapshot);
+    }
+
+    #[test]
+    fn systems_page_structural_smoke_emits_actions_overlays_palette_and_stress() {
+        let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Systems);
+
+        assert_eq!(app.output().warnings, Vec::new());
+        assert!(app.output().primitives.len() > 180);
+        assert!(count_primitives(&app, |primitive| matches!(primitive, Primitive::Rect(_))) > 130);
+        assert!(count_primitives(&app, |primitive| matches!(primitive, Primitive::Text(_))) > 20);
+        assert!(
+            count_primitives(&app, |primitive| matches!(
+                primitive,
+                Primitive::ClipBegin { .. }
+            )) >= 1
+        );
+        assert!(contains_text_in_order(
+            &app,
+            &[
+                "Actions, Overlays, Diagnostics, Stress",
+                "Action Router",
+                "Overlay Stack",
+                "Command Palette",
+                "Primitive Stress",
+                "Runtime Snapshot",
+            ]
+        ));
+
+        assert!(semantic_node(&app, &SemanticRole::Button, "Dispatch"));
+        assert!(semantic_node(&app, &SemanticRole::Button, "Menu Save"));
+        assert!(semantic_node(&app, &SemanticRole::Menu, "Menu"));
+        assert!(semantic_node(
+            &app,
+            &SemanticRole::CommandPalette,
+            "Command Palette"
+        ));
+        assert!(semantic_node(
+            &app,
+            &SemanticRole::Custom("popover".to_owned()),
+            "Popover"
+        ));
+        assert!(count_semantic_role(&app, &SemanticRole::ListItem) >= 3);
+        assert!(app.output().semantics.nodes().iter().any(|node| {
+            node.role == SemanticRole::Menu
+                && node
+                    .actions
+                    .iter()
+                    .any(|action| action.kind == SemanticActionKind::Dismiss)
+        }));
+
+        click(&mut app, Point::new(100.0, 210.0));
+
+        assert_eq!(app.action_count(), 1);
+        assert!(has_text(&app, "workspace.save via Menu (1)"));
+
+        let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Systems);
+
+        click(&mut app, Point::new(930.0, 160.0));
+
+        assert_eq!(app.action_count(), 1);
+        assert!(has_text(&app, "workspace.save via CommandPalette (1)"));
     }
 
     #[test]
