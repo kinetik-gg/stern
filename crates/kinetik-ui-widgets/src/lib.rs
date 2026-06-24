@@ -4,6 +4,7 @@ pub mod collections;
 pub mod dock;
 pub mod inspector;
 pub mod overlays;
+pub mod taxonomy;
 pub mod ui;
 pub mod viewport;
 
@@ -11,6 +12,7 @@ pub use collections::*;
 pub use dock::*;
 pub use inspector::*;
 pub use overlays::*;
+pub use taxonomy::*;
 pub use ui::*;
 pub use viewport::*;
 
