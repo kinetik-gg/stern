@@ -198,6 +198,70 @@ impl ScaleFactor {
             rect.height as f32 / self.value as f32,
         )
     }
+
+    /// Snaps a logical point to the nearest physical pixel grid coordinate.
+    ///
+    /// This is a visual alignment policy. Invalid scale factors or non-finite
+    /// point coordinates return [`Point::ZERO`].
+    #[must_use]
+    pub fn snap_point_to_physical_grid(self, point: Point) -> Point {
+        if !self.is_valid() || !point_is_valid(point) {
+            return Point::ZERO;
+        }
+
+        let physical = self.logical_point_to_physical(point);
+        let Some(x) = physical_pixel_to_logical_f32(physical.x, self.value) else {
+            return Point::ZERO;
+        };
+        let Some(y) = physical_pixel_to_logical_f32(physical.y, self.value) else {
+            return Point::ZERO;
+        };
+
+        Point::new(x, y)
+    }
+
+    /// Snaps each logical rectangle edge to the nearest physical pixel grid.
+    ///
+    /// Unlike [`Self::logical_rect_to_physical`], this does not preserve covered
+    /// area with floor/ceil rounding. It rounds every edge independently to the
+    /// nearest physical pixel and converts the snapped edges back to logical
+    /// units. Invalid scale factors, non-finite geometry, or negative rectangle
+    /// sizes return [`Rect::ZERO`].
+    #[must_use]
+    pub fn snap_rect_to_physical_grid(self, rect: Rect) -> Rect {
+        if !self.is_valid() || !rect_is_snap_valid(rect) {
+            return Rect::ZERO;
+        }
+
+        let min_x = round_f32_to_i32(f64::from(rect.min_x()) * self.value);
+        let min_y = round_f32_to_i32(f64::from(rect.min_y()) * self.value);
+        let max_x = round_f32_to_i32(f64::from(rect.max_x()) * self.value);
+        let max_y = round_f32_to_i32(f64::from(rect.max_y()) * self.value);
+
+        let Some(x) = physical_pixel_to_logical_f32(min_x, self.value) else {
+            return Rect::ZERO;
+        };
+        let Some(y) = physical_pixel_to_logical_f32(min_y, self.value) else {
+            return Rect::ZERO;
+        };
+        let Some(max_x) = physical_pixel_to_logical_f32(max_x, self.value) else {
+            return Rect::ZERO;
+        };
+        let Some(max_y) = physical_pixel_to_logical_f32(max_y, self.value) else {
+            return Rect::ZERO;
+        };
+
+        Rect::new(
+            x,
+            y,
+            logical_extent_between_edges(x, max_x),
+            logical_extent_between_edges(y, max_y),
+        )
+    }
+}
+
+fn point_is_valid(point: Point) -> bool {
+    point.x.is_finite() && point.y.is_finite()
 }
 
 fn rect_is_valid(rect: Rect) -> bool {
@@ -207,6 +271,80 @@ fn rect_is_valid(rect: Rect) -> bool {
         && rect.height.is_finite()
         && rect.width > 0.0
         && rect.height > 0.0
+}
+
+fn rect_is_snap_valid(rect: Rect) -> bool {
+    rect.x.is_finite()
+        && rect.y.is_finite()
+        && rect.width.is_finite()
+        && rect.height.is_finite()
+        && rect.width >= 0.0
+        && rect.height >= 0.0
+        && rect.max_x().is_finite()
+        && rect.max_y().is_finite()
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+fn physical_pixel_to_logical_f32(pixel: i32, scale: f64) -> Option<f32> {
+    let logical = f64::from(pixel) / scale;
+    if logical.is_finite() && logical >= f64::from(f32::MIN) && logical <= f64::from(f32::MAX) {
+        Some(logical as f32)
+    } else {
+        None
+    }
+}
+
+fn logical_extent_between_edges(min: f32, max: f32) -> f32 {
+    let mut extent = (max - min).max(0.0);
+
+    for _ in 0..4 {
+        let edge = min + extent;
+        if edge.to_bits() == max.to_bits() {
+            return extent;
+        }
+
+        if edge < max {
+            extent = next_up_f32(extent);
+        } else {
+            extent = next_down_f32(extent).max(0.0);
+        }
+    }
+
+    extent
+}
+
+fn next_up_f32(value: f32) -> f32 {
+    if !value.is_finite() {
+        return value;
+    }
+
+    if value == -0.0 {
+        return f32::from_bits(1);
+    }
+
+    let bits = value.to_bits();
+    if value >= 0.0 {
+        f32::from_bits(bits + 1)
+    } else {
+        f32::from_bits(bits - 1)
+    }
+}
+
+fn next_down_f32(value: f32) -> f32 {
+    if !value.is_finite() {
+        return value;
+    }
+
+    if value == 0.0 {
+        return -f32::from_bits(1);
+    }
+
+    let bits = value.to_bits();
+    if value > 0.0 {
+        f32::from_bits(bits - 1)
+    } else {
+        f32::from_bits(bits + 1)
+    }
 }
 
 #[allow(clippy::cast_possible_truncation)]
