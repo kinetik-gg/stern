@@ -13,6 +13,7 @@ pub mod interaction;
 pub mod layout;
 pub mod liveness;
 pub mod memory;
+pub mod observers;
 pub mod perf;
 pub mod render;
 pub mod runtime;
@@ -56,6 +57,11 @@ pub use liveness::{
     LivenessGeneration, LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus,
 };
 pub use memory::UiMemory;
+pub use observers::{
+    ObserverDelivery, ObserverDeliverySkipReason, ObserverDeliveryStatus, ObserverDrain,
+    ObserverNotification, ObserverNotificationId, ObserverPublishStatus, ObserverRegistry,
+    ObserverSkippedDelivery, ObserverSubscriptionHandle, ObserverSubscriptionId,
+};
 pub use perf::{
     AllocationBudget, AllocationUsage, BudgetStatus, FrameCounters, FrameMetrics, FrameTimings,
 };

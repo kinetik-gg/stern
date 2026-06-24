@@ -3,7 +3,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus, Vec2, WidgetId,
+    LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus, ObserverDelivery,
+    ObserverDrain, ObserverNotification, ObserverNotificationId, ObserverPublishStatus,
+    ObserverRegistry, ObserverSubscriptionHandle, ObserverSubscriptionId, Vec2, WidgetId,
 };
 
 /// Retained interaction and widget state owned by the UI runtime.
@@ -36,6 +38,7 @@ pub struct UiMemory {
     scroll_offsets: HashMap<WidgetId, Vec2>,
     open_popovers: HashSet<WidgetId>,
     liveness: LivenessRegistry,
+    observers: ObserverRegistry,
 }
 
 impl UiMemory {
@@ -52,6 +55,7 @@ impl UiMemory {
         self.released_drag_source = None;
         self.pointer_interaction_cancelled = false;
         self.liveness.begin_frame();
+        self.observers.prune_inactive_subscriptions();
     }
 
     /// Removes liveness targets not seen during the current frame.
@@ -362,6 +366,66 @@ impl UiMemory {
     ) -> LivenessUpdateStatus {
         self.liveness.apply_update(token, update)
     }
+
+    /// Returns the retained observer registry.
+    #[must_use]
+    pub const fn observers(&self) -> &ObserverRegistry {
+        &self.observers
+    }
+
+    /// Returns mutable access to the retained observer registry.
+    pub fn observers_mut(&mut self) -> &mut ObserverRegistry {
+        &mut self.observers
+    }
+
+    /// Retains an observer subscription tied to the provided liveness token.
+    pub fn subscribe_observer(&mut self, token: LivenessToken) -> ObserverSubscriptionHandle {
+        self.observers.subscribe(token)
+    }
+
+    /// Updates an active observer subscription to a renewed liveness token.
+    pub fn update_observer_subscription_token(
+        &mut self,
+        id: ObserverSubscriptionId,
+        token: LivenessToken,
+    ) -> bool {
+        self.observers.update_subscription_token(id, token)
+    }
+
+    /// Explicitly unsubscribes a retained observer subscription.
+    pub fn unsubscribe_observer(&mut self, id: ObserverSubscriptionId) -> bool {
+        self.observers.unsubscribe(id)
+    }
+
+    /// Publishes an observer notification into the retained queue.
+    pub fn publish_observer(
+        &mut self,
+        subscription_id: ObserverSubscriptionId,
+        notification_id: ObserverNotificationId,
+    ) -> ObserverPublishStatus {
+        self.observers.publish(subscription_id, notification_id)
+    }
+
+    /// Enqueues an observer notification into the retained queue.
+    pub fn enqueue_observer(
+        &mut self,
+        notification: ObserverNotification,
+    ) -> ObserverPublishStatus {
+        self.observers.enqueue(notification)
+    }
+
+    /// Drains observer notifications queued at the start of this pass.
+    pub fn drain_observers(
+        &mut self,
+        deliver: impl FnMut(&mut ObserverRegistry, ObserverDelivery),
+    ) -> ObserverDrain {
+        let Self {
+            liveness,
+            observers,
+            ..
+        } = self;
+        observers.drain(liveness, deliver)
+    }
 }
 
 #[cfg(test)]
@@ -384,6 +448,7 @@ mod tests {
         assert_eq!(memory.released_drag_source(), None);
         assert_eq!(memory.text_input_owner(), None);
         assert!(memory.liveness().is_empty());
+        assert!(memory.observers().is_empty());
     }
 
     #[test]
