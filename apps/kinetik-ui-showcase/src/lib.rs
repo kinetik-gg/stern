@@ -1,6 +1,7 @@
 //! Deterministic showcase scenarios for Kinetik UI.
 
 pub mod app;
+pub mod artifacts;
 pub mod editor;
 pub mod raster;
 
