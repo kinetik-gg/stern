@@ -589,27 +589,19 @@ fn native_logical_pixel_scale(scale_factor: ScaleFactor) -> f32 {
     }
 }
 
-#[allow(clippy::cast_possible_truncation)]
 fn snap_rect_to_scale(rect: Rect, scale_factor: ScaleFactor) -> Rect {
     if !rect.x.is_finite()
         || !rect.y.is_finite()
         || !rect.width.is_finite()
         || !rect.height.is_finite()
         || !scale_factor.is_valid()
+        || rect.width < 0.0
+        || rect.height < 0.0
     {
         return rect;
     }
-    let scale = scale_factor.value();
-    let left = (f64::from(rect.min_x()) * scale).round() / scale;
-    let top = (f64::from(rect.min_y()) * scale).round() / scale;
-    let right = (f64::from(rect.max_x()) * scale).round() / scale;
-    let bottom = (f64::from(rect.max_y()) * scale).round() / scale;
-    Rect::new(
-        left as f32,
-        top as f32,
-        (right - left) as f32,
-        (bottom - top) as f32,
-    )
+
+    scale_factor.snap_rect_to_physical_grid(rect)
 }
 
 #[cfg(test)]
@@ -629,6 +621,39 @@ mod tests {
         );
     }
 
+    fn assert_close(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() <= 0.001,
+            "expected {actual} to be close to {expected}"
+        );
+    }
+
+    fn assert_rect_close(actual: Rect, expected: Rect) {
+        assert_close(actual.x, expected.x);
+        assert_close(actual.y, expected.y);
+        assert_close(actual.width, expected.width);
+        assert_close(actual.height, expected.height);
+    }
+
+    fn assert_point_close(actual: Point, expected: Point) {
+        assert_close(actual.x, expected.x);
+        assert_close(actual.y, expected.y);
+    }
+
+    fn assert_edge_aligned(value: f32, scale_factor: ScaleFactor) {
+        let physical = f64::from(value) * scale_factor.value();
+        assert!(
+            (physical - physical.round()).abs() <= 0.001,
+            "{value} -> {physical}"
+        );
+    }
+
+    fn assert_rect_edges_aligned(rect: Rect, scale_factor: ScaleFactor) {
+        for edge in [rect.x, rect.y, rect.max_x(), rect.max_y()] {
+            assert_edge_aligned(edge, scale_factor);
+        }
+    }
+
     fn surface() -> ViewportSurface {
         ViewportSurface {
             texture: TextureId::from_raw(1),
@@ -636,6 +661,66 @@ mod tests {
             bounds: Rect::new(0.0, 0.0, 200.0, 200.0),
             pan_zoom: PanZoom::default(),
         }
+    }
+
+    fn unsnapped_content_rect(surface: ViewportSurface, scale_factor: ScaleFactor) -> Rect {
+        let bounds = surface.effective_bounds();
+        let source = surface.effective_source_size().expect("source");
+        let scale = surface.content_scale_at(scale_factor);
+        let width = source.width * scale;
+        let height = source.height * scale;
+
+        Rect::new(
+            bounds.x + (bounds.width - width) * 0.5 + surface.pan_zoom.pan.x,
+            bounds.y + (bounds.height - height) * 0.5 + surface.pan_zoom.pan.y,
+            width,
+            height,
+        )
+    }
+
+    fn expected_content_scale_at(surface: ViewportSurface, native_scale: f32) -> f32 {
+        match surface.pan_zoom.fit {
+            ViewportFit::Fit => {
+                let width_scale = surface.bounds.width / surface.source_size.width;
+                let height_scale = surface.bounds.height / surface.source_size.height;
+                width_scale.min(height_scale)
+            }
+            ViewportFit::Fill => {
+                let width_scale = surface.bounds.width / surface.source_size.width;
+                let height_scale = surface.bounds.height / surface.source_size.height;
+                width_scale.max(height_scale)
+            }
+            ViewportFit::ActualSize => native_scale,
+            ViewportFit::Zoom => surface.pan_zoom.zoom * native_scale,
+        }
+    }
+
+    fn expected_unsnapped_content_rect(surface: ViewportSurface, content_scale: f32) -> Rect {
+        let width = surface.source_size.width * content_scale;
+        let height = surface.source_size.height * content_scale;
+
+        Rect::new(
+            surface.bounds.x + (surface.bounds.width - width) * 0.5 + surface.pan_zoom.pan.x,
+            surface.bounds.y + (surface.bounds.height - height) * 0.5 + surface.pan_zoom.pan.y,
+            width,
+            height,
+        )
+    }
+
+    fn expected_snapped_content_rect(
+        surface: ViewportSurface,
+        scale_factor: ScaleFactor,
+        content_scale: f32,
+    ) -> Rect {
+        scale_factor
+            .snap_rect_to_physical_grid(expected_unsnapped_content_rect(surface, content_scale))
+    }
+
+    fn expected_screen_point(content_rect: Rect, content_scale: f32, point: Point) -> Point {
+        Point::new(
+            content_rect.x + point.x * content_scale,
+            content_rect.y + point.y * content_scale,
+        )
     }
 
     #[test]
@@ -678,15 +763,33 @@ mod tests {
     fn actual_size_maps_source_pixels_to_physical_pixels() {
         let mut surface = surface();
         surface.pan_zoom.actual_size();
-        let rect = surface.content_rect_at(ScaleFactor::new(2.0));
 
-        assert_approx(surface.content_scale_at(ScaleFactor::new(2.0)), 0.5);
-        assert_approx(rect.width, 200.0);
-        assert_approx(rect.height, 100.0);
-        assert_approx(rect.x, 0.0);
-        assert_approx(rect.y, 50.0);
-        assert_approx(rect.width * 2.0, 400.0);
-        assert_approx(rect.height * 2.0, 200.0);
+        for scale_value in [1.0_f32, 1.25, 1.5, 2.0] {
+            let scale_factor = ScaleFactor::new(f64::from(scale_value));
+            let rect = surface.content_rect_at(scale_factor);
+            let expected_scale = 1.0 / scale_value;
+
+            assert_close(surface.content_scale_at(scale_factor), expected_scale);
+            assert_close(rect.width * scale_value, surface.source_size.width);
+            assert_close(rect.height * scale_value, surface.source_size.height);
+            assert_rect_edges_aligned(rect, scale_factor);
+        }
+    }
+
+    #[test]
+    fn content_rect_at_delegates_valid_snapping_to_core_policy() {
+        let mut surface = surface();
+        surface.bounds = Rect::new(0.35, 0.65, 205.0, 153.0);
+        surface.pan_zoom.actual_size();
+        surface.pan_zoom.pan_by(Vec2::new(0.4, -0.2));
+
+        for scale_value in [1.25, 1.5, 2.0] {
+            let scale_factor = ScaleFactor::new(scale_value);
+            let expected = scale_factor
+                .snap_rect_to_physical_grid(unsnapped_content_rect(surface, scale_factor));
+
+            assert_rect_close(surface.content_rect_at(scale_factor), expected);
+        }
     }
 
     #[test]
@@ -753,6 +856,47 @@ mod tests {
         assert_approx(rect.y, 75.0);
         assert_approx(rect.width, 10.0);
         assert_approx(rect.height, 5.0);
+    }
+
+    #[test]
+    fn fractional_scale_coordinate_conversions_round_trip() {
+        let mut surface = surface();
+        surface.bounds = Rect::new(0.25, 0.5, 203.0, 177.0);
+        surface.pan_zoom.set_zoom(1.35);
+        surface.pan_zoom.pan_by(Vec2::new(7.25, -3.5));
+
+        for (scale_factor, scale_value) in [
+            (ScaleFactor::new(1.25), 1.25_f32),
+            (ScaleFactor::new(1.5), 1.5_f32),
+        ] {
+            let content_scale = expected_content_scale_at(surface, 1.0 / scale_value);
+            let content_rect = expected_snapped_content_rect(surface, scale_factor, content_scale);
+
+            for point in [
+                Point::new(0.0, 0.0),
+                Point::new(123.25, 77.5),
+                Point::new(399.0, 199.0),
+            ] {
+                let expected_screen = expected_screen_point(content_rect, content_scale, point);
+                let expected_viewport = Point::new(
+                    expected_screen.x - surface.bounds.x,
+                    expected_screen.y - surface.bounds.y,
+                );
+                let screen = surface
+                    .content_to_screen_at(point, scale_factor)
+                    .expect("screen");
+                let content = surface
+                    .screen_to_content_at(expected_screen, scale_factor)
+                    .expect("content");
+                let local = surface
+                    .viewport_to_content_at(expected_viewport, scale_factor)
+                    .expect("local content");
+
+                assert_point_close(screen, expected_screen);
+                assert_point_close(content, point);
+                assert_point_close(local, point);
+            }
+        }
     }
 
     #[test]
@@ -873,25 +1017,116 @@ mod tests {
         surface.bounds = Rect::new(0.25, 0.25, 201.0, 201.0);
         surface.pan_zoom.actual_size();
         let scale_factor = ScaleFactor::new(1.25);
+        let content_rect = surface.content_rect_at(scale_factor);
+        let content_scale = surface.content_scale_at(scale_factor);
+        let content_overlay = Rect::new(23.0, 17.0, 41.0, 19.0);
+        let expected = scale_factor.snap_rect_to_physical_grid(Rect::new(
+            content_rect.x + content_overlay.x * content_scale,
+            content_rect.y + content_overlay.y * content_scale,
+            content_overlay.width * content_scale,
+            content_overlay.height * content_scale,
+        ));
 
         let overlay = surface
-            .content_rect_to_screen_at(Rect::new(23.0, 17.0, 41.0, 19.0), scale_factor)
+            .content_rect_to_screen_at(content_overlay, scale_factor)
             .expect("overlay rect");
 
-        for value in [
-            overlay.x,
-            overlay.y,
-            overlay.width,
-            overlay.height,
-            overlay.max_x(),
-            overlay.max_y(),
-        ] {
-            let physical = f64::from(value) * scale_factor.value();
-            assert!(
-                (physical - physical.round()).abs() <= 0.001,
-                "{value} -> {physical}"
-            );
-        }
+        assert_rect_close(overlay, expected);
+        assert_rect_edges_aligned(overlay, scale_factor);
+    }
+
+    #[test]
+    fn scale_aware_guides_and_crosshair_align_with_snapped_texture_rect() {
+        let mut surface = surface();
+        surface.bounds = Rect::new(0.25, 0.25, 201.0, 201.0);
+        surface.pan_zoom.actual_size();
+        let scale_factor = ScaleFactor::new(1.5);
+        let content_scale = expected_content_scale_at(surface, 1.0 / 1.5);
+        let content_rect = expected_snapped_content_rect(surface, scale_factor, content_scale);
+        let expected_horizontal_y = content_rect.y + 100.0 * content_scale;
+        let expected_vertical_x = content_rect.x + 200.0 * content_scale;
+        let viewport_bounds = surface.bounds;
+
+        let guides = surface.content_guide_primitives_at(
+            &[Guide::Horizontal(100.0), Guide::Vertical(200.0)],
+            Color::WHITE,
+            scale_factor,
+        );
+        assert_eq!(guides.len(), 2);
+
+        let Primitive::Line(horizontal_guide) = &guides[0] else {
+            panic!("expected horizontal guide");
+        };
+        assert_close(horizontal_guide.from.x, content_rect.x);
+        assert_close(horizontal_guide.to.x, content_rect.max_x());
+        assert_close(horizontal_guide.from.y, expected_horizontal_y);
+        assert_close(horizontal_guide.to.y, expected_horizontal_y);
+        assert!(horizontal_guide.from.y >= content_rect.y);
+        assert!(horizontal_guide.from.y <= content_rect.max_y());
+        assert_edge_aligned(horizontal_guide.from.y, scale_factor);
+
+        let Primitive::Line(vertical_guide) = &guides[1] else {
+            panic!("expected vertical guide");
+        };
+        assert_close(vertical_guide.from.y, content_rect.y);
+        assert_close(vertical_guide.to.y, content_rect.max_y());
+        assert_close(vertical_guide.from.x, expected_vertical_x);
+        assert_close(vertical_guide.to.x, expected_vertical_x);
+        assert!(vertical_guide.from.x >= content_rect.x);
+        assert!(vertical_guide.from.x <= content_rect.max_x());
+        assert_edge_aligned(vertical_guide.from.x, scale_factor);
+
+        let crosshair = Crosshair {
+            visible: true,
+            position: Point::new(200.0, 100.0),
+            label: None,
+            color: Color::WHITE,
+        };
+        let crosshair_primitives =
+            surface.content_crosshair_primitives_at(&crosshair, scale_factor);
+        assert_eq!(crosshair_primitives.len(), 2);
+        let Primitive::Line(horizontal_crosshair) = &crosshair_primitives[0] else {
+            panic!("expected crosshair horizontal line");
+        };
+        let Primitive::Line(vertical_crosshair) = &crosshair_primitives[1] else {
+            panic!("expected crosshair vertical line");
+        };
+        let expected_crosshair_screen =
+            expected_screen_point(content_rect, content_scale, crosshair.position);
+
+        assert_close(horizontal_crosshair.from.x, viewport_bounds.x);
+        assert_close(horizontal_crosshair.to.x, viewport_bounds.max_x());
+        assert_close(horizontal_crosshair.from.y, expected_crosshair_screen.y);
+        assert_close(horizontal_crosshair.to.y, expected_crosshair_screen.y);
+        assert_close(vertical_crosshair.from.x, expected_crosshair_screen.x);
+        assert_close(vertical_crosshair.to.x, expected_crosshair_screen.x);
+        assert_close(vertical_crosshair.from.y, viewport_bounds.y);
+        assert_close(vertical_crosshair.to.y, viewport_bounds.max_y());
+        assert!(horizontal_crosshair.from.y >= content_rect.y);
+        assert!(horizontal_crosshair.from.y <= content_rect.max_y());
+        assert!(vertical_crosshair.from.x >= content_rect.x);
+        assert!(vertical_crosshair.from.x <= content_rect.max_x());
+        assert_edge_aligned(horizontal_crosshair.from.y, scale_factor);
+        assert_edge_aligned(vertical_crosshair.from.x, scale_factor);
+    }
+
+    #[test]
+    fn invalid_scale_factor_preserves_viewport_rect_behavior() {
+        let mut surface = surface();
+        surface.bounds = Rect::new(0.25, 0.25, 201.0, 201.0);
+        surface.pan_zoom.actual_size();
+        let invalid_scale = ScaleFactor::new(0.0);
+
+        let rect = surface.content_rect_at(invalid_scale);
+        let overlay = surface
+            .content_rect_to_screen_at(Rect::new(20.0, 10.0, 40.0, 20.0), invalid_scale)
+            .expect("overlay rect");
+
+        assert_rect_close(rect, unsnapped_content_rect(surface, invalid_scale));
+        assert!(rect.width > 0.0);
+        assert!(rect.height > 0.0);
+        assert!(overlay.width > 0.0);
+        assert!(overlay.height > 0.0);
     }
 
     #[test]
