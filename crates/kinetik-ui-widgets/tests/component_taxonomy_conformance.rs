@@ -89,6 +89,50 @@ fn representative_components_report_honest_categories_and_statuses() {
 }
 
 #[test]
+fn stage9_basic_components_report_current_conformance_statuses() {
+    assert_entry(
+        "Label",
+        ComponentCategory::Display,
+        ComponentConformanceStatus::Implemented,
+    );
+    assert_entry(
+        "Button",
+        ComponentCategory::Control,
+        ComponentConformanceStatus::Implemented,
+    );
+    assert_entry(
+        "IconButton",
+        ComponentCategory::Control,
+        ComponentConformanceStatus::Implemented,
+    );
+    assert_entry(
+        "Checkbox",
+        ComponentCategory::Input,
+        ComponentConformanceStatus::Implemented,
+    );
+    assert_entry(
+        "RadioButton",
+        ComponentCategory::Input,
+        ComponentConformanceStatus::Implemented,
+    );
+    assert_entry(
+        "Toggle",
+        ComponentCategory::Input,
+        ComponentConformanceStatus::Implemented,
+    );
+    assert_entry(
+        "Slider",
+        ComponentCategory::Input,
+        ComponentConformanceStatus::Implemented,
+    );
+    assert_entry(
+        "Panel",
+        ComponentCategory::Docking,
+        ComponentConformanceStatus::Partial,
+    );
+}
+
+#[test]
 fn lookup_by_name_returns_registry_entry() {
     for metadata in COMPONENT_METADATA {
         assert_eq!(component_metadata(metadata.name), Some(metadata));

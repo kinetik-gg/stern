@@ -182,10 +182,26 @@ impl IconLibrary {
     }
 }
 
+fn response_reported_focus(response: &Response) -> bool {
+    response.state.focused && !response.state.disabled
+}
+
+fn response_reported_pressed(response: &Response) -> bool {
+    response.state.pressed && !response.state.disabled
+}
+
+fn suppress_disabled_interaction_reporting(response: &mut Response) {
+    if response.state.disabled {
+        response.state.focused = false;
+        response.state.active = false;
+        response.state.pressed = false;
+    }
+}
+
 fn with_response_state(mut node: SemanticNode, response: &Response) -> SemanticNode {
     node.state.disabled = response.state.disabled;
-    node.state.focused = response.state.focused;
-    node.state.pressed = response.state.pressed;
+    node.state.focused = response_reported_focus(response);
+    node.state.pressed = response_reported_pressed(response);
     node.state.selected = response.state.selected;
     node
 }
@@ -772,11 +788,12 @@ pub fn button(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    let response = focusable(id, rect, input, memory, disabled);
+    let mut response = focusable(id, rect, input, memory, disabled);
+    suppress_disabled_interaction_reporting(&mut response);
     let recipe = theme.button(ComponentState {
         hovered: response.state.hovered,
-        pressed: response.state.pressed,
-        focused: response.state.focused,
+        pressed: response_reported_pressed(&response),
+        focused: response_reported_focus(&response),
         disabled,
         selected: false,
     });
@@ -1149,11 +1166,12 @@ fn icon_button_with_optional_library(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    let response = focusable(id, rect, input, memory, disabled);
+    let mut response = focusable(id, rect, input, memory, disabled);
+    suppress_disabled_interaction_reporting(&mut response);
     let recipe = theme.button(ComponentState {
         hovered: response.state.hovered,
-        pressed: response.state.pressed,
-        focused: response.state.focused,
+        pressed: response_reported_pressed(&response),
+        focused: response_reported_focus(&response),
         disabled,
         selected: false,
     });
@@ -1336,12 +1354,13 @@ pub fn checkbox_with_label(
     disabled: bool,
 ) -> WidgetOutput {
     let mut response = selectable(id, rect, input, memory, checked, disabled);
+    suppress_disabled_interaction_reporting(&mut response);
     let selected = clicked_toggle_state(checked, response.clicked);
     response.state.selected = selected;
     let recipe = theme.checkbox(ComponentState {
         hovered: response.state.hovered,
-        pressed: response.state.pressed,
-        focused: response.state.focused,
+        pressed: response_reported_pressed(&response),
+        focused: response_reported_focus(&response),
         disabled,
         selected,
     });
@@ -1419,11 +1438,11 @@ pub fn radio_button_with_label(
         pressed: output
             .response
             .as_ref()
-            .is_some_and(|response| response.state.pressed),
+            .is_some_and(response_reported_pressed),
         focused: output
             .response
             .as_ref()
-            .is_some_and(|response| response.state.focused),
+            .is_some_and(response_reported_focus),
         disabled,
         selected: display_selected,
     });
@@ -1464,12 +1483,13 @@ pub fn toggle_with_label(
     disabled: bool,
 ) -> WidgetOutput {
     let mut response = selectable(id, rect, input, memory, on, disabled);
+    suppress_disabled_interaction_reporting(&mut response);
     let selected = clicked_toggle_state(on, response.clicked);
     response.state.selected = selected;
     let recipe = theme.toggle(ComponentState {
         hovered: response.state.hovered,
-        pressed: response.state.pressed,
-        focused: response.state.focused,
+        pressed: response_reported_pressed(&response),
+        focused: response_reported_focus(&response),
         disabled,
         selected,
     });
@@ -1549,7 +1569,8 @@ pub fn slider_with_label(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    let response = draggable(id, rect, input, memory, disabled);
+    let mut response = draggable(id, rect, input, memory, disabled);
+    suppress_disabled_interaction_reporting(&mut response);
     let (start, end) = slider_range_bounds(&range);
     if !disabled
         && (response.state.active || (response.clicked && !response.keyboard_activated))
@@ -1564,8 +1585,8 @@ pub fn slider_with_label(
     let fill_rect = Rect::new(rect.x, rect.y, rect.width * t, rect.height);
     let recipe = theme.slider(ComponentState {
         hovered: response.state.hovered,
-        pressed: response.state.pressed,
-        focused: response.state.focused,
+        pressed: response_reported_pressed(&response),
+        focused: response_reported_focus(&response),
         disabled,
         selected: false,
     });
@@ -2761,7 +2782,7 @@ mod tests {
         assert!(!node.focusable);
         assert!(node.state.disabled);
         assert!(node.state.selected);
-        assert!(node.state.focused);
+        assert!(!node.state.focused);
         assert!(!node.state.pressed);
         assert!(
             node.actions
