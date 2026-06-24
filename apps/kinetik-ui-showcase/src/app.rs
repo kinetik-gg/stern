@@ -10,10 +10,10 @@ use kinetik_ui::core::{
     ActionRoutingContext, ActionSource, Axis, Brush, ClipId, Color, CornerRadius, FrameContext,
     FrameOutput, ImageId, Insets, Key, KeyEvent, KeyState, LayoutItem, LinePrimitive, Measurement,
     Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput, Primitive, Rect,
-    RectPrimitive, RepaintRequest, ScaleFactor, Shortcut, Size, SizeRule, Stroke, TextInputEvent,
-    TextPrimitive, TextureId, TexturePrimitive, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo,
-    column_layout, default_dark_theme, inspect_primitives, rect_from_size, row_layout,
-    split_leading,
+    RectPrimitive, RepaintRequest, ScaleFactor, SemanticNode, SemanticRole, Shortcut, Size,
+    SizeRule, Stroke, TextInputEvent, TextPrimitive, TextureId, TexturePrimitive, TimeInfo,
+    UiInput, UiMemory, Vec2, ViewportInfo, column_layout, default_dark_theme, inspect_primitives,
+    rect_from_size, row_layout, split_leading,
 };
 use kinetik_ui::render::{
     ImageResource, RenderImage, RenderImageSampling, RenderResources, TextureResource,
@@ -1035,6 +1035,11 @@ impl ShowcaseApp {
 
     fn dock_preview(&mut self, ui: &mut Ui<'_>, panel: Rect) {
         panel_title(ui, panel, "Interactive Dock Model");
+        let dock_semantic_id = ui.id("layout.dock-preview.semantic");
+        ui.push_semantic_node(
+            SemanticNode::new(dock_semantic_id, SemanticRole::Dock, panel)
+                .with_label("Interactive Dock Model"),
+        );
         self.dock_preview_controls(ui, panel);
         let area = self.dock_model_preview();
         Self::draw_dock_preview(ui, &area, panel);
@@ -1190,6 +1195,11 @@ impl ShowcaseApp {
 
     fn table_preview(ui: &mut Ui<'_>, panel: Rect) {
         panel_title(ui, panel, "Virtualized Table Model");
+        let table_semantic_id = ui.id("layout.table-preview.semantic");
+        ui.push_semantic_node(
+            SemanticNode::new(table_semantic_id, SemanticRole::Table, panel)
+                .with_label("Virtualized Table Model"),
+        );
         let table = TableLayout {
             columns: vec![
                 TableColumn {
@@ -1311,6 +1321,12 @@ impl ShowcaseApp {
             panel.y + 86.0,
             surface_width,
             surface_height,
+        );
+        let viewport_semantic_id = ui.id("viewport.surface.semantic");
+        ui.push_semantic_node(
+            SemanticNode::new(viewport_semantic_id, SemanticRole::Viewport, surface)
+                .with_label("Pan/Zoom Texture Surface")
+                .focusable(true),
         );
 
         let mut pan_zoom = PanZoom::default();
@@ -2056,6 +2072,18 @@ mod tests {
             .any(|node| &node.role == role && node.label.as_deref() == Some(label))
     }
 
+    fn semantic_role_has_action(
+        app: &ShowcaseApp,
+        role: &SemanticRole,
+        action: &SemanticActionKind,
+    ) -> bool {
+        app.output()
+            .semantics
+            .nodes()
+            .iter()
+            .any(|node| &node.role == role && node.actions.iter().any(|item| &item.kind == action))
+    }
+
     fn text_labels(app: &ShowcaseApp) -> Vec<&str> {
         app.output()
             .primitives
@@ -2165,6 +2193,63 @@ mod tests {
         assert!(app.output().platform_requests.iter().any(|request| {
             matches!(request, PlatformRequest::StartTextInput { rect: Some(rect) } if !rect.is_empty())
         }));
+    }
+
+    #[test]
+    fn layout_page_structural_smoke_emits_layout_dock_table_and_actions() {
+        let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Layout);
+
+        assert_eq!(app.output().warnings, Vec::new());
+        assert!(app.output().primitives.len() > 100);
+        assert!(count_primitives(&app, |primitive| matches!(primitive, Primitive::Rect(_))) > 60);
+        assert!(count_primitives(&app, |primitive| matches!(primitive, Primitive::Text(_))) > 30);
+        assert!(
+            count_primitives(&app, |primitive| matches!(
+                primitive,
+                Primitive::ClipBegin { .. }
+            )) >= 2
+        );
+        assert!(contains_text_in_order(
+            &app,
+            &[
+                "Layout, Docking, and Data Surfaces",
+                "Measurement-Aware Layout",
+                "Interactive Dock Model",
+                "Virtualized Table Model",
+            ]
+        ));
+        assert!(has_text(&app, "Rows: 7 | Columns: 4 | Overscan: 0"));
+        assert!(app.primitives().iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text.starts_with("Frames: "))
+        }));
+
+        assert!(semantic_node(
+            &app,
+            &SemanticRole::Dock,
+            "Interactive Dock Model"
+        ));
+        assert!(semantic_node(
+            &app,
+            &SemanticRole::Table,
+            "Virtualized Table Model"
+        ));
+        assert!(semantic_node(&app, &SemanticRole::Button, "Split Tab"));
+        assert!(count_semantic_role(&app, &SemanticRole::Panel) >= 4);
+        assert!(semantic_role_has_action(
+            &app,
+            &SemanticRole::Slider,
+            &SemanticActionKind::SetValue
+        ));
+        assert!(semantic_role_has_action(
+            &app,
+            &SemanticRole::Button,
+            &SemanticActionKind::Invoke
+        ));
+
+        click(&mut app, Point::new(700.0, 162.0));
+
+        assert!(has_text(&app, "Frame 9"));
     }
 
     #[test]
@@ -2618,6 +2703,80 @@ mod tests {
         assert!((app.zoom() - 0.2).abs() < f32::EPSILON);
         assert!(has_text(&app, "Zoom: 100%"));
         assert!((viewport_texture_rect(&app).width - 384.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn viewport_page_structural_smoke_emits_texture_viewport_semantics_and_platform_requests() {
+        let mut app = ShowcaseApp::new();
+        app.set_page(ShowcasePage::Viewport);
+
+        assert_eq!(app.output().warnings, Vec::new());
+        assert!(app.output().primitives.len() > 60);
+        assert_eq!(
+            count_primitives(&app, |primitive| matches!(primitive, Primitive::Texture(_))),
+            2
+        );
+        assert!(count_primitives(&app, |primitive| matches!(primitive, Primitive::Line(_))) >= 5);
+        assert!(
+            count_primitives(&app, |primitive| matches!(
+                primitive,
+                Primitive::ClipBegin { .. }
+            )) >= 2
+        );
+        assert!(contains_text_in_order(
+            &app,
+            &[
+                "Viewport, Texture, and Overlay Surface",
+                "Viewport Controls",
+                "Pan/Zoom Texture Surface",
+                "3D/Video Boundary",
+            ]
+        ));
+        assert!(has_text(
+            &app,
+            "Surface: 384x216 | Guides: 3 | Crosshair: 192,108"
+        ));
+
+        assert!(semantic_node(
+            &app,
+            &SemanticRole::Viewport,
+            "Pan/Zoom Texture Surface"
+        ));
+        assert!(semantic_node(&app, &SemanticRole::Button, "Fit"));
+        assert!(semantic_node(&app, &SemanticRole::Button, "Actual Size"));
+        assert!(count_semantic_role(&app, &SemanticRole::Panel) >= 3);
+        assert!(semantic_role_has_action(
+            &app,
+            &SemanticRole::Viewport,
+            &SemanticActionKind::Focus
+        ));
+        assert!(semantic_role_has_action(
+            &app,
+            &SemanticRole::Slider,
+            &SemanticActionKind::SetValue
+        ));
+        assert!(semantic_role_has_action(
+            &app,
+            &SemanticRole::Button,
+            &SemanticActionKind::Invoke
+        ));
+
+        let resources = app.render_resources();
+        assert!(resources.texture(TextureId::from_raw(99)).is_some());
+        assert!(resources.texture(TextureId::from_raw(101)).is_some());
+
+        app.update(&ShowcaseInput {
+            mouse: Some(Point::new(1090.0, 240.0)),
+            ..ShowcaseInput::default()
+        });
+
+        assert!(
+            app.output()
+                .platform_requests
+                .contains(&PlatformRequest::SetCursor(
+                    kinetik_ui::core::CursorShape::PointingHand
+                ))
+        );
     }
 
     #[test]

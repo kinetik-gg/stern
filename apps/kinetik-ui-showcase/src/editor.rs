@@ -9,8 +9,8 @@
 use kinetik_ui::core::{
     ActionDescriptor, ActionSource, Axis, Brush, ClipId, Color, CornerRadius, CursorShape,
     ImagePrimitive, Key, KeyState, LinePrimitive, Modifiers, PlatformRequest, Point, Primitive,
-    Rect, RectPrimitive, RepaintRequest, Shortcut, Size, Stroke, TextPrimitive, TextureId, Theme,
-    Vec2,
+    Rect, RectPrimitive, RepaintRequest, SemanticNode, SemanticRole, Shortcut, Size, Stroke,
+    TextPrimitive, TextureId, Theme, Vec2,
 };
 use kinetik_ui::render::{
     ImageAtlasRegion, ImageResource, RenderImage, RenderImageSampling, RenderResources,
@@ -948,6 +948,11 @@ impl EditorShowcase {
             (viewport.width - 8.0).max(1.0),
             (viewport.height - workspace_top - bottom_bar - 4.0).max(1.0),
         );
+        let dock_semantic_id = ui.id("editor.dock.semantic");
+        ui.push_semantic_node(
+            SemanticNode::new(dock_semantic_id, SemanticRole::Dock, bounds)
+                .with_label("Editor Dock"),
+        );
         let frame_layouts = solve_dock_layout(&self.dock, bounds);
         for layout in frame_layouts {
             self.editor_frame(ui, layout.frame, layout.rect.inset(2.0));
@@ -982,6 +987,11 @@ impl EditorShowcase {
         let Some(frame_snapshot) = self.dock.frame(frame_id).cloned() else {
             return;
         };
+        let frame_semantic_id = ui.id(("editor.frame.semantic", frame_id.raw()));
+        ui.push_semantic_node(
+            SemanticNode::new(frame_semantic_id, SemanticRole::Frame, frame_rect)
+                .with_label(format!("Frame {}", frame_id.raw())),
+        );
         let tab_height = 26.0;
         self.frame_tab_interactions(ui, frame_id, frame_rect, tab_height, &frame_snapshot);
         let Some(frame_snapshot) = self.dock.frame(frame_id).cloned() else {
@@ -1018,11 +1028,19 @@ impl EditorShowcase {
             .dock
             .frame(frame_id)
             .and_then(Frame::active_panel)
-            .map(|panel| panel.id);
+            .cloned();
+        if let Some(panel) = active_panel.as_ref() {
+            let panel_semantic_id =
+                ui.id(("editor.panel.semantic", frame_id.raw(), panel.id.raw()));
+            ui.push_semantic_node(
+                SemanticNode::new(panel_semantic_id, SemanticRole::Panel, body)
+                    .with_label(panel.title.clone()),
+            );
+        }
         ui.clip_rect(
             ("editor.frame-body", frame_id.raw()),
             body,
-            |ui| match active_panel {
+            |ui| match active_panel.as_ref().map(|panel| panel.id) {
                 Some(PANEL_SCENE) => self.scene_graph(ui, body),
                 Some(PANEL_ASSETS) => self.assets_browser(ui, body),
                 Some(PANEL_VIEWPORT) => self.viewport_panel(ui, body),
@@ -2060,8 +2078,8 @@ mod tests {
     };
     use kinetik_ui::core::{
         Brush, CursorShape, FrameContext, PhysicalSize, PlatformRequest, Point, PointerButtonState,
-        PointerInput, Primitive, Rect, RepaintRequest, ScaleFactor, SemanticRole, Size, TimeInfo,
-        UiInput, UiMemory, ViewportInfo, default_dark_theme,
+        PointerInput, Primitive, Rect, RepaintRequest, ScaleFactor, SemanticActionKind,
+        SemanticRole, Size, TimeInfo, UiInput, UiMemory, ViewportInfo, default_dark_theme,
     };
     use kinetik_ui::render::RenderResources;
     use kinetik_ui::widgets::{Ui, ViewportSurface, solve_dock_layout};
@@ -2428,6 +2446,86 @@ mod tests {
     }
 
     #[test]
+    fn editor_structural_smoke_emits_dock_frame_panel_viewport_and_action_categories() {
+        let theme = default_dark_theme();
+        let mut memory = UiMemory::new();
+        let context = editor_test_context(UiInput::default());
+        let mut ui = Ui::begin_frame(context, &mut memory, &theme);
+        let mut editor = EditorShowcase::new();
+
+        let invocations = editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+
+        assert!(invocations.is_empty());
+        assert_eq!(output.warnings, Vec::new());
+        assert!(output.primitives.len() > 200);
+        assert!(
+            count_primitives(&output.primitives, |primitive| matches!(
+                primitive,
+                Primitive::Rect(_)
+            )) > 100
+        );
+        assert!(
+            count_primitives(&output.primitives, |primitive| matches!(
+                primitive,
+                Primitive::Text(_)
+            )) > 50
+        );
+        assert!(
+            count_primitives(&output.primitives, |primitive| matches!(
+                primitive,
+                Primitive::Image(_)
+            )) >= 24
+        );
+        assert!(
+            count_primitives(&output.primitives, |primitive| matches!(
+                primitive,
+                Primitive::Texture(_)
+            )) >= 1
+        );
+        assert!(
+            count_primitives(&output.primitives, |primitive| matches!(
+                primitive,
+                Primitive::Line(_)
+            )) >= 8
+        );
+        assert!(
+            count_primitives(&output.primitives, |primitive| matches!(
+                primitive,
+                Primitive::ClipBegin { .. }
+            )) >= 2
+        );
+        assert!(output.primitives.iter().any(|primitive| {
+            matches!(primitive, Primitive::Texture(texture) if texture.texture == super::VIEWPORT_TEXTURE)
+        }));
+        assert!(output.primitives.iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "CameraPreview")
+        }));
+
+        assert_eq!(count_semantic_role(&output, &SemanticRole::Dock), 1);
+        assert!(count_semantic_role(&output, &SemanticRole::Frame) >= 5);
+        assert!(count_semantic_role(&output, &SemanticRole::Panel) >= 5);
+        assert!(count_semantic_role(&output, &SemanticRole::Tab) >= 6);
+        assert!(count_semantic_role(&output, &SemanticRole::IconButton) >= 12);
+        assert!(count_semantic_role(&output, &SemanticRole::Slider) >= 1);
+        assert!(output.semantics.nodes().iter().any(|node| {
+            node.role == SemanticRole::IconButton
+                && node.label.as_deref() == Some("Play")
+                && node
+                    .actions
+                    .iter()
+                    .any(|action| action.kind == SemanticActionKind::Invoke)
+        }));
+        assert!(output.semantics.nodes().iter().any(|node| {
+            node.role == SemanticRole::Slider
+                && node
+                    .actions
+                    .iter()
+                    .any(|action| action.kind == SemanticActionKind::SetValue)
+        }));
+    }
+
+    #[test]
     fn editor_uses_phosphor_atlas_primitives_for_visible_editor_icons() {
         let theme = default_dark_theme();
         let mut memory = UiMemory::new();
@@ -2686,6 +2784,22 @@ mod tests {
     fn point_is_in_toolbar(point: Point) -> bool {
         let chrome = EditorChromeMetrics::from_theme(&default_dark_theme());
         point.y >= TOOLBAR_Y && point.y <= TOOLBAR_Y + chrome.toolbar_button
+    }
+
+    fn count_primitives(primitives: &[Primitive], predicate: impl Fn(&Primitive) -> bool) -> usize {
+        primitives
+            .iter()
+            .filter(|primitive| predicate(primitive))
+            .count()
+    }
+
+    fn count_semantic_role(output: &kinetik_ui::core::FrameOutput, role: &SemanticRole) -> usize {
+        output
+            .semantics
+            .nodes()
+            .iter()
+            .filter(|node| &node.role == role)
+            .count()
     }
 
     fn pointer_input_at(x: f32, y: f32, down: bool, pressed: bool, released: bool) -> UiInput {
