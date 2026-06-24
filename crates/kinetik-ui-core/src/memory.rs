@@ -19,6 +19,8 @@ pub struct UiMemory {
     secondary_pressed: Option<WidgetId>,
     /// Widget currently holding pointer capture.
     pointer_capture: Option<WidgetId>,
+    /// Widget that released pointer capture during this frame.
+    pointer_capture_released: Option<WidgetId>,
     /// Pointer interaction was cancelled at this frame's runtime boundary.
     pointer_interaction_cancelled: bool,
     /// Widget currently acting as an active drag source.
@@ -43,6 +45,7 @@ impl UiMemory {
     /// Clears transient frame state while preserving retained widget state.
     pub fn begin_frame(&mut self) {
         self.hovered = None;
+        self.pointer_capture_released = None;
         self.released_drag_source = None;
         self.pointer_interaction_cancelled = false;
     }
@@ -81,6 +84,15 @@ impl UiMemory {
     #[must_use]
     pub const fn pointer_capture(&self) -> Option<WidgetId> {
         self.pointer_capture
+    }
+
+    /// Returns the widget that owns pointer routing during this frame.
+    #[must_use]
+    pub(crate) const fn pointer_routing_owner(&self) -> Option<WidgetId> {
+        match self.pointer_capture {
+            Some(owner) => Some(owner),
+            None => self.pointer_capture_released,
+        }
     }
 
     /// Returns true when pointer interaction was cancelled before primitive evaluation.
@@ -234,6 +246,7 @@ impl UiMemory {
         if cancelled {
             self.clear_drag();
             self.clear_interaction();
+            self.pointer_capture_released = None;
             self.pointer_interaction_cancelled = true;
         }
         cancelled
@@ -248,6 +261,7 @@ impl UiMemory {
 
     /// Clears interaction capture state at the end of an interaction.
     pub fn clear_interaction(&mut self) {
+        self.pointer_capture_released = self.pointer_capture;
         self.active = None;
         self.pressed = None;
         self.secondary_pressed = None;

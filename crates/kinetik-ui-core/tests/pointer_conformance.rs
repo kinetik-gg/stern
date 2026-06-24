@@ -3,9 +3,9 @@
 use std::time::Duration;
 
 use kinetik_ui_core::{
-    Key, Modifiers, MouseButton, Point, Rect, Response, ScrollResponse, Size, Ui, UiTestHarness,
-    Vec2, WidgetId, context_menu_trigger, draggable, drop_target, pressable, scrollable,
-    tooltip_trigger,
+    CursorShape, Key, Modifiers, MouseButton, PlatformRequest, Point, Rect, Response,
+    ScrollResponse, Size, Ui, UiTestHarness, Vec2, WidgetId, context_menu_trigger, draggable,
+    drop_target, pressable, scrollable, tooltip_trigger,
 };
 
 fn rect() -> Rect {
@@ -274,6 +274,77 @@ fn pointer_interaction_drag_capture_suppresses_other_hover() {
 }
 
 #[test]
+fn pointer_interaction_capture_blocks_other_active_click_and_cursor_stealing() {
+    let mut harness = UiTestHarness::new();
+
+    harness.set_pointer_position(Point::new(10.0, 10.0));
+    harness.pointer_press(MouseButton::Primary);
+    let _ = harness.run_frame(|ui| {
+        let id = source_id(ui);
+        let (input, memory) = ui.input_and_memory_mut();
+        draggable(id, source_rect(), input, memory, false)
+    });
+
+    harness.set_pointer_position(Point::new(90.0, 10.0));
+    let ((source, other, source_cursor, other_cursor), drag_output) = harness.run_frame(|ui| {
+        let source = source_id(ui);
+        let other = target_id(ui);
+        let (source_response, other_response) = {
+            let (input, memory) = ui.input_and_memory_mut();
+            (
+                draggable(source, source_rect(), input, memory, false),
+                pressable(other, target_rect(), input, memory, false),
+            )
+        };
+        let source_cursor = ui.request_cursor_for(source, CursorShape::Grabbing);
+        let other_cursor = ui.request_cursor_for(other, CursorShape::PointingHand);
+        (source_response, other_response, source_cursor, other_cursor)
+    });
+
+    assert!(source.dragged);
+    assert!(source.state.active);
+    assert!(!source.state.hovered);
+    assert!(!other.state.hovered);
+    assert!(!other.state.active);
+    assert!(!other.state.pressed);
+    assert!(!other.clicked);
+    assert!(source_cursor);
+    assert!(!other_cursor);
+    assert_eq!(
+        drag_output.platform_requests,
+        vec![PlatformRequest::SetCursor(CursorShape::Grabbing)]
+    );
+
+    harness.pointer_release(MouseButton::Primary);
+    let ((source, other, source_cursor, other_cursor), release_output) = harness.run_frame(|ui| {
+        let source = source_id(ui);
+        let other = target_id(ui);
+        let (source_response, other_response) = {
+            let (input, memory) = ui.input_and_memory_mut();
+            (
+                draggable(source, source_rect(), input, memory, false),
+                pressable(other, target_rect(), input, memory, false),
+            )
+        };
+        let source_cursor = ui.request_cursor_for(source, CursorShape::Grabbing);
+        let other_cursor = ui.request_cursor_for(other, CursorShape::PointingHand);
+        (source_response, other_response, source_cursor, other_cursor)
+    });
+
+    assert!(!source.clicked);
+    assert!(!source.state.active);
+    assert!(!other.state.hovered);
+    assert!(!other.state.active);
+    assert!(!other.state.pressed);
+    assert!(!other.clicked);
+    assert!(!source_cursor);
+    assert!(!other_cursor);
+    assert!(release_output.platform_requests.is_empty());
+    assert_eq!(harness.memory().pointer_capture(), None);
+    assert_eq!(harness.memory().active(), None);
+}
+
+#[test]
 fn pointer_interaction_focus_loss_cancels_capture_without_synthesizing_drop() {
     let mut harness = UiTestHarness::new();
     let retained_focus = WidgetId::from_key("retained-focus");
@@ -418,6 +489,151 @@ fn pointer_interaction_release_all_clears_capture_without_participating_primitiv
     assert_eq!(harness.memory().released_drag_source(), None);
     assert_eq!(harness.memory().focused(), Some(retained_focus));
     assert_eq!(harness.memory().text_input_owner(), Some(retained_focus));
+}
+
+#[test]
+fn pointer_interaction_release_all_cancels_disabled_owner_without_drop_or_cursor() {
+    let mut harness = UiTestHarness::new();
+
+    harness.set_pointer_position(Point::new(10.0, 10.0));
+    harness.pointer_press(MouseButton::Primary);
+    let _ = harness.run_frame(|ui| {
+        let source = source_id(ui);
+        let (input, memory) = ui.input_and_memory_mut();
+        draggable(source, source_rect(), input, memory, false)
+    });
+
+    harness.set_pointer_position(Point::new(90.0, 10.0));
+    let _ = harness.run_frame(|ui| {
+        let source = source_id(ui);
+        let (input, memory) = ui.input_and_memory_mut();
+        draggable(source, source_rect(), input, memory, false)
+    });
+
+    harness.input_mut().release_pointer_buttons();
+    let ((source, target, source_cursor), output) = harness.run_frame(|ui| {
+        let source = source_id(ui);
+        let target = target_id(ui);
+        let (source_response, target_response) = {
+            let (input, memory) = ui.input_and_memory_mut();
+            (
+                draggable(source, source_rect(), input, memory, true),
+                drop_target(target, target_rect(), input, memory, false),
+            )
+        };
+        let source_cursor = ui.request_cursor_for(source, CursorShape::Grabbing);
+        (source_response, target_response, source_cursor)
+    });
+
+    assert!(source.state.disabled);
+    assert!(!source.state.active);
+    assert!(!source.dragged);
+    assert!(!source.clicked);
+    assert!(!target.response.state.hovered);
+    assert_eq!(target.source, None);
+    assert!(!target.dropped);
+    assert!(!source_cursor);
+    assert!(output.platform_requests.is_empty());
+    assert!(harness.memory().pointer_interaction_cancelled());
+    assert_eq!(harness.memory().pointer_capture(), None);
+    assert_eq!(harness.memory().drag_source(), None);
+    assert_eq!(harness.memory().released_drag_source(), None);
+}
+
+#[test]
+fn pointer_interaction_cancellation_flag_and_cursor_suppression_are_frame_local() {
+    let mut harness = UiTestHarness::new();
+
+    harness.set_pointer_position(Point::new(10.0, 10.0));
+    harness.pointer_press(MouseButton::Primary);
+    let _ = harness.run_frame(|ui| {
+        let source = source_id(ui);
+        let (input, memory) = ui.input_and_memory_mut();
+        draggable(source, source_rect(), input, memory, false)
+    });
+
+    harness.set_pointer_position(Point::new(90.0, 10.0));
+    let _ = harness.run_frame(|ui| {
+        let source = source_id(ui);
+        let (input, memory) = ui.input_and_memory_mut();
+        draggable(source, source_rect(), input, memory, false)
+    });
+
+    harness.input_mut().release_pointer_buttons();
+    let ((cancelled, source_cursor, target_cursor), cancel_output) = harness.run_frame(|ui| {
+        let source = source_id(ui);
+        let target = target_id(ui);
+        let _ = {
+            let (input, memory) = ui.input_and_memory_mut();
+            draggable(source, source_rect(), input, memory, false)
+        };
+        let source_cursor = ui.request_cursor_for(source, CursorShape::Grabbing);
+        let _ = {
+            let (input, memory) = ui.input_and_memory_mut();
+            pressable(target, target_rect(), input, memory, false)
+        };
+        let target_cursor = ui.request_cursor_for(target, CursorShape::PointingHand);
+        (
+            ui.memory().pointer_interaction_cancelled(),
+            source_cursor,
+            target_cursor,
+        )
+    });
+
+    assert!(cancelled);
+    assert!(!source_cursor);
+    assert!(!target_cursor);
+    assert!(cancel_output.platform_requests.is_empty());
+
+    harness.advance_frame(Duration::from_millis(16));
+    let ((cancelled, target, target_cursor), normal_output) = harness.run_frame(|ui| {
+        let target = target_id(ui);
+        let target_response = {
+            let (input, memory) = ui.input_and_memory_mut();
+            pressable(target, target_rect(), input, memory, false)
+        };
+        let target_cursor = ui.request_cursor_for(target, CursorShape::PointingHand);
+        (
+            ui.memory().pointer_interaction_cancelled(),
+            target_response,
+            target_cursor,
+        )
+    });
+
+    assert!(!cancelled);
+    assert!(target.state.hovered);
+    assert!(target_cursor);
+    assert_eq!(
+        normal_output.platform_requests,
+        vec![PlatformRequest::SetCursor(CursorShape::PointingHand)]
+    );
+}
+
+#[test]
+fn pointer_interaction_secondary_press_owner_is_cleared_by_cancellation() {
+    let mut harness = UiTestHarness::new();
+
+    harness.set_pointer_position(Point::new(10.0, 10.0));
+    harness.pointer_press(MouseButton::Secondary);
+    let pressed = context_menu_response(&mut harness, false);
+    assert!(!pressed.secondary_clicked);
+    assert_eq!(harness.memory().secondary_pressed(), Some(pressed.id));
+
+    harness.set_window_focused(false);
+    harness.pointer_release(MouseButton::Secondary);
+    let cancelled = context_menu_response(&mut harness, false);
+
+    assert!(!cancelled.secondary_clicked);
+    assert!(!cancelled.context_requested);
+    assert_eq!(harness.memory().secondary_pressed(), None);
+    assert!(harness.memory().pointer_interaction_cancelled());
+
+    harness.set_window_focused(true);
+    harness.advance_frame(Duration::from_millis(16));
+    let cleared = harness
+        .run_frame(|ui| ui.memory().pointer_interaction_cancelled())
+        .0;
+    assert!(!cleared);
 }
 
 #[test]

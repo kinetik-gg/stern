@@ -294,6 +294,14 @@ impl FrameOutput {
         self.platform_requests.push(request);
     }
 
+    /// Records the cursor request for this frame, replacing earlier cursor intent.
+    pub fn request_cursor(&mut self, cursor: CursorShape) {
+        self.platform_requests
+            .retain(|request| !matches!(request, PlatformRequest::SetCursor(_)));
+        self.platform_requests
+            .push(PlatformRequest::SetCursor(cursor));
+    }
+
     /// Appends one runtime warning.
     pub fn push_warning(&mut self, warning: FrameWarning) {
         self.warnings.push(warning);
@@ -447,6 +455,28 @@ impl<'a> Ui<'a> {
     /// Appends one platform request.
     pub fn push_platform_request(&mut self, request: PlatformRequest) {
         self.output.push_platform_request(request);
+    }
+
+    /// Requests a cursor shape for a hovered or captured widget.
+    ///
+    /// Captured pointer owners stay authoritative even when the pointer leaves
+    /// their rect. Other widgets cannot publish cursor intent while capture is
+    /// owned elsewhere, and cancelled pointer frames suppress stale cursor
+    /// output until a later frame establishes fresh hover or capture state.
+    pub fn request_cursor_for(&mut self, owner: WidgetId, cursor: CursorShape) -> bool {
+        if self.memory.pointer_interaction_cancelled() {
+            return false;
+        }
+        if let Some(captured) = self.memory.pointer_capture() {
+            if captured != owner {
+                return false;
+            }
+        } else if !self.memory.is_hovered(owner) {
+            return false;
+        }
+
+        self.output.request_cursor(cursor);
+        true
     }
 
     /// Starts platform text input for a focused text-editing widget.

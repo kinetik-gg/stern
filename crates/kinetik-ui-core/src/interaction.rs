@@ -382,7 +382,7 @@ fn keyboard_activation_pressed(id: WidgetId, input: &UiInput, memory: &UiMemory)
 
 fn routed_hit_test(id: WidgetId, rect: Rect, input: &UiInput, memory: &UiMemory) -> bool {
     memory
-        .pointer_capture()
+        .pointer_routing_owner()
         .is_none_or(|captured| captured == id)
         && hit_test(rect, input)
 }
