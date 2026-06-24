@@ -32,8 +32,8 @@ pub use actions::{
     Shortcut,
 };
 pub use debug::{
-    DebugOverlay, PrimitiveInspection, PrimitiveKind, inspect_primitives, primitive_bounds,
-    primitive_kind,
+    DebugOverlay, DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity, FrameDiagnostic,
+    PrimitiveInspection, PrimitiveKind, inspect_primitives, primitive_bounds, primitive_kind,
 };
 pub use geometry::{Point, Rect, Size, Vec2};
 pub use identity::{DuplicateWidgetId, IdStack, WidgetId};

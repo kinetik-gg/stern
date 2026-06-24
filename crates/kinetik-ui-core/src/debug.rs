@@ -1,6 +1,52 @@
 //! Debug inspection models for renderer-neutral UI diagnostics.
 
-use crate::{FrameMetrics, Point, Primitive, Rect};
+use crate::{ClipId, FrameMetrics, LayerId, Point, Primitive, Rect, WidgetId};
+
+/// Severity for structured frame diagnostics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DiagnosticSeverity {
+    /// Recoverable runtime issue reported as a frame warning.
+    Warning,
+}
+
+/// Stable diagnostic grouping for downstream filtering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DiagnosticCategory {
+    /// Widget identity and stable ID issues.
+    Identity,
+    /// Accessibility semantic tree validation issues.
+    SemanticTree,
+    /// Unbalanced render primitive stack issues.
+    PrimitiveStack,
+}
+
+/// Structured diagnostic source location.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DiagnosticLocation {
+    /// A widget identity.
+    Widget(WidgetId),
+    /// A clip primitive stack scope.
+    Clip(ClipId),
+    /// A layer primitive stack scope.
+    Layer(LayerId),
+    /// The transform primitive stack.
+    TransformStack,
+    /// The frame semantic tree.
+    SemanticTree,
+}
+
+/// Stable diagnostic metadata derived from frame warnings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FrameDiagnostic {
+    /// Stable Kinetik-owned diagnostic code.
+    pub code: &'static str,
+    /// Diagnostic severity.
+    pub severity: DiagnosticSeverity,
+    /// Diagnostic category.
+    pub category: DiagnosticCategory,
+    /// Structured diagnostic location.
+    pub location: DiagnosticLocation,
+}
 
 /// Primitive category used by debug tooling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

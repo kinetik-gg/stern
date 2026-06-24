@@ -3,6 +3,7 @@
 use std::hash::Hash;
 use std::time::Duration;
 
+use crate::debug::{DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity, FrameDiagnostic};
 use crate::input::{Key, KeyEvent, KeyState, UiInput};
 use crate::memory::UiMemory;
 use crate::render::{ClipId, LayerId, Primitive};
@@ -217,6 +218,63 @@ pub enum FrameWarning {
     },
 }
 
+impl FrameWarning {
+    /// Returns stable structured diagnostic metadata for this warning.
+    #[must_use]
+    pub const fn diagnostic(&self) -> FrameDiagnostic {
+        match *self {
+            Self::DuplicateWidgetId { id } => FrameDiagnostic {
+                code: "identity.duplicate_widget_id",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::Identity,
+                location: DiagnosticLocation::Widget(id),
+            },
+            Self::UnmatchedClipEnd { id } => FrameDiagnostic {
+                code: "primitive_stack.unmatched_clip_end",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::PrimitiveStack,
+                location: DiagnosticLocation::Clip(id),
+            },
+            Self::UnclosedClip { id } => FrameDiagnostic {
+                code: "primitive_stack.unclosed_clip",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::PrimitiveStack,
+                location: DiagnosticLocation::Clip(id),
+            },
+            Self::UnmatchedLayerEnd { id } => FrameDiagnostic {
+                code: "primitive_stack.unmatched_layer_end",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::PrimitiveStack,
+                location: DiagnosticLocation::Layer(id),
+            },
+            Self::UnclosedLayer { id } => FrameDiagnostic {
+                code: "primitive_stack.unclosed_layer",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::PrimitiveStack,
+                location: DiagnosticLocation::Layer(id),
+            },
+            Self::UnmatchedTransformEnd => FrameDiagnostic {
+                code: "primitive_stack.unmatched_transform_end",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::PrimitiveStack,
+                location: DiagnosticLocation::TransformStack,
+            },
+            Self::UnclosedTransforms { .. } => FrameDiagnostic {
+                code: "primitive_stack.unclosed_transforms",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::PrimitiveStack,
+                location: DiagnosticLocation::TransformStack,
+            },
+            Self::InvalidSemanticTree { .. } => FrameDiagnostic {
+                code: "semantics.invalid_tree",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::SemanticTree,
+                location: DiagnosticLocation::SemanticTree,
+            },
+        }
+    }
+}
+
 /// Output produced by a UI frame.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FrameOutput {
@@ -306,6 +364,12 @@ impl FrameOutput {
     /// Appends one runtime warning.
     pub fn push_warning(&mut self, warning: FrameWarning) {
         self.warnings.push(warning);
+    }
+
+    /// Returns structured diagnostics derived from frame warnings in warning order.
+    #[must_use]
+    pub fn diagnostics(&self) -> Vec<FrameDiagnostic> {
+        self.warnings.iter().map(FrameWarning::diagnostic).collect()
     }
 
     /// Exports a validated accessibility snapshot for platform adapters.
