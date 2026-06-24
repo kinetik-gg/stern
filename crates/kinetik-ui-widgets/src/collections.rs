@@ -1211,6 +1211,46 @@ impl Selection {
         self.selected.iter().copied().collect()
     }
 
+    /// Returns the range anchor, when one is set.
+    #[must_use]
+    pub const fn anchor(&self) -> Option<ItemId> {
+        self.anchor
+    }
+
+    /// Returns true when the current range anchor is present in the visible items.
+    #[must_use]
+    pub fn anchor_visible(&self, visible_items: &[ItemId]) -> bool {
+        self.anchor
+            .is_some_and(|anchor| visible_items.contains(&anchor))
+    }
+
+    /// Retains selected, active, and anchored items present in the visible item set.
+    ///
+    /// Returns true when selection state changed.
+    pub fn retain_visible(&mut self, visible_items: &[ItemId]) -> bool {
+        let visible_items = visible_items.iter().copied().collect::<BTreeSet<_>>();
+        let selected_len = self.selected.len();
+        self.selected.retain(|item| visible_items.contains(item));
+
+        let mut changed = self.selected.len() != selected_len;
+        if self
+            .active
+            .is_some_and(|active| !visible_items.contains(&active))
+        {
+            self.active = None;
+            changed = true;
+        }
+        if self
+            .anchor
+            .is_some_and(|anchor| !visible_items.contains(&anchor))
+        {
+            self.anchor = None;
+            changed = true;
+        }
+
+        changed
+    }
+
     /// Clears selection.
     pub fn clear(&mut self) {
         self.selected.clear();
