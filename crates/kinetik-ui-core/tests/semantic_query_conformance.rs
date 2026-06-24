@@ -132,6 +132,7 @@ fn semantic_query_finds_slider_by_numeric_value_and_exposes_node_fields() {
     let matched = snapshot.find_by_value(&value).expect("slider value");
 
     assert_eq!(matched.id, slider);
+    assert_eq!(snapshot.find_by_id(slider), Some(matched));
     assert_eq!(matched.parent, Some(root));
     assert_eq!(matched.children, Vec::<WidgetId>::new());
     assert_eq!(matched.bounds, Rect::new(12.0, 40.0, 180.0, 18.0));
@@ -163,6 +164,82 @@ fn semantic_query_finds_slider_by_numeric_value_and_exposes_node_fields() {
     );
     assert_eq!(
         snapshot.find_by_value(&SemanticValue::Text("0.5".to_owned())),
+        None
+    );
+}
+
+#[test]
+fn semantic_query_finds_nodes_by_action_affordance_and_state() {
+    let root = WidgetId::from_key("root");
+    let snap = WidgetId::from_key("snap");
+    let menu = WidgetId::from_key("more");
+    let mut snap_node =
+        SemanticNode::new(snap, SemanticRole::Toggle, Rect::new(8.0, 8.0, 96.0, 24.0))
+            .focusable(true)
+            .with_label("Snap")
+            .with_action(SemanticAction::new(
+                SemanticActionKind::Invoke,
+                "Toggle snap",
+            ));
+    snap_node.state = SemanticState {
+        selected: true,
+        checked: Some(true),
+        pressed: true,
+        ..SemanticState::default()
+    };
+    let mut menu_node = SemanticNode::new(
+        menu,
+        SemanticRole::MenuItem,
+        Rect::new(112.0, 8.0, 96.0, 24.0),
+    )
+    .focusable(true)
+    .with_label("More")
+    .with_action(SemanticAction::new(SemanticActionKind::Open, "Open menu"));
+    menu_node.state.expanded = Some(false);
+
+    let mut tree = SemanticTree::new();
+    tree.push(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([snap, menu]));
+    tree.push(snap_node);
+    tree.push(menu_node);
+
+    let snapshot = tree.accessibility_snapshot(None).expect("valid snapshot");
+
+    assert_eq!(
+        snapshot
+            .nodes_by_action(&SemanticActionKind::Focus)
+            .map(|node| node.id)
+            .collect::<Vec<_>>(),
+        vec![snap, menu]
+    );
+    assert_eq!(
+        snapshot
+            .find_by_action(&SemanticActionKind::Open)
+            .map(|node| node.id),
+        Some(menu)
+    );
+    assert_eq!(
+        snapshot
+            .find_by_action(&SemanticActionKind::Close)
+            .map(|node| node.id),
+        None
+    );
+    assert_eq!(
+        snapshot
+            .nodes_by_state(|state| state.checked == Some(true))
+            .map(|node| node.id)
+            .collect::<Vec<_>>(),
+        vec![snap]
+    );
+    assert_eq!(
+        snapshot
+            .find_by_state(|state| state.expanded == Some(false))
+            .map(|node| node.id),
+        Some(menu)
+    );
+    assert_eq!(
+        snapshot
+            .find_by_state(|state| state.disabled)
+            .map(|node| node.id),
         None
     );
 }
@@ -216,6 +293,13 @@ fn semantic_query_preserves_traversal_and_filters_focus_order() {
         vec![root, second, first, disabled]
     );
     assert_eq!(snapshot.focus_order, vec![second, first]);
+    assert_eq!(
+        snapshot
+            .focus_order_nodes()
+            .map(|node| node.id)
+            .collect::<Vec<_>>(),
+        vec![second, first]
+    );
     assert_eq!(snapshot.focused, None);
     assert_eq!(snapshot.node(second).expect("second").parent, Some(root));
     assert_eq!(

@@ -574,6 +574,12 @@ impl AccessibilitySnapshot {
         self.nodes.iter().find(|node| node.id == id)
     }
 
+    /// Finds an exported node by semantic widget ID.
+    #[must_use]
+    pub fn find_by_id(&self, id: WidgetId) -> Option<&AccessibilityNode> {
+        self.node(id)
+    }
+
     /// Returns exported nodes with the requested semantic role.
     pub fn nodes_by_role<'a>(
         &'a self,
@@ -639,6 +645,50 @@ impl AccessibilitySnapshot {
         self.nodes
             .iter()
             .find(|node| node.state.value.as_ref() == Some(value))
+    }
+
+    /// Returns exported nodes that support the requested semantic action kind.
+    pub fn nodes_by_action<'a>(
+        &'a self,
+        action: &'a SemanticActionKind,
+    ) -> impl Iterator<Item = &'a AccessibilityNode> + 'a {
+        self.nodes.iter().filter(move |node| {
+            node.actions
+                .iter()
+                .any(|candidate| &candidate.kind == action)
+        })
+    }
+
+    /// Finds the first exported node that supports the requested semantic action kind.
+    #[must_use]
+    pub fn find_by_action(&self, action: &SemanticActionKind) -> Option<&AccessibilityNode> {
+        self.nodes.iter().find(|node| {
+            node.actions
+                .iter()
+                .any(|candidate| &candidate.kind == action)
+        })
+    }
+
+    /// Returns exported nodes whose semantic state matches the predicate.
+    pub fn nodes_by_state<'a>(
+        &'a self,
+        mut predicate: impl FnMut(&SemanticState) -> bool + 'a,
+    ) -> impl Iterator<Item = &'a AccessibilityNode> + 'a {
+        self.nodes.iter().filter(move |node| predicate(&node.state))
+    }
+
+    /// Finds the first exported node whose semantic state matches the predicate.
+    #[must_use]
+    pub fn find_by_state(
+        &self,
+        mut predicate: impl FnMut(&SemanticState) -> bool,
+    ) -> Option<&AccessibilityNode> {
+        self.nodes.iter().find(|node| predicate(&node.state))
+    }
+
+    /// Returns focusable exported nodes in deterministic focus traversal order.
+    pub fn focus_order_nodes(&self) -> impl Iterator<Item = &AccessibilityNode> {
+        self.focus_order.iter().filter_map(|id| self.node(*id))
     }
 }
 
