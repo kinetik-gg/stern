@@ -452,7 +452,17 @@ impl ActionRouter {
     /// active owner.
     #[must_use]
     pub fn resolve_shortcut(&self, input: &KeyboardInput) -> Option<ActionInvocation> {
-        self.resolve_shortcut_in_context(input, ActionRoutingContext::new())
+        self.resolve_shortcuts(input).pop_front()
+    }
+
+    /// Resolves all enabled visible global actions for pressed shortcut events.
+    ///
+    /// Invocations are returned in keyboard event order. When multiple bindings
+    /// match the same event, the highest-priority active binding wins, with
+    /// first registration used as the deterministic equal-priority tie breaker.
+    #[must_use]
+    pub fn resolve_shortcuts(&self, input: &KeyboardInput) -> ActionQueue {
+        self.resolve_shortcuts_in_context(input, ActionRoutingContext::new())
     }
 
     /// Resolves the highest-priority enabled visible action active in a routing context.
@@ -466,7 +476,22 @@ impl ActionRouter {
         input: &KeyboardInput,
         routing: ActionRoutingContext,
     ) -> Option<ActionInvocation> {
-        self.resolve_shortcut_matching(input, |binding, event| {
+        self.resolve_shortcuts_in_context(input, routing)
+            .pop_front()
+    }
+
+    /// Resolves all enabled visible actions active in a routing context.
+    ///
+    /// Invocations are returned in keyboard event order. Each event resolves to
+    /// at most one action using modal, text input, focused widget, container,
+    /// editor, then global priority.
+    #[must_use]
+    pub fn resolve_shortcuts_in_context(
+        &self,
+        input: &KeyboardInput,
+        routing: ActionRoutingContext,
+    ) -> ActionQueue {
+        self.resolve_shortcuts_matching(input, |binding, event| {
             let text_input_reserved =
                 routing.text_input.is_some() && text_input_reserves_event(event);
             binding_context_is_active(&binding.context, routing)
@@ -475,20 +500,33 @@ impl ActionRouter {
         })
     }
 
-    fn resolve_shortcut_matching(
+    fn resolve_shortcuts_matching(
         &self,
         input: &KeyboardInput,
         filter: impl Fn(&ActionBinding, &KeyEvent) -> bool,
+    ) -> ActionQueue {
+        let mut queue = ActionQueue::new();
+        for event in &input.events {
+            if let Some(invocation) = self.resolve_event_matching(event, &filter) {
+                queue.push(invocation);
+            }
+        }
+        queue
+    }
+
+    fn resolve_event_matching(
+        &self,
+        event: &KeyEvent,
+        filter: &impl Fn(&ActionBinding, &KeyEvent) -> bool,
     ) -> Option<ActionInvocation> {
         self.bindings
             .iter()
             .enumerate()
             .filter_map(|(index, binding)| {
                 let shortcut = binding.descriptor.shortcut.as_ref()?;
-                let event = input
-                    .events
-                    .iter()
-                    .find(|event| shortcut.matches_key_event(event))?;
+                if !shortcut.matches_key_event(event) {
+                    return None;
+                }
                 (filter(binding, event) && binding.descriptor.can_invoke())
                     .then_some((index, binding))
             })
@@ -524,9 +562,14 @@ fn binding_context_is_text_input(context: &ActionContext, routing: ActionRouting
 }
 
 fn text_input_reserves_event(event: &KeyEvent) -> bool {
+    let standard_editing_modifier = event.modifiers.ctrl || event.modifiers.super_key;
+    if standard_editing_modifier && physical_key_is_standard_text_editing(event.physical_key) {
+        return true;
+    }
+
     match &event.key {
         Key::Character(character) => {
-            if event.modifiers.ctrl || event.modifiers.super_key {
+            if standard_editing_modifier {
                 matches!(
                     character.to_ascii_lowercase().as_str(),
                     "a" | "c" | "v" | "x" | "y" | "z"
@@ -551,6 +594,18 @@ fn text_input_reserves_event(event: &KeyEvent) -> bool {
         Key::Space => event.modifiers.is_empty(),
         Key::Escape | Key::Function(_) | Key::Unidentified => false,
     }
+}
+
+fn physical_key_is_standard_text_editing(physical_key: PhysicalKey) -> bool {
+    matches!(
+        physical_key,
+        PhysicalKey::KeyA
+            | PhysicalKey::KeyC
+            | PhysicalKey::KeyV
+            | PhysicalKey::KeyX
+            | PhysicalKey::KeyY
+            | PhysicalKey::KeyZ
+    )
 }
 
 impl Hash for ActionDescriptor {

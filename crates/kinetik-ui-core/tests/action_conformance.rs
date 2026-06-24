@@ -414,6 +414,41 @@ fn action_conformance_scripted_ctrl_s_routes_to_global_frame_action() {
 }
 
 #[test]
+fn action_conformance_scripted_shortcuts_emit_frame_actions_in_event_order() {
+    let modal = WidgetId::from_key("modal");
+    let mut router = ActionRouter::new();
+    bind(
+        &mut router,
+        action_with_shortcut("file.save", ctrl_shortcut("s")),
+        ActionContext::Global,
+        ActionPriority::Global,
+    );
+    bind(
+        &mut router,
+        action_with_shortcut("modal.find", ctrl_shortcut("f")),
+        ActionContext::Modal(modal),
+        ActionPriority::Modal,
+    );
+
+    let mut harness = UiTestHarness::new();
+    let ((), output) = harness.run_scripted_frame_with_action_router(
+        [
+            ScriptedInput::key_press(Key::Character("s".to_owned()), ctrl()),
+            ScriptedInput::key_press(Key::Character("f".to_owned()), ctrl()),
+        ],
+        &router,
+        ActionRoutingContext::new().with_modal(modal),
+        |_| {},
+    );
+
+    assert_eq!(
+        frame_action_ids(&output),
+        vec![ActionId::new("file.save"), ActionId::new("modal.find")]
+    );
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+}
+
+#[test]
 fn action_conformance_scripted_text_input_blocks_reserved_global_but_allows_text_binding() {
     let field = WidgetId::from_key("field");
     let mut router = ActionRouter::new();
@@ -750,6 +785,26 @@ fn action_conformance_physical_shortcuts_remain_layout_independent() {
     );
     assert_eq!(
         router.resolve_shortcut(&key_press(Key::Character("z".to_owned()), ctrl())),
+        None
+    );
+}
+
+#[test]
+fn action_conformance_text_input_reserves_physical_editing_shortcuts_across_layouts() {
+    let field = WidgetId::from_key("field");
+    let mut router = ActionRouter::new();
+    bind(
+        &mut router,
+        action_with_shortcut("global.undo", Shortcut::physical(ctrl(), PhysicalKey::KeyZ)),
+        ActionContext::Global,
+        ActionPriority::Global,
+    );
+
+    assert_eq!(
+        router.resolve_shortcut_in_context(
+            &physical_key_press(Key::Character("w".to_owned()), PhysicalKey::KeyZ, ctrl(),),
+            ActionRoutingContext::new().with_text_input(field),
+        ),
         None
     );
 }

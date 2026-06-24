@@ -580,10 +580,10 @@ impl UiTestHarness {
         routing: ActionRoutingContext,
         build: impl FnOnce(&mut Ui<'_>) -> T,
     ) -> (T, FrameOutput) {
-        let shortcut_invocation = self.route_shortcut(router, routing);
+        let mut shortcut_invocations = self.route_shortcuts(router, routing);
         self.run_frame(|ui| {
             let result = build(ui);
-            if let Some(invocation) = shortcut_invocation {
+            for invocation in shortcut_invocations.drain() {
                 ui.push_action(invocation);
             }
             result
@@ -610,7 +610,17 @@ impl UiTestHarness {
         router: &ActionRouter,
         routing: ActionRoutingContext,
     ) -> Option<ActionInvocation> {
-        router.resolve_shortcut_in_context(&self.input.keyboard, routing)
+        self.route_shortcuts(router, routing).pop_front()
+    }
+
+    /// Resolves all pending keyboard shortcuts through an action router.
+    #[must_use]
+    pub fn route_shortcuts(
+        &self,
+        router: &ActionRouter,
+        routing: ActionRoutingContext,
+    ) -> ActionQueue {
+        router.resolve_shortcuts_in_context(&self.input.keyboard, routing)
     }
 
     /// Applies one typed scripted input operation to the pending frame.

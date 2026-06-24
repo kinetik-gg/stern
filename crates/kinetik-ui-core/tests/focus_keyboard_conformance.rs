@@ -898,7 +898,7 @@ fn focus_keyboard_text_input_reservation_still_blocks_global_physical_editing_sh
 
     assert_eq!(
         router.resolve_shortcut_in_context(
-            &physical_input("z", PhysicalKey::KeyZ, ctrl()),
+            &physical_input("w", PhysicalKey::KeyZ, ctrl()),
             ActionRoutingContext::new().with_text_input(field),
         ),
         None
