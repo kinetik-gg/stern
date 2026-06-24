@@ -4,13 +4,14 @@ mod support;
 
 use kinetik_ui_core::{
     Brush, ClipId, Color, CornerRadius, GradientStop, ImageId, ImagePrimitive, LayerId,
-    LinePrimitive, LinearGradient, PathElement, PathPrimitive, Point, Primitive, Rect,
-    RectPrimitive, ShadowPrimitive, Size, Stroke, TextLayoutId, TextPrimitive, TextureId,
-    TexturePrimitive, Transform, Vec2,
+    LinePrimitive, LinearGradient, PathElement, PathPrimitive, PhysicalSize, Point, Primitive,
+    Rect, RectPrimitive, ScaleFactor, ShadowPrimitive, Size, Stroke, TextLayoutId, TextPrimitive,
+    TextureId, TexturePrimitive, Transform, Vec2, ViewportInfo,
 };
 use kinetik_ui_vello::{
-    ImageAtlasRegion, ImageResource, RenderDiagnostic, RenderImage, RenderImageSampling,
-    RenderResources, TextureResource, render_translation_snapshot, translate_primitives,
+    ImageAtlasRegion, ImageResource, RenderDiagnostic, RenderFrameInput, RenderImage,
+    RenderImageSampling, RenderResources, TextureResource, VelloRenderer,
+    render_translation_snapshot, translate_primitives,
 };
 use support::command_snapshots::{
     assert_command_snapshot, command_snapshot_artifact_paths, command_snapshot_root,
@@ -458,6 +459,58 @@ fn render_translation_conformance_reports_recoverable_missing_resource_paths() {
         "commands:\n  0: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] text layout=6 origin=(0.000, 10.000) family=\"sans-serif\" size=12.000 line_height=16.000 color=rgba(1.000, 1.000, 1.000, 1.000) text=\"Missing layout\"\n  1: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] text layout=none origin=(0.000, 30.000) family=\"sans-serif\" size=12.000 line_height=16.000 color=rgba(1.000, 1.000, 1.000, 1.000) text=\"Fallback text\"\n  2: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#1 rect=(0.000, 0.000, 8.000, 8.000) tint=none\n  3: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] image#2 rect=(10.000, 0.000, 8.000, 8.000) tint=none\n  4: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#3 rect=(20.000, 0.000, 8.000, 8.000) source_size=2.000x2.000\n  5: layer=0 transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000] clips=[] texture#4 rect=(30.000, 0.000, 8.000, 8.000) source_size=2.000x2.000\ndiagnostics:\n  missing_text_layout#6\n  missing_image#1\n  missing_image_pixels#2\n  missing_texture#3\n  missing_texture_snapshot#4",
         &render_translation_snapshot(&translation),
     );
+}
+
+#[test]
+fn render_translation_conformance_submit_frame_encodes_recoverable_missing_resources() {
+    let primitives = vec![
+        Primitive::Text(TextPrimitive {
+            layout: Some(TextLayoutId::from_raw(71)),
+            origin: Point::new(4.2, 16.4),
+            text: "Fallback".to_owned(),
+            family: "sans-serif".to_owned(),
+            size: 12.0,
+            line_height: 16.0,
+            brush: Brush::Solid(Color::WHITE),
+        }),
+        Primitive::Image(ImagePrimitive {
+            image: ImageId::from_raw(72),
+            rect: Rect::new(12.2, 20.2, 16.4, 12.4),
+            tint: None,
+        }),
+        Primitive::Texture(TexturePrimitive {
+            texture: TextureId::from_raw(73),
+            rect: Rect::new(32.2, 20.2, 16.4, 12.4),
+            source_size: Size::new(2.0, 2.0),
+        }),
+    ];
+    let resources = RenderResources::new();
+    let mut renderer = VelloRenderer::new();
+
+    let output = renderer.submit_frame(RenderFrameInput {
+        viewport: ViewportInfo::new(
+            Size::new(80.0, 60.0),
+            PhysicalSize::new(100, 75),
+            ScaleFactor::new(1.25),
+        ),
+        primitives: &primitives,
+        resources: &resources,
+    });
+    let encoding = renderer.scene().encoding();
+
+    assert_eq!(output.primitive_count, primitives.len());
+    assert_eq!(
+        output.diagnostics,
+        vec![
+            RenderDiagnostic::MissingTextLayout(TextLayoutId::from_raw(71)),
+            RenderDiagnostic::MissingImage(ImageId::from_raw(72)),
+            RenderDiagnostic::MissingTexture(TextureId::from_raw(73)),
+        ]
+    );
+    assert!(!encoding.is_empty());
+    assert!(!encoding.resources.glyph_runs.is_empty());
+    assert!(!encoding.resources.glyphs.is_empty());
+    assert!(encoding.n_paths >= 2);
 }
 
 #[test]
