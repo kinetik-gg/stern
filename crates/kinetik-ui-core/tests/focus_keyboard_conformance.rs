@@ -428,6 +428,138 @@ fn focus_keyboard_focus_change_retires_stale_text_input_owner() {
 }
 
 #[test]
+fn focus_keyboard_focused_text_widget_starts_input_and_observes_same_frame_commit() {
+    let field = WidgetId::from_key("field");
+    let rect = Rect::new(12.0, 24.0, 160.0, 20.0);
+    let mut harness = UiTestHarness::new();
+
+    let (observed, output) =
+        harness.run_scripted_frame([ScriptedInput::TextCommit("hello".to_owned())], |ui| {
+            ui.memory_mut().focus(field);
+            assert!(ui.start_text_input(field, Some(rect)));
+            assert_eq!(ui.memory().text_input_owner(), Some(field));
+
+            let owner = ui.memory().text_input_owner();
+            ui.input()
+                .text_events
+                .iter()
+                .filter_map(|event| match event {
+                    TextInputEvent::Commit(text) => Some((owner, text.clone())),
+                    TextInputEvent::CompositionStart
+                    | TextInputEvent::Composition { .. }
+                    | TextInputEvent::CompositionEnd => None,
+                })
+                .collect::<Vec<_>>()
+        });
+
+    assert_eq!(observed, vec![(Some(field), "hello".to_owned())]);
+    assert_eq!(harness.memory().text_input_owner(), Some(field));
+    assert_eq!(
+        output.platform_requests,
+        vec![PlatformRequest::StartTextInput { rect: Some(rect) }]
+    );
+}
+
+#[test]
+fn focus_keyboard_same_frame_text_input_handoff_observes_commit_for_new_owner() {
+    let old_field = WidgetId::from_key("old-field");
+    let new_field = WidgetId::from_key("new-field");
+    let rect = Rect::new(8.0, 12.0, 120.0, 18.0);
+    let mut harness = UiTestHarness::new();
+    harness.memory_mut().focus(old_field);
+    harness.memory_mut().set_text_input_owner(old_field);
+
+    let (observed, output) =
+        harness.run_scripted_frame([ScriptedInput::TextCommit("handoff".to_owned())], |ui| {
+            ui.memory_mut().focus(new_field);
+            assert!(ui.start_text_input(new_field, Some(rect)));
+
+            let owner = ui.memory().text_input_owner();
+            ui.input()
+                .text_events
+                .iter()
+                .filter_map(|event| match event {
+                    TextInputEvent::Commit(text) => Some((owner, text.clone())),
+                    TextInputEvent::CompositionStart
+                    | TextInputEvent::Composition { .. }
+                    | TextInputEvent::CompositionEnd => None,
+                })
+                .collect::<Vec<_>>()
+        });
+
+    assert_eq!(observed, vec![(Some(new_field), "handoff".to_owned())]);
+    assert_eq!(harness.memory().focused(), Some(new_field));
+    assert_eq!(harness.memory().text_input_owner(), Some(new_field));
+    assert_eq!(
+        output.platform_requests,
+        vec![PlatformRequest::StartTextInput { rect: Some(rect) }]
+    );
+}
+
+#[test]
+fn focus_keyboard_starting_text_input_allows_missing_logical_rect() {
+    let field = WidgetId::from_key("field");
+    let mut harness = UiTestHarness::new();
+    harness.memory_mut().focus(field);
+
+    let (started, output) = harness.run_frame(|ui| ui.start_text_input(field, None));
+
+    assert!(started);
+    assert_eq!(harness.memory().text_input_owner(), Some(field));
+    assert_eq!(
+        output.platform_requests,
+        vec![PlatformRequest::StartTextInput { rect: None }]
+    );
+}
+
+#[test]
+fn focus_keyboard_text_composition_events_do_not_route_global_shortcut_actions() {
+    let field = WidgetId::from_key("field");
+    let mut router = ActionRouter::new();
+    bind_global(
+        &mut router,
+        "global.type.k",
+        Shortcut::new(Modifiers::default(), Key::Character("k".to_owned())),
+    );
+    bind_global(&mut router, "global.save", ctrl_shortcut("s"));
+    let mut harness = UiTestHarness::new();
+    harness.memory_mut().focus(field);
+    harness.memory_mut().set_text_input_owner(field);
+
+    let (text_events, output) = harness.run_scripted_frame_with_action_router(
+        [
+            ScriptedInput::TextCompositionStart,
+            ScriptedInput::TextComposition {
+                text: "ka".to_owned(),
+                selection: Some(TextRange::new(1, 2)),
+            },
+            ScriptedInput::TextCommit("か".to_owned()),
+            ScriptedInput::TextCompositionEnd,
+        ],
+        &router,
+        ActionRoutingContext::new().with_text_input(field),
+        |ui| {
+            assert_eq!(ui.memory().text_input_owner(), Some(field));
+            ui.input().text_events.clone()
+        },
+    );
+
+    assert_eq!(
+        text_events,
+        vec![
+            TextInputEvent::CompositionStart,
+            TextInputEvent::Composition {
+                text: "ka".to_owned(),
+                selection: Some(TextRange::new(1, 2)),
+            },
+            TextInputEvent::Commit("か".to_owned()),
+            TextInputEvent::CompositionEnd,
+        ]
+    );
+    assert!(output.actions.is_empty());
+}
+
+#[test]
 fn focus_keyboard_accessibility_snapshot_filters_focused_identity_when_not_focusable() {
     let (_, first, second, third) = ids();
     let disabled = WidgetId::from_key("disabled");

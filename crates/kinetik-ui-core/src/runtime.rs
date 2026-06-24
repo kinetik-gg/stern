@@ -449,6 +449,22 @@ impl<'a> Ui<'a> {
         self.output.push_platform_request(request);
     }
 
+    /// Starts platform text input for a focused text-editing widget.
+    ///
+    /// The rectangle is expressed in logical UI coordinates and is forwarded
+    /// unchanged for platform adapters to interpret. Unfocused widgets cannot
+    /// acquire text input ownership through this helper.
+    pub fn start_text_input(&mut self, owner: WidgetId, rect: Option<Rect>) -> bool {
+        if !self.memory.is_focused(owner) {
+            return false;
+        }
+
+        self.memory.set_text_input_owner(owner);
+        self.output
+            .push_platform_request(PlatformRequest::StartTextInput { rect });
+        true
+    }
+
     /// Appends one runtime warning.
     pub fn push_warning(&mut self, warning: FrameWarning) {
         self.output.push_warning(warning);
@@ -958,6 +974,51 @@ mod tests {
         assert!(ui.memory().pointer_interaction_cancelled());
         assert_eq!(ui.memory().focused(), Some(focused));
         assert_eq!(ui.memory().text_input_owner(), Some(focused));
+    }
+
+    #[test]
+    fn ui_builder_starts_text_input_for_focused_widget() {
+        let viewport = ViewportInfo::new(
+            Size::new(100.0, 50.0),
+            PhysicalSize::new(100, 50),
+            ScaleFactor::ONE,
+        );
+        let context = FrameContext::new(viewport, UiInput::default(), TimeInfo::default());
+        let field = WidgetId::from_key("field");
+        let rect = Rect::new(4.0, 8.0, 60.0, 18.0);
+        let mut memory = UiMemory::new();
+        memory.focus(field);
+
+        let mut ui = Ui::begin_frame(context, &mut memory);
+        assert!(ui.start_text_input(field, Some(rect)));
+        let output = ui.end_frame();
+
+        assert_eq!(memory.text_input_owner(), Some(field));
+        assert_eq!(
+            output.platform_requests,
+            vec![PlatformRequest::StartTextInput { rect: Some(rect) }]
+        );
+    }
+
+    #[test]
+    fn ui_builder_does_not_start_text_input_for_unfocused_widget() {
+        let viewport = ViewportInfo::new(
+            Size::new(100.0, 50.0),
+            PhysicalSize::new(100, 50),
+            ScaleFactor::ONE,
+        );
+        let context = FrameContext::new(viewport, UiInput::default(), TimeInfo::default());
+        let focused = WidgetId::from_key("focused");
+        let field = WidgetId::from_key("field");
+        let mut memory = UiMemory::new();
+        memory.focus(focused);
+
+        let mut ui = Ui::begin_frame(context, &mut memory);
+        assert!(!ui.start_text_input(field, None));
+        let output = ui.end_frame();
+
+        assert_eq!(memory.text_input_owner(), None);
+        assert!(output.platform_requests.is_empty());
     }
 
     #[test]
