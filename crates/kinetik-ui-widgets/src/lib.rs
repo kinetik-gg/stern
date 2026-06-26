@@ -2148,7 +2148,7 @@ pub(crate) fn multi_line_text_field_with_text_layouts_and_caret_visibility(
         }) {
             text_events.push(TextInputEvent::Commit("\n".to_owned()));
         }
-        state.apply_input(&text_events, &input.keyboard.events);
+        state.apply_multiline_input(&text_events, &input.keyboard.events);
     }
     let recipe = theme.text_field(ComponentState {
         hovered: response.state.hovered,

@@ -1070,6 +1070,52 @@ impl TextEditState {
         self.selection = self.selection.clamp_to_text(&self.text);
     }
 
+    /// Moves the caret to the start of the current explicit line.
+    pub fn move_line_home(&mut self) {
+        self.set_caret(line_range_at_offset(&self.text, self.selection.active).start);
+    }
+
+    /// Extends the selection to the start of the current explicit line.
+    pub fn extend_line_home(&mut self) {
+        self.selection.active = line_range_at_offset(&self.text, self.selection.active).start;
+        self.selection = self.selection.clamp_to_text(&self.text);
+    }
+
+    /// Moves the caret to the end of the current explicit line.
+    pub fn move_line_end(&mut self) {
+        self.set_caret(line_range_at_offset(&self.text, self.selection.active).end);
+    }
+
+    /// Extends the selection to the end of the current explicit line.
+    pub fn extend_line_end(&mut self) {
+        self.selection.active = line_range_at_offset(&self.text, self.selection.active).end;
+        self.selection = self.selection.clamp_to_text(&self.text);
+    }
+
+    /// Moves the caret to the previous explicit line, preserving logical column for this event.
+    pub fn move_line_up(&mut self) {
+        let target = vertical_line_target(&self.text, self.selection.active, -1);
+        self.set_caret(target);
+    }
+
+    /// Extends the selection to the previous explicit line.
+    pub fn extend_line_up(&mut self) {
+        self.selection.active = vertical_line_target(&self.text, self.selection.active, -1);
+        self.selection = self.selection.clamp_to_text(&self.text);
+    }
+
+    /// Moves the caret to the next explicit line, preserving logical column for this event.
+    pub fn move_line_down(&mut self) {
+        let target = vertical_line_target(&self.text, self.selection.active, 1);
+        self.set_caret(target);
+    }
+
+    /// Extends the selection to the next explicit line.
+    pub fn extend_line_down(&mut self) {
+        self.selection.active = vertical_line_target(&self.text, self.selection.active, 1);
+        self.selection = self.selection.clamp_to_text(&self.text);
+    }
+
     /// Applies text and key events from a frame.
     pub fn apply_input(&mut self, text_events: &[TextInputEvent], key_events: &[KeyEvent]) {
         for event in text_events {
@@ -1106,6 +1152,55 @@ impl TextEditState {
                 Key::ArrowRight => self.move_right(),
                 Key::Home => self.move_home(),
                 Key::End => self.move_end(),
+                _ => {}
+            }
+        }
+    }
+
+    /// Applies text and key events using explicit-line multiline navigation.
+    pub fn apply_multiline_input(
+        &mut self,
+        text_events: &[TextInputEvent],
+        key_events: &[KeyEvent],
+    ) {
+        for event in text_events {
+            match event {
+                TextInputEvent::CompositionStart => {
+                    self.composition = Some(TextComposition::default());
+                }
+                TextInputEvent::Composition { text, selection } => {
+                    self.composition = Some(TextComposition::new(text.clone(), *selection));
+                }
+                TextInputEvent::Commit(text) => {
+                    self.insert_text(text);
+                }
+                TextInputEvent::CompositionEnd => {
+                    self.composition = None;
+                }
+            }
+        }
+        for event in key_events {
+            if event.state != KeyState::Pressed {
+                continue;
+            }
+            if self.apply_shortcut_event(event) {
+                continue;
+            }
+            match event.key {
+                Key::Backspace => self.backspace(),
+                Key::Delete => self.delete_forward(),
+                Key::ArrowLeft if event.modifiers.shift => self.extend_left(),
+                Key::ArrowRight if event.modifiers.shift => self.extend_right(),
+                Key::ArrowUp if event.modifiers.shift => self.extend_line_up(),
+                Key::ArrowDown if event.modifiers.shift => self.extend_line_down(),
+                Key::Home if event.modifiers.shift => self.extend_line_home(),
+                Key::End if event.modifiers.shift => self.extend_line_end(),
+                Key::ArrowLeft => self.move_left(),
+                Key::ArrowRight => self.move_right(),
+                Key::ArrowUp => self.move_line_up(),
+                Key::ArrowDown => self.move_line_down(),
+                Key::Home => self.move_line_home(),
+                Key::End => self.move_line_end(),
                 _ => {}
             }
         }
@@ -1252,6 +1347,63 @@ fn next_boundary(text: &str, offset: usize) -> Option<usize> {
         .map(|(index, _)| index)
         .find(|index| *index > offset)
         .or_else(|| (offset < text.len()).then_some(text.len()))
+}
+
+fn line_ranges(text: &str) -> Vec<core::ops::Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    for segment in text.split_inclusive('\n') {
+        let line = segment.strip_suffix('\n').unwrap_or(segment);
+        ranges.push(start..start + line.len());
+        start += segment.len();
+    }
+    if ranges.is_empty() || text.ends_with('\n') {
+        ranges.push(start..start);
+    }
+    ranges
+}
+
+fn line_index_at_offset(text: &str, offset: usize) -> usize {
+    let offset = clamp_boundary(text, offset);
+    let ranges = line_ranges(text);
+    ranges
+        .iter()
+        .position(|range| offset >= range.start && offset <= range.end)
+        .unwrap_or(ranges.len().saturating_sub(1))
+}
+
+fn line_range_at_offset(text: &str, offset: usize) -> core::ops::Range<usize> {
+    let ranges = line_ranges(text);
+    ranges[line_index_at_offset(text, offset)].clone()
+}
+
+fn line_column_at_offset(text: &str, line: &core::ops::Range<usize>, offset: usize) -> usize {
+    let offset = clamp_boundary(text, offset).clamp(line.start, line.end);
+    text[line.start..offset].chars().count()
+}
+
+fn offset_at_line_column(text: &str, line: &core::ops::Range<usize>, column: usize) -> usize {
+    let mut offset = line.start;
+    let mut remaining = column;
+    for character in text[line.clone()].chars() {
+        if remaining == 0 {
+            break;
+        }
+        offset += character.len_utf8();
+        remaining -= 1;
+    }
+    offset.min(line.end)
+}
+
+fn vertical_line_target(text: &str, offset: usize, delta: isize) -> usize {
+    let ranges = line_ranges(text);
+    let current_index = line_index_at_offset(text, offset);
+    let current_line = &ranges[current_index];
+    let column = line_column_at_offset(text, current_line, offset);
+    let target_index = current_index
+        .saturating_add_signed(delta)
+        .min(ranges.len().saturating_sub(1));
+    offset_at_line_column(text, &ranges[target_index], column)
 }
 
 fn clamp_text_range(text: &str, range: TextRange) -> TextRange {
@@ -1814,6 +1966,99 @@ mod tests {
         assert_eq!(state.caret(), 0);
         state.move_end();
         assert_eq!(state.caret(), 4);
+    }
+
+    #[test]
+    fn multiline_vertical_navigation_clamps_at_document_edges() {
+        let mut state = TextEditState::new("one\ntwo");
+        state.set_caret(1);
+
+        state.move_line_up();
+        assert_eq!(state.caret(), 1);
+
+        state.set_caret(5);
+        state.move_line_down();
+        assert_eq!(state.caret(), 5);
+    }
+
+    #[test]
+    fn multiline_vertical_navigation_clamps_to_shorter_lines_without_mutating_text() {
+        let mut state = TextEditState::new("wide\né\nβeta");
+        state.set_caret(3);
+
+        state.move_line_down();
+
+        assert_eq!(state.text, "wide\né\nβeta");
+        assert_eq!(state.caret(), "wide\né".len());
+        assert!(state.text.is_char_boundary(state.caret()));
+
+        state.move_line_down();
+        assert_eq!(state.caret(), "wide\né\nβ".len());
+        assert!(state.text.is_char_boundary(state.caret()));
+    }
+
+    #[test]
+    fn multiline_shift_vertical_navigation_extends_selection() {
+        let mut state = TextEditState::new("ab\ncde\nfg");
+        state.set_caret(4);
+
+        state.extend_line_down();
+
+        assert_eq!(state.text, "ab\ncde\nfg");
+        assert_eq!(state.selection, TextSelection::new(4, 8));
+    }
+
+    #[test]
+    fn multiline_home_and_end_target_current_line() {
+        let mut state = TextEditState::new("one\ntwé\nthree");
+        state.set_caret(5);
+
+        state.move_line_home();
+        assert_eq!(state.caret(), 4);
+
+        state.set_caret(5);
+        state.move_line_end();
+        assert_eq!(state.caret(), "one\ntwé".len());
+
+        state.set_caret(5);
+        state.extend_line_home();
+        assert_eq!(state.selection, TextSelection::new(5, 4));
+
+        state.set_caret(5);
+        state.extend_line_end();
+        assert_eq!(state.selection, TextSelection::new(5, "one\ntwé".len()));
+    }
+
+    #[test]
+    fn multiline_input_uses_explicit_line_navigation_without_changing_text() {
+        let mut state = TextEditState::new("alpha\nβ\nomega");
+        state.set_caret(3);
+        let shift = Modifiers::new(true, false, false, false);
+
+        state.apply_multiline_input(
+            &[],
+            &[KeyEvent::new(
+                Key::ArrowDown,
+                KeyState::Pressed,
+                shift,
+                false,
+            )],
+        );
+
+        assert_eq!(state.text, "alpha\nβ\nomega");
+        assert_eq!(state.selection, TextSelection::new(3, "alpha\nβ".len()));
+        assert!(state.text.is_char_boundary(state.selection.active));
+
+        state.apply_multiline_input(
+            &[],
+            &[KeyEvent::new(
+                Key::Home,
+                KeyState::Pressed,
+                Modifiers::default(),
+                false,
+            )],
+        );
+        assert_eq!(state.caret(), "alpha\n".len());
     }
 
     #[test]

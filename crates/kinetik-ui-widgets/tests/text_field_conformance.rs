@@ -816,6 +816,211 @@ fn multi_line_enter_inserts_newline_but_single_line_enter_does_not() {
 }
 
 #[test]
+fn multi_line_text_field_moves_vertically_between_explicit_lines() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("multi-nav");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    memory.set_text_input_owner(id);
+    let mut state = TextEditState::new("one\ntwo\nthree");
+    state.set_caret(6);
+
+    let up_input = UiInput {
+        keyboard: key_input(Key::ArrowUp, Modifiers::default()),
+        ..UiInput::default()
+    };
+    let up = multi_line_text_field(
+        id,
+        Rect::new(0.0, 0.0, 180.0, 80.0),
+        &mut state,
+        &up_input,
+        &mut memory,
+        &theme,
+        false,
+    );
+
+    assert!(!up.changed);
+    assert_eq!(state.text, "one\ntwo\nthree");
+    assert_eq!(state.caret(), 2);
+
+    let down_input = UiInput {
+        keyboard: key_input(Key::ArrowDown, Modifiers::default()),
+        ..UiInput::default()
+    };
+    let down = multi_line_text_field(
+        id,
+        Rect::new(0.0, 0.0, 180.0, 80.0),
+        &mut state,
+        &down_input,
+        &mut memory,
+        &theme,
+        false,
+    );
+
+    assert!(!down.changed);
+    assert_eq!(state.caret(), 6);
+}
+
+#[test]
+fn multi_line_text_field_extends_selection_with_shift_vertical_navigation() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("multi-shift-nav");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    memory.set_text_input_owner(id);
+    let mut state = TextEditState::new("one\ntwo\nthree");
+    state.set_caret(6);
+    let input = UiInput {
+        keyboard: key_input(Key::ArrowDown, shift()),
+        ..UiInput::default()
+    };
+
+    let output = multi_line_text_field(
+        id,
+        Rect::new(0.0, 0.0, 180.0, 80.0),
+        &mut state,
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+
+    assert!(!output.changed);
+    assert_eq!(state.text, "one\ntwo\nthree");
+    assert_eq!(state.selection, TextSelection::new(6, 10));
+}
+
+#[test]
+fn multi_line_text_field_home_end_are_line_local() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("multi-home-end");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    memory.set_text_input_owner(id);
+    let mut state = TextEditState::new("one\ntwo\nthree");
+    state.set_caret(5);
+
+    let home_input = UiInput {
+        keyboard: key_input(Key::Home, Modifiers::default()),
+        ..UiInput::default()
+    };
+    let home = multi_line_text_field(
+        id,
+        Rect::new(0.0, 0.0, 180.0, 80.0),
+        &mut state,
+        &home_input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(!home.changed);
+    assert_eq!(state.caret(), 4);
+
+    state.set_caret(5);
+    let end_input = UiInput {
+        keyboard: key_input(Key::End, Modifiers::default()),
+        ..UiInput::default()
+    };
+    let end = multi_line_text_field(
+        id,
+        Rect::new(0.0, 0.0, 180.0, 80.0),
+        &mut state,
+        &end_input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(!end.changed);
+    assert_eq!(state.caret(), 7);
+}
+
+#[test]
+fn multi_line_text_field_shift_home_end_extend_to_current_line_edges() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("multi-shift-home-end");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    memory.set_text_input_owner(id);
+    let mut state = TextEditState::new("one\ntwo\nthree");
+    state.set_caret(5);
+
+    let shift_home_input = UiInput {
+        keyboard: key_input(Key::Home, shift()),
+        ..UiInput::default()
+    };
+    let shift_home = multi_line_text_field(
+        id,
+        Rect::new(0.0, 0.0, 180.0, 80.0),
+        &mut state,
+        &shift_home_input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(!shift_home.changed);
+    assert_eq!(state.selection, TextSelection::new(5, 4));
+
+    state.set_caret(5);
+    let shift_end_input = UiInput {
+        keyboard: key_input(Key::End, shift()),
+        ..UiInput::default()
+    };
+    let shift_end = multi_line_text_field(
+        id,
+        Rect::new(0.0, 0.0, 180.0, 80.0),
+        &mut state,
+        &shift_end_input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(!shift_end.changed);
+    assert_eq!(state.selection, TextSelection::new(5, 7));
+}
+
+#[test]
+fn unfocused_and_disabled_multi_line_text_fields_ignore_navigation() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("multi-disabled-nav");
+    let input = UiInput {
+        keyboard: key_input(Key::ArrowDown, shift()),
+        ..UiInput::default()
+    };
+
+    let mut unfocused_memory = UiMemory::new();
+    let mut unfocused_state = TextEditState::new("one\ntwo");
+    unfocused_state.set_caret(1);
+    let unfocused = multi_line_text_field(
+        id,
+        Rect::new(0.0, 0.0, 180.0, 80.0),
+        &mut unfocused_state,
+        &input,
+        &mut unfocused_memory,
+        &theme,
+        false,
+    );
+    assert!(!unfocused.changed);
+    assert_eq!(unfocused_state.selection, TextSelection::new(1, 1));
+
+    let mut disabled_memory = UiMemory::new();
+    disabled_memory.focus(id);
+    disabled_memory.set_text_input_owner(id);
+    let mut disabled_state = TextEditState::new("one\ntwo");
+    disabled_state.set_caret(1);
+    let disabled = multi_line_text_field(
+        id,
+        Rect::new(0.0, 0.0, 180.0, 80.0),
+        &mut disabled_state,
+        &input,
+        &mut disabled_memory,
+        &theme,
+        true,
+    );
+    assert!(!disabled.changed);
+    assert_eq!(disabled_state.selection, TextSelection::new(1, 1));
+}
+
+#[test]
 fn numeric_input_distinguishes_valid_invalid_and_empty_states() {
     let theme = default_dark_theme();
     let mut memory = UiMemory::new();
@@ -1056,7 +1261,91 @@ fn search_and_numeric_fields_extend_selection_through_widget_flow() {
 }
 
 #[test]
-fn multi_line_text_field_extends_linear_selection_without_vertical_navigation() {
+fn single_line_search_and_numeric_navigation_remains_buffer_local() {
+    let theme = default_dark_theme();
+    let field = WidgetId::from_key("single-nav");
+    let mut field_memory = UiMemory::new();
+    field_memory.focus(field);
+    field_memory.set_text_input_owner(field);
+    let mut field_state = TextEditState::new("one\ntwo");
+    field_state.set_caret(5);
+
+    let home = text_field(
+        field,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut field_state,
+        &UiInput {
+            keyboard: key_input(Key::Home, Modifiers::default()),
+            ..UiInput::default()
+        },
+        &mut field_memory,
+        &theme,
+        false,
+    );
+    assert!(!home.changed);
+    assert_eq!(field_state.caret(), 0);
+
+    field_state.set_caret(5);
+    let arrow_down = text_field(
+        field,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut field_state,
+        &UiInput {
+            keyboard: key_input(Key::ArrowDown, Modifiers::default()),
+            ..UiInput::default()
+        },
+        &mut field_memory,
+        &theme,
+        false,
+    );
+    assert!(!arrow_down.changed);
+    assert_eq!(field_state.caret(), 5);
+
+    let search = root_child("search-nav");
+    let mut search_memory = UiMemory::new();
+    search_memory.focus(search);
+    search_memory.set_text_input_owner(search);
+    let mut search_state = TextEditState::new("media");
+    search_state.set_caret(2);
+    let search_input = UiInput {
+        keyboard: key_input(Key::End, Modifiers::default()),
+        ..UiInput::default()
+    };
+    let mut ui = Ui::new(&search_input, &mut search_memory, &theme);
+    let search_output = ui.search_field(
+        "search-nav",
+        Rect::new(0.0, 0.0, 180.0, 24.0),
+        &mut search_state,
+        false,
+    );
+    let _ = ui.finish_output();
+    assert!(!search_output.field.changed);
+    assert_eq!(search_state.caret(), 5);
+
+    let number = WidgetId::from_key("number-nav");
+    let mut number_memory = UiMemory::new();
+    number_memory.focus(number);
+    number_memory.set_text_input_owner(number);
+    let mut number_state = TextEditState::new("42.5");
+    number_state.set_caret(2);
+    let number_output = numeric_input(
+        number,
+        Rect::new(0.0, 0.0, 180.0, 24.0),
+        &mut number_state,
+        &UiInput {
+            keyboard: key_input(Key::ArrowUp, Modifiers::default()),
+            ..UiInput::default()
+        },
+        &mut number_memory,
+        &theme,
+        false,
+    );
+    assert!(!number_output.field.changed);
+    assert_eq!(number_state.caret(), 2);
+}
+
+#[test]
+fn multi_line_text_field_shift_end_extends_to_current_line_end() {
     let theme = default_dark_theme();
     let id = WidgetId::from_key("multi");
     let mut memory = UiMemory::new();
