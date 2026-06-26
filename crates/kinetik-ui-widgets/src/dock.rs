@@ -3253,6 +3253,31 @@ impl WorkspaceSnapshot {
         validate_workspace_snapshot_diagnostics(self, descriptors)
     }
 
+    /// Returns an explicit metadata-only repair plan for this workspace snapshot.
+    ///
+    /// The plan keeps strict validation unchanged: hard identity or dock
+    /// corruption yields no repaired snapshot. Recoverable stale, missing, or
+    /// unknown panel metadata remains visible through diagnostics and actions.
+    #[must_use]
+    pub fn repair_plan(&self, descriptors: &[PanelTypeDescriptor]) -> WorkspaceRepairPlan {
+        plan_workspace_snapshot_repair(self, descriptors)
+    }
+
+    /// Returns the metadata-only repaired workspace snapshot when planning found
+    /// no hard repair error.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceRestoreError`] when the dock snapshot is invalid,
+    /// duplicate identity metadata exists, or a missing panel instance cannot be
+    /// represented by safe placeholder metadata.
+    pub fn repair_snapshot(
+        &self,
+        descriptors: &[PanelTypeDescriptor],
+    ) -> Result<WorkspaceSnapshot, WorkspaceRestoreError> {
+        self.repair_plan(descriptors).into_repaired_snapshot()
+    }
+
     /// Validates this workspace snapshot and restores its dock.
     ///
     /// # Errors
@@ -3403,6 +3428,111 @@ impl WorkspaceSnapshotDiagnostics {
     }
 }
 
+/// Stable repair action code for workspace snapshot repair planning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceRepairActionCode {
+    /// A missing panel instance record was filled with placeholder metadata.
+    AddMissingPanelInstancePlaceholder,
+    /// A panel instance record not referenced by the dock snapshot was dropped.
+    DropStalePanelInstance,
+    /// An unknown panel type was preserved as explicit unresolved metadata.
+    KeepUnknownPanelType,
+}
+
+impl WorkspaceRepairActionCode {
+    /// Returns the stable string code for this repair action.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::AddMissingPanelInstancePlaceholder => {
+                "workspace_repair.add_missing_panel_instance_placeholder"
+            }
+            Self::DropStalePanelInstance => "workspace_repair.drop_stale_panel_instance",
+            Self::KeepUnknownPanelType => "workspace_repair.keep_unknown_panel_type",
+        }
+    }
+}
+
+/// Structured metadata-only action emitted by workspace repair planning.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceRepairAction {
+    /// Stable repair action code.
+    pub code: WorkspaceRepairActionCode,
+    /// Panel instance identity affected by this action.
+    pub panel_instance: Option<PanelInstanceId>,
+    /// Panel type identity affected by this action.
+    pub panel_type: Option<PanelTypeId>,
+    /// Dock frame containing the panel instance when known.
+    pub frame: Option<FrameId>,
+    /// Legacy dock panel identity when known.
+    pub panel: Option<PanelId>,
+    /// Title stored on the dock panel when relevant.
+    pub dock_title: Option<String>,
+    /// Title stored on the panel instance when relevant.
+    pub instance_title: Option<String>,
+}
+
+impl WorkspaceRepairAction {
+    fn new(code: WorkspaceRepairActionCode) -> Self {
+        Self {
+            code,
+            panel_instance: None,
+            panel_type: None,
+            frame: None,
+            panel: None,
+            dock_title: None,
+            instance_title: None,
+        }
+    }
+
+    /// Returns the stable string code for this repair action.
+    #[must_use]
+    pub const fn stable_code(&self) -> &'static str {
+        self.code.as_str()
+    }
+}
+
+/// Deterministic report for explicit workspace snapshot repair planning.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceRepairPlan {
+    /// Strict validation diagnostics collected before repair planning.
+    pub diagnostics: WorkspaceSnapshotDiagnostics,
+    /// Metadata-only repair actions the plan would apply.
+    pub actions: Vec<WorkspaceRepairAction>,
+    /// Repaired workspace snapshot when no hard repair error was found.
+    pub repaired_snapshot: Option<WorkspaceSnapshot>,
+    /// Hard repair error that prevents producing a repaired snapshot.
+    pub hard_error: Option<WorkspaceRestoreError>,
+}
+
+impl WorkspaceRepairPlan {
+    /// Returns true when this plan can produce a repaired snapshot.
+    #[must_use]
+    pub const fn is_repairable(&self) -> bool {
+        self.hard_error.is_none()
+    }
+
+    /// Returns true when repair planning found a hard error.
+    #[must_use]
+    pub const fn has_hard_error(&self) -> bool {
+        self.hard_error.is_some()
+    }
+
+    /// Consumes the plan and returns the repaired snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns the hard repair error when planning could not safely produce a
+    /// repaired snapshot.
+    pub fn into_repaired_snapshot(self) -> Result<WorkspaceSnapshot, WorkspaceRestoreError> {
+        match (self.repaired_snapshot, self.hard_error) {
+            (Some(snapshot), None) => Ok(snapshot),
+            (_, Some(error)) => Err(error),
+            (None, None) => unreachable!("repairable plans always carry a repaired snapshot"),
+        }
+    }
+}
+
 impl From<DockRestoreError> for WorkspaceRestoreError {
     fn from(value: DockRestoreError) -> Self {
         Self::Dock(value)
@@ -3517,6 +3647,160 @@ pub fn validate_workspace_snapshot_diagnostics(
     let dock_references = collect_dock_panel_references(&snapshot.dock.root);
     let workspace = collect_workspace_snapshot_diagnostics(snapshot, descriptors, &dock_references);
     WorkspaceSnapshotDiagnostics { dock, workspace }
+}
+
+fn plan_workspace_snapshot_repair(
+    snapshot: &WorkspaceSnapshot,
+    descriptors: &[PanelTypeDescriptor],
+) -> WorkspaceRepairPlan {
+    let diagnostics = validate_workspace_snapshot_diagnostics(snapshot, descriptors);
+    let hard_error = workspace_repair_hard_error(snapshot, descriptors, &diagnostics);
+    let (actions, repaired_snapshot) = if hard_error.is_some() {
+        (Vec::new(), None)
+    } else {
+        let mut actions = Vec::new();
+        let stale_panel_instances = collect_stale_panel_instances(&diagnostics);
+        let mut repaired = WorkspaceSnapshot::new(
+            snapshot.dock.clone(),
+            snapshot
+                .panel_instances
+                .iter()
+                .filter(|instance| !stale_panel_instances.contains(&instance.id))
+                .cloned()
+                .collect(),
+        );
+
+        for diagnostic in &diagnostics.workspace {
+            match diagnostic.code {
+                WorkspaceSnapshotDiagnosticCode::MissingPanelInstance => {
+                    if let Some(placeholder) =
+                        placeholder_panel_instance_from_diagnostic(diagnostic, descriptors)
+                    {
+                        let mut action = WorkspaceRepairAction::new(
+                            WorkspaceRepairActionCode::AddMissingPanelInstancePlaceholder,
+                        );
+                        action.panel_instance = Some(placeholder.id);
+                        action.panel_type = Some(placeholder.panel_type);
+                        action.frame = diagnostic.frame;
+                        action.panel = diagnostic.panel;
+                        action.dock_title.clone_from(&diagnostic.dock_title);
+                        repaired.panel_instances.push(placeholder);
+                        actions.push(action);
+                    }
+                }
+                WorkspaceSnapshotDiagnosticCode::StalePanelInstance => {
+                    let mut action = WorkspaceRepairAction::new(
+                        WorkspaceRepairActionCode::DropStalePanelInstance,
+                    );
+                    action.panel_instance = diagnostic.panel_instance;
+                    action.panel_type = diagnostic.panel_type;
+                    action.instance_title.clone_from(&diagnostic.instance_title);
+                    actions.push(action);
+                }
+                WorkspaceSnapshotDiagnosticCode::UnknownPanelType => {
+                    if diagnostic.panel_instance.is_some_and(|panel_instance| {
+                        stale_panel_instances.contains(&panel_instance)
+                    }) {
+                        continue;
+                    }
+                    let mut action =
+                        WorkspaceRepairAction::new(WorkspaceRepairActionCode::KeepUnknownPanelType);
+                    action.panel_instance = diagnostic.panel_instance;
+                    action.panel_type = diagnostic.panel_type;
+                    actions.push(action);
+                }
+                WorkspaceSnapshotDiagnosticCode::DuplicatePanelInstanceId
+                | WorkspaceSnapshotDiagnosticCode::DuplicatePanelTypeDescriptor
+                | WorkspaceSnapshotDiagnosticCode::PanelTitleDrift => {}
+            }
+        }
+
+        (actions, Some(repaired))
+    };
+
+    WorkspaceRepairPlan {
+        diagnostics,
+        actions,
+        repaired_snapshot,
+        hard_error,
+    }
+}
+
+fn workspace_repair_hard_error(
+    snapshot: &WorkspaceSnapshot,
+    descriptors: &[PanelTypeDescriptor],
+    diagnostics: &WorkspaceSnapshotDiagnostics,
+) -> Option<WorkspaceRestoreError> {
+    if let Err(error) = validate_dock_snapshot(&snapshot.dock) {
+        return Some(WorkspaceRestoreError::Dock(error));
+    }
+
+    for diagnostic in &diagnostics.workspace {
+        match diagnostic.code {
+            WorkspaceSnapshotDiagnosticCode::DuplicatePanelTypeDescriptor => {
+                return diagnostic.panel_type.map(|panel_type| {
+                    WorkspaceRestoreError::DuplicatePanelTypeDescriptor { panel_type }
+                });
+            }
+            WorkspaceSnapshotDiagnosticCode::DuplicatePanelInstanceId => {
+                return diagnostic.panel_instance.map(|panel_instance| {
+                    WorkspaceRestoreError::DuplicatePanelInstanceId { panel_instance }
+                });
+            }
+            WorkspaceSnapshotDiagnosticCode::MissingPanelInstance => {
+                if placeholder_panel_instance_from_diagnostic(diagnostic, descriptors).is_none() {
+                    return diagnostic.panel_instance.map(|panel_instance| {
+                        WorkspaceRestoreError::MissingPanelInstance { panel_instance }
+                    });
+                }
+            }
+            WorkspaceSnapshotDiagnosticCode::StalePanelInstance
+            | WorkspaceSnapshotDiagnosticCode::UnknownPanelType
+            | WorkspaceSnapshotDiagnosticCode::PanelTitleDrift => {}
+        }
+    }
+
+    None
+}
+
+fn collect_stale_panel_instances(
+    diagnostics: &WorkspaceSnapshotDiagnostics,
+) -> BTreeSet<PanelInstanceId> {
+    diagnostics
+        .workspace
+        .iter()
+        .filter_map(|diagnostic| {
+            (diagnostic.code == WorkspaceSnapshotDiagnosticCode::StalePanelInstance)
+                .then_some(diagnostic.panel_instance)
+                .flatten()
+        })
+        .collect()
+}
+
+fn placeholder_panel_instance_from_diagnostic(
+    diagnostic: &WorkspaceSnapshotDiagnostic,
+    descriptors: &[PanelTypeDescriptor],
+) -> Option<PanelInstanceSnapshot> {
+    let panel_instance = diagnostic.panel_instance?;
+    let dock_title = diagnostic.dock_title.as_ref()?;
+    let panel_type = unique_panel_type_for_title(dock_title, descriptors)?;
+    Some(PanelInstanceSnapshot::new(
+        panel_instance,
+        panel_type,
+        dock_title.clone(),
+    ))
+}
+
+fn unique_panel_type_for_title(
+    title: &str,
+    descriptors: &[PanelTypeDescriptor],
+) -> Option<PanelTypeId> {
+    let mut matches = descriptors
+        .iter()
+        .filter(|descriptor| descriptor.title == title)
+        .map(|descriptor| descriptor.id);
+    let panel_type = matches.next()?;
+    matches.next().is_none().then_some(panel_type)
 }
 
 fn validate_dock_snapshot(
