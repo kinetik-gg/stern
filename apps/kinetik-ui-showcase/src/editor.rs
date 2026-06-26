@@ -19,14 +19,15 @@ use kinetik_ui::render::{
 };
 use kinetik_ui::text::TextEditState;
 use kinetik_ui::widgets::{
-    Dock, DockDropTarget, DockDropZone, DockNode, DockPlacement, DockTabDrag, Frame, FrameId,
-    FrameLayout, FrameTab, GridColumns, GridLayout, Guide, ItemId, ListLayout, Menu, MenuItem,
-    MenuOverlay, OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayStack, PanZoom,
-    Panel, PanelId, PanelInstanceId, PanelInstancePolicy, PanelInstanceSnapshot, PanelTypeCategory,
-    PanelTypeDescriptor, PanelTypeId, PopoverPlacement, PopoverRequest, PropertyGridLayout,
-    PropertyGridRow, TableColumn, TableLayout, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
-    ViewportComposition, ViewportFit, ViewportSurface, WorkspaceSnapshot, frame_tabs,
-    icon_button_semantics, place_popover, resolve_frame_drop_zone, solve_dock_layout,
+    Dock, DockDropTarget, DockDropZone, DockNode, DockPlacement, DockSplitterContextActionKind,
+    DockTabDrag, Frame, FrameId, FrameLayout, FrameTab, GridColumns, GridLayout, Guide, ItemId,
+    ListLayout, Menu, MenuItem, MenuOverlay, OverlayDismissal, OverlayEntry, OverlayId,
+    OverlayKind, OverlayStack, PanZoom, Panel, PanelId, PanelInstanceId, PanelInstancePolicy,
+    PanelInstanceSnapshot, PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PopoverPlacement,
+    PopoverRequest, PropertyGridLayout, PropertyGridRow, TableColumn, TableLayout, TreeExpansion,
+    TreeItem, TreeLayout, TreeModel, Ui, ViewportComposition, ViewportFit, ViewportSurface,
+    WorkspaceSnapshot, frame_tabs, icon_button_semantics, place_popover,
+    resolve_dock_splitter_context_actions, resolve_frame_drop_zone, solve_dock_layout,
     solve_dock_splitters,
 };
 
@@ -46,6 +47,8 @@ const ACTION_TOOL_SELECT: &str = "editor.tool.select";
 const ACTION_TOOL_MOVE: &str = "editor.tool.move";
 const ACTION_TOOL_ROTATE: &str = "editor.tool.rotate";
 const ACTION_TOOL_SCALE: &str = "editor.tool.scale";
+const ACTION_DOCK_JOIN: &str = "editor.dock.join";
+const ACTION_DOCK_SWAP: &str = "editor.dock.swap";
 
 const VIEWPORT_TEXTURE: TextureId = TextureId::from_raw(9_001);
 const VIEWPORT_SIZE: Size = Size::new(1280.0, 720.0);
@@ -975,6 +978,50 @@ impl EditorShowcase {
             x += chrome.toolbar_stride;
         }
 
+        rect(
+            ui,
+            Rect::new(x + 4.0, TOOLBAR_Y + 3.0, 1.0, chrome.toolbar_button - 6.0),
+            rgb(57, 60, 66),
+            None,
+        );
+        x += 18.0;
+        for (kind, icon, label, action) in [
+            (
+                DockSplitterContextActionKind::Join,
+                ToolbarIcon::Component,
+                "Join dock splitter",
+                ACTION_DOCK_JOIN,
+            ),
+            (
+                DockSplitterContextActionKind::Swap,
+                ToolbarIcon::Layers,
+                "Swap dock frames",
+                ACTION_DOCK_SWAP,
+            ),
+        ] {
+            let response = toolbar_icon_button(
+                ui,
+                ("editor.dock-action", action),
+                Rect::new(x, TOOLBAR_Y, chrome.toolbar_button, chrome.toolbar_button),
+                icon,
+                label,
+                false,
+                false,
+            );
+            if response.clicked {
+                let bounds = editor_workspace_rect(ui.theme(), viewport);
+                if self.apply_splitter_context_action(bounds, kind) {
+                    invocations.push(ActionInvocation::new(
+                        ActionId::new(action),
+                        ActionSource::Button,
+                        ActionContext::Editor,
+                    ));
+                }
+                ui.request_repaint(RepaintRequest::NextFrame);
+            }
+            x += chrome.toolbar_stride;
+        }
+
         for (index, icon, label, action, rect) in run_toolbar_buttons(viewport, chrome) {
             toolbar_icon_button(
                 ui,
@@ -985,6 +1032,74 @@ impl EditorShowcase {
                 false,
                 false,
             );
+        }
+    }
+
+    fn apply_splitter_context_action(
+        &mut self,
+        bounds: Rect,
+        kind: DockSplitterContextActionKind,
+    ) -> bool {
+        let frame_layouts = solve_dock_layout(&self.dock, bounds);
+        let Some(splitter) = solve_dock_splitters(&self.dock, bounds, 4.0)
+            .into_iter()
+            .next()
+        else {
+            "No dock splitter action available".clone_into(&mut self.status);
+            return false;
+        };
+        let actions = resolve_dock_splitter_context_actions(&self.dock, &frame_layouts, &splitter);
+        let Some(action) = actions
+            .into_iter()
+            .find(|action| action.kind == kind && action.enabled)
+        else {
+            match kind {
+                DockSplitterContextActionKind::Join => "No dock join action available",
+                DockSplitterContextActionKind::Swap => "No dock swap action available",
+            }
+            .clone_into(&mut self.status);
+            return false;
+        };
+
+        match kind {
+            DockSplitterContextActionKind::Join => {
+                let Some(request) = action.join_request() else {
+                    "No dock join action available".clone_into(&mut self.status);
+                    return false;
+                };
+                let source = request.source_frame();
+                let target = request.target_frame();
+                if self.dock.apply_join_request(bounds, request) {
+                    self.status = format!(
+                        "Dock splitter joined frame {} into frame {}",
+                        source.raw(),
+                        target.raw()
+                    );
+                    true
+                } else {
+                    "Dock join request rejected".clone_into(&mut self.status);
+                    false
+                }
+            }
+            DockSplitterContextActionKind::Swap => {
+                let Some(request) = action.swap_request() else {
+                    "No dock swap action available".clone_into(&mut self.status);
+                    return false;
+                };
+                let source = request.source_frame();
+                let target = request.target_frame();
+                if self.dock.apply_swap_request(bounds, request) {
+                    self.status = format!(
+                        "Dock splitter swapped frame {} with frame {}",
+                        source.raw(),
+                        target.raw()
+                    );
+                    true
+                } else {
+                    "Dock swap request rejected".clone_into(&mut self.status);
+                    false
+                }
+            }
         }
     }
 
@@ -1022,14 +1137,7 @@ impl EditorShowcase {
     }
 
     fn workspace(&mut self, ui: &mut Ui<'_>, viewport: Rect) {
-        let bottom_bar = 24.0;
-        let workspace_top = workspace_top(ui.theme());
-        let bounds = Rect::new(
-            4.0,
-            workspace_top,
-            (viewport.width - 8.0).max(1.0),
-            (viewport.height - workspace_top - bottom_bar - 4.0).max(1.0),
-        );
+        let bounds = editor_workspace_rect(ui.theme(), viewport);
         let dock_semantic_id = ui.id("editor.dock.semantic");
         ui.push_semantic_node(
             SemanticNode::new(dock_semantic_id, SemanticRole::Dock, bounds)
@@ -1989,6 +2097,17 @@ fn menu_bar_rect() -> Rect {
     Rect::new(0.0, 0.0, 760.0, 28.0)
 }
 
+fn editor_workspace_rect(theme: &Theme, viewport: Rect) -> Rect {
+    let bottom_bar = 24.0;
+    let workspace_top = workspace_top(theme);
+    Rect::new(
+        4.0,
+        workspace_top,
+        (viewport.width - 8.0).max(1.0),
+        (viewport.height - workspace_top - bottom_bar - 4.0).max(1.0),
+    )
+}
+
 fn menu_anchor(kind: EditorMenuKind) -> Rect {
     menu_header_rects()
         .into_iter()
@@ -2404,7 +2523,10 @@ mod tests {
         SemanticRole, Size, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, default_dark_theme,
     };
     use kinetik_ui::render::RenderResources;
-    use kinetik_ui::widgets::{Ui, ViewportSurface, solve_dock_layout, solve_dock_splitters};
+    use kinetik_ui::widgets::{
+        DockSplitterContextActionKind, Ui, ViewportSurface, resolve_dock_splitter_context_actions,
+        solve_dock_layout, solve_dock_splitters,
+    };
 
     #[test]
     fn inspector_label_width_preserves_value_space_at_narrow_widths() {
@@ -2661,6 +2783,71 @@ mod tests {
 
         assert!(after > before, "{after} should be greater than {before}");
         assert_eq!(output.repaint, RepaintRequest::NextFrame);
+    }
+
+    #[test]
+    fn editor_splitter_join_action_uses_context_metadata_and_apply_request() {
+        let mut editor = EditorShowcase::new();
+        let bounds = editor_workspace_bounds();
+        let layout = solve_dock_layout(&editor.dock, bounds);
+        let splitter = solve_dock_splitters(&editor.dock, bounds, 4.0)
+            .into_iter()
+            .next()
+            .expect("root splitter");
+        let action = resolve_dock_splitter_context_actions(&editor.dock, &layout, &splitter)
+            .into_iter()
+            .find(|action| action.kind == DockSplitterContextActionKind::Join && action.enabled)
+            .expect("enabled join action");
+        let request = action.join_request().expect("join request");
+        let source = request.source_frame();
+        let target = request.target_frame();
+
+        assert!(editor.apply_splitter_context_action(bounds, DockSplitterContextActionKind::Join));
+
+        assert!(editor.dock.frame(source).is_none());
+        assert!(editor.dock.frame(target).is_some());
+        assert_eq!(editor.dock.active_frame(), Some(target));
+        assert_eq!(
+            editor.status,
+            format!(
+                "Dock splitter joined frame {} into frame {}",
+                source.raw(),
+                target.raw()
+            )
+        );
+    }
+
+    #[test]
+    fn editor_splitter_swap_action_uses_context_metadata_and_apply_request() {
+        let mut editor = EditorShowcase::new();
+        let bounds = editor_workspace_bounds();
+        let layout = solve_dock_layout(&editor.dock, bounds);
+        let splitter = solve_dock_splitters(&editor.dock, bounds, 4.0)
+            .into_iter()
+            .next()
+            .expect("root splitter");
+        let action = resolve_dock_splitter_context_actions(&editor.dock, &layout, &splitter)
+            .into_iter()
+            .find(|action| action.kind == DockSplitterContextActionKind::Swap && action.enabled)
+            .expect("enabled swap action");
+        let request = action.swap_request().expect("swap request");
+        let source = request.source_frame();
+        let target = request.target_frame();
+        let source_before = editor_frame_rect(&editor, source);
+        let target_before = editor_frame_rect(&editor, target);
+
+        assert!(editor.apply_splitter_context_action(bounds, DockSplitterContextActionKind::Swap));
+
+        assert_eq!(editor_frame_rect(&editor, source), target_before);
+        assert_eq!(editor_frame_rect(&editor, target), source_before);
+        assert_eq!(
+            editor.status,
+            format!(
+                "Dock splitter swapped frame {} with frame {}",
+                source.raw(),
+                target.raw()
+            )
+        );
     }
 
     #[test]
