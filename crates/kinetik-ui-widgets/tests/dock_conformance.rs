@@ -315,6 +315,9 @@ fn panel_policy_duplicate_request_respects_descriptor_and_is_app_owned() {
     let descriptor = PanelTypeDescriptor::new(PanelTypeId::from_raw(20), "Viewport")
         .with_default_size(Size::new(640.0, 360.0))
         .with_default_open_action(ActionId::new("workspace.open.viewport"));
+    let singleton = descriptor
+        .clone()
+        .with_instance_policy(PanelInstancePolicy::Singleton);
     let denied = descriptor
         .clone()
         .with_duplicate_policy(PanelDuplicatePolicy::Denied);
@@ -322,6 +325,19 @@ fn panel_policy_duplicate_request_respects_descriptor_and_is_app_owned() {
     let before = dock.snapshot();
     let frame = dock.frame(FrameId::from_raw(2)).expect("frame");
 
+    assert!(
+        !resolve_panel_affordances(&singleton, PanelInstanceId::from_raw(2), frame)
+            .duplicate_available
+    );
+    assert_eq!(
+        resolve_panel_duplicate_request(
+            &singleton,
+            PanelInstanceId::from_raw(2),
+            frame,
+            PanelWorkspaceContext::Docked,
+        ),
+        None
+    );
     assert_eq!(
         resolve_panel_duplicate_request(
             &denied,

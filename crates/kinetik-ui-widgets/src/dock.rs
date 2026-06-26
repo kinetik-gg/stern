@@ -535,6 +535,7 @@ pub fn resolve_panel_affordances(
         close_visible: descriptor.close_policy == PanelClosePolicy::Closable
             && frame.panel_dismissible(panel),
         duplicate_available: panel_in_frame
+            && descriptor.instance_policy == PanelInstancePolicy::MultiInstance
             && descriptor.duplicate_policy == PanelDuplicatePolicy::Allowed,
         float_available: panel_in_frame && descriptor.float_policy == PanelFloatPolicy::Allowed,
     }
