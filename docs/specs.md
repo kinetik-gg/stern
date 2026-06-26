@@ -568,6 +568,13 @@ Splitters are addressed by `DockSplitPath`, and drop targets distinguish tab
 merge from split insertion. These operations update the same dock tree that is
 serialized by `Dock::snapshot`.
 
+Dock topology queries should stay pure and windowless. Frame neighbor lookup is
+derived from solved `FrameLayout` rectangles and supports left, right, up, and
+down directions without mutating focus, shortcuts, actions, or dock state.
+T-junctions and overlapping candidates use deterministic tie-breaking: nearest
+edge distance, then greatest perpendicular edge overlap, then lowest raw
+`FrameId`.
+
 ### 12.2 Frame
 
 `Frame` is a managed editor container. It is similar to a docked sub-window, not a floating modal.

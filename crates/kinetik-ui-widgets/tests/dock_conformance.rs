@@ -2,13 +2,15 @@
 
 use kinetik_ui_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
 use kinetik_ui_widgets::{
-    Dock, DockDropTarget, DockNode, DockPathElement, DockPlacement, DockRestoreError, DockSnapshot,
-    DockSnapshotDiagnosticCode, DockSnapshotNode, DockSnapshotSplitValue, DockSplitPath, Frame,
-    FrameId, Panel, PanelClosePolicy, PanelDockHint, PanelDuplicatePolicy, PanelFloatPolicy,
-    PanelId, PanelInstanceId, PanelInstancePolicy, PanelInstanceSnapshot, PanelTypeCategory,
+    Dock, DockDropTarget, DockNeighborDirection, DockNode, DockPathElement, DockPlacement,
+    DockRestoreError, DockSnapshot, DockSnapshotDiagnosticCode, DockSnapshotNode,
+    DockSnapshotSplitValue, DockSplitPath, Frame, FrameId, FrameLayout, FrameNeighbors, Panel,
+    PanelClosePolicy, PanelDockHint, PanelDuplicatePolicy, PanelFloatPolicy, PanelId,
+    PanelInstanceId, PanelInstancePolicy, PanelInstanceSnapshot, PanelTypeCategory,
     PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, SnapshotDiagnosticSeverity,
-    WorkspaceRestoreError, WorkspaceSnapshotDiagnosticCode, frame_tabs, resolve_dock_drop_target,
-    solve_dock_layout, solve_dock_splitters, split_ratio_from_drag,
+    WorkspaceRestoreError, WorkspaceSnapshotDiagnosticCode, frame_neighbor, frame_tabs,
+    resolve_dock_drop_target, solve_dock_layout, solve_dock_neighbors, solve_dock_splitters,
+    split_ratio_from_drag,
 };
 
 fn panel(id: u64, title: &str) -> Panel {
@@ -53,6 +55,14 @@ fn frame_rect(dock: &Dock, frame: u64, bounds: Rect) -> Rect {
         .find(|layout| layout.frame == FrameId::from_raw(frame))
         .expect("frame layout")
         .rect
+}
+
+fn neighbors_for(neighbors: &[FrameNeighbors], frame: u64) -> FrameNeighbors {
+    neighbors
+        .iter()
+        .find(|neighbors| neighbors.frame == FrameId::from_raw(frame))
+        .copied()
+        .expect("frame neighbors")
 }
 
 fn workspace_panel_descriptors() -> Vec<PanelTypeDescriptor> {
@@ -669,6 +679,191 @@ fn invalid_geometry_is_sanitized_for_layout_splitters_and_drag_ratios() {
         DockNode::Split { ratio, .. } => assert_close(ratio, 0.5),
         DockNode::Frame(_) => panic!("root split should remain intact"),
     }
+}
+
+#[test]
+fn dock_neighbors_resolve_left_right_up_down_in_nested_splits() {
+    let dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+
+    let neighbors = solve_dock_neighbors(&dock, bounds);
+
+    assert_eq!(neighbors.len(), 3);
+    assert_eq!(
+        neighbors_for(&neighbors, 1),
+        FrameNeighbors {
+            frame: FrameId::from_raw(1),
+            left: None,
+            right: Some(FrameId::from_raw(2)),
+            up: None,
+            down: None,
+        }
+    );
+    assert_eq!(
+        neighbors_for(&neighbors, 2),
+        FrameNeighbors {
+            frame: FrameId::from_raw(2),
+            left: Some(FrameId::from_raw(1)),
+            right: None,
+            up: None,
+            down: Some(FrameId::from_raw(3)),
+        }
+    );
+    assert_eq!(
+        neighbors_for(&neighbors, 3),
+        FrameNeighbors {
+            frame: FrameId::from_raw(3),
+            left: Some(FrameId::from_raw(1)),
+            right: None,
+            up: Some(FrameId::from_raw(2)),
+            down: None,
+        }
+    );
+}
+
+#[test]
+fn dock_neighbor_lookup_never_returns_self() {
+    let layout = [
+        FrameLayout {
+            frame: FrameId::from_raw(1),
+            rect: Rect::new(0.0, 0.0, 100.0, 100.0),
+        },
+        FrameLayout {
+            frame: FrameId::from_raw(1),
+            rect: Rect::new(100.0, 0.0, 100.0, 100.0),
+        },
+    ];
+
+    assert_eq!(
+        frame_neighbor(&layout, FrameId::from_raw(1), DockNeighborDirection::Right,),
+        None
+    );
+}
+
+#[test]
+fn dock_neighbor_t_junction_ties_use_lowest_frame_id() {
+    let dock = Dock::new(DockNode::Split {
+        axis: Axis::Horizontal,
+        ratio: 0.5,
+        min_first: 0.0,
+        min_second: 0.0,
+        first: Box::new(DockNode::Frame(frame(1, vec![panel(1, "Left")]))),
+        second: Box::new(DockNode::Split {
+            axis: Axis::Vertical,
+            ratio: 0.5,
+            min_first: 0.0,
+            min_second: 0.0,
+            first: Box::new(DockNode::Frame(frame(3, vec![panel(3, "Top Right")]))),
+            second: Box::new(DockNode::Frame(frame(2, vec![panel(2, "Bottom Right")]))),
+        }),
+    });
+
+    assert_eq!(
+        frame_neighbor(
+            &solve_dock_layout(&dock, Rect::new(0.0, 0.0, 1000.0, 500.0)),
+            FrameId::from_raw(1),
+            DockNeighborDirection::Right,
+        ),
+        Some(FrameId::from_raw(2))
+    );
+}
+
+#[test]
+fn dock_neighbor_prefers_nearer_split_column_over_far_full_height_frame() {
+    let dock = Dock::new(DockNode::Split {
+        axis: Axis::Horizontal,
+        ratio: 0.25,
+        min_first: 0.0,
+        min_second: 0.0,
+        first: Box::new(DockNode::Frame(frame(1, vec![panel(1, "Left")]))),
+        second: Box::new(DockNode::Split {
+            axis: Axis::Horizontal,
+            ratio: 0.5,
+            min_first: 0.0,
+            min_second: 0.0,
+            first: Box::new(DockNode::Split {
+                axis: Axis::Vertical,
+                ratio: 0.5,
+                min_first: 0.0,
+                min_second: 0.0,
+                first: Box::new(DockNode::Frame(frame(3, vec![panel(3, "Near Top")]))),
+                second: Box::new(DockNode::Frame(frame(2, vec![panel(2, "Near Bottom")]))),
+            }),
+            second: Box::new(DockNode::Frame(frame(4, vec![panel(4, "Far Full")]))),
+        }),
+    });
+
+    assert_eq!(
+        frame_neighbor(
+            &solve_dock_layout(&dock, Rect::new(0.0, 0.0, 1000.0, 500.0)),
+            FrameId::from_raw(1),
+            DockNeighborDirection::Right,
+        ),
+        Some(FrameId::from_raw(2))
+    );
+}
+
+#[test]
+fn repeated_layout_solves_produce_stable_dock_neighbors() {
+    let dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+
+    let first = solve_dock_neighbors(&dock, bounds);
+    let second = solve_dock_neighbors(&dock, bounds);
+
+    assert_eq!(first, second);
+    assert_eq!(
+        frame_neighbor(
+            &solve_dock_layout(&dock, bounds),
+            FrameId::from_raw(1),
+            DockNeighborDirection::Right,
+        ),
+        Some(FrameId::from_raw(2))
+    );
+}
+
+#[test]
+fn invalid_and_empty_geometry_returns_no_dock_neighbors() {
+    let dock = nested_dock();
+    let invalid_neighbors =
+        solve_dock_neighbors(&dock, Rect::new(f32::NAN, f32::INFINITY, -100.0, 0.0));
+
+    assert_eq!(invalid_neighbors.len(), 3);
+    assert!(
+        invalid_neighbors
+            .iter()
+            .all(|neighbors| neighbors.left.is_none()
+                && neighbors.right.is_none()
+                && neighbors.up.is_none()
+                && neighbors.down.is_none())
+    );
+    assert_eq!(
+        invalid_neighbors,
+        solve_dock_neighbors(&dock, Rect::new(f32::NAN, f32::INFINITY, -100.0, 0.0))
+    );
+
+    let invalid_layout = [
+        FrameLayout {
+            frame: FrameId::from_raw(1),
+            rect: Rect::new(0.0, 0.0, f32::INFINITY, 100.0),
+        },
+        FrameLayout {
+            frame: FrameId::from_raw(2),
+            rect: Rect::new(100.0, 0.0, 100.0, 100.0),
+        },
+    ];
+    assert_eq!(
+        frame_neighbor(
+            &invalid_layout,
+            FrameId::from_raw(1),
+            DockNeighborDirection::Right,
+        ),
+        None
+    );
+    assert_eq!(
+        frame_neighbor(&[], FrameId::from_raw(1), DockNeighborDirection::Right),
+        None
+    );
 }
 
 #[test]

@@ -1,6 +1,9 @@
 //! `Dock`, `Frame`, and `Panel` models for editor layouts.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
+};
 
 use kinetik_ui_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
 
@@ -1047,12 +1050,115 @@ pub struct FrameLayout {
     pub rect: Rect,
 }
 
+/// Cardinal direction for dock frame neighbor lookup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DockNeighborDirection {
+    /// Candidate frame is to the left of the source frame.
+    Left,
+    /// Candidate frame is to the right of the source frame.
+    Right,
+    /// Candidate frame is above the source frame.
+    Up,
+    /// Candidate frame is below the source frame.
+    Down,
+}
+
+/// Resolved neighboring frames for one dock frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FrameNeighbors {
+    /// Source frame.
+    pub frame: FrameId,
+    /// Best neighboring frame to the left.
+    pub left: Option<FrameId>,
+    /// Best neighboring frame to the right.
+    pub right: Option<FrameId>,
+    /// Best neighboring frame above.
+    pub up: Option<FrameId>,
+    /// Best neighboring frame below.
+    pub down: Option<FrameId>,
+}
+
+impl FrameNeighbors {
+    /// Creates empty neighbor data for a frame.
+    #[must_use]
+    pub const fn empty(frame: FrameId) -> Self {
+        Self {
+            frame,
+            left: None,
+            right: None,
+            up: None,
+            down: None,
+        }
+    }
+
+    /// Returns the neighbor for a cardinal direction.
+    #[must_use]
+    pub const fn neighbor(self, direction: DockNeighborDirection) -> Option<FrameId> {
+        match direction {
+            DockNeighborDirection::Left => self.left,
+            DockNeighborDirection::Right => self.right,
+            DockNeighborDirection::Up => self.up,
+            DockNeighborDirection::Down => self.down,
+        }
+    }
+}
+
 /// Resolves a dock tree into frame rectangles.
 #[must_use]
 pub fn solve_dock_layout(area: &Dock, bounds: Rect) -> Vec<FrameLayout> {
     let mut frames = Vec::new();
     solve_node(&area.root, bounds, &mut frames);
     frames
+}
+
+/// Resolves cardinal frame neighbors from solved dock layout rectangles.
+///
+/// Ties are deterministic: nearest edge distance wins, then greatest
+/// perpendicular edge overlap, then the lowest raw [`FrameId`].
+#[must_use]
+pub fn solve_dock_neighbors(area: &Dock, bounds: Rect) -> Vec<FrameNeighbors> {
+    let frames = solve_dock_layout(area, bounds);
+    frames
+        .iter()
+        .map(|layout| FrameNeighbors {
+            frame: layout.frame,
+            left: frame_neighbor(&frames, layout.frame, DockNeighborDirection::Left),
+            right: frame_neighbor(&frames, layout.frame, DockNeighborDirection::Right),
+            up: frame_neighbor(&frames, layout.frame, DockNeighborDirection::Up),
+            down: frame_neighbor(&frames, layout.frame, DockNeighborDirection::Down),
+        })
+        .collect()
+}
+
+/// Resolves the best neighbor for one frame from solved dock layout rectangles.
+///
+/// Invalid or empty source/candidate rectangles are ignored. The source frame
+/// is never returned as its own neighbor.
+#[must_use]
+pub fn frame_neighbor(
+    frames: &[FrameLayout],
+    frame: FrameId,
+    direction: DockNeighborDirection,
+) -> Option<FrameId> {
+    let source = frames.iter().find(|layout| layout.frame == frame)?;
+    if !valid_neighbor_rect(source.rect) {
+        return None;
+    }
+
+    let mut best = None;
+    for candidate in frames {
+        if candidate.frame == frame || !valid_neighbor_rect(candidate.rect) {
+            continue;
+        }
+        let Some(score) = neighbor_candidate_score(source.rect, candidate.rect, direction) else {
+            continue;
+        };
+        if neighbor_candidate_is_better(best, (candidate.frame, score)) {
+            best = Some((candidate.frame, score));
+        }
+    }
+
+    best.map(|(frame, _)| frame)
 }
 
 /// Resolves splitter interaction rectangles for a dock tree.
@@ -1293,6 +1399,90 @@ fn valid_drop_rect(rect: Rect) -> bool {
 
 fn valid_drop_point(point: Point) -> bool {
     point.x.is_finite() && point.y.is_finite()
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NeighborCandidateScore {
+    overlap: f32,
+    distance: f32,
+}
+
+fn neighbor_candidate_score(
+    source: Rect,
+    candidate: Rect,
+    direction: DockNeighborDirection,
+) -> Option<NeighborCandidateScore> {
+    let (overlap, distance) = match direction {
+        DockNeighborDirection::Left => (
+            range_overlap(
+                source.min_y(),
+                source.max_y(),
+                candidate.min_y(),
+                candidate.max_y(),
+            ),
+            source.min_x() - candidate.max_x(),
+        ),
+        DockNeighborDirection::Right => (
+            range_overlap(
+                source.min_y(),
+                source.max_y(),
+                candidate.min_y(),
+                candidate.max_y(),
+            ),
+            candidate.min_x() - source.max_x(),
+        ),
+        DockNeighborDirection::Up => (
+            range_overlap(
+                source.min_x(),
+                source.max_x(),
+                candidate.min_x(),
+                candidate.max_x(),
+            ),
+            source.min_y() - candidate.max_y(),
+        ),
+        DockNeighborDirection::Down => (
+            range_overlap(
+                source.min_x(),
+                source.max_x(),
+                candidate.min_x(),
+                candidate.max_x(),
+            ),
+            candidate.min_y() - source.max_y(),
+        ),
+    };
+
+    (overlap > 0.0 && distance >= 0.0).then_some(NeighborCandidateScore { overlap, distance })
+}
+
+fn neighbor_candidate_is_better(
+    best: Option<(FrameId, NeighborCandidateScore)>,
+    candidate: (FrameId, NeighborCandidateScore),
+) -> bool {
+    let Some((best_frame, best_score)) = best else {
+        return true;
+    };
+    let (candidate_frame, candidate_score) = candidate;
+    match candidate_score.distance.total_cmp(&best_score.distance) {
+        Ordering::Less => true,
+        Ordering::Greater => false,
+        Ordering::Equal => match candidate_score.overlap.total_cmp(&best_score.overlap) {
+            Ordering::Greater => true,
+            Ordering::Less => false,
+            Ordering::Equal => candidate_frame.raw() < best_frame.raw(),
+        },
+    }
+}
+
+fn range_overlap(first_min: f32, first_max: f32, second_min: f32, second_max: f32) -> f32 {
+    first_max.min(second_max) - first_min.max(second_min)
+}
+
+fn valid_neighbor_rect(rect: Rect) -> bool {
+    rect.x.is_finite()
+        && rect.y.is_finite()
+        && rect.width.is_finite()
+        && rect.height.is_finite()
+        && !rect.is_empty()
 }
 
 fn finite_ratio(value: f32) -> f32 {
