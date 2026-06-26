@@ -19,8 +19,9 @@ use crate::{
     CommandPaletteOverlay, DropdownCloseResult, DropdownItemId, DropdownModel, DropdownOverlay,
     IconId, IconLibrary, MenuOverlay, MultiLineTextFieldOutput, NumericInputOutput,
     NumericScrubInputConfig, NumericScrubInputOutput, OverlayStack, PanelFrame, PathFieldConfig,
-    PathFieldOutput, SearchFieldOutput, SelectFieldConfig, SelectFieldOutput, SliderStep,
-    TextFieldOutput, VectorScrubInputConfig, VectorScrubInputOutput, WidgetOutput,
+    PathFieldOutput, PropertyGridAffordanceOutput, PropertyGridAffordanceRects, PropertyGridRow,
+    SearchFieldOutput, SelectFieldConfig, SelectFieldOutput, SliderStep, TextFieldOutput,
+    VectorScrubInputConfig, VectorScrubInputOutput, WidgetOutput,
     asset_slot_field as asset_slot_field_widget, button as button_widget,
     checkbox as checkbox_widget, checkbox_with_label as checkbox_with_label_widget,
     checkbox_with_label_target as checkbox_with_label_target_widget,
@@ -37,6 +38,7 @@ use crate::{
     numeric_scrub_input_with_text_layouts_and_caret_visibility as numeric_scrub_input_widget,
     panel as panel_widget, panel_semantics,
     path_field_with_text_layouts_and_caret_visibility as path_field_widget,
+    property_grid_row_affordance_controls as property_grid_row_affordance_controls_widget,
     radio_button as radio_button_widget, radio_button_with_label as radio_button_with_label_widget,
     radio_button_with_label_target as radio_button_with_label_target_widget,
     search_field_with_text_layouts_and_caret_visibility as search_field_widget,
@@ -1566,6 +1568,22 @@ impl<'a> Ui<'a> {
         let theme = self.theme;
         let (input, memory) = self.runtime.input_and_memory_mut();
         let output = color_field_widget(id, rect, label, color, config, input, memory, theme);
+        self.push_widget_output(&output.widget);
+        output
+    }
+
+    /// Emits compact reset/keyframe controls for a property-grid row.
+    pub fn property_grid_row_affordance_controls(
+        &mut self,
+        key: impl Hash,
+        row: &PropertyGridRow,
+        rects: PropertyGridAffordanceRects,
+    ) -> PropertyGridAffordanceOutput {
+        let id = self.id(key);
+        let theme = self.theme;
+        let (input, memory) = self.runtime.input_and_memory_mut();
+        let output =
+            property_grid_row_affordance_controls_widget(id, row, rects, input, memory, theme);
         self.push_widget_output(&output.widget);
         output
     }

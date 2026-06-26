@@ -134,6 +134,12 @@ pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
     ComponentMetadata::new("Table", "table", Collection, Partial),
     ComponentMetadata::new("Tree", "tree", Collection, Partial),
     ComponentMetadata::new("PropertyGrid", "property-grid", Inspector, Partial),
+    ComponentMetadata::new(
+        "PropertyAffordanceControls",
+        "property-affordance-controls",
+        Inspector,
+        Implemented,
+    ),
     ComponentMetadata::new("Vector2Field", "vector-two-field", Inspector, Implemented),
     ComponentMetadata::new("Vector3Field", "vector-three-field", Inspector, Implemented),
     ComponentMetadata::new("Vector4Field", "vector-four-field", Inspector, Implemented),

@@ -9,9 +9,11 @@ use kinetik_ui_core::{
 use kinetik_ui_text::TextEditState;
 use kinetik_ui_widgets::{
     AssetSlotAsset, AssetSlotConfig, ColorFieldConfig, DropdownItem, DropdownItemId, DropdownModel,
-    NumericScrubInputConfig, RadioGroupChoice, SelectFieldConfig, SliderStep, Ui, WidgetOutput,
-    asset_slot_field, button, checkbox_with_label, color_field, icon_button_with_label, label,
-    panel, radio_button_with_label, select_field, slider_with_label, toggle_with_label,
+    NumericScrubInputConfig, PropertyGridAffordanceLayout, PropertyGridRow, RadioGroupChoice,
+    SelectFieldConfig, SliderStep, Ui, WidgetOutput, asset_slot_field, button, checkbox_with_label,
+    color_field, icon_button_with_label, label, panel, property_grid_row_affordance_controls,
+    property_grid_row_affordance_rects, radio_button_with_label, select_field, slider_with_label,
+    toggle_with_label,
 };
 
 fn pointer_input(x: f32, y: f32, down: bool, pressed: bool, released: bool) -> UiInput {
@@ -551,6 +553,91 @@ fn color_field_emits_swatch_semantics_and_open_intent() {
         Some(SemanticValue::Text(
             "rgba(0.250, 0.500, 0.750, 1.000)".to_owned()
         ))
+    );
+}
+
+#[test]
+fn property_grid_affordance_controls_report_app_owned_requests() {
+    let theme = default_dark_theme();
+    let row = PropertyGridRow::property(kinetik_ui_widgets::ItemId::from_raw(42), "Exposure", 0)
+        .with_resettable(true, false)
+        .with_keyframeable(true, false);
+    let rects = property_grid_row_affordance_rects(
+        &row,
+        Rect::new(0.0, 0.0, 96.0, 20.0),
+        PropertyGridAffordanceLayout::new(18.0, 4.0),
+    );
+    let keyframe_center = rects.keyframe_rect.expect("keyframe rect").center();
+    let mut memory = UiMemory::new();
+
+    let _ = property_grid_row_affordance_controls(
+        WidgetId::from_key("exposure"),
+        &row,
+        rects,
+        &pressed_at(keyframe_center.x, keyframe_center.y),
+        &mut memory,
+        &theme,
+    );
+    let output = property_grid_row_affordance_controls(
+        WidgetId::from_key("exposure"),
+        &row,
+        rects,
+        &released_at(keyframe_center.x, keyframe_center.y),
+        &mut memory,
+        &theme,
+    );
+
+    assert!(!output.reset_requested);
+    assert!(output.keyframe_toggle_requested);
+    assert!(output.requested_keyed);
+    assert!(!row.state.affordances.keyframe.keyed);
+    assert!(output.widget.semantics.iter().any(|node| {
+        node.role == SemanticRole::IconButton
+            && node.label.as_deref() == Some("Toggle keyframe for Exposure")
+            && node
+                .actions
+                .iter()
+                .any(|action| action.kind == SemanticActionKind::Invoke)
+    }));
+}
+
+#[test]
+fn read_only_property_grid_affordances_do_not_emit_mutation_requests() {
+    let theme = default_dark_theme();
+    let row = PropertyGridRow::property(kinetik_ui_widgets::ItemId::from_raw(43), "Script", 0)
+        .with_read_only(true)
+        .with_resettable(true, false)
+        .with_keyframeable(true, false);
+    let rects = property_grid_row_affordance_rects(
+        &row,
+        Rect::new(0.0, 0.0, 96.0, 20.0),
+        PropertyGridAffordanceLayout::new(18.0, 4.0),
+    );
+    let reset_center = rects.reset_rect.expect("reset rect").center();
+    let output = property_grid_row_affordance_controls(
+        WidgetId::from_key("script"),
+        &row,
+        rects,
+        &pressed_at(reset_center.x, reset_center.y),
+        &mut UiMemory::new(),
+        &theme,
+    );
+
+    assert!(!output.reset_requested);
+    assert!(!output.keyframe_toggle_requested);
+    assert!(
+        output
+            .reset_response
+            .expect("reset response")
+            .state
+            .disabled
+    );
+    assert!(
+        output
+            .keyframe_response
+            .expect("keyframe response")
+            .state
+            .disabled
     );
 }
 

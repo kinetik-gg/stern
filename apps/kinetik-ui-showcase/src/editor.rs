@@ -28,12 +28,13 @@ use kinetik_ui::widgets::{
     OverlayStack, PanZoom, Panel, PanelId, PanelInstanceId, PanelInstancePolicy,
     PanelInstanceSnapshot, PanelOpenActionMetadata, PanelOpenDecision, PanelRegistry,
     PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, PathFieldConfig,
-    PopoverPlacement, PropertyGridLayout, PropertyGridRow, SelectFieldConfig, StatusBar,
-    StatusItem, StatusItemId, StatusItemKind, StatusProgress, TabStrip, TableColumn, TableLayout,
-    Toolbar, ToolbarGroup, ToolbarGroupId, ToolbarItem, ToolbarItemPresentation, TreeExpansion,
-    TreeItem, TreeLayout, TreeModel, Ui, VectorScrubInputConfig, ViewportComposition, ViewportFit,
-    ViewportSurface, WorkspaceSnapshot, classify_numeric_input_draft, frame_tabs,
-    icon_button_semantics, resolve_dock_splitter_context_actions_with_policy,
+    PopoverPlacement, PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow,
+    PropertyGridRowStatus, SelectFieldConfig, StatusBar, StatusItem, StatusItemId, StatusItemKind,
+    StatusProgress, TabStrip, TableColumn, TableLayout, Toolbar, ToolbarGroup, ToolbarGroupId,
+    ToolbarItem, ToolbarItemPresentation, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
+    VectorScrubInputConfig, ViewportComposition, ViewportFit, ViewportSurface, WorkspaceSnapshot,
+    classify_numeric_input_draft, frame_tabs, icon_button_semantics,
+    property_grid_row_affordance_rects, resolve_dock_splitter_context_actions_with_policy,
     resolve_frame_drop_zone_with_policy, solve_dock_layout, solve_dock_splitters_with_style,
 };
 
@@ -2276,16 +2277,80 @@ impl EditorShowcase {
                             );
                         }
                         kinetik_ui::widgets::PropertyGridRowKind::Property { .. } => {
+                            let model_row = &rows[row.index];
+                            let status = model_row.state.status.presentation();
+                            let label_color = match status.severity {
+                                kinetik_ui::widgets::PropertyGridStatusSeverity::None => {
+                                    rgb(154, 160, 168)
+                                }
+                                kinetik_ui::widgets::PropertyGridStatusSeverity::Info => {
+                                    rgb(126, 179, 236)
+                                }
+                                kinetik_ui::widgets::PropertyGridStatusSeverity::Warning => {
+                                    rgb(232, 179, 90)
+                                }
+                                kinetik_ui::widgets::PropertyGridStatusSeverity::Error => {
+                                    rgb(236, 96, 96)
+                                }
+                            };
                             rect(ui, row.rect, rgb(24, 25, 27), Some(rgb(38, 40, 45)));
+                            if status.accented {
+                                rect(
+                                    ui,
+                                    Rect::new(row.rect.x, row.rect.y, 3.0, row.rect.height),
+                                    label_color,
+                                    None,
+                                );
+                                text(
+                                    ui,
+                                    row.label_rect.max_x() - 10.0,
+                                    row.label_rect.y + 16.0,
+                                    match status.severity {
+                                        kinetik_ui::widgets::PropertyGridStatusSeverity::Info => {
+                                            "i"
+                                        }
+                                        kinetik_ui::widgets::PropertyGridStatusSeverity::Warning => {
+                                            "!"
+                                        }
+                                        kinetik_ui::widgets::PropertyGridStatusSeverity::Error => {
+                                            "x"
+                                        }
+                                        kinetik_ui::widgets::PropertyGridStatusSeverity::None => "",
+                                    },
+                                    9.0,
+                                    label_color,
+                                );
+                            }
                             text(
                                 ui,
                                 row.label_rect.x + 6.0,
                                 row.label_rect.y + 16.0,
-                                &rows[row.index].label,
+                                &model_row.label,
                                 11.0,
-                                rgb(154, 160, 168),
+                                label_color,
                             );
-                            self.inspector_value(ui, row.id, row.value_rect.inset(2.0));
+                            let affordance_rects = property_grid_row_affordance_rects(
+                                model_row,
+                                row.value_rect.inset(2.0),
+                                PropertyGridAffordanceLayout::default(),
+                            );
+                            self.inspector_value(ui, model_row, affordance_rects.value_rect);
+                            let affordance = ui.property_grid_row_affordance_controls(
+                                ("editor.inspector.affordance", row.id.raw()),
+                                model_row,
+                                affordance_rects,
+                            );
+                            if affordance.reset_requested {
+                                self.status = format!("Reset requested for {}", model_row.label);
+                            } else if affordance.keyframe_toggle_requested {
+                                let state = if affordance.requested_keyed {
+                                    "add"
+                                } else {
+                                    "remove"
+                                };
+                                self.status =
+                                    format!("Keyframe {state} requested for {}", model_row.label);
+                            }
                         }
                     }
                 }
@@ -2293,7 +2358,10 @@ impl EditorShowcase {
         );
     }
 
-    fn inspector_value(&mut self, ui: &mut Ui<'_>, id: ItemId, rect_value: Rect) {
+    fn inspector_value(&mut self, ui: &mut Ui<'_>, row: &PropertyGridRow, rect_value: Rect) {
+        let id = row.id;
+        let disabled = row.state.disabled;
+        let read_only = row.state.read_only;
         match id.raw() {
             2 => {
                 ui.vector3_scrub_input(
@@ -2304,7 +2372,9 @@ impl EditorShowcase {
                     &mut self.position_states,
                     VectorScrubInputConfig::new(
                         NumericScrubInputConfig::new(0.1).with_fine_step(0.01),
-                    ),
+                    )
+                    .disabled(disabled)
+                    .read_only(read_only),
                 );
             }
             5 => {
@@ -2315,7 +2385,9 @@ impl EditorShowcase {
                     &mut self.scale,
                     NumericScrubInputConfig::new(0.01)
                         .with_fine_step(0.001)
-                        .with_min(0.0),
+                        .with_min(0.0)
+                        .disabled(disabled)
+                        .read_only(read_only),
                 );
             }
             7 => {
@@ -2324,7 +2396,7 @@ impl EditorShowcase {
                     rect_value,
                     &mut self.exposure,
                     0.0..=1.0,
-                    false,
+                    disabled || read_only,
                 );
             }
             8 => {
@@ -2333,7 +2405,7 @@ impl EditorShowcase {
                     rect_value,
                     &mut self.roughness,
                     0.0..=1.0,
-                    false,
+                    disabled || read_only,
                 );
             }
             9 => {
@@ -2343,7 +2415,10 @@ impl EditorShowcase {
                     rect_value,
                     "Material",
                     Some(&asset),
-                    AssetSlotConfig::new("Drop material").accepts_drop(true),
+                    AssetSlotConfig::new("Drop material")
+                        .accepts_drop(true)
+                        .disabled(disabled)
+                        .read_only(read_only),
                 );
                 if slot.drop_received {
                     "Material drop requested".clone_into(&mut self.status);
@@ -2358,7 +2433,7 @@ impl EditorShowcase {
                     "editor.inspector.snap",
                     Rect::new(rect_value.x, rect_value.y + 2.0, 42.0, 18.0),
                     &mut self.snap_enabled,
-                    false,
+                    disabled || read_only,
                 );
             }
             13 => {
@@ -2369,7 +2444,9 @@ impl EditorShowcase {
                     &mut self.mass,
                     NumericScrubInputConfig::new(0.5)
                         .with_fine_step(0.1)
-                        .with_min(0.0),
+                        .with_min(0.0)
+                        .disabled(disabled)
+                        .read_only(read_only),
                 );
             }
             14 => {
@@ -2379,7 +2456,9 @@ impl EditorShowcase {
                     rect_value,
                     "Collider",
                     &model,
-                    SelectFieldConfig::new("Choose collider"),
+                    SelectFieldConfig::new("Choose collider")
+                        .disabled(disabled)
+                        .read_only(read_only),
                 );
                 if select.open_requested {
                     "Collider choices requested".clone_into(&mut self.status);
@@ -2391,7 +2470,10 @@ impl EditorShowcase {
                     rect_value,
                     "Script path",
                     &mut self.script_path,
-                    PathFieldConfig::default().open(true),
+                    PathFieldConfig::default()
+                        .open(true)
+                        .disabled(disabled)
+                        .read_only(read_only),
                 );
                 if path.browse_requested {
                     "Script path browse requested".clone_into(&mut self.status);
@@ -3022,18 +3104,38 @@ fn scene_model() -> TreeModel {
 fn inspector_rows() -> Vec<PropertyGridRow> {
     vec![
         PropertyGridRow::section(item_id(1), "Transform"),
-        PropertyGridRow::property(item_id(2), "Position", 0),
-        PropertyGridRow::property(item_id(5), "Uniform Scale", 0),
+        PropertyGridRow::property(item_id(2), "Position", 0)
+            .with_resettable(true, false)
+            .with_keyframeable(true, true),
+        PropertyGridRow::property(item_id(5), "Uniform Scale", 0)
+            .with_resettable(true, true)
+            .with_keyframeable(true, false),
         PropertyGridRow::section(item_id(6), "Rendering"),
-        PropertyGridRow::property(item_id(7), "Exposure", 0),
-        PropertyGridRow::property(item_id(8), "Roughness", 0),
-        PropertyGridRow::property(item_id(9), "Material", 0),
+        PropertyGridRow::property(item_id(7), "Exposure", 0)
+            .with_status(PropertyGridRowStatus::warning("Preview range exceeded"))
+            .with_resettable(true, false)
+            .with_keyframeable(true, false),
+        PropertyGridRow::property(item_id(8), "Roughness", 0)
+            .with_resettable(true, true)
+            .with_keyframeable(true, false),
+        PropertyGridRow::property(item_id(9), "Material", 0)
+            .with_status(PropertyGridRowStatus::info("Inherited material override"))
+            .with_resettable(true, false),
         PropertyGridRow::section(item_id(10), "Editor"),
-        PropertyGridRow::property(item_id(11), "Snap", 0),
+        PropertyGridRow::property(item_id(11), "Snap", 0).with_resettable(true, false),
         PropertyGridRow::section(item_id(12), "Physics"),
-        PropertyGridRow::property(item_id(13), "Mass", 0),
-        PropertyGridRow::property(item_id(14), "Collider", 0),
-        PropertyGridRow::property(item_id(15), "Script", 0),
+        PropertyGridRow::property(item_id(13), "Mass", 0)
+            .with_status(PropertyGridRowStatus::error("Mass must be positive"))
+            .with_resettable(true, false)
+            .with_keyframeable(true, false),
+        PropertyGridRow::property(item_id(14), "Collider", 0)
+            .with_resettable(true, false)
+            .with_keyframeable(true, false),
+        PropertyGridRow::property(item_id(15), "Script", 0)
+            .with_read_only(true)
+            .with_status(PropertyGridRowStatus::info("Script comes from prefab"))
+            .with_resettable(true, false)
+            .with_keyframeable(true, false),
     ]
 }
 

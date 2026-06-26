@@ -3,8 +3,13 @@
 use std::collections::BTreeSet;
 use std::ops::Range;
 
-use kinetik_ui_core::Rect;
+use kinetik_ui_core::{
+    Brush, ComponentState, CornerRadius, CursorShape, PlatformRequest, Point, Primitive, Rect,
+    RectPrimitive, Response, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
+    SemanticValue, TextPrimitive, TextRole, Theme, UiInput, UiMemory, WidgetId, focusable,
+};
 
+use crate::WidgetOutput;
 use crate::collections::ItemId;
 
 fn finite_non_negative(value: f32) -> f32 {
@@ -46,6 +51,52 @@ pub enum PropertyGridStatusSeverity {
     Warning,
     /// Blocking error row status.
     Error,
+}
+
+/// Deterministic presentation metadata for row validation or help status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PropertyGridStatusPresentation {
+    /// Status severity.
+    pub severity: PropertyGridStatusSeverity,
+    /// Stable compact status label.
+    pub label: &'static str,
+    /// True when the row should show a status accent.
+    pub accented: bool,
+    /// True when the status should be treated as blocking validation.
+    pub blocking: bool,
+}
+
+impl PropertyGridStatusSeverity {
+    /// Returns deterministic presentation metadata for this severity.
+    #[must_use]
+    pub const fn presentation(self) -> PropertyGridStatusPresentation {
+        match self {
+            Self::None => PropertyGridStatusPresentation {
+                severity: self,
+                label: "None",
+                accented: false,
+                blocking: false,
+            },
+            Self::Info => PropertyGridStatusPresentation {
+                severity: self,
+                label: "Info",
+                accented: true,
+                blocking: false,
+            },
+            Self::Warning => PropertyGridStatusPresentation {
+                severity: self,
+                label: "Warning",
+                accented: true,
+                blocking: false,
+            },
+            Self::Error => PropertyGridStatusPresentation {
+                severity: self,
+                label: "Error",
+                accented: true,
+                blocking: true,
+            },
+        }
+    }
 }
 
 /// Data-only validation or help status for a property-grid row.
@@ -97,6 +148,97 @@ impl PropertyGridRowStatus {
     pub const fn is_blocking_error(&self) -> bool {
         matches!(self.severity, PropertyGridStatusSeverity::Error)
     }
+
+    /// Returns deterministic presentation metadata for this status.
+    #[must_use]
+    pub const fn presentation(&self) -> PropertyGridStatusPresentation {
+        self.severity.presentation()
+    }
+
+    /// Returns accessible status text including severity and message when present.
+    #[must_use]
+    pub fn semantic_text(&self) -> Option<String> {
+        let presentation = self.presentation();
+        if matches!(presentation.severity, PropertyGridStatusSeverity::None) {
+            return None;
+        }
+
+        Some(match self.message.as_deref() {
+            Some(message) if !message.is_empty() => format!("{}: {message}", presentation.label),
+            _ => presentation.label.to_owned(),
+        })
+    }
+}
+
+/// Reset-to-default affordance metadata for a property-grid row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PropertyGridResetAffordance {
+    /// True when a reset control should be presented.
+    pub available: bool,
+    /// True when the current value already matches the application-owned default.
+    pub at_default: bool,
+}
+
+impl PropertyGridResetAffordance {
+    /// Creates reset affordance metadata.
+    #[must_use]
+    pub const fn new(available: bool, at_default: bool) -> Self {
+        Self {
+            available,
+            at_default,
+        }
+    }
+}
+
+/// Keyframe affordance metadata for a property-grid row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PropertyGridKeyframeAffordance {
+    /// True when a keyframe control should be presented.
+    pub available: bool,
+    /// True when the current property is keyed at the current application time.
+    pub keyed: bool,
+}
+
+impl PropertyGridKeyframeAffordance {
+    /// Creates keyframe affordance metadata.
+    #[must_use]
+    pub const fn new(available: bool, keyed: bool) -> Self {
+        Self { available, keyed }
+    }
+}
+
+/// App-owned property affordance metadata attached to a property-grid row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PropertyGridRowAffordances {
+    /// Reset-to-default control metadata.
+    pub reset: PropertyGridResetAffordance,
+    /// Keyframe toggle control metadata.
+    pub keyframe: PropertyGridKeyframeAffordance,
+}
+
+impl PropertyGridRowAffordances {
+    /// Creates neutral affordance metadata.
+    #[must_use]
+    pub const fn neutral() -> Self {
+        Self {
+            reset: PropertyGridResetAffordance::new(false, false),
+            keyframe: PropertyGridKeyframeAffordance::new(false, false),
+        }
+    }
+
+    /// Returns this metadata with reset-to-default state set.
+    #[must_use]
+    pub const fn with_reset(mut self, available: bool, at_default: bool) -> Self {
+        self.reset = PropertyGridResetAffordance::new(available, at_default);
+        self
+    }
+
+    /// Returns this metadata with keyframe state set.
+    #[must_use]
+    pub const fn with_keyframe(mut self, available: bool, keyed: bool) -> Self {
+        self.keyframe = PropertyGridKeyframeAffordance::new(available, keyed);
+        self
+    }
 }
 
 /// Data-only form state metadata for a property-grid row.
@@ -112,6 +254,8 @@ pub struct PropertyGridRowState {
     pub help_text: Option<String>,
     /// Optional validation or help status owned by the application.
     pub status: PropertyGridRowStatus,
+    /// Optional reset/keyframe affordance metadata owned by the application.
+    pub affordances: PropertyGridRowAffordances,
 }
 
 impl PropertyGridRowState {
@@ -124,6 +268,7 @@ impl PropertyGridRowState {
             required: false,
             help_text: None,
             status: PropertyGridRowStatus::severity(PropertyGridStatusSeverity::None),
+            affordances: PropertyGridRowAffordances::neutral(),
         }
     }
 
@@ -159,6 +304,20 @@ impl PropertyGridRowState {
     #[must_use]
     pub fn with_status(mut self, status: PropertyGridRowStatus) -> Self {
         self.status = status;
+        self
+    }
+
+    /// Returns this metadata with reset-to-default affordance state set.
+    #[must_use]
+    pub const fn with_resettable(mut self, available: bool, at_default: bool) -> Self {
+        self.affordances = self.affordances.with_reset(available, at_default);
+        self
+    }
+
+    /// Returns this metadata with keyframe affordance state set.
+    #[must_use]
+    pub const fn with_keyframeable(mut self, available: bool, keyed: bool) -> Self {
+        self.affordances = self.affordances.with_keyframe(available, keyed);
         self
     }
 
@@ -247,6 +406,20 @@ impl PropertyGridRow {
         self
     }
 
+    /// Returns this row with reset-to-default affordance state set.
+    #[must_use]
+    pub fn with_resettable(mut self, available: bool, at_default: bool) -> Self {
+        self.state = self.state.with_resettable(available, at_default);
+        self
+    }
+
+    /// Returns this row with keyframe affordance state set.
+    #[must_use]
+    pub fn with_keyframeable(mut self, available: bool, keyed: bool) -> Self {
+        self.state = self.state.with_keyframeable(available, keyed);
+        self
+    }
+
     /// Returns true when this row can accept interaction.
     #[must_use]
     pub fn is_interactable(&self) -> bool {
@@ -263,6 +436,320 @@ impl PropertyGridRow {
     #[must_use]
     pub fn has_blocking_error(&self) -> bool {
         self.state.has_blocking_error()
+    }
+
+    /// Returns true when this row can emit a reset-to-default request.
+    #[must_use]
+    pub fn can_request_reset(&self) -> bool {
+        matches!(self.kind, PropertyGridRowKind::Property { .. })
+            && !self.state.disabled
+            && !self.state.read_only
+            && self.state.affordances.reset.available
+            && !self.state.affordances.reset.at_default
+    }
+
+    /// Returns true when this row can emit a keyframe toggle request.
+    #[must_use]
+    pub fn can_request_keyframe_toggle(&self) -> bool {
+        matches!(self.kind, PropertyGridRowKind::Property { .. })
+            && !self.state.disabled
+            && !self.state.read_only
+            && self.state.affordances.keyframe.available
+    }
+}
+
+/// Layout tuning for compact property-row affordance controls.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PropertyGridAffordanceLayout {
+    /// Square control size for reset and keyframe controls.
+    pub button_size: f32,
+    /// Gap between controls and the value editor.
+    pub gap: f32,
+    /// Minimum value-editor width preserved before controls are shown.
+    pub min_value_width: f32,
+}
+
+impl PropertyGridAffordanceLayout {
+    /// Creates property affordance layout tuning.
+    #[must_use]
+    pub const fn new(button_size: f32, gap: f32) -> Self {
+        Self {
+            button_size,
+            gap,
+            min_value_width: 40.0,
+        }
+    }
+
+    /// Sets the minimum value-editor width preserved before controls are shown.
+    #[must_use]
+    pub const fn with_min_value_width(mut self, min_value_width: f32) -> Self {
+        self.min_value_width = min_value_width;
+        self
+    }
+}
+
+impl Default for PropertyGridAffordanceLayout {
+    fn default() -> Self {
+        Self::new(18.0, 4.0)
+    }
+}
+
+/// Rectangles assigned to property-row value and affordance controls.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PropertyGridAffordanceRects {
+    /// Value/control rectangle after reserving visible affordance controls.
+    pub value_rect: Rect,
+    /// Reset-to-default control rectangle, when visible.
+    pub reset_rect: Option<Rect>,
+    /// Keyframe toggle control rectangle, when visible.
+    pub keyframe_rect: Option<Rect>,
+}
+
+/// Output from property-row affordance controls.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropertyGridAffordanceOutput {
+    /// Widget primitives, semantics, and platform requests emitted by controls.
+    pub widget: WidgetOutput,
+    /// True when the user requested an app-owned reset-to-default operation.
+    pub reset_requested: bool,
+    /// True when the user requested an app-owned keyframe toggle operation.
+    pub keyframe_toggle_requested: bool,
+    /// Keyed state requested by the keyframe toggle, without storing animation data.
+    pub requested_keyed: bool,
+    /// Reset control response, when visible.
+    pub reset_response: Option<Response>,
+    /// Keyframe control response, when visible.
+    pub keyframe_response: Option<Response>,
+}
+
+/// Computes compact reset/keyframe affordance rectangles for one value cell.
+#[must_use]
+pub fn property_grid_row_affordance_rects(
+    row: &PropertyGridRow,
+    value_rect: Rect,
+    layout: PropertyGridAffordanceLayout,
+) -> PropertyGridAffordanceRects {
+    let button_size = finite_non_negative(layout.button_size)
+        .min(finite_non_negative(value_rect.height))
+        .min(finite_non_negative(value_rect.width));
+    let gap = finite_non_negative(layout.gap).min(finite_non_negative(value_rect.width));
+    let min_value_width = finite_non_negative(layout.min_value_width);
+    let mut cursor = value_rect.max_x();
+
+    let keyframe_rect = if row.state.affordances.keyframe.available
+        && can_reserve_affordance(cursor, value_rect.x, button_size, gap, min_value_width)
+    {
+        cursor -= button_size;
+        let rect = Rect::new(
+            cursor,
+            value_rect.y + (value_rect.height - button_size).max(0.0) * 0.5,
+            button_size,
+            button_size,
+        );
+        cursor -= gap.min((cursor - value_rect.x).max(0.0));
+        Some(rect)
+    } else {
+        None
+    };
+
+    let reset_rect = if row.state.affordances.reset.available
+        && can_reserve_affordance(cursor, value_rect.x, button_size, gap, min_value_width)
+    {
+        cursor -= button_size.min((cursor - value_rect.x).max(0.0));
+        let width = button_size.min((value_rect.max_x() - cursor).max(0.0));
+        let rect = Rect::new(
+            cursor,
+            value_rect.y + (value_rect.height - button_size).max(0.0) * 0.5,
+            width,
+            button_size,
+        );
+        cursor -= gap.min((cursor - value_rect.x).max(0.0));
+        Some(rect)
+    } else {
+        None
+    };
+
+    PropertyGridAffordanceRects {
+        value_rect: Rect::new(
+            value_rect.x,
+            value_rect.y,
+            (cursor - value_rect.x).max(0.0),
+            value_rect.height,
+        ),
+        reset_rect,
+        keyframe_rect,
+    }
+}
+
+fn can_reserve_affordance(
+    cursor: f32,
+    value_x: f32,
+    button_size: f32,
+    gap: f32,
+    min_value_width: f32,
+) -> bool {
+    button_size > 0.0 && cursor - value_x >= button_size + gap + min_value_width
+}
+
+/// Emits compact property-row reset and keyframe controls.
+#[must_use]
+pub fn property_grid_row_affordance_controls(
+    id: WidgetId,
+    row: &PropertyGridRow,
+    rects: PropertyGridAffordanceRects,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+) -> PropertyGridAffordanceOutput {
+    let mut widget = WidgetOutput::new(None, Vec::new());
+    let mut reset_response = None;
+    let mut keyframe_response = None;
+    let mut reset_requested = false;
+    let mut keyframe_toggle_requested = false;
+    let mut requested_keyed = row.state.affordances.keyframe.keyed;
+
+    if let Some(rect) = rects.reset_rect {
+        let disabled = !row.can_request_reset();
+        let response = affordance_button(
+            &mut widget,
+            id.child("reset"),
+            rect,
+            format!("Reset {} to default", row.label),
+            "Reset",
+            "R",
+            false,
+            disabled,
+            input,
+            memory,
+            theme,
+        );
+        reset_requested = !disabled && response.clicked;
+        reset_response = Some(response);
+    }
+
+    if let Some(rect) = rects.keyframe_rect {
+        let disabled = !row.can_request_keyframe_toggle();
+        let response = affordance_button(
+            &mut widget,
+            id.child("keyframe"),
+            rect,
+            format!("Toggle keyframe for {}", row.label),
+            "Toggle keyframe",
+            "K",
+            row.state.affordances.keyframe.keyed,
+            disabled,
+            input,
+            memory,
+            theme,
+        );
+        keyframe_toggle_requested = !disabled && response.clicked;
+        if keyframe_toggle_requested {
+            requested_keyed = !row.state.affordances.keyframe.keyed;
+        }
+        keyframe_response = Some(response);
+    }
+
+    PropertyGridAffordanceOutput {
+        widget,
+        reset_requested,
+        keyframe_toggle_requested,
+        requested_keyed,
+        reset_response,
+        keyframe_response,
+    }
+}
+
+/// Builds deterministic semantic metadata for a property-grid row status.
+#[must_use]
+pub fn property_grid_row_status_semantics(
+    id: WidgetId,
+    row: &PropertyGridRow,
+    row_rect: PropertyGridRowRect,
+) -> Option<SemanticNode> {
+    let status_text = row.state.status.semantic_text()?;
+    let mut node = SemanticNode::new(id.child("status"), SemanticRole::Label, row_rect.rect)
+        .with_label(format!("{} status", row.label));
+    node.description = Some(status_text.clone());
+    node.state.value = Some(SemanticValue::Text(status_text));
+    node.state.disabled = row.state.disabled;
+    Some(node)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn affordance_button(
+    widget: &mut WidgetOutput,
+    id: WidgetId,
+    rect: Rect,
+    label: String,
+    action_label: &'static str,
+    glyph: &'static str,
+    selected: bool,
+    disabled: bool,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+) -> Response {
+    let mut response = focusable(id, rect, input, memory, disabled);
+    suppress_disabled_interaction_reporting(&mut response);
+    response.state.selected = selected;
+    let recipe = theme.button(ComponentState {
+        hovered: response.state.hovered,
+        pressed: response.state.pressed && !response.state.disabled,
+        focused: response.state.focused && !response.state.disabled,
+        disabled,
+        selected,
+    });
+
+    widget.primitives.push(Primitive::Rect(RectPrimitive {
+        rect,
+        fill: Some(recipe.background),
+        stroke: Some(recipe.border),
+        radius: CornerRadius::all(3.0),
+    }));
+    widget.primitives.push(Primitive::Text(TextPrimitive {
+        layout: None,
+        origin: Point::new(
+            rect.x + (rect.width * 0.5 - theme.font(TextRole::Label).size * 0.28).max(1.0),
+            rect.y
+                + (rect.height - theme.font(TextRole::Label).line_height).max(0.0) * 0.5
+                + theme.font(TextRole::Label).size,
+        ),
+        text: glyph.to_owned(),
+        family: theme.font(TextRole::Label).family.to_owned(),
+        size: theme.font(TextRole::Label).size,
+        line_height: theme.font(TextRole::Label).line_height,
+        brush: Brush::Solid(recipe.foreground),
+    }));
+
+    let mut node = SemanticNode::new(id, SemanticRole::IconButton, rect)
+        .with_label(label)
+        .focusable(!disabled);
+    node.state.disabled = disabled;
+    node.state.focused = response.state.focused && !response.state.disabled;
+    node.state.pressed = response.state.pressed && !response.state.disabled;
+    node.state.selected = selected;
+    if !disabled {
+        node.actions.push(SemanticAction::new(
+            SemanticActionKind::Invoke,
+            action_label,
+        ));
+    }
+    widget.semantics.push(node);
+
+    if response.state.hovered && !response.state.disabled {
+        widget
+            .platform_requests
+            .push(PlatformRequest::SetCursor(CursorShape::PointingHand));
+    }
+
+    response
+}
+
+fn suppress_disabled_interaction_reporting(response: &mut Response) {
+    if response.state.disabled {
+        response.state.focused = false;
+        response.state.active = false;
+        response.state.pressed = false;
     }
 }
 
@@ -645,13 +1132,18 @@ impl PropertyGridLayout {
 #[cfg(test)]
 mod tests {
     use super::{
-        PropertyGridError, PropertyGridLayout, PropertyGridRow, PropertyGridRowState,
-        PropertyGridRowStatus, PropertyGridStatusSeverity, VectorComponentLayout,
-        VectorComponentRect, vector2_component_rects, vector3_component_rects,
+        PropertyGridAffordanceLayout, PropertyGridError, PropertyGridLayout, PropertyGridRow,
+        PropertyGridRowAffordances, PropertyGridRowState, PropertyGridRowStatus,
+        PropertyGridStatusSeverity, VectorComponentLayout, VectorComponentRect,
+        property_grid_row_affordance_controls, property_grid_row_affordance_rects,
+        property_grid_row_status_semantics, vector2_component_rects, vector3_component_rects,
         vector4_component_rects,
     };
     use crate::ItemId;
-    use kinetik_ui_core::Rect;
+    use kinetik_ui_core::{
+        Point, PointerButtonState, PointerInput, Rect, SemanticActionKind, SemanticRole,
+        SemanticValue, UiInput, UiMemory, WidgetId, default_dark_theme,
+    };
 
     fn assert_approx(actual: f32, expected: f32) {
         assert!(
@@ -696,6 +1188,17 @@ mod tests {
         ]
     }
 
+    fn pointer_input(x: f32, y: f32, down: bool, pressed: bool, released: bool) -> UiInput {
+        UiInput {
+            pointer: PointerInput {
+                position: Some(Point::new(x, y)),
+                primary: PointerButtonState::new(down, pressed, released),
+                ..PointerInput::default()
+            },
+            ..UiInput::default()
+        }
+    }
+
     #[test]
     fn property_grid_validates_duplicate_row_ids() {
         let rows = vec![
@@ -726,6 +1229,12 @@ mod tests {
         assert!(property.is_interactable());
         assert!(property.is_editable());
         assert!(!property.has_blocking_error());
+        assert_eq!(
+            property.state.affordances,
+            PropertyGridRowAffordances::neutral()
+        );
+        assert!(!property.can_request_reset());
+        assert!(!property.can_request_keyframe_toggle());
     }
 
     #[test]
@@ -737,7 +1246,9 @@ mod tests {
             .with_help_text("Use scene-referred values")
             .with_status(PropertyGridRowStatus::warning(
                 "Value is above preview range",
-            ));
+            ))
+            .with_resettable(true, false)
+            .with_keyframeable(true, true);
 
         assert!(row.state.disabled);
         assert!(row.state.read_only);
@@ -754,9 +1265,17 @@ mod tests {
             row.state.status.message.as_deref(),
             Some("Value is above preview range")
         );
+        assert_eq!(
+            row.state.affordances,
+            PropertyGridRowAffordances::neutral()
+                .with_reset(true, false)
+                .with_keyframe(true, true)
+        );
         assert!(!row.is_interactable());
         assert!(!row.is_editable());
         assert!(!row.has_blocking_error());
+        assert!(!row.can_request_reset());
+        assert!(!row.can_request_keyframe_toggle());
     }
 
     #[test]
@@ -833,6 +1352,262 @@ mod tests {
             layout.visible_row_rects(bounds, &plain, 0.0, 0),
             layout.visible_row_rects(bounds, &annotated, 0.0, 0)
         );
+    }
+
+    #[test]
+    fn property_grid_status_presentation_is_deterministic() {
+        assert_eq!(
+            PropertyGridStatusSeverity::None.presentation().label,
+            "None"
+        );
+        assert!(!PropertyGridStatusSeverity::None.presentation().accented);
+        assert_eq!(
+            PropertyGridStatusSeverity::Info.presentation().label,
+            "Info"
+        );
+        assert!(PropertyGridStatusSeverity::Warning.presentation().accented);
+        assert!(!PropertyGridStatusSeverity::Warning.presentation().blocking);
+        assert!(PropertyGridStatusSeverity::Error.presentation().blocking);
+        assert_eq!(
+            PropertyGridRowStatus::error("Invalid").presentation(),
+            PropertyGridStatusSeverity::Error.presentation()
+        );
+    }
+
+    #[test]
+    fn property_grid_status_semantics_include_severity_and_message_without_layout_changes() {
+        let rows = [
+            PropertyGridRow::property(ItemId::from_raw(1), "Mode", 0),
+            PropertyGridRow::property(ItemId::from_raw(2), "Guide", 0)
+                .with_status(PropertyGridRowStatus::info("Inherited from parent")),
+            PropertyGridRow::property(ItemId::from_raw(3), "Exposure", 0)
+                .with_status(PropertyGridRowStatus::warning("Preview range exceeded")),
+            PropertyGridRow::property(ItemId::from_raw(4), "Mass", 0)
+                .with_status(PropertyGridRowStatus::error("Mass must be positive")),
+        ];
+        let layout = PropertyGridLayout::new(20.0, 24.0, 90.0, 8.0, 12.0);
+        let bounds = Rect::new(0.0, 0.0, 240.0, 80.0);
+        let rects = layout.visible_row_rects(bounds, &rows, 0.0, 0);
+        let plain_rows = [
+            PropertyGridRow::property(ItemId::from_raw(1), "Mode", 0),
+            PropertyGridRow::property(ItemId::from_raw(2), "Guide", 0),
+            PropertyGridRow::property(ItemId::from_raw(3), "Exposure", 0),
+            PropertyGridRow::property(ItemId::from_raw(4), "Mass", 0),
+        ];
+
+        assert_eq!(rects, layout.visible_row_rects(bounds, &plain_rows, 0.0, 0));
+        assert!(
+            property_grid_row_status_semantics(WidgetId::from_key("mode"), &rows[0], rects[0])
+                .is_none()
+        );
+
+        for (index, expected) in [
+            (1, "Info: Inherited from parent"),
+            (2, "Warning: Preview range exceeded"),
+            (3, "Error: Mass must be positive"),
+        ] {
+            let node = property_grid_row_status_semantics(
+                WidgetId::from_key(rows[index].label.as_str()),
+                &rows[index],
+                rects[index],
+            )
+            .expect("status semantics");
+            let expected_label = format!("{} status", rows[index].label);
+            assert_eq!(node.role, SemanticRole::Label);
+            assert_eq!(node.label.as_deref(), Some(expected_label.as_str()));
+            assert_eq!(node.description.as_deref(), Some(expected));
+            assert_eq!(
+                node.state.value,
+                Some(SemanticValue::Text(expected.to_owned()))
+            );
+        }
+    }
+
+    #[test]
+    fn property_grid_affordance_rects_reserve_controls_without_changing_row_rect() {
+        let row = PropertyGridRow::property(ItemId::from_raw(2), "Exposure", 0)
+            .with_status(PropertyGridRowStatus::error("Too bright"))
+            .with_resettable(true, false)
+            .with_keyframeable(true, true);
+        let layout = PropertyGridLayout::new(20.0, 24.0, 90.0, 8.0, 12.0);
+        let row_rects = layout.visible_row_rects(
+            Rect::new(0.0, 0.0, 220.0, 20.0),
+            std::slice::from_ref(&row),
+            0.0,
+            0,
+        );
+        let row_rect = row_rects[0];
+        let row_rect_without_status = layout.visible_row_rects(
+            Rect::new(0.0, 0.0, 220.0, 20.0),
+            &[
+                PropertyGridRow::property(ItemId::from_raw(2), "Exposure", 0)
+                    .with_resettable(true, false)
+                    .with_keyframeable(true, true),
+            ],
+            0.0,
+            0,
+        )[0];
+
+        assert_eq!(row_rect, row_rect_without_status);
+
+        let affordances = property_grid_row_affordance_rects(
+            &row,
+            row_rect.value_rect,
+            PropertyGridAffordanceLayout::new(18.0, 4.0),
+        );
+        assert!(affordances.reset_rect.is_some());
+        assert!(affordances.keyframe_rect.is_some());
+        assert!(affordances.value_rect.width < row_rect.value_rect.width);
+        assert!(affordances.value_rect.max_x() <= affordances.reset_rect.unwrap().x);
+    }
+
+    #[test]
+    fn property_grid_affordance_controls_emit_requests_only() {
+        let theme = default_dark_theme();
+        let row = PropertyGridRow::property(ItemId::from_raw(2), "Exposure", 0)
+            .with_resettable(true, false)
+            .with_keyframeable(true, false);
+        let rects = property_grid_row_affordance_rects(
+            &row,
+            Rect::new(0.0, 0.0, 88.0, 20.0),
+            PropertyGridAffordanceLayout::new(18.0, 4.0),
+        );
+        let reset_center = rects.reset_rect.expect("reset rect").center();
+        let mut memory = UiMemory::new();
+
+        let _ = property_grid_row_affordance_controls(
+            WidgetId::from_key("exposure"),
+            &row,
+            rects,
+            &pointer_input(reset_center.x, reset_center.y, true, true, false),
+            &mut memory,
+            &theme,
+        );
+        let reset = property_grid_row_affordance_controls(
+            WidgetId::from_key("exposure"),
+            &row,
+            rects,
+            &pointer_input(reset_center.x, reset_center.y, false, false, true),
+            &mut memory,
+            &theme,
+        );
+
+        assert!(reset.reset_requested);
+        assert!(!reset.keyframe_toggle_requested);
+        assert!(!reset.requested_keyed);
+
+        let keyframe_center = rects.keyframe_rect.expect("keyframe rect").center();
+        let mut memory = UiMemory::new();
+        let _ = property_grid_row_affordance_controls(
+            WidgetId::from_key("exposure"),
+            &row,
+            rects,
+            &pointer_input(keyframe_center.x, keyframe_center.y, true, true, false),
+            &mut memory,
+            &theme,
+        );
+        let keyframe = property_grid_row_affordance_controls(
+            WidgetId::from_key("exposure"),
+            &row,
+            rects,
+            &pointer_input(keyframe_center.x, keyframe_center.y, false, false, true),
+            &mut memory,
+            &theme,
+        );
+
+        assert!(!keyframe.reset_requested);
+        assert!(keyframe.keyframe_toggle_requested);
+        assert!(keyframe.requested_keyed);
+        assert!(!row.state.affordances.keyframe.keyed);
+    }
+
+    #[test]
+    fn property_grid_affordance_controls_suppress_disabled_and_read_only_requests() {
+        let theme = default_dark_theme();
+        for row in [
+            PropertyGridRow::property(ItemId::from_raw(2), "Exposure", 0)
+                .with_disabled(true)
+                .with_resettable(true, false)
+                .with_keyframeable(true, false),
+            PropertyGridRow::property(ItemId::from_raw(3), "Mass", 0)
+                .with_read_only(true)
+                .with_resettable(true, false)
+                .with_keyframeable(true, false),
+            PropertyGridRow::property(ItemId::from_raw(4), "Scale", 0)
+                .with_resettable(true, true)
+                .with_keyframeable(true, false),
+        ] {
+            let rects = property_grid_row_affordance_rects(
+                &row,
+                Rect::new(0.0, 0.0, 88.0, 20.0),
+                PropertyGridAffordanceLayout::new(18.0, 4.0),
+            );
+            let reset_center = rects.reset_rect.expect("reset rect").center();
+            let output = property_grid_row_affordance_controls(
+                WidgetId::from_key(row.label.as_str()),
+                &row,
+                rects,
+                &pointer_input(reset_center.x, reset_center.y, true, true, false),
+                &mut UiMemory::new(),
+                &theme,
+            );
+
+            assert!(!output.reset_requested);
+            assert!(!output.keyframe_toggle_requested);
+            assert!(
+                output
+                    .reset_response
+                    .expect("reset response")
+                    .state
+                    .disabled
+            );
+            if row.state.disabled || row.state.read_only {
+                assert!(
+                    output
+                        .keyframe_response
+                        .expect("keyframe response")
+                        .state
+                        .disabled
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn property_grid_affordance_controls_expose_semantics() {
+        let theme = default_dark_theme();
+        let row = PropertyGridRow::property(ItemId::from_raw(2), "Exposure", 0)
+            .with_resettable(true, false)
+            .with_keyframeable(true, true);
+        let rects = property_grid_row_affordance_rects(
+            &row,
+            Rect::new(0.0, 0.0, 88.0, 20.0),
+            PropertyGridAffordanceLayout::new(18.0, 4.0),
+        );
+
+        let output = property_grid_row_affordance_controls(
+            WidgetId::from_key("exposure"),
+            &row,
+            rects,
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            &theme,
+        );
+
+        assert_eq!(output.widget.semantics.len(), 2);
+        assert!(output.widget.semantics.iter().all(|node| {
+            node.role == SemanticRole::IconButton
+                && node
+                    .actions
+                    .iter()
+                    .any(|action| action.kind == SemanticActionKind::Invoke)
+        }));
+        assert!(output.widget.semantics.iter().any(|node| {
+            node.label.as_deref() == Some("Reset Exposure to default") && !node.state.selected
+        }));
+        assert!(output.widget.semantics.iter().any(|node| {
+            node.label.as_deref() == Some("Toggle keyframe for Exposure") && node.state.selected
+        }));
     }
 
     #[test]
