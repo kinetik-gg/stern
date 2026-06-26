@@ -11,7 +11,8 @@ use kinetik_ui_core::{
 };
 use kinetik_ui_text::{TextEditState, TextLayoutStore, TextSelection};
 use kinetik_ui_widgets::{
-    Ui, multi_line_text_field, numeric_input, text_field, text_field_with_text_layouts,
+    NumericInputDraft, Ui, classify_numeric_input_draft, multi_line_text_field, numeric_input,
+    restore_text_draft, text_field, text_field_with_text_layouts,
 };
 
 fn root_child(key: &str) -> WidgetId {
@@ -1198,6 +1199,16 @@ fn numeric_input_distinguishes_valid_invalid_and_empty_states() {
     let theme = default_dark_theme();
     let mut memory = UiMemory::new();
 
+    assert_eq!(
+        classify_numeric_input_draft("42.5"),
+        NumericInputDraft::Valid(42.5)
+    );
+    assert_eq!(
+        classify_numeric_input_draft("42 px"),
+        NumericInputDraft::Invalid
+    );
+    assert_eq!(classify_numeric_input_draft("  "), NumericInputDraft::Empty);
+
     let mut valid_state = TextEditState::new("42.5");
     let valid = numeric_input(
         WidgetId::from_key("valid"),
@@ -1210,6 +1221,7 @@ fn numeric_input_distinguishes_valid_invalid_and_empty_states() {
     );
     assert!(valid.valid);
     assert_eq!(valid.value, Some(42.5));
+    assert_eq!(valid.policy.draft, NumericInputDraft::Valid(42.5));
 
     let mut invalid_state = TextEditState::new("42 px");
     let invalid = numeric_input(
@@ -1223,6 +1235,7 @@ fn numeric_input_distinguishes_valid_invalid_and_empty_states() {
     );
     assert!(!invalid.valid);
     assert_eq!(invalid.value, None);
+    assert_eq!(invalid.policy.draft, NumericInputDraft::Invalid);
 
     let mut empty_state = TextEditState::new("  ");
     let empty = numeric_input(
@@ -1236,6 +1249,168 @@ fn numeric_input_distinguishes_valid_invalid_and_empty_states() {
     );
     assert!(empty.valid);
     assert_eq!(empty.value, None);
+    assert_eq!(empty.policy.draft, NumericInputDraft::Empty);
+}
+
+#[test]
+fn focused_numeric_input_enter_requests_commit_for_valid_non_empty_draft() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("number");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    memory.set_text_input_owner(id);
+    let mut state = TextEditState::new("42.5");
+    let input = UiInput {
+        keyboard: key_input(Key::Enter, Modifiers::default()),
+        ..UiInput::default()
+    };
+
+    let output = numeric_input(
+        id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut state,
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+
+    assert_eq!(output.policy.draft, NumericInputDraft::Valid(42.5));
+    assert!(output.policy.commit_requested);
+    assert!(!output.policy.revert_requested);
+    assert_eq!(state.text, "42.5");
+}
+
+#[test]
+fn focused_numeric_input_enter_ignores_invalid_and_empty_drafts() {
+    let theme = default_dark_theme();
+    let input = UiInput {
+        keyboard: key_input(Key::Enter, Modifiers::default()),
+        ..UiInput::default()
+    };
+
+    let invalid_id = WidgetId::from_key("invalid-number");
+    let mut invalid_memory = UiMemory::new();
+    invalid_memory.focus(invalid_id);
+    invalid_memory.set_text_input_owner(invalid_id);
+    let mut invalid_state = TextEditState::new("42 px");
+    let invalid = numeric_input(
+        invalid_id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut invalid_state,
+        &input,
+        &mut invalid_memory,
+        &theme,
+        false,
+    );
+    assert_eq!(invalid.policy.draft, NumericInputDraft::Invalid);
+    assert!(!invalid.policy.commit_requested);
+    assert!(!invalid.policy.revert_requested);
+
+    let empty_id = WidgetId::from_key("empty-number");
+    let mut empty_memory = UiMemory::new();
+    empty_memory.focus(empty_id);
+    empty_memory.set_text_input_owner(empty_id);
+    let mut empty_state = TextEditState::new("  ");
+    let empty = numeric_input(
+        empty_id,
+        Rect::new(0.0, 32.0, 160.0, 24.0),
+        &mut empty_state,
+        &input,
+        &mut empty_memory,
+        &theme,
+        false,
+    );
+    assert_eq!(empty.policy.draft, NumericInputDraft::Empty);
+    assert!(!empty.policy.commit_requested);
+    assert!(!empty.policy.revert_requested);
+}
+
+#[test]
+fn focused_numeric_input_escape_requests_revert_and_helper_restores_baseline() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("number-revert");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    memory.set_text_input_owner(id);
+    let mut state = TextEditState::new("invalid draft");
+    state.set_selection(TextSelection::new(0, state.text.len()));
+    let input = UiInput {
+        keyboard: key_input(Key::Escape, Modifiers::default()),
+        ..UiInput::default()
+    };
+
+    let output = numeric_input(
+        id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut state,
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+
+    assert_eq!(output.policy.draft, NumericInputDraft::Invalid);
+    assert!(!output.policy.commit_requested);
+    assert!(output.policy.revert_requested);
+    assert_eq!(state.text, "invalid draft");
+
+    assert!(restore_text_draft(&mut state, "12.5"));
+    assert_eq!(state.text, "12.5");
+    assert_eq!(state.selection, TextSelection::new(4, 4));
+    assert_eq!(
+        classify_numeric_input_draft(&state.text),
+        NumericInputDraft::Valid(12.5)
+    );
+}
+
+#[test]
+fn unfocused_and_disabled_numeric_inputs_ignore_commit_revert_keys() {
+    let theme = default_dark_theme();
+    let input = UiInput {
+        keyboard: KeyboardInput {
+            modifiers: Modifiers::default(),
+            events: vec![
+                KeyEvent::new(Key::Enter, KeyState::Pressed, Modifiers::default(), false),
+                KeyEvent::new(Key::Escape, KeyState::Pressed, Modifiers::default(), false),
+            ],
+        },
+        ..UiInput::default()
+    };
+
+    let unfocused_id = WidgetId::from_key("unfocused-number");
+    let mut unfocused_memory = UiMemory::new();
+    let mut unfocused_state = TextEditState::new("42");
+    let unfocused = numeric_input(
+        unfocused_id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut unfocused_state,
+        &input,
+        &mut unfocused_memory,
+        &theme,
+        false,
+    );
+    assert_eq!(unfocused.policy.draft, NumericInputDraft::Valid(42.0));
+    assert!(!unfocused.policy.commit_requested);
+    assert!(!unfocused.policy.revert_requested);
+
+    let disabled_id = WidgetId::from_key("disabled-number");
+    let mut disabled_memory = UiMemory::new();
+    disabled_memory.focus(disabled_id);
+    disabled_memory.set_text_input_owner(disabled_id);
+    let mut disabled_state = TextEditState::new("42");
+    let disabled = numeric_input(
+        disabled_id,
+        Rect::new(0.0, 32.0, 160.0, 24.0),
+        &mut disabled_state,
+        &input,
+        &mut disabled_memory,
+        &theme,
+        true,
+    );
+    assert_eq!(disabled.policy.draft, NumericInputDraft::Valid(42.0));
+    assert!(!disabled.policy.commit_requested);
+    assert!(!disabled.policy.revert_requested);
 }
 
 #[test]

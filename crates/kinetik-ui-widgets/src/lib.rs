@@ -2302,6 +2302,94 @@ pub struct MultiLineTextFieldOutput {
     pub visible_lines: usize,
 }
 
+/// Parsed state of a numeric input draft.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NumericInputDraft {
+    /// The draft contains only whitespace.
+    Empty,
+    /// The draft parses as a numeric value.
+    Valid(f32),
+    /// The draft is non-empty and does not parse as a numeric value.
+    Invalid,
+}
+
+impl NumericInputDraft {
+    /// Returns the parsed value when the draft is valid and non-empty.
+    #[must_use]
+    pub const fn value(self) -> Option<f32> {
+        match self {
+            Self::Valid(value) => Some(value),
+            Self::Empty | Self::Invalid => None,
+        }
+    }
+
+    /// Returns true when the draft is empty.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        matches!(self, Self::Empty)
+    }
+
+    /// Returns true when the draft is empty or valid.
+    #[must_use]
+    pub const fn is_acceptable(self) -> bool {
+        matches!(self, Self::Empty | Self::Valid(_))
+    }
+}
+
+/// Generic commit/revert policy emitted by numeric inputs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NumericInputPolicy {
+    /// Current draft classification.
+    pub draft: NumericInputDraft,
+    /// Whether the current frame requested committing a valid non-empty draft.
+    pub commit_requested: bool,
+    /// Whether the current frame requested reverting the draft to a caller-owned baseline.
+    pub revert_requested: bool,
+}
+
+impl NumericInputPolicy {
+    /// Creates a policy with no keyboard requests.
+    #[must_use]
+    pub const fn idle(draft: NumericInputDraft) -> Self {
+        Self {
+            draft,
+            commit_requested: false,
+            revert_requested: false,
+        }
+    }
+}
+
+/// Classifies numeric input draft text without mutating widget or application state.
+#[must_use]
+pub fn classify_numeric_input_draft(text: &str) -> NumericInputDraft {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        NumericInputDraft::Empty
+    } else if let Ok(value) = trimmed.parse::<f32>() {
+        NumericInputDraft::Valid(value)
+    } else {
+        NumericInputDraft::Invalid
+    }
+}
+
+/// Restores a text-edit draft to a caller-owned baseline.
+///
+/// This helper is generic text state plumbing for commit/revert flows. It does
+/// not parse, validate, or apply application-owned numeric values.
+pub fn restore_text_draft(state: &mut TextEditState, draft: impl Into<String>) -> bool {
+    let draft = draft.into();
+    let caret = draft.len();
+    let changed = state.text != draft
+        || state.composition.is_some()
+        || state.selection != TextSelection::new(caret, caret);
+
+    state.text = draft;
+    state.composition = None;
+    state.set_selection(TextSelection::new(caret, caret));
+
+    changed
+}
+
 /// Emits a multi-line text field and applies text input while focused.
 pub fn multi_line_text_field(
     id: WidgetId,
@@ -2444,9 +2532,11 @@ pub(crate) fn multi_line_text_field_with_text_layouts_and_caret_visibility(
 pub struct NumericInputOutput {
     /// Text field output.
     pub field: TextFieldOutput,
+    /// Draft classification and keyboard commit/revert requests.
+    pub policy: NumericInputPolicy,
     /// Parsed numeric value, if valid.
     pub value: Option<f32>,
-    /// Whether the current text parses as a number.
+    /// Whether the current draft is empty or parses as a number.
     pub valid: bool,
 }
 
@@ -2512,13 +2602,46 @@ pub(crate) fn numeric_input_with_text_layouts_and_caret_visibility(
         text_layouts,
         caret_visible,
     );
-    let value = state.text.trim().parse::<f32>().ok();
+    let draft = classify_numeric_input_draft(&state.text);
+    let policy = numeric_input_keyboard_policy(draft, &field, input, disabled);
 
     NumericInputOutput {
         field,
-        value,
-        valid: value.is_some() || state.text.trim().is_empty(),
+        policy,
+        value: draft.value(),
+        valid: draft.is_acceptable(),
     }
+}
+
+fn numeric_input_keyboard_policy(
+    draft: NumericInputDraft,
+    field: &TextFieldOutput,
+    input: &UiInput,
+    disabled: bool,
+) -> NumericInputPolicy {
+    let Some(response) = field.widget.response.as_ref() else {
+        return NumericInputPolicy::idle(draft);
+    };
+    if disabled || !response.state.focused || response.state.disabled {
+        return NumericInputPolicy::idle(draft);
+    }
+
+    let mut policy = NumericInputPolicy::idle(draft);
+    for event in &input.keyboard.events {
+        if event.state != KeyState::Pressed || event.repeat || !event.modifiers.is_empty() {
+            continue;
+        }
+        match event.key {
+            Key::Enter if matches!(draft, NumericInputDraft::Valid(_)) => {
+                policy.commit_requested = true;
+            }
+            Key::Escape => {
+                policy.revert_requested = true;
+            }
+            _ => {}
+        }
+    }
+    policy
 }
 
 /// Output emitted by search fields.
