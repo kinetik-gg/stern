@@ -629,6 +629,14 @@ are a deterministic set, and stale records are reported with structured
 errors. The shell may carry an application-owned state key, but applications
 still own panel content and state serialization.
 
+Snapshot diagnostics are additive to restore validation. `DockSnapshot` and
+`WorkspaceSnapshot` should expose structured diagnostics with stable codes and
+typed context for frame IDs, panel instance IDs, panel type IDs, and split
+paths where practical. Existing `Dock::restore`, `WorkspaceSnapshot::validate`,
+and `WorkspaceSnapshot::restore_dock` error-return behavior remains compatible.
+When a `PanelInstanceSnapshot` title drifts from the matching dock `Panel`
+title, restoration remains allowed and diagnostics should report a warning.
+
 Applications still own panel content, panel instance creation, action execution,
 workspace persistence, and any domain-specific factories.
 
@@ -1542,6 +1550,11 @@ visible fallback UI for missing visual resources
 error values for renderer/platform failures
 no silent failures for layout or identity problems
 ```
+
+Snapshot restore helpers may pair error-return validation with additive
+structured diagnostics. Diagnostics should remain deterministic, use stable
+codes, and provide typed context rather than string-only messages so future
+debug tools can present them without parsing text.
 
 The toolkit should include debug visualization modes:
 

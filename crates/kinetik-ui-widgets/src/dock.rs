@@ -1356,6 +1356,14 @@ pub struct DockSnapshot {
     pub root: DockSnapshotNode,
 }
 
+impl DockSnapshot {
+    /// Returns structured diagnostics for this snapshot.
+    #[must_use]
+    pub fn diagnostics(&self) -> DockSnapshotDiagnostics {
+        validate_dock_snapshot_diagnostics(self)
+    }
+}
+
 /// Snapshot node.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DockSnapshotNode {
@@ -1408,6 +1416,132 @@ pub enum DockRestoreError {
     InvalidSplitRatio,
     /// Split minimum is not finite or is negative.
     InvalidSplitMinimum,
+}
+
+/// Snapshot diagnostic severity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapshotDiagnosticSeverity {
+    /// Validation error that prevents restore.
+    Error,
+    /// Non-fatal issue that should be visible to debug tooling.
+    Warning,
+}
+
+/// Stable diagnostic code for dock snapshot validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DockSnapshotDiagnosticCode {
+    /// Frame contains no panels.
+    EmptyFrame,
+    /// Two frames use the same stable frame identity.
+    DuplicateFrameId,
+    /// Two panels use the same stable panel identity.
+    DuplicatePanelId,
+    /// Active frame identity references a frame missing from the dock tree.
+    InvalidActiveFrame,
+    /// Active tab index is outside the panel list.
+    InvalidActivePanelIndex,
+    /// Split ratio is not finite or is outside the inclusive 0.0..=1.0 range.
+    InvalidSplitRatio,
+    /// Split minimum is not finite or is negative.
+    InvalidSplitMinimum,
+    /// Dismissible panel policy references a panel missing from the frame.
+    InvalidDismissiblePanel,
+    /// Dismissible panel policy contains the same panel more than once.
+    DuplicateDismissiblePolicy,
+}
+
+impl DockSnapshotDiagnosticCode {
+    /// Returns the stable string code for this diagnostic.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::EmptyFrame => "dock.empty_frame",
+            Self::DuplicateFrameId => "dock.duplicate_frame_id",
+            Self::DuplicatePanelId => "dock.duplicate_panel_id",
+            Self::InvalidActiveFrame => "dock.invalid_active_frame",
+            Self::InvalidActivePanelIndex => "dock.invalid_active_panel_index",
+            Self::InvalidSplitRatio => "dock.invalid_split_ratio",
+            Self::InvalidSplitMinimum => "dock.invalid_split_minimum",
+            Self::InvalidDismissiblePanel => "dock.invalid_dismissible_panel",
+            Self::DuplicateDismissiblePolicy => "dock.duplicate_dismissible_policy",
+        }
+    }
+}
+
+/// Split value identified by a dock snapshot diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DockSnapshotSplitValue {
+    /// Split ratio.
+    Ratio,
+    /// Minimum size for the first child.
+    MinFirst,
+    /// Minimum size for the second child.
+    MinSecond,
+}
+
+/// Structured diagnostic for dock snapshot validation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DockSnapshotDiagnostic {
+    /// Stable diagnostic code.
+    pub code: DockSnapshotDiagnosticCode,
+    /// Diagnostic severity.
+    pub severity: SnapshotDiagnosticSeverity,
+    /// Tree path to the split or frame where the diagnostic was found.
+    pub path: DockSplitPath,
+    /// Frame identity when the diagnostic is frame-scoped.
+    pub frame: Option<FrameId>,
+    /// Panel identity when the diagnostic is panel-scoped.
+    pub panel: Option<PanelId>,
+    /// Invalid active panel index when applicable.
+    pub active_index: Option<usize>,
+    /// Panel count used to judge an active panel index.
+    pub panel_count: Option<usize>,
+    /// Split value involved in split diagnostics.
+    pub split_value: Option<DockSnapshotSplitValue>,
+}
+
+impl DockSnapshotDiagnostic {
+    fn new(code: DockSnapshotDiagnosticCode, path: DockSplitPath) -> Self {
+        Self {
+            code,
+            severity: SnapshotDiagnosticSeverity::Error,
+            path,
+            frame: None,
+            panel: None,
+            active_index: None,
+            panel_count: None,
+            split_value: None,
+        }
+    }
+
+    /// Returns the stable string code for this diagnostic.
+    #[must_use]
+    pub const fn stable_code(&self) -> &'static str {
+        self.code.as_str()
+    }
+}
+
+/// Structured dock snapshot diagnostics.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DockSnapshotDiagnostics {
+    /// Diagnostics in deterministic validation order.
+    pub diagnostics: Vec<DockSnapshotDiagnostic>,
+}
+
+impl DockSnapshotDiagnostics {
+    /// Returns true when no error diagnostics were emitted.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        !self.has_errors()
+    }
+
+    /// Returns true when at least one error diagnostic was emitted.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == SnapshotDiagnosticSeverity::Error)
+    }
 }
 
 /// Persistable metadata for one open panel instance.
@@ -1484,6 +1618,12 @@ impl WorkspaceSnapshot {
         validate_workspace_snapshot(self, descriptors, &dock_validation)
     }
 
+    /// Returns structured diagnostics for this workspace snapshot.
+    #[must_use]
+    pub fn diagnostics(&self, descriptors: &[PanelTypeDescriptor]) -> WorkspaceSnapshotDiagnostics {
+        validate_workspace_snapshot_diagnostics(self, descriptors)
+    }
+
     /// Validates this workspace snapshot and restores its dock.
     ///
     /// # Errors
@@ -1531,6 +1671,107 @@ pub enum WorkspaceRestoreError {
         /// Stale panel instance identity.
         panel_instance: PanelInstanceId,
     },
+}
+
+/// Stable diagnostic code for workspace snapshot validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceSnapshotDiagnosticCode {
+    /// Two panel instance records use the same stable identity.
+    DuplicatePanelInstanceId,
+    /// Two panel type descriptors use the same stable identity.
+    DuplicatePanelTypeDescriptor,
+    /// A dock panel does not have a matching panel instance record.
+    MissingPanelInstance,
+    /// A panel instance record is not referenced by the dock snapshot.
+    StalePanelInstance,
+    /// A panel instance references a panel type absent from the supplied descriptors.
+    UnknownPanelType,
+    /// A dock tab title differs from its panel instance title.
+    PanelTitleDrift,
+}
+
+impl WorkspaceSnapshotDiagnosticCode {
+    /// Returns the stable string code for this diagnostic.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DuplicatePanelInstanceId => "workspace.duplicate_panel_instance_id",
+            Self::DuplicatePanelTypeDescriptor => "workspace.duplicate_panel_type_descriptor",
+            Self::MissingPanelInstance => "workspace.missing_panel_instance",
+            Self::StalePanelInstance => "workspace.stale_panel_instance",
+            Self::UnknownPanelType => "workspace.unknown_panel_type",
+            Self::PanelTitleDrift => "workspace.panel_title_drift",
+        }
+    }
+}
+
+/// Structured diagnostic for workspace snapshot validation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceSnapshotDiagnostic {
+    /// Stable diagnostic code.
+    pub code: WorkspaceSnapshotDiagnosticCode,
+    /// Diagnostic severity.
+    pub severity: SnapshotDiagnosticSeverity,
+    /// Panel instance identity when the diagnostic is instance-scoped.
+    pub panel_instance: Option<PanelInstanceId>,
+    /// Panel type identity when the diagnostic is type-scoped.
+    pub panel_type: Option<PanelTypeId>,
+    /// Dock frame containing the panel instance when known.
+    pub frame: Option<FrameId>,
+    /// Legacy dock panel identity when known.
+    pub panel: Option<PanelId>,
+    /// Title stored on the dock panel when relevant.
+    pub dock_title: Option<String>,
+    /// Title stored on the panel instance when relevant.
+    pub instance_title: Option<String>,
+}
+
+impl WorkspaceSnapshotDiagnostic {
+    fn new(code: WorkspaceSnapshotDiagnosticCode) -> Self {
+        Self {
+            code,
+            severity: SnapshotDiagnosticSeverity::Error,
+            panel_instance: None,
+            panel_type: None,
+            frame: None,
+            panel: None,
+            dock_title: None,
+            instance_title: None,
+        }
+    }
+
+    /// Returns the stable string code for this diagnostic.
+    #[must_use]
+    pub const fn stable_code(&self) -> &'static str {
+        self.code.as_str()
+    }
+}
+
+/// Structured workspace snapshot diagnostics.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceSnapshotDiagnostics {
+    /// Diagnostics for the wrapped dock snapshot.
+    pub dock: DockSnapshotDiagnostics,
+    /// Diagnostics for the workspace panel instance shell.
+    pub workspace: Vec<WorkspaceSnapshotDiagnostic>,
+}
+
+impl WorkspaceSnapshotDiagnostics {
+    /// Returns true when no error diagnostics were emitted.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        !self.has_errors()
+    }
+
+    /// Returns true when at least one error diagnostic was emitted.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        self.dock.has_errors()
+            || self
+                .workspace
+                .iter()
+                .any(|diagnostic| diagnostic.severity == SnapshotDiagnosticSeverity::Error)
+    }
 }
 
 impl From<DockRestoreError> for WorkspaceRestoreError {
@@ -1602,6 +1843,53 @@ struct DockSnapshotValidation {
     panel_ids: BTreeSet<PanelId>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DockPanelReference {
+    panel: PanelId,
+    frame: FrameId,
+    title: String,
+}
+
+#[derive(Default)]
+struct DockSnapshotDiagnosticState {
+    frame_ids: BTreeSet<FrameId>,
+    panel_ids: BTreeSet<PanelId>,
+    panel_references: BTreeMap<PanelId, DockPanelReference>,
+    diagnostics: Vec<DockSnapshotDiagnostic>,
+}
+
+/// Returns structured diagnostics for a dock snapshot.
+#[must_use]
+pub fn validate_dock_snapshot_diagnostics(snapshot: &DockSnapshot) -> DockSnapshotDiagnostics {
+    let mut state = DockSnapshotDiagnosticState::default();
+    collect_dock_snapshot_diagnostics(&snapshot.root, &DockSplitPath::root(), &mut state);
+    if let Some(active_frame) = snapshot.active_frame
+        && !state.frame_ids.contains(&active_frame)
+    {
+        let mut diagnostic = DockSnapshotDiagnostic::new(
+            DockSnapshotDiagnosticCode::InvalidActiveFrame,
+            DockSplitPath::root(),
+        );
+        diagnostic.frame = Some(active_frame);
+        state.diagnostics.push(diagnostic);
+    }
+    DockSnapshotDiagnostics {
+        diagnostics: state.diagnostics,
+    }
+}
+
+/// Returns structured diagnostics for a workspace snapshot.
+#[must_use]
+pub fn validate_workspace_snapshot_diagnostics(
+    snapshot: &WorkspaceSnapshot,
+    descriptors: &[PanelTypeDescriptor],
+) -> WorkspaceSnapshotDiagnostics {
+    let dock = validate_dock_snapshot_diagnostics(&snapshot.dock);
+    let dock_references = collect_dock_panel_references(&snapshot.dock.root);
+    let workspace = collect_workspace_snapshot_diagnostics(snapshot, descriptors, &dock_references);
+    WorkspaceSnapshotDiagnostics { dock, workspace }
+}
+
 fn validate_dock_snapshot(
     snapshot: &DockSnapshot,
 ) -> Result<DockSnapshotValidation, DockRestoreError> {
@@ -1613,6 +1901,102 @@ fn validate_dock_snapshot(
         return Err(DockRestoreError::InvalidActiveFrame);
     }
     Ok(validation)
+}
+
+fn collect_workspace_snapshot_diagnostics(
+    snapshot: &WorkspaceSnapshot,
+    descriptors: &[PanelTypeDescriptor],
+    dock_references: &BTreeMap<PanelId, DockPanelReference>,
+) -> Vec<WorkspaceSnapshotDiagnostic> {
+    let mut diagnostics = Vec::new();
+    let mut panel_types = BTreeSet::new();
+    for descriptor in descriptors {
+        if !panel_types.insert(descriptor.id) {
+            let mut diagnostic = WorkspaceSnapshotDiagnostic::new(
+                WorkspaceSnapshotDiagnosticCode::DuplicatePanelTypeDescriptor,
+            );
+            diagnostic.panel_type = Some(descriptor.id);
+            diagnostics.push(diagnostic);
+        }
+    }
+
+    let mut snapshot_panel_instances = BTreeMap::new();
+    for instance in &snapshot.panel_instances {
+        match snapshot_panel_instances.entry(instance.id) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(instance);
+            }
+            std::collections::btree_map::Entry::Occupied(_) => {
+                let mut diagnostic = WorkspaceSnapshotDiagnostic::new(
+                    WorkspaceSnapshotDiagnosticCode::DuplicatePanelInstanceId,
+                );
+                diagnostic.panel_instance = Some(instance.id);
+                diagnostic.panel_type = Some(instance.panel_type);
+                diagnostics.push(diagnostic);
+            }
+        }
+    }
+
+    for (panel_instance, instance) in &snapshot_panel_instances {
+        if !panel_types.contains(&instance.panel_type) {
+            let mut diagnostic =
+                WorkspaceSnapshotDiagnostic::new(WorkspaceSnapshotDiagnosticCode::UnknownPanelType);
+            diagnostic.panel_instance = Some(*panel_instance);
+            diagnostic.panel_type = Some(instance.panel_type);
+            diagnostics.push(diagnostic);
+        }
+    }
+
+    let dock_panel_instances: BTreeMap<_, _> = dock_references
+        .iter()
+        .map(|(panel, reference)| (panel.instance_id(), reference))
+        .collect();
+    for (panel_instance, reference) in &dock_panel_instances {
+        if !snapshot_panel_instances.contains_key(panel_instance) {
+            let mut diagnostic = WorkspaceSnapshotDiagnostic::new(
+                WorkspaceSnapshotDiagnosticCode::MissingPanelInstance,
+            );
+            diagnostic.panel_instance = Some(*panel_instance);
+            diagnostic.frame = Some(reference.frame);
+            diagnostic.panel = Some(reference.panel);
+            diagnostic.dock_title = Some(reference.title.clone());
+            diagnostics.push(diagnostic);
+        }
+    }
+
+    for panel_instance in snapshot_panel_instances.keys() {
+        if !dock_panel_instances.contains_key(panel_instance) {
+            let mut diagnostic = WorkspaceSnapshotDiagnostic::new(
+                WorkspaceSnapshotDiagnosticCode::StalePanelInstance,
+            );
+            diagnostic.panel_instance = Some(*panel_instance);
+            if let Some(instance) = snapshot_panel_instances.get(panel_instance) {
+                diagnostic.panel_type = Some(instance.panel_type);
+                diagnostic.instance_title = Some(instance.title.clone());
+            }
+            diagnostics.push(diagnostic);
+        }
+    }
+
+    for (panel_instance, reference) in &dock_panel_instances {
+        let Some(instance) = snapshot_panel_instances.get(panel_instance) else {
+            continue;
+        };
+        if reference.title != instance.title {
+            let mut diagnostic =
+                WorkspaceSnapshotDiagnostic::new(WorkspaceSnapshotDiagnosticCode::PanelTitleDrift);
+            diagnostic.severity = SnapshotDiagnosticSeverity::Warning;
+            diagnostic.panel_instance = Some(*panel_instance);
+            diagnostic.panel_type = Some(instance.panel_type);
+            diagnostic.frame = Some(reference.frame);
+            diagnostic.panel = Some(reference.panel);
+            diagnostic.dock_title = Some(reference.title.clone());
+            diagnostic.instance_title = Some(instance.title.clone());
+            diagnostics.push(diagnostic);
+        }
+    }
+
+    diagnostics
 }
 
 fn validate_workspace_snapshot(
@@ -1673,6 +2057,183 @@ fn validate_workspace_snapshot(
     }
 
     Ok(())
+}
+
+fn collect_dock_panel_references(
+    snapshot: &DockSnapshotNode,
+) -> BTreeMap<PanelId, DockPanelReference> {
+    let mut state = DockSnapshotDiagnosticState::default();
+    collect_dock_snapshot_diagnostics(snapshot, &DockSplitPath::root(), &mut state);
+    state.panel_references
+}
+
+fn collect_dock_snapshot_diagnostics(
+    snapshot: &DockSnapshotNode,
+    path: &DockSplitPath,
+    state: &mut DockSnapshotDiagnosticState,
+) {
+    match snapshot {
+        DockSnapshotNode::Frame {
+            id,
+            panels,
+            active,
+            dismissible_panels,
+        } => collect_frame_snapshot_diagnostics(
+            *id,
+            panels,
+            *active,
+            dismissible_panels,
+            path,
+            state,
+        ),
+        DockSnapshotNode::Split {
+            ratio,
+            min_first,
+            min_second,
+            first,
+            second,
+            ..
+        } => collect_split_snapshot_diagnostics(
+            *ratio,
+            *min_first,
+            *min_second,
+            first,
+            second,
+            path,
+            state,
+        ),
+    }
+}
+
+fn collect_frame_snapshot_diagnostics(
+    id: FrameId,
+    panels: &[Panel],
+    active: usize,
+    dismissible_panels: &[PanelId],
+    path: &DockSplitPath,
+    state: &mut DockSnapshotDiagnosticState,
+) {
+    if !state.frame_ids.insert(id) {
+        let mut diagnostic =
+            DockSnapshotDiagnostic::new(DockSnapshotDiagnosticCode::DuplicateFrameId, path.clone());
+        diagnostic.frame = Some(id);
+        state.diagnostics.push(diagnostic);
+    }
+    if panels.is_empty() {
+        let mut diagnostic =
+            DockSnapshotDiagnostic::new(DockSnapshotDiagnosticCode::EmptyFrame, path.clone());
+        diagnostic.frame = Some(id);
+        state.diagnostics.push(diagnostic);
+    }
+    if active >= panels.len() {
+        let mut diagnostic = DockSnapshotDiagnostic::new(
+            DockSnapshotDiagnosticCode::InvalidActivePanelIndex,
+            path.clone(),
+        );
+        diagnostic.frame = Some(id);
+        diagnostic.active_index = Some(active);
+        diagnostic.panel_count = Some(panels.len());
+        state.diagnostics.push(diagnostic);
+    }
+
+    let frame_panel_ids = collect_frame_panel_diagnostics(id, panels, path, state);
+    collect_frame_dismissible_diagnostics(id, dismissible_panels, &frame_panel_ids, path, state);
+}
+
+fn collect_frame_panel_diagnostics(
+    frame: FrameId,
+    panels: &[Panel],
+    path: &DockSplitPath,
+    state: &mut DockSnapshotDiagnosticState,
+) -> BTreeSet<PanelId> {
+    let mut frame_panel_ids = BTreeSet::new();
+    for panel in panels {
+        if !frame_panel_ids.insert(panel.id) || !state.panel_ids.insert(panel.id) {
+            let mut diagnostic = DockSnapshotDiagnostic::new(
+                DockSnapshotDiagnosticCode::DuplicatePanelId,
+                path.clone(),
+            );
+            diagnostic.frame = Some(frame);
+            diagnostic.panel = Some(panel.id);
+            state.diagnostics.push(diagnostic);
+        }
+        state
+            .panel_references
+            .entry(panel.id)
+            .or_insert_with(|| DockPanelReference {
+                panel: panel.id,
+                frame,
+                title: panel.title.clone(),
+            });
+    }
+    frame_panel_ids
+}
+
+fn collect_frame_dismissible_diagnostics(
+    frame: FrameId,
+    dismissible_panels: &[PanelId],
+    frame_panel_ids: &BTreeSet<PanelId>,
+    path: &DockSplitPath,
+    state: &mut DockSnapshotDiagnosticState,
+) {
+    let mut frame_dismissible_ids = BTreeSet::new();
+    for panel in dismissible_panels {
+        if !frame_dismissible_ids.insert(*panel) {
+            let mut diagnostic = DockSnapshotDiagnostic::new(
+                DockSnapshotDiagnosticCode::DuplicateDismissiblePolicy,
+                path.clone(),
+            );
+            diagnostic.frame = Some(frame);
+            diagnostic.panel = Some(*panel);
+            state.diagnostics.push(diagnostic);
+        }
+        if !frame_panel_ids.contains(panel) {
+            let mut diagnostic = DockSnapshotDiagnostic::new(
+                DockSnapshotDiagnosticCode::InvalidDismissiblePanel,
+                path.clone(),
+            );
+            diagnostic.frame = Some(frame);
+            diagnostic.panel = Some(*panel);
+            state.diagnostics.push(diagnostic);
+        }
+    }
+}
+
+fn collect_split_snapshot_diagnostics(
+    ratio: f32,
+    min_first: f32,
+    min_second: f32,
+    first: &DockSnapshotNode,
+    second: &DockSnapshotNode,
+    path: &DockSplitPath,
+    state: &mut DockSnapshotDiagnosticState,
+) {
+    if !ratio.is_finite() || !(0.0..=1.0).contains(&ratio) {
+        let mut diagnostic = DockSnapshotDiagnostic::new(
+            DockSnapshotDiagnosticCode::InvalidSplitRatio,
+            path.clone(),
+        );
+        diagnostic.split_value = Some(DockSnapshotSplitValue::Ratio);
+        state.diagnostics.push(diagnostic);
+    }
+    if !min_first.is_finite() || min_first < 0.0 {
+        let mut diagnostic = DockSnapshotDiagnostic::new(
+            DockSnapshotDiagnosticCode::InvalidSplitMinimum,
+            path.clone(),
+        );
+        diagnostic.split_value = Some(DockSnapshotSplitValue::MinFirst);
+        state.diagnostics.push(diagnostic);
+    }
+    if !min_second.is_finite() || min_second < 0.0 {
+        let mut diagnostic = DockSnapshotDiagnostic::new(
+            DockSnapshotDiagnosticCode::InvalidSplitMinimum,
+            path.clone(),
+        );
+        diagnostic.split_value = Some(DockSnapshotSplitValue::MinSecond);
+        state.diagnostics.push(diagnostic);
+    }
+    collect_dock_snapshot_diagnostics(first, &path.child(DockPathElement::First), state);
+    collect_dock_snapshot_diagnostics(second, &path.child(DockPathElement::Second), state);
 }
 
 fn validate_snapshot_node(
