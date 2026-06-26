@@ -115,6 +115,12 @@ pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
     ComponentMetadata::new("Toggle", "toggle", Input, Implemented),
     ComponentMetadata::new("Slider", "slider", Input, Implemented),
     ComponentMetadata::new("NumericInput", "numeric-input", Input, Implemented),
+    ComponentMetadata::new(
+        "NumericScrubInput",
+        "numeric-scrub-input",
+        Input,
+        Implemented,
+    ),
     ComponentMetadata::new("TextField", "text-field", TextEditing, Implemented),
     ComponentMetadata::new(
         "MultiLineTextField",

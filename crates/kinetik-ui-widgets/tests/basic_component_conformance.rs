@@ -3,13 +3,14 @@
 use kinetik_ui_core::{
     CursorShape, IconId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PlatformRequest, Point,
     PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest, Response,
-    SemanticActionKind, SemanticNode, SemanticRole, SemanticValue, Theme, UiInput, UiMemory,
+    SemanticActionKind, SemanticNode, SemanticRole, SemanticValue, Theme, UiInput, UiMemory, Vec2,
     WidgetId, default_dark_theme,
 };
+use kinetik_ui_text::TextEditState;
 use kinetik_ui_widgets::{
-    RadioGroupChoice, SliderStep, Ui, WidgetOutput, button, checkbox_with_label,
-    icon_button_with_label, label, panel, radio_button_with_label, slider_with_label,
-    toggle_with_label,
+    NumericScrubInputConfig, RadioGroupChoice, SliderStep, Ui, WidgetOutput, button,
+    checkbox_with_label, icon_button_with_label, label, panel, radio_button_with_label,
+    slider_with_label, toggle_with_label,
 };
 
 fn pointer_input(x: f32, y: f32, down: bool, pressed: bool, released: bool) -> UiInput {
@@ -25,6 +26,18 @@ fn pointer_input(x: f32, y: f32, down: bool, pressed: bool, released: bool) -> U
 
 fn pressed_at(x: f32, y: f32) -> UiInput {
     pointer_input(x, y, true, true, false)
+}
+
+fn dragged_at(x: f32, y: f32, delta_x: f32) -> UiInput {
+    UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(x, y)),
+            delta: Vec2::new(delta_x, 0.0),
+            primary: PointerButtonState::new(true, false, false),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    }
 }
 
 fn released_at(x: f32, y: f32) -> UiInput {
@@ -1447,5 +1460,33 @@ fn stage2_radio_group_keyboard_activation_uses_choice_control_semantics() {
     assert_eq!(group.selected_index, Some(2));
     assert!(group.responses[2].keyboard_activated);
     assert_eq!(checked_radio_labels(&output), vec!["Third"]);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+    let mut scrub_value = 2.0;
+    let mut scrub_state = TextEditState::new("2");
+    let rect = stage9_rect();
+    let mut memory = UiMemory::new();
+    let input = pressed_at(4.0, 4.0);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    ui.numeric_scrub_input(
+        "scrub",
+        rect,
+        &mut scrub_value,
+        &mut scrub_state,
+        NumericScrubInputConfig::new(0.5),
+    );
+    assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
+    let input = dragged_at(8.0, 4.0, 4.0);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let scrub = ui.numeric_scrub_input(
+        "scrub",
+        rect,
+        &mut scrub_value,
+        &mut scrub_state,
+        NumericScrubInputConfig::new(0.5),
+    );
+    let output = ui.finish_output();
+    assert!(scrub.scrubbed);
+    assert!((scrub_value - 4.0).abs() < f32::EPSILON);
     assert_eq!(output.repaint, RepaintRequest::NextFrame);
 }

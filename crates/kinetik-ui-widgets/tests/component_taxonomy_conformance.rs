@@ -3,17 +3,19 @@
 use std::collections::BTreeSet;
 
 use kinetik_ui_core::{
-    Key, KeyEvent, KeyState, KeyboardInput, Modifiers, Point, Rect, SemanticActionKind,
-    SemanticRole, Size, UiInput, UiMemory, WidgetId, default_dark_theme,
+    Key, KeyEvent, KeyState, KeyboardInput, Modifiers, Point, PointerButtonState, PointerInput,
+    Rect, SemanticActionKind, SemanticRole, SemanticValue, Size, UiInput, UiMemory, Vec2, WidgetId,
+    default_dark_theme,
 };
 use kinetik_ui_text::TextEditState;
 use kinetik_ui_widgets::{
     COMPONENT_METADATA, ComponentCategory, ComponentConformanceStatus, ComponentMetadata,
-    DropdownCloseReason, DropdownItem, DropdownItemId, DropdownModel, DropdownOverlay, OverlayId,
-    OverlayStack, PanelId, PopoverPlacement, PropertyGridLayout, PropertyGridRow,
-    PropertyGridRowState, PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice,
-    SliderStep, TabStrip, Ui, classify_numeric_input_draft, component_metadata,
-    components_by_category, numeric_input, slider_with_step,
+    DropdownCloseReason, DropdownItem, DropdownItemId, DropdownModel, DropdownOverlay,
+    NumericScrubInputConfig, OverlayId, OverlayStack, PanelId, PopoverPlacement,
+    PropertyGridLayout, PropertyGridRow, PropertyGridRowState, PropertyGridRowStatus,
+    PropertyGridStatusSeverity, RadioGroupChoice, SliderStep, TabStrip, Ui,
+    classify_numeric_input_draft, component_metadata, components_by_category, numeric_input,
+    numeric_scrub_input, slider_with_step,
 };
 
 fn entry(name: &str) -> &'static ComponentMetadata {
@@ -179,6 +181,7 @@ fn stage1_basic_control_matrix_reports_complete_statuses() {
         ("MultiLineTextField", ComponentCategory::TextEditing),
         ("SearchField", ComponentCategory::TextEditing),
         ("NumericInput", ComponentCategory::Input),
+        ("NumericScrubInput", ComponentCategory::Input),
         ("Button", ComponentCategory::Control),
         ("IconButton", ComponentCategory::Control),
         ("Checkbox", ComponentCategory::Input),
@@ -205,6 +208,11 @@ fn stage2_control_taxonomy_reports_honest_statuses() {
         ),
         (
             "NumericInput",
+            ComponentCategory::Input,
+            ComponentConformanceStatus::Implemented,
+        ),
+        (
+            "NumericScrubInput",
             ComponentCategory::Input,
             ComponentConformanceStatus::Implemented,
         ),
@@ -394,6 +402,48 @@ fn stage2_slider_and_numeric_input_statuses_are_backed_by_public_contracts() {
     assert!(numeric.valid);
     assert!(numeric.policy.commit_requested);
     assert!(!numeric.policy.revert_requested);
+
+    let scrub_id = WidgetId::from_key("stage2-numeric-scrub");
+    let mut scrub_memory = UiMemory::new();
+    scrub_memory.activate(scrub_id);
+    let mut scrub_state = TextEditState::new("2");
+    let mut scrub_value = 2.0;
+    let scrub = numeric_scrub_input(
+        scrub_id,
+        Rect::new(0.0, 56.0, 120.0, 24.0),
+        &mut scrub_value,
+        &mut scrub_state,
+        NumericScrubInputConfig::new(0.5).with_range(0.0, 10.0),
+        &UiInput {
+            pointer: PointerInput {
+                position: Some(Point::new(8.0, 60.0)),
+                delta: Vec2::new(4.0, 0.0),
+                primary: PointerButtonState::new(true, false, false),
+                ..PointerInput::default()
+            },
+            ..UiInput::default()
+        },
+        &mut scrub_memory,
+        &theme,
+    );
+
+    assert!(scrub.scrubbed);
+    assert!((scrub_value - 4.0).abs() < f32::EPSILON);
+    assert!(
+        scrub
+            .input
+            .field
+            .widget
+            .semantics
+            .iter()
+            .any(|node| matches!(
+                node.state.value,
+                Some(SemanticValue::Number { current, min, max })
+                    if (current - 4.0).abs() < f32::EPSILON
+                        && (min - 0.0).abs() < f32::EPSILON
+                        && (max - 10.0).abs() < f32::EPSILON
+            ))
+    );
 }
 
 #[test]

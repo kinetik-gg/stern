@@ -23,16 +23,17 @@ use kinetik_ui::widgets::{
     DockPlacement, DockSplitterContextActionKind, DockTabDrag, Frame, FrameId, FrameLayout,
     FrameTab, GridColumns, GridLayout, Guide, ItemId, ListLayout, Menu, MenuBar, MenuBarMenu,
     MenuBarMenuId, MenuBarOverlayRequest, MenuItem, MenuOverlay, ModalAction, ModalActionRole,
-    ModalDialog, ModalDialogOverlay, OverlayDismissal, OverlayId, OverlayKind, OverlayStack,
-    PanZoom, Panel, PanelId, PanelInstanceId, PanelInstancePolicy, PanelInstanceSnapshot,
-    PanelOpenActionMetadata, PanelOpenDecision, PanelRegistry, PanelTypeCategory,
-    PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, PopoverPlacement, PropertyGridLayout,
-    PropertyGridRow, StatusBar, StatusItem, StatusItemId, StatusItemKind, StatusProgress, TabStrip,
-    TableColumn, TableLayout, Toolbar, ToolbarGroup, ToolbarGroupId, ToolbarItem,
-    ToolbarItemPresentation, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
-    ViewportComposition, ViewportFit, ViewportSurface, WorkspaceSnapshot, frame_tabs,
-    icon_button_semantics, resolve_dock_splitter_context_actions_with_policy,
-    resolve_frame_drop_zone_with_policy, solve_dock_layout, solve_dock_splitters_with_style,
+    ModalDialog, ModalDialogOverlay, NumericScrubInputConfig, OverlayDismissal, OverlayId,
+    OverlayKind, OverlayStack, PanZoom, Panel, PanelId, PanelInstanceId, PanelInstancePolicy,
+    PanelInstanceSnapshot, PanelOpenActionMetadata, PanelOpenDecision, PanelRegistry,
+    PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, PopoverPlacement,
+    PropertyGridLayout, PropertyGridRow, StatusBar, StatusItem, StatusItemId, StatusItemKind,
+    StatusProgress, TabStrip, TableColumn, TableLayout, Toolbar, ToolbarGroup, ToolbarGroupId,
+    ToolbarItem, ToolbarItemPresentation, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
+    ViewportComposition, ViewportFit, ViewportSurface, WorkspaceSnapshot,
+    classify_numeric_input_draft, frame_tabs, icon_button_semantics,
+    resolve_dock_splitter_context_actions_with_policy, resolve_frame_drop_zone_with_policy,
+    solve_dock_layout, solve_dock_splitters_with_style,
 };
 
 /// Saves the current editor project.
@@ -2288,16 +2289,42 @@ impl EditorShowcase {
     fn inspector_value(&mut self, ui: &mut Ui<'_>, id: ItemId, rect_value: Rect) {
         match id.raw() {
             2 => {
-                ui.numeric_input("editor.inspector.pos-x", rect_value, &mut self.pos_x, false);
+                inspector_numeric_scrub(
+                    ui,
+                    "editor.inspector.pos-x",
+                    rect_value,
+                    &mut self.pos_x,
+                    NumericScrubInputConfig::new(0.1).with_fine_step(0.01),
+                );
             }
             3 => {
-                ui.numeric_input("editor.inspector.pos-y", rect_value, &mut self.pos_y, false);
+                inspector_numeric_scrub(
+                    ui,
+                    "editor.inspector.pos-y",
+                    rect_value,
+                    &mut self.pos_y,
+                    NumericScrubInputConfig::new(0.1).with_fine_step(0.01),
+                );
             }
             4 => {
-                ui.numeric_input("editor.inspector.pos-z", rect_value, &mut self.pos_z, false);
+                inspector_numeric_scrub(
+                    ui,
+                    "editor.inspector.pos-z",
+                    rect_value,
+                    &mut self.pos_z,
+                    NumericScrubInputConfig::new(0.1).with_fine_step(0.01),
+                );
             }
             5 => {
-                ui.numeric_input("editor.inspector.scale", rect_value, &mut self.scale, false);
+                inspector_numeric_scrub(
+                    ui,
+                    "editor.inspector.scale",
+                    rect_value,
+                    &mut self.scale,
+                    NumericScrubInputConfig::new(0.01)
+                        .with_fine_step(0.001)
+                        .with_min(0.0),
+                );
             }
             7 => {
                 ui.slider(
@@ -2326,7 +2353,15 @@ impl EditorShowcase {
                 );
             }
             13 => {
-                ui.numeric_input("editor.inspector.mass", rect_value, &mut self.mass, false);
+                inspector_numeric_scrub(
+                    ui,
+                    "editor.inspector.mass",
+                    rect_value,
+                    &mut self.mass,
+                    NumericScrubInputConfig::new(0.5)
+                        .with_fine_step(0.1)
+                        .with_min(0.0),
+                );
             }
             _ => {
                 text(
@@ -4685,6 +4720,19 @@ fn inspector_value_label(id: ItemId) -> &'static str {
         15 => "player_controller.lua",
         _ => "-",
     }
+}
+
+fn inspector_numeric_scrub(
+    ui: &mut Ui<'_>,
+    key: &'static str,
+    rect: Rect,
+    state: &mut TextEditState,
+    config: NumericScrubInputConfig,
+) {
+    let mut value = classify_numeric_input_draft(&state.text)
+        .value()
+        .unwrap_or(0.0);
+    ui.numeric_scrub_input(key, rect, &mut value, state, config);
 }
 
 fn log_color(level: &str) -> Color {

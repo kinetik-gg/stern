@@ -7,12 +7,14 @@ use kinetik_ui_core::{
     ActionRoutingContext, ComponentState, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
     PhysicalKey, PhysicalSize, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive,
     Rect, RepaintRequest, ScaleFactor, SemanticActionKind, SemanticRole, SemanticValue, Shortcut,
-    Size, TextInputEvent, TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId, default_dark_theme,
+    Size, TextInputEvent, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId,
+    default_dark_theme,
 };
 use kinetik_ui_text::{TextEditState, TextLayoutStore, TextSelection};
 use kinetik_ui_widgets::{
-    NumericInputDraft, Ui, classify_numeric_input_draft, multi_line_text_field, numeric_input,
-    restore_text_draft, text_field, text_field_with_text_layouts,
+    NumericInputDraft, NumericScrubInputConfig, Ui, classify_numeric_input_draft,
+    multi_line_text_field, numeric_input, numeric_scrub_input, restore_text_draft, text_field,
+    text_field_with_text_layouts,
 };
 
 fn root_child(key: &str) -> WidgetId {
@@ -70,6 +72,22 @@ fn input_at(x: f32, y: f32, down: bool, pressed: bool, released: bool) -> UiInpu
 
 fn pressed_at(x: f32, y: f32) -> UiInput {
     input_at(x, y, true, true, false)
+}
+
+fn scrub_drag_at(x: f32, y: f32, delta_x: f32, modifiers: Modifiers) -> UiInput {
+    UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(x, y)),
+            delta: Vec2::new(delta_x, 0.0),
+            primary: PointerButtonState::new(true, false, false),
+            ..PointerInput::default()
+        },
+        keyboard: KeyboardInput {
+            modifiers,
+            events: Vec::new(),
+        },
+        ..UiInput::default()
+    }
 }
 
 fn frame_context_at(now: Duration, input: UiInput) -> kinetik_ui_core::FrameContext {
@@ -1411,6 +1429,271 @@ fn unfocused_and_disabled_numeric_inputs_ignore_commit_revert_keys() {
     assert_eq!(disabled.policy.draft, NumericInputDraft::Valid(42.0));
     assert!(!disabled.policy.commit_requested);
     assert!(!disabled.policy.revert_requested);
+}
+
+#[test]
+fn numeric_scrub_input_maps_horizontal_drag_delta_to_value() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("scrub-number");
+    let rect = Rect::new(0.0, 0.0, 160.0, 24.0);
+    let config = NumericScrubInputConfig::new(0.5).with_range(0.0, 10.0);
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new("2");
+    let mut value = 2.0;
+
+    let _ = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &pressed_at(4.0, 4.0),
+        &mut memory,
+        &theme,
+    );
+    let output = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &scrub_drag_at(8.0, 4.0, 4.0, Modifiers::default()),
+        &mut memory,
+        &theme,
+    );
+
+    assert!(output.scrub_response.dragged);
+    assert!(output.scrubbed);
+    assert!(output.value_changed);
+    assert!((value - 4.0).abs() < f32::EPSILON);
+    assert_eq!(state.text, "4");
+    assert_eq!(output.input.policy.draft, NumericInputDraft::Valid(4.0));
+
+    let node = output
+        .input
+        .field
+        .widget
+        .semantics
+        .iter()
+        .find(|node| node.role == SemanticRole::TextField)
+        .expect("numeric scrub text semantics");
+    assert!(
+        node.actions
+            .iter()
+            .any(|action| action.kind == SemanticActionKind::SetText)
+    );
+    assert!(
+        node.actions
+            .iter()
+            .any(|action| action.kind == SemanticActionKind::SetValue)
+    );
+    assert_eq!(
+        node.state.value,
+        Some(SemanticValue::Number {
+            current: 4.0,
+            min: 0.0,
+            max: 10.0,
+        })
+    );
+}
+
+#[test]
+fn numeric_scrub_input_uses_fine_and_coarse_modifier_steps() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 160.0, 24.0);
+    let config = NumericScrubInputConfig::new(1.0)
+        .with_fine_step(0.25)
+        .with_coarse_step(5.0);
+
+    let fine_id = WidgetId::from_key("fine-scrub");
+    let mut fine_memory = UiMemory::new();
+    let mut fine_state = TextEditState::new("10");
+    let mut fine_value = 10.0;
+    let _ = numeric_scrub_input(
+        fine_id,
+        rect,
+        &mut fine_value,
+        &mut fine_state,
+        config,
+        &pressed_at(4.0, 4.0),
+        &mut fine_memory,
+        &theme,
+    );
+    let fine = numeric_scrub_input(
+        fine_id,
+        rect,
+        &mut fine_value,
+        &mut fine_state,
+        config,
+        &scrub_drag_at(8.0, 4.0, 8.0, shift()),
+        &mut fine_memory,
+        &theme,
+    );
+    assert!((fine.step - 0.25).abs() < f32::EPSILON);
+    assert!((fine_value - 12.0).abs() < f32::EPSILON);
+
+    let coarse_id = WidgetId::from_key("coarse-scrub");
+    let mut coarse_memory = UiMemory::new();
+    let mut coarse_state = TextEditState::new("10");
+    let mut coarse_value = 10.0;
+    let _ = numeric_scrub_input(
+        coarse_id,
+        rect,
+        &mut coarse_value,
+        &mut coarse_state,
+        config,
+        &pressed_at(4.0, 4.0),
+        &mut coarse_memory,
+        &theme,
+    );
+    let coarse = numeric_scrub_input(
+        coarse_id,
+        rect,
+        &mut coarse_value,
+        &mut coarse_state,
+        config,
+        &scrub_drag_at(8.0, 4.0, 3.0, ctrl()),
+        &mut coarse_memory,
+        &theme,
+    );
+    assert!((coarse.step - 5.0).abs() < f32::EPSILON);
+    assert!((coarse_value - 25.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn numeric_scrub_input_sanitizes_steps_and_clamps_to_finite_bounds() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("clamped-scrub");
+    let rect = Rect::new(0.0, 0.0, 160.0, 24.0);
+    let config = NumericScrubInputConfig::new(-2.0)
+        .with_fine_step(0.0)
+        .with_coarse_step(f32::NAN)
+        .with_range(10.0, 0.0);
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new("2");
+    let mut value = 2.0;
+
+    let _ = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &pressed_at(4.0, 4.0),
+        &mut memory,
+        &theme,
+    );
+    let output = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &scrub_drag_at(8.0, 4.0, 20.0, Modifiers::default()),
+        &mut memory,
+        &theme,
+    );
+
+    assert!((output.step - 1.0).abs() < f32::EPSILON);
+    assert_eq!(output.min, Some(0.0));
+    assert_eq!(output.max, Some(10.0));
+    assert!((value - 10.0).abs() < f32::EPSILON);
+    assert_eq!(state.text, "10");
+}
+
+#[test]
+fn numeric_scrub_input_invalid_draft_does_not_silently_commit() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("invalid-scrub");
+    let rect = Rect::new(0.0, 0.0, 160.0, 24.0);
+    let config = NumericScrubInputConfig::new(1.0);
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new("12 px");
+    let mut value = 12.0;
+
+    let _ = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &pressed_at(4.0, 4.0),
+        &mut memory,
+        &theme,
+    );
+    let output = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &scrub_drag_at(8.0, 4.0, 8.0, Modifiers::default()),
+        &mut memory,
+        &theme,
+    );
+
+    assert!(output.scrub_response.dragged);
+    assert!(!output.scrubbed);
+    assert!(!output.value_changed);
+    assert!((value - 12.0).abs() < f32::EPSILON);
+    assert_eq!(state.text, "12 px");
+    assert_eq!(output.input.policy.draft, NumericInputDraft::Invalid);
+    assert!(!output.input.valid);
+}
+
+#[test]
+fn disabled_and_read_only_numeric_scrub_inputs_do_not_mutate_or_take_ownership() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 160.0, 24.0);
+
+    let disabled_id = WidgetId::from_key("disabled-scrub");
+    let mut disabled_memory = UiMemory::new();
+    let mut disabled_state = TextEditState::new("1");
+    let mut disabled_value = 1.0;
+    let disabled = numeric_scrub_input(
+        disabled_id,
+        rect,
+        &mut disabled_value,
+        &mut disabled_state,
+        NumericScrubInputConfig::new(1.0).disabled(true),
+        &UiInput {
+            text_events: vec![TextInputEvent::Commit("9".to_owned())],
+            ..scrub_drag_at(8.0, 4.0, 8.0, Modifiers::default())
+        },
+        &mut disabled_memory,
+        &theme,
+    );
+    assert!(!disabled.scrub_response.dragged);
+    assert!(!disabled.scrubbed);
+    assert!((disabled_value - 1.0).abs() < f32::EPSILON);
+    assert_eq!(disabled_state.text, "1");
+    assert_eq!(disabled_memory.focused(), None);
+    assert_eq!(disabled_memory.active(), None);
+    assert_eq!(disabled_memory.text_input_owner(), None);
+    assert!(disabled.input.field.widget.semantics[0].state.disabled);
+
+    let read_only_id = WidgetId::from_key("read-only-scrub");
+    let mut read_only_memory = UiMemory::new();
+    let mut read_only_state = TextEditState::new("3");
+    let mut read_only_value = 3.0;
+    let read_only = numeric_scrub_input(
+        read_only_id,
+        rect,
+        &mut read_only_value,
+        &mut read_only_state,
+        NumericScrubInputConfig::new(1.0).read_only(true),
+        &pressed_at(4.0, 4.0),
+        &mut read_only_memory,
+        &theme,
+    );
+    assert!(!read_only.scrub_response.state.active);
+    assert!(!read_only.scrubbed);
+    assert!((read_only_value - 3.0).abs() < f32::EPSILON);
+    assert_eq!(read_only_state.text, "3");
+    assert_eq!(read_only_memory.focused(), None);
+    assert_eq!(read_only_memory.text_input_owner(), None);
+    assert!(read_only.input.field.widget.semantics[0].state.disabled);
+    assert!(!read_only.input.field.widget.semantics[0].focusable);
 }
 
 #[test]
