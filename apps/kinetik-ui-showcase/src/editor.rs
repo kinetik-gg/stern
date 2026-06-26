@@ -19,16 +19,17 @@ use kinetik_ui::render::{
 };
 use kinetik_ui::text::TextEditState;
 use kinetik_ui::widgets::{
-    Dock, DockDropTarget, DockDropZone, DockNode, DockPlacement, DockSplitterContextActionKind,
-    DockTabDrag, Frame, FrameId, FrameLayout, FrameTab, GridColumns, GridLayout, Guide, ItemId,
-    ListLayout, Menu, MenuItem, MenuOverlay, OverlayDismissal, OverlayEntry, OverlayId,
-    OverlayKind, OverlayStack, PanZoom, Panel, PanelId, PanelInstanceId, PanelInstancePolicy,
-    PanelInstanceSnapshot, PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PopoverPlacement,
-    PopoverRequest, PropertyGridLayout, PropertyGridRow, TableColumn, TableLayout, TreeExpansion,
-    TreeItem, TreeLayout, TreeModel, Ui, ViewportComposition, ViewportFit, ViewportSurface,
-    WorkspaceSnapshot, frame_tabs, icon_button_semantics, place_popover,
-    resolve_dock_splitter_context_actions, resolve_frame_drop_zone, solve_dock_layout,
-    solve_dock_splitters,
+    Dock, DockChromeStyle, DockDropTarget, DockDropZone, DockInteractionPolicy, DockNode,
+    DockPlacement, DockSplitterContextActionKind, DockTabDrag, Frame, FrameId, FrameLayout,
+    FrameTab, GridColumns, GridLayout, Guide, ItemId, ListLayout, Menu, MenuItem, MenuOverlay,
+    OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayStack, PanZoom, Panel, PanelId,
+    PanelInstanceId, PanelInstancePolicy, PanelInstanceSnapshot, PanelOpenActionMetadata,
+    PanelOpenDecision, PanelRegistry, PanelTypeCategory, PanelTypeDescriptor, PanelTypeId,
+    PanelWorkspaceContext, PopoverPlacement, PopoverRequest, PropertyGridLayout, PropertyGridRow,
+    TableColumn, TableLayout, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
+    ViewportComposition, ViewportFit, ViewportSurface, WorkspaceSnapshot, frame_tabs,
+    icon_button_semantics, place_popover, resolve_dock_splitter_context_actions_with_policy,
+    resolve_frame_drop_zone_with_policy, solve_dock_layout, solve_dock_splitters_with_style,
 };
 
 /// Saves the current editor project.
@@ -49,6 +50,13 @@ const ACTION_TOOL_ROTATE: &str = "editor.tool.rotate";
 const ACTION_TOOL_SCALE: &str = "editor.tool.scale";
 const ACTION_DOCK_JOIN: &str = "editor.dock.join";
 const ACTION_DOCK_SWAP: &str = "editor.dock.swap";
+const ACTION_OPEN_VIEWPORT: &str = "editor.panel.open.viewport";
+const ACTION_OPEN_EXPLORER: &str = "editor.panel.open.explorer";
+const ACTION_OPEN_PROPERTIES: &str = "editor.panel.open.properties";
+const ACTION_OPEN_ASSET_BROWSER: &str = "editor.panel.open.asset-browser";
+const ACTION_OPEN_TIMELINE: &str = "editor.panel.open.timeline";
+const ACTION_OPEN_CONSOLE: &str = "editor.panel.open.console";
+const ACTION_OPEN_NODE_GRAPH: &str = "editor.panel.open.node-graph";
 
 const VIEWPORT_TEXTURE: TextureId = TextureId::from_raw(9_001);
 const VIEWPORT_SIZE: Size = Size::new(1280.0, 720.0);
@@ -95,6 +103,14 @@ fn workspace_top(theme: &Theme) -> f32 {
     TOOLBAR_Y + EditorChromeMetrics::from_theme(theme).toolbar_button + TOOLBAR_BOTTOM_PADDING
 }
 
+fn editor_dock_interaction_policy() -> DockInteractionPolicy {
+    DockInteractionPolicy::default().with_drop_edge_fraction(0.25)
+}
+
+fn editor_dock_chrome_style() -> DockChromeStyle {
+    DockChromeStyle::default().with_splitter_hit_thickness(4.0)
+}
+
 const FRAME_SCENE: FrameId = FrameId::from_raw(1);
 const FRAME_ASSETS: FrameId = FrameId::from_raw(2);
 const FRAME_VIEWPORT: FrameId = FrameId::from_raw(3);
@@ -105,22 +121,25 @@ const PANEL_TYPE_SCENE: PanelTypeId = PanelTypeId::from_raw(1);
 const PANEL_TYPE_ASSETS: PanelTypeId = PanelTypeId::from_raw(2);
 const PANEL_TYPE_VIEWPORT: PanelTypeId = PanelTypeId::from_raw(3);
 const PANEL_TYPE_CONSOLE: PanelTypeId = PanelTypeId::from_raw(4);
-const PANEL_TYPE_JOBS: PanelTypeId = PanelTypeId::from_raw(5);
+const PANEL_TYPE_TIMELINE: PanelTypeId = PanelTypeId::from_raw(5);
 const PANEL_TYPE_INSPECTOR: PanelTypeId = PanelTypeId::from_raw(6);
+const PANEL_TYPE_NODE_GRAPH: PanelTypeId = PanelTypeId::from_raw(7);
 
 const PANEL_SCENE_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(1);
 const PANEL_ASSETS_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(2);
 const PANEL_VIEWPORT_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(3);
 const PANEL_CONSOLE_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(4);
-const PANEL_JOBS_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(5);
+const PANEL_TIMELINE_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(5);
 const PANEL_INSPECTOR_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(6);
+const PANEL_NODE_GRAPH_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(7);
 
 const PANEL_SCENE: PanelId = PanelId::from_instance_id(PANEL_SCENE_INSTANCE);
 const PANEL_ASSETS: PanelId = PanelId::from_instance_id(PANEL_ASSETS_INSTANCE);
 const PANEL_VIEWPORT: PanelId = PanelId::from_instance_id(PANEL_VIEWPORT_INSTANCE);
 const PANEL_CONSOLE: PanelId = PanelId::from_instance_id(PANEL_CONSOLE_INSTANCE);
-const PANEL_JOBS: PanelId = PanelId::from_instance_id(PANEL_JOBS_INSTANCE);
+const PANEL_TIMELINE: PanelId = PanelId::from_instance_id(PANEL_TIMELINE_INSTANCE);
 const PANEL_INSPECTOR: PanelId = PanelId::from_instance_id(PANEL_INSPECTOR_INSTANCE);
+const PANEL_NODE_GRAPH: PanelId = PanelId::from_instance_id(PANEL_NODE_GRAPH_INSTANCE);
 const FRAME_DRAG_INSERT_START: u64 = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,14 +154,14 @@ const EDITOR_PANEL_INSTANCES: &[EditorPanelInstanceSpec] = &[
     EditorPanelInstanceSpec {
         id: PANEL_SCENE_INSTANCE,
         panel_type: PANEL_TYPE_SCENE,
-        title: "Scene",
-        state_key: "editor.scene",
+        title: "Explorer",
+        state_key: "editor.explorer",
     },
     EditorPanelInstanceSpec {
         id: PANEL_ASSETS_INSTANCE,
         panel_type: PANEL_TYPE_ASSETS,
-        title: "Assets",
-        state_key: "editor.assets",
+        title: "Asset Browser",
+        state_key: "editor.asset-browser",
     },
     EditorPanelInstanceSpec {
         id: PANEL_VIEWPORT_INSTANCE,
@@ -157,16 +176,22 @@ const EDITOR_PANEL_INSTANCES: &[EditorPanelInstanceSpec] = &[
         state_key: "editor.console",
     },
     EditorPanelInstanceSpec {
-        id: PANEL_JOBS_INSTANCE,
-        panel_type: PANEL_TYPE_JOBS,
-        title: "Jobs",
-        state_key: "editor.jobs",
+        id: PANEL_TIMELINE_INSTANCE,
+        panel_type: PANEL_TYPE_TIMELINE,
+        title: "Timeline",
+        state_key: "editor.timeline",
     },
     EditorPanelInstanceSpec {
         id: PANEL_INSPECTOR_INSTANCE,
         panel_type: PANEL_TYPE_INSPECTOR,
-        title: "Inspector",
-        state_key: "editor.inspector",
+        title: "Properties",
+        state_key: "editor.properties",
+    },
+    EditorPanelInstanceSpec {
+        id: PANEL_NODE_GRAPH_INSTANCE,
+        panel_type: PANEL_TYPE_NODE_GRAPH,
+        title: "Node Graph",
+        state_key: "editor.node-graph",
     },
 ];
 
@@ -440,7 +465,8 @@ impl EditorShowcase {
             ACTION_TOOL_MOVE => self.select_tool(EditorTool::Move),
             ACTION_TOOL_ROTATE => self.select_tool(EditorTool::Rotate),
             ACTION_TOOL_SCALE => self.select_tool(EditorTool::Scale),
-            _ => false,
+            _ => panel_type_for_open_action(action_id)
+                .is_some_and(|panel_type| self.open_or_focus_panel(panel_type)),
         }
     }
 
@@ -887,20 +913,7 @@ impl EditorShowcase {
                 menu_action(ACTION_BUILD, "Package Windows x64", None, None, true),
                 menu_action(ACTION_PALETTE, "Run Profiler", None, None, false),
             ]),
-            EditorMenuKind::Window => menu([
-                menu_action(
-                    ACTION_PALETTE,
-                    "Command Palette",
-                    Some(ctrl_char("p")),
-                    None,
-                    true,
-                ),
-                MenuItem::Separator,
-                menu_action(ACTION_PALETTE, "Scene Graph", None, Some(true), true),
-                menu_action(ACTION_PALETTE, "Inspector", None, Some(true), true),
-                menu_action(ACTION_PALETTE, "Asset Browser", None, Some(true), true),
-                menu_action(ACTION_PALETTE, "Console", None, Some(true), true),
-            ]),
+            EditorMenuKind::Window => self.window_menu_model(),
             EditorMenuKind::Help => menu([
                 menu_action(
                     ACTION_PALETTE,
@@ -913,6 +926,81 @@ impl EditorShowcase {
                 MenuItem::Separator,
                 menu_action(ACTION_PALETTE, "About Kinetik Forge", None, None, true),
             ]),
+        }
+    }
+
+    fn window_menu_model(&self) -> Menu {
+        let registry = editor_panel_registry();
+        let open_metadata = editor_open_panel_metadata();
+        let mut menu = Menu::new();
+        menu.push(menu_action(
+            ACTION_PALETTE,
+            "Command Palette",
+            Some(ctrl_char("p")),
+            None,
+            true,
+        ));
+        menu.push(MenuItem::Separator);
+
+        for category in registry.categories() {
+            menu.push(MenuItem::Label(panel_category_label(category).to_owned()));
+            for metadata in open_metadata
+                .iter()
+                .filter(|metadata| &metadata.category == category)
+            {
+                menu.push(menu_action_from_panel_metadata(
+                    metadata,
+                    self.is_panel_type_open(metadata.panel_type),
+                ));
+            }
+        }
+
+        menu
+    }
+
+    fn is_panel_type_open(&self, panel_type: PanelTypeId) -> bool {
+        let instances = editor_panel_instances();
+        instances.iter().any(|instance| {
+            let panel = PanelId::from_instance_id(instance.id);
+            instance.panel_type == panel_type
+                && self
+                    .dock
+                    .frames()
+                    .iter()
+                    .any(|frame| frame.panels.iter().any(|item| item.id == panel))
+        })
+    }
+
+    fn open_or_focus_panel(&mut self, panel_type: PanelTypeId) -> bool {
+        let registry = editor_panel_registry();
+        let instances = editor_panel_instances();
+        let Some(decision) = registry.resolve_open_decision(
+            panel_type,
+            &instances,
+            &self.dock,
+            PanelWorkspaceContext::Docked,
+        ) else {
+            "Panel open request unavailable".clone_into(&mut self.status);
+            return false;
+        };
+
+        match decision {
+            PanelOpenDecision::FocusExisting(request) => {
+                if self
+                    .dock
+                    .select_panel(request.target.frame, request.target.panel)
+                {
+                    self.status = format!("Focused {}", request.metadata.title);
+                    true
+                } else {
+                    self.status = format!("Could not focus {}", request.metadata.title);
+                    false
+                }
+            }
+            PanelOpenDecision::OpenNew(request) => {
+                self.status = format!("Open {} requested", request.metadata.title);
+                true
+            }
         }
     }
 
@@ -1041,14 +1129,21 @@ impl EditorShowcase {
         kind: DockSplitterContextActionKind,
     ) -> bool {
         let frame_layouts = solve_dock_layout(&self.dock, bounds);
-        let Some(splitter) = solve_dock_splitters(&self.dock, bounds, 4.0)
-            .into_iter()
-            .next()
+        let Some(splitter) =
+            solve_dock_splitters_with_style(&self.dock, bounds, editor_dock_chrome_style())
+                .into_iter()
+                .next()
         else {
             "No dock splitter action available".clone_into(&mut self.status);
             return false;
         };
-        let actions = resolve_dock_splitter_context_actions(&self.dock, &frame_layouts, &splitter);
+        let policy = editor_dock_interaction_policy();
+        let actions = resolve_dock_splitter_context_actions_with_policy(
+            &self.dock,
+            &frame_layouts,
+            &splitter,
+            policy,
+        );
         let Some(action) = actions
             .into_iter()
             .find(|action| action.kind == kind && action.enabled)
@@ -1069,7 +1164,10 @@ impl EditorShowcase {
                 };
                 let source = request.source_frame();
                 let target = request.target_frame();
-                if self.dock.apply_join_request(bounds, request) {
+                if self
+                    .dock
+                    .apply_join_request_with_policy(bounds, request, policy)
+                {
                     self.status = format!(
                         "Dock splitter joined frame {} into frame {}",
                         source.raw(),
@@ -1088,7 +1186,10 @@ impl EditorShowcase {
                 };
                 let source = request.source_frame();
                 let target = request.target_frame();
-                if self.dock.apply_swap_request(bounds, request) {
+                if self
+                    .dock
+                    .apply_swap_request_with_policy(bounds, request, policy)
+                {
                     self.status = format!(
                         "Dock splitter swapped frame {} with frame {}",
                         source.raw(),
@@ -1164,15 +1265,21 @@ impl EditorShowcase {
         }
         self.frame_drop_targets(ui, &frame_layouts, &tab_drags);
 
-        for splitter in solve_dock_splitters(&self.dock, bounds, 4.0) {
+        let chrome_style = editor_dock_chrome_style();
+        let interaction_policy = editor_dock_interaction_policy();
+        for splitter in solve_dock_splitters_with_style(&self.dock, bounds, chrome_style) {
             let response = ui.draggable(
                 ("editor.splitter", splitter.path.clone()),
                 splitter.rect,
                 false,
             );
             if response.dragged {
-                self.dock
-                    .resize_split(&splitter.path, bounds, response.drag_delta);
+                self.dock.resize_split_with_policy(
+                    &splitter.path,
+                    bounds,
+                    response.drag_delta,
+                    interaction_policy,
+                );
                 ui.request_repaint(RepaintRequest::NextFrame);
             }
             let color = if response.state.hovered || response.state.active {
@@ -1263,8 +1370,9 @@ impl EditorShowcase {
                 Some(PANEL_ASSETS) => self.assets_browser(ui, body),
                 Some(PANEL_VIEWPORT) => self.viewport_panel(ui, body),
                 Some(PANEL_CONSOLE) => Self::console_panel(ui, body),
-                Some(PANEL_JOBS) => Self::jobs_panel(ui, body),
+                Some(PANEL_TIMELINE) => Self::timeline_panel(ui, body),
                 Some(PANEL_INSPECTOR) => self.inspector(ui, body),
+                Some(PANEL_NODE_GRAPH) => Self::node_graph_panel(ui, body),
                 _ => {}
             },
         );
@@ -1349,7 +1457,11 @@ impl EditorShowcase {
         frame_rect: Rect,
         pointer: Point,
     ) -> Option<DockDropTarget> {
-        let zone = resolve_frame_drop_zone(frame_rect, pointer)?;
+        let zone = resolve_frame_drop_zone_with_policy(
+            frame_rect,
+            pointer,
+            editor_dock_interaction_policy(),
+        )?;
         Some(match zone {
             DockDropZone::Center => DockDropTarget::tab(frame),
             DockDropZone::Left => DockDropTarget::split(
@@ -1619,6 +1731,12 @@ impl EditorShowcase {
             (body.width - 16.0).max(1.0),
             (body.height - 66.0).max(1.0),
         );
+        let viewport_semantic_id = ui.id("editor.viewport.surface.semantic");
+        ui.push_semantic_node(
+            SemanticNode::new(viewport_semantic_id, SemanticRole::Viewport, surface_bounds)
+                .with_label("Viewport Surface")
+                .focusable(true),
+        );
         let drag = ui.draggable("editor.viewport.surface", surface_bounds, false);
         if drag.dragged {
             self.viewport_pan_zoom.pan_by(drag.drag_delta);
@@ -1772,9 +1890,17 @@ impl EditorShowcase {
         text(
             ui,
             header.x + 34.0,
-            header.y + 22.0,
+            header.y + 12.0,
+            "Inspector",
+            9.0,
+            rgb(151, 158, 166),
+        );
+        text(
+            ui,
+            header.x + 34.0,
+            header.y + 27.0,
             scene_label(self.selected_node),
-            13.0,
+            12.0,
             rgb(231, 233, 237),
         );
         draw_icon(
@@ -1941,17 +2067,17 @@ impl EditorShowcase {
         }
     }
 
-    fn jobs_panel(ui: &mut Ui<'_>, body: Rect) {
+    fn timeline_panel(ui: &mut Ui<'_>, body: Rect) {
         rect(ui, body, rgb(20, 21, 23), None);
         let rows = [
-            ("Bake global illumination", "Queued", 0.14),
-            ("Build navigation mesh", "Ready", 0.62),
-            ("Import character rig", "Running", 0.47),
-            ("Package Windows x64", "Idle", 0.0),
+            ("Intro camera pan", "Frame 001-072", 0.24),
+            ("Character pickup", "Frame 073-144", 0.48),
+            ("Vehicle reveal", "Frame 145-216", 0.72),
+            ("Cut to gameplay", "Frame 217-300", 0.88),
         ];
         let layout = ListLayout::new(28.0);
         for item in layout.row_rects(body.inset(8.0), rows.len(), 0..rows.len()) {
-            let (name, state, progress) = rows[item.index];
+            let (name, range, progress) = rows[item.index];
             rect(ui, item.rect, rgb(22, 23, 25), Some(rgb(38, 40, 45)));
             text(
                 ui,
@@ -1965,7 +2091,7 @@ impl EditorShowcase {
                 ui,
                 item.rect.max_x() - 96.0,
                 item.rect.y + 18.0,
-                state,
+                range,
                 11.0,
                 rgb(154, 160, 168),
             );
@@ -1981,6 +2107,61 @@ impl EditorShowcase {
                 ),
                 rgb(69, 123, 220),
                 None,
+            );
+        }
+    }
+
+    fn node_graph_panel(ui: &mut Ui<'_>, body: Rect) {
+        rect(ui, body, rgb(20, 21, 23), None);
+        text(
+            ui,
+            body.x + 10.0,
+            body.y + 20.0,
+            "Compositor Graph",
+            12.0,
+            rgb(218, 222, 228),
+        );
+
+        let nodes = [
+            (
+                "Texture",
+                Rect::new(body.x + 18.0, body.y + 42.0, 92.0, 44.0),
+            ),
+            (
+                "Color Grade",
+                Rect::new(body.x + 150.0, body.y + 66.0, 112.0, 44.0),
+            ),
+            (
+                "Output",
+                Rect::new(body.x + 300.0, body.y + 48.0, 92.0, 44.0),
+            ),
+        ];
+        for window in nodes.windows(2) {
+            let from = window[0].1;
+            let to = window[1].1;
+            line(
+                ui,
+                Point::new(from.max_x(), from.y + from.height * 0.5),
+                Point::new(to.x, to.y + to.height * 0.5),
+                rgb(83, 137, 230),
+                2.0,
+            );
+        }
+        for (label, rect_bounds) in nodes {
+            rect_fill(
+                ui,
+                rect_bounds,
+                rgb(31, 33, 37),
+                Some(rgb(66, 71, 80)),
+                CornerRadius::all(4.0),
+            );
+            text(
+                ui,
+                rect_bounds.x + 10.0,
+                rect_bounds.y + 27.0,
+                label,
+                11.0,
+                rgb(228, 231, 236),
             );
         }
     }
@@ -2122,7 +2303,7 @@ fn menu_size(kind: EditorMenuKind) -> Size {
         EditorMenuKind::View => Size::new(224.0, 136.0),
         EditorMenuKind::Project => Size::new(224.0, 106.0),
         EditorMenuKind::Build => Size::new(224.0, 82.0),
-        EditorMenuKind::Window => Size::new(232.0, 154.0),
+        EditorMenuKind::Window => Size::new(232.0, 340.0),
         EditorMenuKind::Help => Size::new(230.0, 88.0),
     }
 }
@@ -2147,6 +2328,42 @@ fn menu_action(
     action.state.checked = checked;
     action.state.enabled = enabled;
     MenuItem::Action(action)
+}
+
+fn menu_action_from_panel_metadata(metadata: &PanelOpenActionMetadata, checked: bool) -> MenuItem {
+    let action_id = metadata
+        .default_open_action
+        .as_ref()
+        .expect("showcase panel descriptors declare default open actions");
+    let mut action = ActionDescriptor::new(action_id.as_str(), metadata.title.clone());
+    action.state.checked = Some(checked);
+    MenuItem::Action(action)
+}
+
+fn panel_type_for_open_action(action_id: &str) -> Option<PanelTypeId> {
+    match action_id {
+        ACTION_OPEN_VIEWPORT => Some(PANEL_TYPE_VIEWPORT),
+        ACTION_OPEN_EXPLORER => Some(PANEL_TYPE_SCENE),
+        ACTION_OPEN_PROPERTIES => Some(PANEL_TYPE_INSPECTOR),
+        ACTION_OPEN_ASSET_BROWSER => Some(PANEL_TYPE_ASSETS),
+        ACTION_OPEN_TIMELINE => Some(PANEL_TYPE_TIMELINE),
+        ACTION_OPEN_CONSOLE => Some(PANEL_TYPE_CONSOLE),
+        ACTION_OPEN_NODE_GRAPH => Some(PANEL_TYPE_NODE_GRAPH),
+        _ => None,
+    }
+}
+
+fn panel_category_label(category: &PanelTypeCategory) -> &str {
+    match category {
+        PanelTypeCategory::General => "General",
+        PanelTypeCategory::Hierarchy => "Hierarchy",
+        PanelTypeCategory::Inspector => "Inspector",
+        PanelTypeCategory::Viewport => "Viewport",
+        PanelTypeCategory::Assets => "Assets",
+        PanelTypeCategory::Timeline => "Timeline",
+        PanelTypeCategory::Diagnostics => "Diagnostics",
+        PanelTypeCategory::Custom(label) => label.as_str(),
+    }
 }
 
 fn ctrl_char(character: &str) -> Shortcut {
@@ -2207,31 +2424,51 @@ fn key_label(key: &Key) -> String {
 
 fn editor_panel_type_descriptors() -> Vec<PanelTypeDescriptor> {
     vec![
-        PanelTypeDescriptor::new(PANEL_TYPE_SCENE, "Scene")
-            .with_category(PanelTypeCategory::Hierarchy)
-            .with_instance_policy(PanelInstancePolicy::Singleton)
-            .with_default_size(Size::new(300.0, 420.0)),
-        PanelTypeDescriptor::new(PANEL_TYPE_ASSETS, "Assets")
-            .with_category(PanelTypeCategory::Assets)
-            .with_instance_policy(PanelInstancePolicy::Singleton)
-            .with_default_size(Size::new(300.0, 260.0)),
         PanelTypeDescriptor::new(PANEL_TYPE_VIEWPORT, "Viewport")
             .with_category(PanelTypeCategory::Viewport)
             .with_instance_policy(PanelInstancePolicy::Singleton)
-            .with_default_size(Size::new(760.0, 520.0)),
+            .with_default_size(Size::new(760.0, 520.0))
+            .with_default_open_action(ActionId::new(ACTION_OPEN_VIEWPORT)),
+        PanelTypeDescriptor::new(PANEL_TYPE_SCENE, "Explorer")
+            .with_category(PanelTypeCategory::Hierarchy)
+            .with_instance_policy(PanelInstancePolicy::Singleton)
+            .with_default_size(Size::new(300.0, 420.0))
+            .with_default_open_action(ActionId::new(ACTION_OPEN_EXPLORER)),
+        PanelTypeDescriptor::new(PANEL_TYPE_INSPECTOR, "Properties")
+            .with_category(PanelTypeCategory::Inspector)
+            .with_instance_policy(PanelInstancePolicy::Singleton)
+            .with_default_size(Size::new(280.0, 520.0))
+            .with_default_open_action(ActionId::new(ACTION_OPEN_PROPERTIES)),
+        PanelTypeDescriptor::new(PANEL_TYPE_ASSETS, "Asset Browser")
+            .with_category(PanelTypeCategory::Assets)
+            .with_instance_policy(PanelInstancePolicy::Singleton)
+            .with_default_size(Size::new(300.0, 260.0))
+            .with_default_open_action(ActionId::new(ACTION_OPEN_ASSET_BROWSER)),
+        PanelTypeDescriptor::new(PANEL_TYPE_TIMELINE, "Timeline")
+            .with_category(PanelTypeCategory::Timeline)
+            .with_instance_policy(PanelInstancePolicy::Singleton)
+            .with_default_size(Size::new(640.0, 180.0))
+            .with_default_open_action(ActionId::new(ACTION_OPEN_TIMELINE)),
         PanelTypeDescriptor::new(PANEL_TYPE_CONSOLE, "Console")
             .with_category(PanelTypeCategory::Diagnostics)
             .with_instance_policy(PanelInstancePolicy::Singleton)
-            .with_default_size(Size::new(640.0, 180.0)),
-        PanelTypeDescriptor::new(PANEL_TYPE_JOBS, "Jobs")
-            .with_category(PanelTypeCategory::Diagnostics)
+            .with_default_size(Size::new(640.0, 180.0))
+            .with_default_open_action(ActionId::new(ACTION_OPEN_CONSOLE)),
+        PanelTypeDescriptor::new(PANEL_TYPE_NODE_GRAPH, "Node Graph")
+            .with_category(PanelTypeCategory::Timeline)
             .with_instance_policy(PanelInstancePolicy::Singleton)
-            .with_default_size(Size::new(640.0, 180.0)),
-        PanelTypeDescriptor::new(PANEL_TYPE_INSPECTOR, "Inspector")
-            .with_category(PanelTypeCategory::Inspector)
-            .with_instance_policy(PanelInstancePolicy::Singleton)
-            .with_default_size(Size::new(280.0, 520.0)),
+            .with_default_size(Size::new(520.0, 220.0))
+            .with_default_open_action(ActionId::new(ACTION_OPEN_NODE_GRAPH)),
     ]
+}
+
+fn editor_panel_registry() -> PanelRegistry {
+    PanelRegistry::from_descriptors(editor_panel_type_descriptors())
+        .expect("showcase panel descriptors must be unique")
+}
+
+fn editor_open_panel_metadata() -> Vec<PanelOpenActionMetadata> {
+    editor_panel_registry().open_actions().collect()
 }
 
 fn editor_panel_instances() -> Vec<PanelInstanceSnapshot> {
@@ -2249,11 +2486,9 @@ fn default_workspace_snapshot() -> WorkspaceSnapshot {
 }
 
 fn default_dock() -> Dock {
-    Dock::restore_workspace(
-        default_workspace_snapshot(),
-        &editor_panel_type_descriptors(),
-    )
-    .expect("default editor workspace snapshot should restore")
+    let registry = editor_panel_registry();
+    Dock::restore_workspace(default_workspace_snapshot(), registry.descriptors())
+        .expect("default editor workspace snapshot should restore")
 }
 
 fn default_dock_layout() -> Dock {
@@ -2294,7 +2529,8 @@ fn default_dock_layout() -> Dock {
                     FRAME_BOTTOM,
                     vec![
                         editor_panel(PANEL_CONSOLE_INSTANCE),
-                        editor_panel(PANEL_JOBS_INSTANCE),
+                        editor_panel(PANEL_TIMELINE_INSTANCE),
+                        editor_panel(PANEL_NODE_GRAPH_INSTANCE),
                     ],
                 ))),
             }),
@@ -2513,7 +2749,7 @@ fn run_toolbar_buttons(
 mod tests {
     use super::{
         EditorChromeMetrics, EditorMenuKind, EditorShowcase, EditorTool, FRAME_BOTTOM,
-        FRAME_INSPECTOR, FRAME_VIEWPORT, PANEL_JOBS, TOOLBAR_Y, VIEWPORT_SIZE, frame_tab_rects,
+        FRAME_INSPECTOR, FRAME_VIEWPORT, PANEL_TIMELINE, TOOLBAR_Y, VIEWPORT_SIZE, frame_tab_rects,
         icon_atlas_image, inspector_label_width, item_id, phosphor_icons, register_resources, rgb,
         rgba,
     };
@@ -2524,8 +2760,9 @@ mod tests {
     };
     use kinetik_ui::render::RenderResources;
     use kinetik_ui::widgets::{
-        DockSplitterContextActionKind, Ui, ViewportSurface, resolve_dock_splitter_context_actions,
-        solve_dock_layout, solve_dock_splitters,
+        DockSplitterContextActionKind, PanelOpenDecision, PanelTypeCategory, Ui, ViewportSurface,
+        resolve_dock_splitter_context_actions_with_policy, solve_dock_layout,
+        solve_dock_splitters_with_style,
     };
 
     #[test]
@@ -2559,15 +2796,15 @@ mod tests {
 
     #[test]
     fn default_workspace_snapshot_validates_against_showcase_panel_descriptors() {
-        let descriptors = super::editor_panel_type_descriptors();
+        let registry = super::editor_panel_registry();
         let snapshot = super::default_workspace_snapshot();
-        let diagnostics = snapshot.diagnostics(&descriptors);
+        let diagnostics = snapshot.diagnostics(registry.descriptors());
 
         assert!(diagnostics.is_valid(), "{diagnostics:?}");
         assert!(diagnostics.dock.diagnostics.is_empty(), "{diagnostics:?}");
         assert!(diagnostics.workspace.is_empty(), "{diagnostics:?}");
         snapshot
-            .validate(&descriptors)
+            .validate(registry.descriptors())
             .expect("workspace validates");
         assert_eq!(
             snapshot.panel_instances,
@@ -2578,16 +2815,182 @@ mod tests {
 
     #[test]
     fn default_workspace_snapshot_round_trips_through_workspace_restore() {
-        let descriptors = super::editor_panel_type_descriptors();
+        let registry = super::editor_panel_registry();
         let snapshot = super::default_workspace_snapshot();
-        let restored =
-            super::Dock::restore_workspace(snapshot.clone(), &descriptors).expect("restore");
+        let restored = super::Dock::restore_workspace(snapshot.clone(), registry.descriptors())
+            .expect("restore");
 
         assert_eq!(restored.snapshot(), snapshot.dock);
         assert_eq!(
             restored.workspace_snapshot(super::editor_panel_instances()),
             snapshot
         );
+    }
+
+    #[test]
+    fn editor_panel_registry_builds_unique_showcase_descriptors() {
+        let registry = super::editor_panel_registry();
+
+        assert_eq!(registry.descriptors().len(), 7);
+        assert_eq!(
+            registry.descriptors(),
+            super::editor_panel_type_descriptors().as_slice()
+        );
+        assert_eq!(
+            registry
+                .descriptor(super::PANEL_TYPE_NODE_GRAPH)
+                .expect("node graph descriptor")
+                .title,
+            "Node Graph"
+        );
+    }
+
+    #[test]
+    fn registry_open_metadata_exposes_editor_vocabulary_in_stable_order() {
+        let registry = super::editor_panel_registry();
+        let metadata = super::editor_open_panel_metadata();
+        let titles = metadata
+            .iter()
+            .map(|metadata| metadata.title.as_str())
+            .collect::<Vec<_>>();
+        let action_ids = metadata
+            .iter()
+            .map(|metadata| {
+                metadata
+                    .default_open_action
+                    .as_ref()
+                    .expect("open action")
+                    .as_str()
+            })
+            .collect::<Vec<_>>();
+        let categories = registry
+            .categories()
+            .into_iter()
+            .map(super::panel_category_label)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            titles,
+            [
+                "Viewport",
+                "Explorer",
+                "Properties",
+                "Asset Browser",
+                "Timeline",
+                "Console",
+                "Node Graph",
+            ]
+        );
+        assert_eq!(
+            action_ids,
+            [
+                super::ACTION_OPEN_VIEWPORT,
+                super::ACTION_OPEN_EXPLORER,
+                super::ACTION_OPEN_PROPERTIES,
+                super::ACTION_OPEN_ASSET_BROWSER,
+                super::ACTION_OPEN_TIMELINE,
+                super::ACTION_OPEN_CONSOLE,
+                super::ACTION_OPEN_NODE_GRAPH,
+            ]
+        );
+        assert_eq!(
+            metadata
+                .iter()
+                .map(|metadata| metadata.category.clone())
+                .collect::<Vec<_>>(),
+            [
+                PanelTypeCategory::Viewport,
+                PanelTypeCategory::Hierarchy,
+                PanelTypeCategory::Inspector,
+                PanelTypeCategory::Assets,
+                PanelTypeCategory::Timeline,
+                PanelTypeCategory::Diagnostics,
+                PanelTypeCategory::Timeline,
+            ]
+        );
+        assert_eq!(
+            categories,
+            [
+                "Viewport",
+                "Hierarchy",
+                "Inspector",
+                "Assets",
+                "Timeline",
+                "Diagnostics",
+            ]
+        );
+    }
+
+    #[test]
+    fn default_workspace_snapshot_contains_roblox_blender_style_vocabulary() {
+        let snapshot = super::default_workspace_snapshot();
+        let titles = snapshot
+            .panel_instances
+            .iter()
+            .map(|instance| instance.title.as_str())
+            .collect::<Vec<_>>();
+        let state_keys = snapshot
+            .panel_instances
+            .iter()
+            .map(|instance| instance.state_key.as_deref().expect("state key"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            titles,
+            [
+                "Explorer",
+                "Asset Browser",
+                "Viewport",
+                "Console",
+                "Timeline",
+                "Properties",
+                "Node Graph",
+            ]
+        );
+        assert_eq!(
+            state_keys,
+            [
+                "editor.explorer",
+                "editor.asset-browser",
+                "editor.viewport",
+                "editor.console",
+                "editor.timeline",
+                "editor.properties",
+                "editor.node-graph",
+            ]
+        );
+    }
+
+    #[test]
+    fn registry_open_or_focus_workflow_is_app_owned_and_deterministic() {
+        let mut editor = EditorShowcase::new();
+        let registry = super::editor_panel_registry();
+        let instances = super::editor_panel_instances();
+        let decision = registry
+            .resolve_open_decision(
+                super::PANEL_TYPE_NODE_GRAPH,
+                &instances,
+                &editor.dock,
+                super::PanelWorkspaceContext::Docked,
+            )
+            .expect("open decision");
+
+        assert!(matches!(decision, PanelOpenDecision::FocusExisting(_)));
+        assert!(editor.open_or_focus_panel(super::PANEL_TYPE_NODE_GRAPH));
+        assert_eq!(editor.status, "Focused Node Graph");
+        assert_eq!(editor.dock.active_frame(), Some(FRAME_BOTTOM));
+        assert_eq!(
+            editor
+                .dock
+                .frame(FRAME_BOTTOM)
+                .and_then(|frame| frame.active_panel())
+                .map(|panel| panel.id),
+            Some(super::PANEL_NODE_GRAPH)
+        );
+
+        assert!(editor.apply_action(super::ACTION_OPEN_PROPERTIES));
+        assert_eq!(editor.status, "Focused Properties");
+        assert_eq!(editor.dock.active_frame(), Some(FRAME_INSPECTOR));
     }
 
     #[test]
@@ -2697,17 +3100,20 @@ mod tests {
         let mut memory = UiMemory::new();
         let theme = default_dark_theme();
         let bottom = bottom_frame_rect(&editor);
-        let jobs = editor
+        let timeline = editor
             .dock
             .frame(FRAME_BOTTOM)
             .and_then(|frame| {
                 frame_tab_rects(frame, bottom, 26.0)
                     .into_iter()
-                    .find(|(tab, _rect)| tab.panel == PANEL_JOBS)
+                    .find(|(tab, _rect)| tab.panel == PANEL_TIMELINE)
                     .map(|(_tab, rect)| rect)
             })
-            .expect("jobs tab");
-        let point = Point::new(jobs.x + jobs.width * 0.5, jobs.y + jobs.height * 0.5);
+            .expect("timeline tab");
+        let point = Point::new(
+            timeline.x + timeline.width * 0.5,
+            timeline.y + timeline.height * 0.5,
+        );
 
         let mut ui = Ui::begin_frame(
             editor_test_context(pointer_input_at(point.x, point.y, true, true, false)),
@@ -2733,7 +3139,7 @@ mod tests {
                 && node.state.focused
         }));
         assert!(output.primitives.iter().any(|primitive| {
-            matches!(primitive, Primitive::Text(text) if text.text == "Bake global illumination")
+            matches!(primitive, Primitive::Text(text) if text.text == "Intro camera pan")
         }));
         assert!(!output.primitives.iter().any(|primitive| {
             matches!(primitive, Primitive::Text(text) if text.text == "Message")
@@ -2746,10 +3152,14 @@ mod tests {
         let mut memory = UiMemory::new();
         let theme = default_dark_theme();
         let bounds = editor_workspace_bounds();
-        let splitter = solve_dock_splitters(&editor.dock, bounds, 4.0)
-            .into_iter()
-            .next()
-            .expect("root splitter");
+        let splitter = solve_dock_splitters_with_style(
+            &editor.dock,
+            bounds,
+            super::editor_dock_chrome_style(),
+        )
+        .into_iter()
+        .next()
+        .expect("root splitter");
         let before = splitter.ratio;
         let press = splitter.rect.center();
 
@@ -2775,11 +3185,15 @@ mod tests {
         );
         editor.render(&mut ui, 0);
         let output = ui.finish_output();
-        let after = solve_dock_splitters(&editor.dock, bounds, 4.0)
-            .into_iter()
-            .next()
-            .expect("root splitter")
-            .ratio;
+        let after = solve_dock_splitters_with_style(
+            &editor.dock,
+            bounds,
+            super::editor_dock_chrome_style(),
+        )
+        .into_iter()
+        .next()
+        .expect("root splitter")
+        .ratio;
 
         assert!(after > before, "{after} should be greater than {before}");
         assert_eq!(output.repaint, RepaintRequest::NextFrame);
@@ -2790,14 +3204,23 @@ mod tests {
         let mut editor = EditorShowcase::new();
         let bounds = editor_workspace_bounds();
         let layout = solve_dock_layout(&editor.dock, bounds);
-        let splitter = solve_dock_splitters(&editor.dock, bounds, 4.0)
-            .into_iter()
-            .next()
-            .expect("root splitter");
-        let action = resolve_dock_splitter_context_actions(&editor.dock, &layout, &splitter)
-            .into_iter()
-            .find(|action| action.kind == DockSplitterContextActionKind::Join && action.enabled)
-            .expect("enabled join action");
+        let splitter = solve_dock_splitters_with_style(
+            &editor.dock,
+            bounds,
+            super::editor_dock_chrome_style(),
+        )
+        .into_iter()
+        .next()
+        .expect("root splitter");
+        let action = resolve_dock_splitter_context_actions_with_policy(
+            &editor.dock,
+            &layout,
+            &splitter,
+            super::editor_dock_interaction_policy(),
+        )
+        .into_iter()
+        .find(|action| action.kind == DockSplitterContextActionKind::Join && action.enabled)
+        .expect("enabled join action");
         let request = action.join_request().expect("join request");
         let source = request.source_frame();
         let target = request.target_frame();
@@ -2822,14 +3245,23 @@ mod tests {
         let mut editor = EditorShowcase::new();
         let bounds = editor_workspace_bounds();
         let layout = solve_dock_layout(&editor.dock, bounds);
-        let splitter = solve_dock_splitters(&editor.dock, bounds, 4.0)
-            .into_iter()
-            .next()
-            .expect("root splitter");
-        let action = resolve_dock_splitter_context_actions(&editor.dock, &layout, &splitter)
-            .into_iter()
-            .find(|action| action.kind == DockSplitterContextActionKind::Swap && action.enabled)
-            .expect("enabled swap action");
+        let splitter = solve_dock_splitters_with_style(
+            &editor.dock,
+            bounds,
+            super::editor_dock_chrome_style(),
+        )
+        .into_iter()
+        .next()
+        .expect("root splitter");
+        let action = resolve_dock_splitter_context_actions_with_policy(
+            &editor.dock,
+            &layout,
+            &splitter,
+            super::editor_dock_interaction_policy(),
+        )
+        .into_iter()
+        .find(|action| action.kind == DockSplitterContextActionKind::Swap && action.enabled)
+        .expect("enabled swap action");
         let request = action.swap_request().expect("swap request");
         let source = request.source_frame();
         let target = request.target_frame();
@@ -2857,17 +3289,17 @@ mod tests {
         let theme = default_dark_theme();
         let bottom = bottom_frame_rect(&editor);
         let inspector = editor_frame_rect(&editor, FRAME_INSPECTOR);
-        let jobs = editor
+        let timeline = editor
             .dock
             .frame(FRAME_BOTTOM)
             .and_then(|frame| {
                 frame_tab_rects(frame, bottom, 26.0)
                     .into_iter()
-                    .find(|(tab, _rect)| tab.panel == PANEL_JOBS)
+                    .find(|(tab, _rect)| tab.panel == PANEL_TIMELINE)
                     .map(|(_tab, rect)| rect)
             })
-            .expect("jobs tab");
-        let start = jobs.center();
+            .expect("timeline tab");
+        let start = timeline.center();
         let target = inspector.center();
 
         let mut ui = Ui::begin_frame(
@@ -2889,7 +3321,7 @@ mod tests {
         editor.render(&mut ui, 0);
         let dragging_output = ui.finish_output();
 
-        assert_eq!(editor.status, "Dragging Jobs tab");
+        assert_eq!(editor.status, "Dragging Timeline tab");
         assert!(dragging_output.primitives.iter().any(|primitive| {
             matches!(
                 primitive,
@@ -2907,16 +3339,16 @@ mod tests {
         editor.render(&mut ui, 0);
         let output = ui.finish_output();
         let inspector_frame = editor.dock.frame(FRAME_INSPECTOR).expect("inspector frame");
-        let jobs_panel = inspector_frame
+        let timeline_panel = inspector_frame
             .panels
             .iter()
-            .find(|panel| panel.id == PANEL_JOBS)
-            .expect("moved jobs panel");
+            .find(|panel| panel.id == PANEL_TIMELINE)
+            .expect("moved timeline panel");
 
-        assert_eq!(jobs_panel.title, "Jobs");
+        assert_eq!(timeline_panel.title, "Timeline");
         assert_eq!(
             inspector_frame.active_panel().map(|panel| panel.id),
-            Some(PANEL_JOBS)
+            Some(PANEL_TIMELINE)
         );
         assert_eq!(editor.dock.active_frame(), Some(FRAME_INSPECTOR));
         assert!(
@@ -2926,28 +3358,29 @@ mod tests {
                 .expect("bottom frame")
                 .panels
                 .iter()
-                .any(|panel| panel.id == PANEL_JOBS)
+                .any(|panel| panel.id == PANEL_TIMELINE)
         );
         assert!(editor.status.contains("Dock tab merged into frame"));
         assert_eq!(output.repaint, RepaintRequest::NextFrame);
 
-        let descriptors = super::editor_panel_type_descriptors();
+        let registry = super::editor_panel_registry();
         let moved_workspace = editor
             .dock
             .workspace_snapshot(super::editor_panel_instances());
         moved_workspace
-            .validate(&descriptors)
+            .validate(registry.descriptors())
             .expect("moved workspace validates");
-        let moved_jobs = moved_workspace
+        let moved_timeline = moved_workspace
             .panel_instances
             .iter()
-            .find(|instance| instance.id == PANEL_JOBS.instance_id())
-            .expect("jobs instance metadata");
-        assert_eq!(moved_jobs.panel_type, super::PANEL_TYPE_JOBS);
-        assert_eq!(moved_jobs.title, "Jobs");
-        assert_eq!(moved_jobs.state_key.as_deref(), Some("editor.jobs"));
-        let restored = super::Dock::restore_workspace(moved_workspace.clone(), &descriptors)
-            .expect("moved workspace restores");
+            .find(|instance| instance.id == PANEL_TIMELINE.instance_id())
+            .expect("timeline instance metadata");
+        assert_eq!(moved_timeline.panel_type, super::PANEL_TYPE_TIMELINE);
+        assert_eq!(moved_timeline.title, "Timeline");
+        assert_eq!(moved_timeline.state_key.as_deref(), Some("editor.timeline"));
+        let restored =
+            super::Dock::restore_workspace(moved_workspace.clone(), registry.descriptors())
+                .expect("moved workspace restores");
         assert_eq!(restored.snapshot(), moved_workspace.dock);
     }
 
@@ -3200,6 +3633,7 @@ mod tests {
         assert_eq!(count_semantic_role(&output, &SemanticRole::Dock), 1);
         assert!(count_semantic_role(&output, &SemanticRole::Frame) >= 5);
         assert!(count_semantic_role(&output, &SemanticRole::Panel) >= 5);
+        assert!(count_semantic_role(&output, &SemanticRole::Viewport) >= 1);
         assert!(count_semantic_role(&output, &SemanticRole::Tab) >= 6);
         assert!(count_semantic_role(&output, &SemanticRole::IconButton) >= 12);
         assert!(count_semantic_role(&output, &SemanticRole::Slider) >= 1);
