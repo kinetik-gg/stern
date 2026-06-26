@@ -12,6 +12,157 @@ const DEFAULT_SPLIT_MINIMUM: f32 = 100.0;
 const DEFAULT_SPLITTER_THICKNESS: f32 = 6.0;
 const DROP_EDGE_FRACTION: f32 = 0.25;
 
+/// Data-only policy for dock interaction affordances.
+///
+/// The default policy preserves the built-in dock behavior. Invalid numeric
+/// values are sanitized by policy-aware helpers before use.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct DockInteractionPolicy {
+    /// Policy for drag-to-dock drop target resolution.
+    pub drop_targets: DockDropTargetPolicy,
+    /// Policy for splitter drag and context action affordances.
+    pub splitters: DockSplitterInteractionPolicy,
+}
+
+/// Data-only policy for drag-to-dock target resolution.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DockDropTargetPolicy {
+    /// Fraction of a frame edge that resolves to split insertion.
+    pub edge_fraction: f32,
+    /// Whether center drop targets may resolve to tab merge targets.
+    pub allow_tab_merge: bool,
+    /// Whether edge drop targets may resolve to split insertion targets.
+    pub allow_split_insertion: bool,
+}
+
+impl Default for DockDropTargetPolicy {
+    fn default() -> Self {
+        Self {
+            edge_fraction: DROP_EDGE_FRACTION,
+            allow_tab_merge: true,
+            allow_split_insertion: true,
+        }
+    }
+}
+
+/// Data-only policy for splitter interaction affordances.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DockSplitterInteractionPolicy {
+    /// Whether splitter drags may resize split ratios.
+    pub allow_resize: bool,
+    /// Whether splitter context metadata may enable join actions.
+    pub allow_join: bool,
+    /// Whether splitter context metadata may enable swap actions.
+    pub allow_swap: bool,
+}
+
+impl Default for DockSplitterInteractionPolicy {
+    fn default() -> Self {
+        Self {
+            allow_resize: true,
+            allow_join: true,
+            allow_swap: true,
+        }
+    }
+}
+
+impl DockInteractionPolicy {
+    /// Returns a copy with deterministic, valid numeric values.
+    #[must_use]
+    pub fn sanitized(self) -> Self {
+        Self {
+            drop_targets: DockDropTargetPolicy {
+                edge_fraction: sanitize_drop_edge_fraction(self.drop_targets.edge_fraction),
+                ..self.drop_targets
+            },
+            ..self
+        }
+    }
+
+    /// Sets the drop-edge fraction.
+    #[must_use]
+    pub const fn with_drop_edge_fraction(mut self, fraction: f32) -> Self {
+        self.drop_targets.edge_fraction = fraction;
+        self
+    }
+
+    /// Sets whether tab merge targets are allowed.
+    #[must_use]
+    pub const fn with_tab_merge(mut self, allowed: bool) -> Self {
+        self.drop_targets.allow_tab_merge = allowed;
+        self
+    }
+
+    /// Sets whether split insertion targets are allowed.
+    #[must_use]
+    pub const fn with_split_insertion(mut self, allowed: bool) -> Self {
+        self.drop_targets.allow_split_insertion = allowed;
+        self
+    }
+
+    /// Sets whether splitter drag resize is allowed.
+    #[must_use]
+    pub const fn with_splitter_resize(mut self, allowed: bool) -> Self {
+        self.splitters.allow_resize = allowed;
+        self
+    }
+
+    /// Sets whether splitter join context actions are allowed.
+    #[must_use]
+    pub const fn with_splitter_join(mut self, allowed: bool) -> Self {
+        self.splitters.allow_join = allowed;
+        self
+    }
+
+    /// Sets whether splitter swap context actions are allowed.
+    #[must_use]
+    pub const fn with_splitter_swap(mut self, allowed: bool) -> Self {
+        self.splitters.allow_swap = allowed;
+        self
+    }
+
+    const fn allows_splitter_action(self, kind: DockSplitterContextActionKind) -> bool {
+        match kind {
+            DockSplitterContextActionKind::Join => self.splitters.allow_join,
+            DockSplitterContextActionKind::Swap => self.splitters.allow_swap,
+        }
+    }
+}
+
+/// Data-only style for dock chrome hit metadata.
+///
+/// The default style preserves the built-in splitter hit rectangle thickness.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DockChromeStyle {
+    /// Logical thickness used to solve splitter hit rectangles.
+    pub splitter_hit_thickness: f32,
+}
+
+impl Default for DockChromeStyle {
+    fn default() -> Self {
+        Self {
+            splitter_hit_thickness: DEFAULT_SPLITTER_THICKNESS,
+        }
+    }
+}
+
+impl DockChromeStyle {
+    /// Returns a copy with deterministic, valid numeric values.
+    #[must_use]
+    pub fn sanitized(self) -> Self {
+        Self {
+            splitter_hit_thickness: splitter_thickness(self.splitter_hit_thickness),
+        }
+    }
+
+    /// Sets the splitter hit thickness in logical units.
+    #[must_use]
+    pub const fn with_splitter_hit_thickness(mut self, thickness: f32) -> Self {
+        self.splitter_hit_thickness = thickness;
+        self
+    }
+}
+
 /// Stable panel identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PanelId(u64);
@@ -1222,9 +1373,30 @@ pub fn resolve_frame_split_affordance_request(
     point: Point,
     new_frame: FrameId,
 ) -> Option<FrameSplitAffordanceRequest> {
+    resolve_frame_split_affordance_request_with_policy(
+        dock,
+        frames,
+        source_frame,
+        point,
+        new_frame,
+        DockInteractionPolicy::default(),
+    )
+}
+
+/// Resolves a pure frame split affordance request using dock interaction policy.
+#[must_use]
+pub fn resolve_frame_split_affordance_request_with_policy(
+    dock: &Dock,
+    frames: &[FrameLayout],
+    source_frame: FrameId,
+    point: Point,
+    new_frame: FrameId,
+    policy: DockInteractionPolicy,
+) -> Option<FrameSplitAffordanceRequest> {
     let source = dock.frame(source_frame)?;
     let active_panel = active_panel_location(source);
-    let (target_frame, placement) = resolve_frame_split_affordance(frames, point)?;
+    let (target_frame, placement) =
+        resolve_frame_split_affordance_with_policy(frames, point, policy)?;
     dock.frame(target_frame)?;
 
     Some(FrameSplitAffordanceRequest {
@@ -1306,45 +1478,76 @@ pub fn resolve_dock_splitter_context_actions(
     frames: &[FrameLayout],
     splitter: &DockSplitter,
 ) -> Vec<DockSplitterContextAction> {
+    resolve_dock_splitter_context_actions_with_policy(
+        dock,
+        frames,
+        splitter,
+        DockInteractionPolicy::default(),
+    )
+}
+
+/// Resolves pure context action metadata using dock interaction policy.
+///
+/// Disabled join or swap policy leaves action metadata present but disabled.
+#[must_use]
+pub fn resolve_dock_splitter_context_actions_with_policy(
+    dock: &Dock,
+    frames: &[FrameLayout],
+    splitter: &DockSplitter,
+    policy: DockInteractionPolicy,
+) -> Vec<DockSplitterContextAction> {
     let context = resolve_dock_splitter_action_context(dock, frames, splitter);
     let (first_to_second, second_to_first) = splitter_context_directions(splitter.axis);
+    let policy = policy.sanitized();
 
     vec![
         dock_splitter_context_action(
             dock,
             frames,
-            DockSplitterContextActionKind::Join,
+            policy,
+            DockSplitterActionSpec {
+                kind: DockSplitterContextActionKind::Join,
+                source_side: DockSplitterSide::First,
+                target_side: DockSplitterSide::Second,
+                direction: first_to_second,
+            },
             context.clone(),
-            DockSplitterSide::First,
-            DockSplitterSide::Second,
-            first_to_second,
         ),
         dock_splitter_context_action(
             dock,
             frames,
-            DockSplitterContextActionKind::Join,
+            policy,
+            DockSplitterActionSpec {
+                kind: DockSplitterContextActionKind::Join,
+                source_side: DockSplitterSide::Second,
+                target_side: DockSplitterSide::First,
+                direction: second_to_first,
+            },
             context.clone(),
-            DockSplitterSide::Second,
-            DockSplitterSide::First,
-            second_to_first,
         ),
         dock_splitter_context_action(
             dock,
             frames,
-            DockSplitterContextActionKind::Swap,
+            policy,
+            DockSplitterActionSpec {
+                kind: DockSplitterContextActionKind::Swap,
+                source_side: DockSplitterSide::First,
+                target_side: DockSplitterSide::Second,
+                direction: first_to_second,
+            },
             context.clone(),
-            DockSplitterSide::First,
-            DockSplitterSide::Second,
-            first_to_second,
         ),
         dock_splitter_context_action(
             dock,
             frames,
-            DockSplitterContextActionKind::Swap,
+            policy,
+            DockSplitterActionSpec {
+                kind: DockSplitterContextActionKind::Swap,
+                source_side: DockSplitterSide::Second,
+                target_side: DockSplitterSide::First,
+                direction: second_to_first,
+            },
             context,
-            DockSplitterSide::Second,
-            DockSplitterSide::First,
-            second_to_first,
         ),
     ]
 }
@@ -1394,55 +1597,62 @@ fn resolve_dock_splitter_action_context(
     }
 }
 
-fn dock_splitter_context_action(
-    dock: &Dock,
-    frames: &[FrameLayout],
+#[derive(Debug, Clone, Copy)]
+struct DockSplitterActionSpec {
     kind: DockSplitterContextActionKind,
-    context: DockSplitterActionContext,
     source_side: DockSplitterSide,
     target_side: DockSplitterSide,
     direction: DockNeighborDirection,
-) -> DockSplitterContextAction {
-    let source_frame = splitter_context_frame(&context, source_side);
-    let target_frame = splitter_context_frame(&context, target_side);
-    let enabled = source_frame
-        .zip(target_frame)
-        .is_some_and(|(source_frame, target_frame)| {
-            if source_frame == target_frame
-                || !dock.frame(source_frame).is_some_and(frame_is_valid)
-                || !dock.frame(target_frame).is_some_and(frame_is_valid)
-            {
-                return false;
-            }
+}
 
-            match kind {
-                DockSplitterContextActionKind::Join => join_request_matches_layout(
-                    frames,
-                    DockJoinRequest {
-                        source_frame,
-                        direction,
-                        target_frame,
-                    },
-                ),
-                DockSplitterContextActionKind::Swap => swap_request_matches_layout(
-                    frames,
-                    DockSwapRequest {
-                        source_frame,
-                        direction,
-                        target_frame,
-                    },
-                ),
-            }
-        });
+fn dock_splitter_context_action(
+    dock: &Dock,
+    frames: &[FrameLayout],
+    policy: DockInteractionPolicy,
+    spec: DockSplitterActionSpec,
+    context: DockSplitterActionContext,
+) -> DockSplitterContextAction {
+    let source_frame = splitter_context_frame(&context, spec.source_side);
+    let target_frame = splitter_context_frame(&context, spec.target_side);
+    let enabled = policy.allows_splitter_action(spec.kind)
+        && source_frame
+            .zip(target_frame)
+            .is_some_and(|(source_frame, target_frame)| {
+                if source_frame == target_frame
+                    || !dock.frame(source_frame).is_some_and(frame_is_valid)
+                    || !dock.frame(target_frame).is_some_and(frame_is_valid)
+                {
+                    return false;
+                }
+
+                match spec.kind {
+                    DockSplitterContextActionKind::Join => join_request_matches_layout(
+                        frames,
+                        DockJoinRequest {
+                            source_frame,
+                            direction: spec.direction,
+                            target_frame,
+                        },
+                    ),
+                    DockSplitterContextActionKind::Swap => swap_request_matches_layout(
+                        frames,
+                        DockSwapRequest {
+                            source_frame,
+                            direction: spec.direction,
+                            target_frame,
+                        },
+                    ),
+                }
+            });
 
     DockSplitterContextAction {
-        kind,
+        kind: spec.kind,
         context,
-        source_side,
-        target_side,
+        source_side: spec.source_side,
+        target_side: spec.target_side,
         source_frame,
         target_frame,
-        direction,
+        direction: spec.direction,
         enabled,
     }
 }
@@ -1858,6 +2068,20 @@ impl Dock {
 
     /// Applies a resolved neighbor join request against the current dock layout.
     pub fn apply_join_request(&mut self, bounds: Rect, request: DockJoinRequest) -> bool {
+        self.apply_join_request_with_policy(bounds, request, DockInteractionPolicy::default())
+    }
+
+    /// Applies a resolved neighbor join request when policy allows join actions.
+    pub fn apply_join_request_with_policy(
+        &mut self,
+        bounds: Rect,
+        request: DockJoinRequest,
+        policy: DockInteractionPolicy,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_join {
+            return false;
+        }
+
         let layout = solve_dock_layout(self, bounds);
         if !join_request_matches_layout(&layout, request) {
             return false;
@@ -1873,6 +2097,26 @@ impl Dock {
         source_frame: FrameId,
         direction: DockNeighborDirection,
     ) -> bool {
+        self.join_neighbor_with_policy(
+            bounds,
+            source_frame,
+            direction,
+            DockInteractionPolicy::default(),
+        )
+    }
+
+    /// Resolves and applies a neighbor join when policy allows join actions.
+    pub fn join_neighbor_with_policy(
+        &mut self,
+        bounds: Rect,
+        source_frame: FrameId,
+        direction: DockNeighborDirection,
+        policy: DockInteractionPolicy,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_join {
+            return false;
+        }
+
         let layout = solve_dock_layout(self, bounds);
         let Some(target_frame) = frame_neighbor(&layout, source_frame, direction) else {
             return false;
@@ -1892,6 +2136,20 @@ impl Dock {
 
     /// Applies a resolved neighbor swap request against the current dock layout.
     pub fn apply_swap_request(&mut self, bounds: Rect, request: DockSwapRequest) -> bool {
+        self.apply_swap_request_with_policy(bounds, request, DockInteractionPolicy::default())
+    }
+
+    /// Applies a resolved neighbor swap request when policy allows swap actions.
+    pub fn apply_swap_request_with_policy(
+        &mut self,
+        bounds: Rect,
+        request: DockSwapRequest,
+        policy: DockInteractionPolicy,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_swap {
+            return false;
+        }
+
         let layout = solve_dock_layout(self, bounds);
         if !swap_request_matches_layout(&layout, request) {
             return false;
@@ -1907,6 +2165,26 @@ impl Dock {
         source_frame: FrameId,
         direction: DockNeighborDirection,
     ) -> bool {
+        self.swap_neighbor_with_policy(
+            bounds,
+            source_frame,
+            direction,
+            DockInteractionPolicy::default(),
+        )
+    }
+
+    /// Resolves and applies a neighbor swap when policy allows swap actions.
+    pub fn swap_neighbor_with_policy(
+        &mut self,
+        bounds: Rect,
+        source_frame: FrameId,
+        direction: DockNeighborDirection,
+        policy: DockInteractionPolicy,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_swap {
+            return false;
+        }
+
         let layout = solve_dock_layout(self, bounds);
         let Some(target_frame) = frame_neighbor(&layout, source_frame, direction) else {
             return false;
@@ -2015,6 +2293,21 @@ impl Dock {
 
     /// Resizes a split addressed by path using a drag delta in logical units.
     pub fn resize_split(&mut self, path: &DockSplitPath, bounds: Rect, delta: Vec2) -> bool {
+        self.resize_split_with_policy(path, bounds, delta, DockInteractionPolicy::default())
+    }
+
+    /// Resizes a split when policy allows splitter drag resize.
+    pub fn resize_split_with_policy(
+        &mut self,
+        path: &DockSplitPath,
+        bounds: Rect,
+        delta: Vec2,
+        policy: DockInteractionPolicy,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_resize {
+            return false;
+        }
+
         resize_split_at_path(&mut self.root, path.elements(), bounds, delta)
     }
 
@@ -2486,11 +2779,25 @@ pub fn frame_neighbor(
 /// Resolves splitter interaction rectangles for a dock tree.
 #[must_use]
 pub fn solve_dock_splitters(area: &Dock, bounds: Rect, thickness: f32) -> Vec<DockSplitter> {
+    solve_dock_splitters_with_style(
+        area,
+        bounds,
+        DockChromeStyle::default().with_splitter_hit_thickness(thickness),
+    )
+}
+
+/// Resolves splitter interaction rectangles using dock chrome style.
+#[must_use]
+pub fn solve_dock_splitters_with_style(
+    area: &Dock,
+    bounds: Rect,
+    style: DockChromeStyle,
+) -> Vec<DockSplitter> {
     let mut splitters = Vec::new();
     solve_splitters(
         &area.root,
         bounds,
-        splitter_thickness(thickness),
+        style.sanitized().splitter_hit_thickness,
         &DockSplitPath::root(),
         &mut splitters,
     );
@@ -2639,6 +2946,14 @@ fn splitter_thickness(thickness: f32) -> f32 {
     }
 }
 
+fn sanitize_drop_edge_fraction(fraction: f32) -> f32 {
+    if fraction.is_finite() {
+        fraction.clamp(0.0, 0.5)
+    } else {
+        DROP_EDGE_FRACTION
+    }
+}
+
 /// Maps a splitter drag delta to a clamped split ratio.
 #[must_use]
 pub fn split_ratio_from_drag(
@@ -2665,6 +2980,16 @@ pub fn split_ratio_from_drag(
 /// Resolves a frame-local drop zone for a pointer position.
 #[must_use]
 pub fn resolve_frame_drop_zone(rect: Rect, point: Point) -> Option<DockDropZone> {
+    resolve_frame_drop_zone_with_policy(rect, point, DockInteractionPolicy::default())
+}
+
+/// Resolves a frame-local drop zone using dock interaction policy.
+#[must_use]
+pub fn resolve_frame_drop_zone_with_policy(
+    rect: Rect,
+    point: Point,
+    policy: DockInteractionPolicy,
+) -> Option<DockDropZone> {
     if !valid_drop_rect(rect) || !valid_drop_point(point) {
         return None;
     }
@@ -2677,8 +3002,9 @@ pub fn resolve_frame_drop_zone(rect: Rect, point: Point) -> Option<DockDropZone>
     let right = (rect.max_x() - point.x).max(0.0);
     let top = (point.y - rect.min_y()).max(0.0);
     let bottom = (rect.max_y() - point.y).max(0.0);
-    let edge_x = finite_non_negative(rect.width) * DROP_EDGE_FRACTION;
-    let edge_y = finite_non_negative(rect.height) * DROP_EDGE_FRACTION;
+    let edge_fraction = policy.sanitized().drop_targets.edge_fraction;
+    let edge_x = finite_non_negative(rect.width) * edge_fraction;
+    let edge_y = finite_non_negative(rect.height) * edge_fraction;
 
     let mut best = (DockDropZone::Center, f32::INFINITY);
     for (zone, distance, limit) in [
@@ -2702,24 +3028,46 @@ pub fn resolve_dock_drop_target(
     point: Point,
     new_frame: FrameId,
 ) -> Option<DockDropTarget> {
+    resolve_dock_drop_target_with_policy(frames, point, new_frame, DockInteractionPolicy::default())
+}
+
+/// Resolves a dock drop target using dock interaction policy.
+#[must_use]
+pub fn resolve_dock_drop_target_with_policy(
+    frames: &[FrameLayout],
+    point: Point,
+    new_frame: FrameId,
+    policy: DockInteractionPolicy,
+) -> Option<DockDropTarget> {
+    let policy = policy.sanitized();
     frames.iter().find_map(|layout| {
-        let zone = resolve_frame_drop_zone(layout.rect, point)?;
-        Some(match zone.placement() {
-            Some(placement) => DockDropTarget::split(layout.frame, placement, new_frame),
-            None => DockDropTarget::tab(layout.frame),
-        })
+        let zone = resolve_frame_drop_zone_with_policy(layout.rect, point, policy)?;
+        match zone.placement() {
+            Some(placement) if policy.drop_targets.allow_split_insertion => {
+                Some(DockDropTarget::split(layout.frame, placement, new_frame))
+            }
+            None if policy.drop_targets.allow_tab_merge => Some(DockDropTarget::tab(layout.frame)),
+            _ => None,
+        }
     })
 }
 
-fn resolve_frame_split_affordance(
+fn resolve_frame_split_affordance_with_policy(
     frames: &[FrameLayout],
     point: Point,
+    policy: DockInteractionPolicy,
 ) -> Option<(FrameId, DockPlacement)> {
     for layout in frames {
-        let Some(zone) = resolve_frame_drop_zone(layout.rect, point) else {
+        let Some(zone) = resolve_frame_drop_zone_with_policy(layout.rect, point, policy) else {
             continue;
         };
-        return zone.placement().map(|placement| (layout.frame, placement));
+        return policy
+            .sanitized()
+            .drop_targets
+            .allow_split_insertion
+            .then_some(zone)
+            .and_then(DockDropZone::placement)
+            .map(|placement| (layout.frame, placement));
     }
 
     None
