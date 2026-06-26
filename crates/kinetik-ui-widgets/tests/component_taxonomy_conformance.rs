@@ -267,6 +267,15 @@ fn component_taxonomy_conformance_reports_stage6_tabs_partial() {
 }
 
 #[test]
+fn component_taxonomy_conformance_reports_stage6_modal_partial() {
+    assert_entry(
+        "Modal",
+        ComponentCategory::Overlay,
+        ComponentConformanceStatus::Partial,
+    );
+}
+
+#[test]
 fn stage2_dropdown_partial_status_is_backed_by_public_model_and_lifecycle() {
     let mut model = DropdownModel::from_items([
         item(1, "Source"),

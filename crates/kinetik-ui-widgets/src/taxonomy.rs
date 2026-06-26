@@ -144,7 +144,7 @@ pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
     ComponentMetadata::new("Tabs", "tabs", Docking, Partial),
     ComponentMetadata::new("Toolbar", "toolbar", System, Partial),
     ComponentMetadata::new("StatusBar", "status-bar", System, Partial),
-    ComponentMetadata::new("Modal", "modal", Overlay, Planned),
+    ComponentMetadata::new("Modal", "modal", Overlay, Partial),
     ComponentMetadata::new("Timeline", "timeline", Viewport, Planned),
     ComponentMetadata::new("TransportControls", "transport-controls", Control, Planned),
     ComponentMetadata::new("ProgressIndicator", "progress-indicator", Display, Planned),
