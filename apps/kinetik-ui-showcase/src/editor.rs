@@ -22,10 +22,12 @@ use kinetik_ui::widgets::{
     Dock, DockDropTarget, DockDropZone, DockNode, DockPlacement, DockTabDrag, Frame, FrameId,
     FrameLayout, FrameTab, GridColumns, GridLayout, Guide, ItemId, ListLayout, Menu, MenuItem,
     MenuOverlay, OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayStack, PanZoom,
-    Panel, PanelId, PopoverPlacement, PopoverRequest, PropertyGridLayout, PropertyGridRow,
-    TableColumn, TableLayout, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
-    ViewportComposition, ViewportFit, ViewportSurface, frame_tabs, icon_button_semantics,
-    place_popover, resolve_frame_drop_zone, solve_dock_layout, solve_dock_splitters,
+    Panel, PanelId, PanelInstanceId, PanelInstancePolicy, PanelInstanceSnapshot, PanelTypeCategory,
+    PanelTypeDescriptor, PanelTypeId, PopoverPlacement, PopoverRequest, PropertyGridLayout,
+    PropertyGridRow, TableColumn, TableLayout, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
+    ViewportComposition, ViewportFit, ViewportSurface, WorkspaceSnapshot, frame_tabs,
+    icon_button_semantics, place_popover, resolve_frame_drop_zone, solve_dock_layout,
+    solve_dock_splitters,
 };
 
 /// Saves the current editor project.
@@ -96,13 +98,74 @@ const FRAME_VIEWPORT: FrameId = FrameId::from_raw(3);
 const FRAME_BOTTOM: FrameId = FrameId::from_raw(4);
 const FRAME_INSPECTOR: FrameId = FrameId::from_raw(5);
 
-const PANEL_SCENE: PanelId = PanelId::from_raw(1);
-const PANEL_ASSETS: PanelId = PanelId::from_raw(2);
-const PANEL_VIEWPORT: PanelId = PanelId::from_raw(3);
-const PANEL_CONSOLE: PanelId = PanelId::from_raw(4);
-const PANEL_JOBS: PanelId = PanelId::from_raw(5);
-const PANEL_INSPECTOR: PanelId = PanelId::from_raw(6);
+const PANEL_TYPE_SCENE: PanelTypeId = PanelTypeId::from_raw(1);
+const PANEL_TYPE_ASSETS: PanelTypeId = PanelTypeId::from_raw(2);
+const PANEL_TYPE_VIEWPORT: PanelTypeId = PanelTypeId::from_raw(3);
+const PANEL_TYPE_CONSOLE: PanelTypeId = PanelTypeId::from_raw(4);
+const PANEL_TYPE_JOBS: PanelTypeId = PanelTypeId::from_raw(5);
+const PANEL_TYPE_INSPECTOR: PanelTypeId = PanelTypeId::from_raw(6);
+
+const PANEL_SCENE_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(1);
+const PANEL_ASSETS_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(2);
+const PANEL_VIEWPORT_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(3);
+const PANEL_CONSOLE_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(4);
+const PANEL_JOBS_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(5);
+const PANEL_INSPECTOR_INSTANCE: PanelInstanceId = PanelInstanceId::from_raw(6);
+
+const PANEL_SCENE: PanelId = PanelId::from_instance_id(PANEL_SCENE_INSTANCE);
+const PANEL_ASSETS: PanelId = PanelId::from_instance_id(PANEL_ASSETS_INSTANCE);
+const PANEL_VIEWPORT: PanelId = PanelId::from_instance_id(PANEL_VIEWPORT_INSTANCE);
+const PANEL_CONSOLE: PanelId = PanelId::from_instance_id(PANEL_CONSOLE_INSTANCE);
+const PANEL_JOBS: PanelId = PanelId::from_instance_id(PANEL_JOBS_INSTANCE);
+const PANEL_INSPECTOR: PanelId = PanelId::from_instance_id(PANEL_INSPECTOR_INSTANCE);
 const FRAME_DRAG_INSERT_START: u64 = 100;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct EditorPanelInstanceSpec {
+    id: PanelInstanceId,
+    panel_type: PanelTypeId,
+    title: &'static str,
+    state_key: &'static str,
+}
+
+const EDITOR_PANEL_INSTANCES: &[EditorPanelInstanceSpec] = &[
+    EditorPanelInstanceSpec {
+        id: PANEL_SCENE_INSTANCE,
+        panel_type: PANEL_TYPE_SCENE,
+        title: "Scene",
+        state_key: "editor.scene",
+    },
+    EditorPanelInstanceSpec {
+        id: PANEL_ASSETS_INSTANCE,
+        panel_type: PANEL_TYPE_ASSETS,
+        title: "Assets",
+        state_key: "editor.assets",
+    },
+    EditorPanelInstanceSpec {
+        id: PANEL_VIEWPORT_INSTANCE,
+        panel_type: PANEL_TYPE_VIEWPORT,
+        title: "Viewport",
+        state_key: "editor.viewport",
+    },
+    EditorPanelInstanceSpec {
+        id: PANEL_CONSOLE_INSTANCE,
+        panel_type: PANEL_TYPE_CONSOLE,
+        title: "Console",
+        state_key: "editor.console",
+    },
+    EditorPanelInstanceSpec {
+        id: PANEL_JOBS_INSTANCE,
+        panel_type: PANEL_TYPE_JOBS,
+        title: "Jobs",
+        state_key: "editor.jobs",
+    },
+    EditorPanelInstanceSpec {
+        id: PANEL_INSPECTOR_INSTANCE,
+        panel_type: PANEL_TYPE_INSPECTOR,
+        title: "Inspector",
+        state_key: "editor.inspector",
+    },
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EditorTool {
@@ -2023,7 +2086,58 @@ fn key_label(key: &Key) -> String {
     }
 }
 
+fn editor_panel_type_descriptors() -> Vec<PanelTypeDescriptor> {
+    vec![
+        PanelTypeDescriptor::new(PANEL_TYPE_SCENE, "Scene")
+            .with_category(PanelTypeCategory::Hierarchy)
+            .with_instance_policy(PanelInstancePolicy::Singleton)
+            .with_default_size(Size::new(300.0, 420.0)),
+        PanelTypeDescriptor::new(PANEL_TYPE_ASSETS, "Assets")
+            .with_category(PanelTypeCategory::Assets)
+            .with_instance_policy(PanelInstancePolicy::Singleton)
+            .with_default_size(Size::new(300.0, 260.0)),
+        PanelTypeDescriptor::new(PANEL_TYPE_VIEWPORT, "Viewport")
+            .with_category(PanelTypeCategory::Viewport)
+            .with_instance_policy(PanelInstancePolicy::Singleton)
+            .with_default_size(Size::new(760.0, 520.0)),
+        PanelTypeDescriptor::new(PANEL_TYPE_CONSOLE, "Console")
+            .with_category(PanelTypeCategory::Diagnostics)
+            .with_instance_policy(PanelInstancePolicy::Singleton)
+            .with_default_size(Size::new(640.0, 180.0)),
+        PanelTypeDescriptor::new(PANEL_TYPE_JOBS, "Jobs")
+            .with_category(PanelTypeCategory::Diagnostics)
+            .with_instance_policy(PanelInstancePolicy::Singleton)
+            .with_default_size(Size::new(640.0, 180.0)),
+        PanelTypeDescriptor::new(PANEL_TYPE_INSPECTOR, "Inspector")
+            .with_category(PanelTypeCategory::Inspector)
+            .with_instance_policy(PanelInstancePolicy::Singleton)
+            .with_default_size(Size::new(280.0, 520.0)),
+    ]
+}
+
+fn editor_panel_instances() -> Vec<PanelInstanceSnapshot> {
+    EDITOR_PANEL_INSTANCES
+        .iter()
+        .map(|spec| {
+            PanelInstanceSnapshot::new(spec.id, spec.panel_type, spec.title)
+                .with_state_key(spec.state_key)
+        })
+        .collect()
+}
+
+fn default_workspace_snapshot() -> WorkspaceSnapshot {
+    default_dock_layout().workspace_snapshot(editor_panel_instances())
+}
+
 fn default_dock() -> Dock {
+    Dock::restore_workspace(
+        default_workspace_snapshot(),
+        &editor_panel_type_descriptors(),
+    )
+    .expect("default editor workspace snapshot should restore")
+}
+
+fn default_dock_layout() -> Dock {
     Dock::new(DockNode::Split {
         axis: Axis::Horizontal,
         ratio: 0.19,
@@ -2036,11 +2150,11 @@ fn default_dock() -> Dock {
             min_second: 160.0,
             first: Box::new(DockNode::Frame(Frame::new(
                 FRAME_SCENE,
-                vec![Panel::new(PANEL_SCENE, "Scene")],
+                vec![editor_panel(PANEL_SCENE_INSTANCE)],
             ))),
             second: Box::new(DockNode::Frame(Frame::new(
                 FRAME_ASSETS,
-                vec![Panel::new(PANEL_ASSETS, "Assets")],
+                vec![editor_panel(PANEL_ASSETS_INSTANCE)],
             ))),
         }),
         second: Box::new(DockNode::Split {
@@ -2055,22 +2169,30 @@ fn default_dock() -> Dock {
                 min_second: 140.0,
                 first: Box::new(DockNode::Frame(Frame::new(
                     FRAME_VIEWPORT,
-                    vec![Panel::new(PANEL_VIEWPORT, "Viewport")],
+                    vec![editor_panel(PANEL_VIEWPORT_INSTANCE)],
                 ))),
                 second: Box::new(DockNode::Frame(Frame::new(
                     FRAME_BOTTOM,
                     vec![
-                        Panel::new(PANEL_CONSOLE, "Console"),
-                        Panel::new(PANEL_JOBS, "Jobs"),
+                        editor_panel(PANEL_CONSOLE_INSTANCE),
+                        editor_panel(PANEL_JOBS_INSTANCE),
                     ],
                 ))),
             }),
             second: Box::new(DockNode::Frame(Frame::new(
                 FRAME_INSPECTOR,
-                vec![Panel::new(PANEL_INSPECTOR, "Inspector")],
+                vec![editor_panel(PANEL_INSPECTOR_INSTANCE)],
             ))),
         }),
     })
+}
+
+fn editor_panel(instance: PanelInstanceId) -> Panel {
+    let spec = EDITOR_PANEL_INSTANCES
+        .iter()
+        .find(|spec| spec.id == instance)
+        .expect("editor panel instance is declared");
+    Panel::from_instance_id(spec.id, spec.title)
 }
 
 fn scene_model() -> TreeModel {
@@ -2311,6 +2433,39 @@ mod tests {
         assert_eq!(chrome.toolbar_stride, 30.0);
         assert_eq!(chrome.toolbar_icon, 16.0);
         assert_eq!(super::workspace_top(&theme), 68.0);
+    }
+
+    #[test]
+    fn default_workspace_snapshot_validates_against_showcase_panel_descriptors() {
+        let descriptors = super::editor_panel_type_descriptors();
+        let snapshot = super::default_workspace_snapshot();
+        let diagnostics = snapshot.diagnostics(&descriptors);
+
+        assert!(diagnostics.is_valid(), "{diagnostics:?}");
+        assert!(diagnostics.dock.diagnostics.is_empty(), "{diagnostics:?}");
+        assert!(diagnostics.workspace.is_empty(), "{diagnostics:?}");
+        snapshot
+            .validate(&descriptors)
+            .expect("workspace validates");
+        assert_eq!(
+            snapshot.panel_instances,
+            super::editor_panel_instances(),
+            "default workspace instances should be deterministic"
+        );
+    }
+
+    #[test]
+    fn default_workspace_snapshot_round_trips_through_workspace_restore() {
+        let descriptors = super::editor_panel_type_descriptors();
+        let snapshot = super::default_workspace_snapshot();
+        let restored =
+            super::Dock::restore_workspace(snapshot.clone(), &descriptors).expect("restore");
+
+        assert_eq!(restored.snapshot(), snapshot.dock);
+        assert_eq!(
+            restored.workspace_snapshot(super::editor_panel_instances()),
+            snapshot
+        );
     }
 
     #[test]
@@ -2588,6 +2743,25 @@ mod tests {
         );
         assert!(editor.status.contains("Dock tab merged into frame"));
         assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+        let descriptors = super::editor_panel_type_descriptors();
+        let moved_workspace = editor
+            .dock
+            .workspace_snapshot(super::editor_panel_instances());
+        moved_workspace
+            .validate(&descriptors)
+            .expect("moved workspace validates");
+        let moved_jobs = moved_workspace
+            .panel_instances
+            .iter()
+            .find(|instance| instance.id == PANEL_JOBS.instance_id())
+            .expect("jobs instance metadata");
+        assert_eq!(moved_jobs.panel_type, super::PANEL_TYPE_JOBS);
+        assert_eq!(moved_jobs.title, "Jobs");
+        assert_eq!(moved_jobs.state_key.as_deref(), Some("editor.jobs"));
+        let restored = super::Dock::restore_workspace(moved_workspace.clone(), &descriptors)
+            .expect("moved workspace restores");
+        assert_eq!(restored.snapshot(), moved_workspace.dock);
     }
 
     #[test]
