@@ -2,22 +2,25 @@
 
 use kinetik_ui_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
 use kinetik_ui_widgets::{
-    Dock, DockDropTarget, DockNeighborDirection, DockNode, DockPathElement, DockPlacement,
-    DockRestoreError, DockSnapshot, DockSnapshotDiagnosticCode, DockSnapshotNode,
-    DockSnapshotSplitValue, DockSplitInsertion, DockSplitPath, DockSplitterContextAction,
-    DockSplitterContextActionKind, DockSplitterSide, Frame, FrameId, FrameLayout, FrameNeighbors,
-    FrameSplitAffordanceRequest, Panel, PanelAffordances, PanelClosePolicy, PanelDockHint,
-    PanelDuplicatePolicy, PanelFloatPolicy, PanelId, PanelInstanceId, PanelInstanceLocation,
-    PanelInstancePolicy, PanelInstanceSnapshot, PanelOpenActionMetadata, PanelOpenDecision,
-    PanelPolicyContext, PanelPolicyMetadata, PanelPolicyUnavailableReason, PanelRegistry,
-    PanelRegistryError, PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext,
-    SnapshotDiagnosticSeverity, WorkspaceRepairAction, WorkspaceRepairActionCode,
-    WorkspaceRestoreError, WorkspaceSnapshot, WorkspaceSnapshotDiagnosticCode, frame_neighbor,
-    frame_tabs, resolve_dock_drop_target, resolve_dock_join_request,
-    resolve_dock_splitter_context_actions, resolve_dock_swap_request,
-    resolve_frame_split_affordance_request, resolve_panel_affordances, resolve_panel_close_request,
-    resolve_panel_duplicate_request, resolve_panel_float_request, resolve_panel_open_decision,
-    resolve_panel_policy_context, solve_dock_layout, solve_dock_neighbors, solve_dock_splitters,
+    Dock, DockChromeStyle, DockDropTarget, DockInteractionPolicy, DockNeighborDirection, DockNode,
+    DockPathElement, DockPlacement, DockRestoreError, DockSnapshot, DockSnapshotDiagnosticCode,
+    DockSnapshotNode, DockSnapshotSplitValue, DockSplitInsertion, DockSplitPath,
+    DockSplitterContextAction, DockSplitterContextActionKind, DockSplitterSide, Frame, FrameId,
+    FrameLayout, FrameNeighbors, FrameSplitAffordanceRequest, Panel, PanelAffordances,
+    PanelClosePolicy, PanelDockHint, PanelDuplicatePolicy, PanelFloatPolicy, PanelId,
+    PanelInstanceId, PanelInstanceLocation, PanelInstancePolicy, PanelInstanceSnapshot,
+    PanelOpenActionMetadata, PanelOpenDecision, PanelPolicyContext, PanelPolicyMetadata,
+    PanelPolicyUnavailableReason, PanelRegistry, PanelRegistryError, PanelTypeCategory,
+    PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, SnapshotDiagnosticSeverity,
+    WorkspaceRepairAction, WorkspaceRepairActionCode, WorkspaceRestoreError, WorkspaceSnapshot,
+    WorkspaceSnapshotDiagnosticCode, frame_neighbor, frame_tabs, resolve_dock_drop_target,
+    resolve_dock_drop_target_with_policy, resolve_dock_join_request,
+    resolve_dock_splitter_context_actions, resolve_dock_splitter_context_actions_with_policy,
+    resolve_dock_swap_request, resolve_frame_drop_zone_with_policy,
+    resolve_frame_split_affordance_request, resolve_frame_split_affordance_request_with_policy,
+    resolve_panel_affordances, resolve_panel_close_request, resolve_panel_duplicate_request,
+    resolve_panel_float_request, resolve_panel_open_decision, resolve_panel_policy_context,
+    solve_dock_layout, solve_dock_neighbors, solve_dock_splitters, solve_dock_splitters_with_style,
     split_ratio_from_drag,
 };
 
@@ -1930,6 +1933,252 @@ fn splitter_context_actions_are_pure_and_stable_across_solves() {
 }
 
 #[test]
+fn default_dock_policy_and_style_match_existing_splitter_behavior() {
+    let dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+    let layout = solve_dock_layout(&dock, bounds);
+    let new_frame = FrameId::from_raw(9);
+
+    assert_eq!(
+        resolve_dock_drop_target(&layout, Point::new(650.0, 150.0), new_frame),
+        resolve_dock_drop_target_with_policy(
+            &layout,
+            Point::new(650.0, 150.0),
+            new_frame,
+            DockInteractionPolicy::default(),
+        )
+    );
+    assert_eq!(
+        resolve_dock_drop_target(&layout, Point::new(998.0, 250.0), new_frame),
+        resolve_dock_drop_target_with_policy(
+            &layout,
+            Point::new(998.0, 250.0),
+            new_frame,
+            DockInteractionPolicy::default(),
+        )
+    );
+    assert_eq!(
+        solve_dock_splitters(&dock, bounds, 8.0),
+        solve_dock_splitters_with_style(
+            &dock,
+            bounds,
+            DockChromeStyle::default().with_splitter_hit_thickness(8.0),
+        )
+    );
+
+    let splitters = solve_dock_splitters(&dock, bounds, 8.0);
+    assert_eq!(
+        resolve_dock_splitter_context_actions(&dock, &layout, &splitters[0]),
+        resolve_dock_splitter_context_actions_with_policy(
+            &dock,
+            &layout,
+            &splitters[0],
+            DockInteractionPolicy::default(),
+        )
+    );
+}
+
+#[test]
+fn custom_dock_policy_changes_drop_edge_resolution() {
+    let dock = nested_dock();
+    let layout = solve_dock_layout(&dock, Rect::new(0.0, 0.0, 1000.0, 500.0));
+    let new_frame = FrameId::from_raw(9);
+    let narrow_edge = DockInteractionPolicy::default().with_drop_edge_fraction(0.10);
+    let wide_edge = DockInteractionPolicy::default().with_drop_edge_fraction(0.40);
+
+    assert_eq!(
+        resolve_dock_drop_target_with_policy(
+            &layout,
+            Point::new(390.0, 150.0),
+            new_frame,
+            narrow_edge,
+        ),
+        Some(DockDropTarget::tab(FrameId::from_raw(2)))
+    );
+    assert_eq!(
+        resolve_dock_drop_target_with_policy(
+            &layout,
+            Point::new(390.0, 150.0),
+            new_frame,
+            wide_edge
+        ),
+        Some(DockDropTarget::split(
+            FrameId::from_raw(2),
+            DockPlacement::Left,
+            new_frame,
+        ))
+    );
+}
+
+#[test]
+fn dock_policy_can_disable_split_or_tab_drop_targets() {
+    let dock = nested_dock();
+    let layout = solve_dock_layout(&dock, Rect::new(0.0, 0.0, 1000.0, 500.0));
+    let new_frame = FrameId::from_raw(9);
+    let no_splits = DockInteractionPolicy::default().with_split_insertion(false);
+    let no_tabs = DockInteractionPolicy::default().with_tab_merge(false);
+
+    assert_eq!(
+        resolve_dock_drop_target_with_policy(
+            &layout,
+            Point::new(998.0, 250.0),
+            new_frame,
+            no_splits,
+        ),
+        None
+    );
+    assert_eq!(
+        resolve_frame_split_affordance_request_with_policy(
+            &dock,
+            &layout,
+            FrameId::from_raw(2),
+            Point::new(998.0, 250.0),
+            new_frame,
+            no_splits,
+        ),
+        None
+    );
+    assert_eq!(
+        resolve_dock_drop_target_with_policy(&layout, Point::new(650.0, 150.0), new_frame, no_tabs,),
+        None
+    );
+    assert_eq!(
+        resolve_dock_drop_target_with_policy(&layout, Point::new(998.0, 250.0), new_frame, no_tabs,),
+        Some(DockDropTarget::split(
+            FrameId::from_raw(2),
+            DockPlacement::Right,
+            new_frame,
+        ))
+    );
+}
+
+#[test]
+fn dock_policy_disables_splitter_resize_join_and_swap_without_mutating_topology() {
+    let mut dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+    let before = dock.snapshot();
+    let no_resize = DockInteractionPolicy::default().with_splitter_resize(false);
+
+    assert!(!dock.resize_split_with_policy(
+        &DockSplitPath::root().child(DockPathElement::Second),
+        bounds,
+        Vec2::new(0.0, 50.0),
+        no_resize,
+    ));
+    assert_eq!(dock.snapshot(), before);
+
+    let layout = solve_dock_layout(&dock, bounds);
+    let splitters = solve_dock_splitters(&dock, bounds, 8.0);
+    let no_join = DockInteractionPolicy::default().with_splitter_join(false);
+    let join_disabled =
+        resolve_dock_splitter_context_actions_with_policy(&dock, &layout, &splitters[0], no_join);
+    assert!(
+        join_disabled
+            .iter()
+            .filter(|action| action.kind == DockSplitterContextActionKind::Join)
+            .all(|action| !action.enabled
+                && action.join_request().is_none()
+                && action.source_frame.is_some()
+                && action.target_frame.is_some())
+    );
+    assert!(
+        join_disabled
+            .iter()
+            .filter(|action| action.kind == DockSplitterContextActionKind::Swap)
+            .all(|action| action.enabled && action.swap_request().is_some())
+    );
+
+    let no_swap = DockInteractionPolicy::default().with_splitter_swap(false);
+    let swap_disabled =
+        resolve_dock_splitter_context_actions_with_policy(&dock, &layout, &splitters[0], no_swap);
+    assert!(
+        swap_disabled
+            .iter()
+            .filter(|action| action.kind == DockSplitterContextActionKind::Swap)
+            .all(|action| !action.enabled
+                && action.swap_request().is_none()
+                && action.source_frame.is_some()
+                && action.target_frame.is_some())
+    );
+    assert!(
+        swap_disabled
+            .iter()
+            .filter(|action| action.kind == DockSplitterContextActionKind::Join)
+            .all(|action| action.enabled && action.join_request().is_some())
+    );
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn invalid_dock_policy_and_style_values_sanitize_deterministically() {
+    let dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+    let layout = solve_dock_layout(&dock, bounds);
+    let new_frame = FrameId::from_raw(9);
+
+    let invalid_policy = DockInteractionPolicy::default().with_drop_edge_fraction(f32::NAN);
+    assert_close(
+        invalid_policy.sanitized().drop_targets.edge_fraction,
+        DockInteractionPolicy::default().drop_targets.edge_fraction,
+    );
+    assert_eq!(
+        resolve_dock_drop_target_with_policy(
+            &layout,
+            Point::new(998.0, 250.0),
+            new_frame,
+            invalid_policy,
+        ),
+        resolve_dock_drop_target(&layout, Point::new(998.0, 250.0), new_frame)
+    );
+
+    let clamped_policy = DockInteractionPolicy::default().with_drop_edge_fraction(2.0);
+    assert_close(clamped_policy.sanitized().drop_targets.edge_fraction, 0.5);
+    assert_eq!(
+        resolve_frame_drop_zone_with_policy(
+            Rect::new(0.0, 0.0, 100.0, 100.0),
+            Point::new(49.0, 50.0),
+            clamped_policy,
+        ),
+        Some(kinetik_ui_widgets::DockDropZone::Left)
+    );
+
+    let invalid_style = DockChromeStyle::default().with_splitter_hit_thickness(f32::NEG_INFINITY);
+    assert_eq!(invalid_style.sanitized(), DockChromeStyle::default());
+    assert_eq!(
+        solve_dock_splitters_with_style(&dock, bounds, invalid_style),
+        solve_dock_splitters_with_style(&dock, bounds, DockChromeStyle::default())
+    );
+}
+
+#[test]
+fn dock_chrome_style_changes_splitter_hit_metadata_without_changing_topology() {
+    let dock = nested_dock();
+    let before = dock.snapshot();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+
+    let thin = solve_dock_splitters_with_style(
+        &dock,
+        bounds,
+        DockChromeStyle::default().with_splitter_hit_thickness(4.0),
+    );
+    let thick = solve_dock_splitters_with_style(
+        &dock,
+        bounds,
+        DockChromeStyle::default().with_splitter_hit_thickness(20.0),
+    );
+
+    assert_eq!(thin.len(), thick.len());
+    assert_eq!(thin[0].path, thick[0].path);
+    assert_eq!(thin[0].axis, thick[0].axis);
+    assert_close(thin[0].rect.width, 4.0);
+    assert_close(thick[0].rect.width, 20.0);
+    assert_close(thin[0].ratio, thick[0].ratio);
+    assert_close(thin[0].min_first, thick[0].min_first);
+    assert_close(thin[0].min_second, thick[0].min_second);
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
 fn dock_neighbors_resolve_left_right_up_down_in_nested_splits() {
     let dock = nested_dock();
     let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
@@ -2969,6 +3218,7 @@ fn snapshot_restore_rejects_invalid_identity_policy_and_split_data() {
 #[test]
 fn panel_remains_passive_metadata_when_frame_and_dock_policy_changes() {
     let mut dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
     let original_panel = dock
         .frame(FrameId::from_raw(2))
         .expect("frame")
@@ -2986,14 +3236,29 @@ fn panel_remains_passive_metadata_when_frame_and_dock_policy_changes() {
     let drag = dock
         .begin_tab_drag(FrameId::from_raw(2), original_panel.id)
         .expect("drag");
-    assert!(dock.drop_tab(
-        drag,
-        DockDropTarget::split(
-            FrameId::from_raw(1),
-            DockPlacement::Bottom,
-            FrameId::from_raw(9),
-        )
-    ));
+    let styled_splitters = solve_dock_splitters_with_style(
+        &dock,
+        bounds,
+        DockChromeStyle::default().with_splitter_hit_thickness(20.0),
+    );
+    assert_eq!(styled_splitters.len(), 2);
+    let target = resolve_dock_drop_target_with_policy(
+        &solve_dock_layout(&dock, bounds),
+        Point::new(150.0, 498.0),
+        FrameId::from_raw(9),
+        DockInteractionPolicy::default().with_drop_edge_fraction(0.4),
+    )
+    .expect("policy split target");
+    match target {
+        DockDropTarget::Split {
+            frame, placement, ..
+        } => {
+            assert_eq!(frame, FrameId::from_raw(1));
+            assert_eq!(placement, DockPlacement::Bottom);
+        }
+        DockDropTarget::Tab { .. } => panic!("expected split target"),
+    }
+    assert!(dock.drop_tab(drag, target));
 
     let moved_panel = dock
         .frame(FrameId::from_raw(9))
