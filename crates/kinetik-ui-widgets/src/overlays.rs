@@ -395,6 +395,254 @@ impl Menu {
     }
 }
 
+/// Stable dropdown item identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct DropdownItemId(u64);
+
+impl DropdownItemId {
+    /// Creates a dropdown item ID from raw bits.
+    #[must_use]
+    pub const fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    /// Returns the raw ID bits.
+    #[must_use]
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
+}
+
+/// Data-only dropdown/select item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DropdownItem {
+    /// Stable item identity used for selection and highlight state.
+    pub id: DropdownItemId,
+    /// Display label for the item.
+    pub label: String,
+    /// Whether the item can be highlighted and selected.
+    pub enabled: bool,
+}
+
+impl DropdownItem {
+    /// Creates an enabled dropdown item.
+    #[must_use]
+    pub fn new(id: DropdownItemId, label: impl Into<String>) -> Self {
+        Self {
+            id,
+            label: label.into(),
+            enabled: true,
+        }
+    }
+
+    /// Returns this item with enabled state set.
+    #[must_use]
+    pub fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+}
+
+/// Keyboard-style dropdown highlight movement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DropdownHighlightMove {
+    /// Move to the previous enabled item, like `ArrowUp`.
+    Previous,
+    /// Move to the next enabled item, like `ArrowDown`.
+    Next,
+    /// Move to the first enabled item, like Home.
+    First,
+    /// Move to the last enabled item, like End.
+    Last,
+}
+
+/// Data-only dropdown/select model.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DropdownModel {
+    items: Vec<DropdownItem>,
+    selected: Option<DropdownItemId>,
+    highlighted: Option<DropdownItemId>,
+}
+
+impl DropdownModel {
+    /// Creates an empty dropdown model.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates a dropdown model from items.
+    #[must_use]
+    pub fn from_items(items: impl IntoIterator<Item = DropdownItem>) -> Self {
+        let mut model = Self::new();
+        model.replace_items(items);
+        model
+    }
+
+    /// Returns the item list.
+    #[must_use]
+    pub fn items(&self) -> &[DropdownItem] {
+        &self.items
+    }
+
+    /// Replaces items and keeps valid selected/highlighted IDs stable.
+    pub fn replace_items(&mut self, items: impl IntoIterator<Item = DropdownItem>) {
+        self.items = items.into_iter().collect();
+        self.reconcile_ids();
+    }
+
+    /// Returns the selected item ID.
+    #[must_use]
+    pub const fn selected_id(&self) -> Option<DropdownItemId> {
+        self.selected
+    }
+
+    /// Returns the selected enabled item.
+    #[must_use]
+    pub fn selected_item(&self) -> Option<&DropdownItem> {
+        self.selected
+            .and_then(|id| self.enabled_item_by_id(id).map(|(_, item)| item))
+    }
+
+    /// Selects an enabled item by stable ID.
+    pub fn set_selected_id(&mut self, id: DropdownItemId) -> bool {
+        if self.enabled_item_by_id(id).is_none() {
+            return false;
+        }
+        self.selected = Some(id);
+        true
+    }
+
+    /// Clears the selected item.
+    pub fn clear_selection(&mut self) {
+        self.selected = None;
+    }
+
+    /// Returns the highlighted item ID.
+    #[must_use]
+    pub const fn highlighted_id(&self) -> Option<DropdownItemId> {
+        self.highlighted
+    }
+
+    /// Returns the highlighted enabled item.
+    #[must_use]
+    pub fn highlighted_item(&self) -> Option<&DropdownItem> {
+        self.highlighted
+            .and_then(|id| self.enabled_item_by_id(id).map(|(_, item)| item))
+    }
+
+    /// Highlights an enabled item by stable ID.
+    pub fn set_highlighted_id(&mut self, id: DropdownItemId) -> bool {
+        if self.enabled_item_by_id(id).is_none() {
+            return false;
+        }
+        self.highlighted = Some(id);
+        true
+    }
+
+    /// Clears the highlighted item.
+    pub fn clear_highlight(&mut self) {
+        self.highlighted = None;
+    }
+
+    /// Moves the highlight to the previous enabled item.
+    pub fn highlight_previous(&mut self) -> Option<DropdownItemId> {
+        self.move_highlight(DropdownHighlightMove::Previous)
+    }
+
+    /// Moves the highlight to the next enabled item.
+    pub fn highlight_next(&mut self) -> Option<DropdownItemId> {
+        self.move_highlight(DropdownHighlightMove::Next)
+    }
+
+    /// Moves the highlight to the first enabled item.
+    pub fn highlight_first(&mut self) -> Option<DropdownItemId> {
+        self.move_highlight(DropdownHighlightMove::First)
+    }
+
+    /// Moves the highlight to the last enabled item.
+    pub fn highlight_last(&mut self) -> Option<DropdownItemId> {
+        self.move_highlight(DropdownHighlightMove::Last)
+    }
+
+    /// Moves the highlight using keyboard-style movement.
+    pub fn move_highlight(&mut self, movement: DropdownHighlightMove) -> Option<DropdownItemId> {
+        let index = match movement {
+            DropdownHighlightMove::Previous => self.previous_highlight_index(),
+            DropdownHighlightMove::Next => self.next_highlight_index(),
+            DropdownHighlightMove::First => self.first_enabled_index(),
+            DropdownHighlightMove::Last => self.last_enabled_index(),
+        }?;
+        let id = self.items[index].id;
+        self.highlighted = Some(id);
+        Some(id)
+    }
+
+    /// Selects the highlighted enabled item.
+    pub fn select_highlighted(&mut self) -> Option<DropdownItemId> {
+        let id = self.highlighted?;
+        self.enabled_item_by_id(id)?;
+        self.selected = Some(id);
+        Some(id)
+    }
+
+    fn reconcile_ids(&mut self) {
+        if self
+            .selected
+            .is_some_and(|id| self.enabled_item_by_id(id).is_none())
+        {
+            self.selected = None;
+        }
+        if self
+            .highlighted
+            .is_some_and(|id| self.enabled_item_by_id(id).is_none())
+        {
+            self.highlighted = None;
+        }
+    }
+
+    fn enabled_item_by_id(&self, id: DropdownItemId) -> Option<(usize, &DropdownItem)> {
+        self.items
+            .iter()
+            .enumerate()
+            .find(|(_, item)| item.id == id && item.enabled)
+    }
+
+    fn highlighted_index(&self) -> Option<usize> {
+        self.highlighted
+            .and_then(|id| self.enabled_item_by_id(id).map(|(index, _)| index))
+    }
+
+    fn first_enabled_index(&self) -> Option<usize> {
+        self.items.iter().position(|item| item.enabled)
+    }
+
+    fn last_enabled_index(&self) -> Option<usize> {
+        self.items.iter().rposition(|item| item.enabled)
+    }
+
+    fn previous_highlight_index(&self) -> Option<usize> {
+        let Some(current) = self.highlighted_index() else {
+            return self.last_enabled_index();
+        };
+        self.items[..current]
+            .iter()
+            .rposition(|item| item.enabled)
+            .or(Some(current))
+    }
+
+    fn next_highlight_index(&self) -> Option<usize> {
+        let Some(current) = self.highlighted_index() else {
+            return self.first_enabled_index();
+        };
+        self.items[current.saturating_add(1)..]
+            .iter()
+            .position(|item| item.enabled)
+            .map(|offset| current + 1 + offset)
+            .or(Some(current))
+    }
+}
+
 /// Action-backed menu-like overlay model.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MenuOverlay {
