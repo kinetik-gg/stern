@@ -216,6 +216,10 @@ PanelInstanceId
   Stable identity for one open instance of a panel type. Existing `PanelId`
   vocabulary is compatibility terminology for panel instances.
 
+WorkspaceSnapshot
+  Additive persistence shell that wraps `DockSnapshot` with typed open panel
+  instance records.
+
 ViewportSurface
   UI-managed rectangle that displays domain-rendered texture content.
 ```
@@ -616,6 +620,14 @@ PanelTypeDescriptor
 optional icon, category, singleton or multi-instance policy, default size,
 allowed workspace contexts, dock placement hints, close/duplicate/future-float
 affordance policy, and an optional application-owned default open action.
+
+`WorkspaceSnapshot` wraps the existing `DockSnapshot` with
+`PanelInstanceSnapshot` records. Validation must ensure each dock panel has a
+matching panel instance, each panel instance references a known
+`PanelTypeId`, panel instance IDs are unique, supplied panel type descriptors
+are a deterministic set, and stale records are reported with structured
+errors. The shell may carry an application-owned state key, but applications
+still own panel content and state serialization.
 
 Applications still own panel content, panel instance creation, action execution,
 workspace persistence, and any domain-specific factories.

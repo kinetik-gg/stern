@@ -1,6 +1,6 @@
 //! `Dock`, `Frame`, and `Panel` models for editor layouts.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use kinetik_ui_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
 
@@ -830,6 +830,21 @@ impl Dock {
         }
     }
 
+    /// Creates an additive workspace snapshot shell around the dock snapshot.
+    ///
+    /// Panel instance records are supplied by the application because the UI
+    /// toolkit does not own panel type registration or panel state storage.
+    #[must_use]
+    pub fn workspace_snapshot(
+        &self,
+        panel_instances: Vec<PanelInstanceSnapshot>,
+    ) -> WorkspaceSnapshot {
+        WorkspaceSnapshot {
+            dock: self.snapshot(),
+            panel_instances,
+        }
+    }
+
     /// Restores a snapshot after validation.
     ///
     /// # Errors
@@ -837,18 +852,26 @@ impl Dock {
     /// Returns [`DockRestoreError`] when persisted dock data is structurally
     /// invalid, contains duplicate identities, or stores invalid split values.
     pub fn restore(snapshot: DockSnapshot) -> Result<Self, DockRestoreError> {
-        let mut validation = DockSnapshotValidation::default();
-        validate_snapshot_node(&snapshot.root, &mut validation)?;
-        if let Some(active_frame) = snapshot.active_frame
-            && !validation.frame_ids.contains(&active_frame)
-        {
-            return Err(DockRestoreError::InvalidActiveFrame);
-        }
+        validate_dock_snapshot(&snapshot)?;
         let root = restore_node(snapshot.root);
         let active_frame = snapshot
             .active_frame
             .or_else(|| first_valid_frame_id(&root));
         Ok(Self { root, active_frame })
+    }
+
+    /// Restores a workspace snapshot after validating its panel instance shell.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceRestoreError`] when the dock snapshot is invalid, an
+    /// instance record is missing or stale, or the supplied panel type
+    /// descriptors are not a deterministic set.
+    pub fn restore_workspace(
+        snapshot: WorkspaceSnapshot,
+        descriptors: &[PanelTypeDescriptor],
+    ) -> Result<Self, WorkspaceRestoreError> {
+        snapshot.restore_dock(descriptors)
     }
 
     fn refresh_active_frame(&mut self) {
@@ -1387,6 +1410,135 @@ pub enum DockRestoreError {
     InvalidSplitMinimum,
 }
 
+/// Persistable metadata for one open panel instance.
+///
+/// This keeps the workspace shell typed while leaving panel content,
+/// application state serialization, and factory behavior application-owned.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelInstanceSnapshot {
+    /// Stable identity for one open panel instance.
+    pub id: PanelInstanceId,
+    /// Developer-declared panel type identity for this instance.
+    pub panel_type: PanelTypeId,
+    /// Display title used by workspace tabs or persisted custom labels.
+    pub title: String,
+    /// Optional application-owned key for looking up persisted panel state.
+    pub state_key: Option<String>,
+}
+
+impl PanelInstanceSnapshot {
+    /// Creates a panel instance snapshot.
+    #[must_use]
+    pub fn new(id: PanelInstanceId, panel_type: PanelTypeId, title: impl Into<String>) -> Self {
+        Self {
+            id,
+            panel_type,
+            title: title.into(),
+            state_key: None,
+        }
+    }
+
+    /// Sets the optional application-owned state key.
+    #[must_use]
+    pub fn with_state_key(mut self, state_key: impl Into<String>) -> Self {
+        self.state_key = Some(state_key.into());
+        self
+    }
+}
+
+/// Additive workspace snapshot shell around a dock snapshot.
+///
+/// `DockSnapshot` remains usable on its own. This type adds enough typed
+/// metadata for applications to validate panel instance references without
+/// introducing panel factories or app state serialization into the widget layer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceSnapshot {
+    /// Persisted dock tree and active frame state.
+    pub dock: DockSnapshot,
+    /// Persisted open panel instance records.
+    pub panel_instances: Vec<PanelInstanceSnapshot>,
+}
+
+impl WorkspaceSnapshot {
+    /// Creates a workspace snapshot shell.
+    #[must_use]
+    pub const fn new(dock: DockSnapshot, panel_instances: Vec<PanelInstanceSnapshot>) -> Self {
+        Self {
+            dock,
+            panel_instances,
+        }
+    }
+
+    /// Validates the workspace shell against supplied panel type descriptors.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceRestoreError`] for invalid dock snapshots, duplicate
+    /// descriptors, duplicate instances, missing records, unknown panel types,
+    /// or stale records.
+    pub fn validate(
+        &self,
+        descriptors: &[PanelTypeDescriptor],
+    ) -> Result<(), WorkspaceRestoreError> {
+        let dock_validation = validate_dock_snapshot(&self.dock)?;
+        validate_workspace_snapshot(self, descriptors, &dock_validation)
+    }
+
+    /// Validates this workspace snapshot and restores its dock.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceRestoreError`] when validation fails or dock restore
+    /// rejects the dock snapshot.
+    pub fn restore_dock(
+        self,
+        descriptors: &[PanelTypeDescriptor],
+    ) -> Result<Dock, WorkspaceRestoreError> {
+        self.validate(descriptors)?;
+        Dock::restore(self.dock).map_err(WorkspaceRestoreError::Dock)
+    }
+}
+
+/// Workspace snapshot validation and restore error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceRestoreError {
+    /// The wrapped dock snapshot is invalid.
+    Dock(DockRestoreError),
+    /// A dock panel does not have a matching panel instance record.
+    MissingPanelInstance {
+        /// Missing panel instance identity.
+        panel_instance: PanelInstanceId,
+    },
+    /// A panel instance references a panel type absent from the supplied descriptors.
+    UnknownPanelType {
+        /// Panel instance with the unknown type.
+        panel_instance: PanelInstanceId,
+        /// Unknown panel type identity.
+        panel_type: PanelTypeId,
+    },
+    /// Two panel instance records use the same stable identity.
+    DuplicatePanelInstanceId {
+        /// Duplicated panel instance identity.
+        panel_instance: PanelInstanceId,
+    },
+    /// Two panel type descriptors use the same stable identity.
+    DuplicatePanelTypeDescriptor {
+        /// Duplicated panel type identity.
+        panel_type: PanelTypeId,
+    },
+    /// A panel instance record is not referenced by the dock snapshot.
+    StalePanelInstance {
+        /// Stale panel instance identity.
+        panel_instance: PanelInstanceId,
+    },
+}
+
+impl From<DockRestoreError> for WorkspaceRestoreError {
+    fn from(value: DockRestoreError) -> Self {
+        Self::Dock(value)
+    }
+}
+
 fn snapshot_node(node: &DockNode) -> DockSnapshotNode {
     match node {
         DockNode::Frame(frame) => DockSnapshotNode::Frame {
@@ -1448,6 +1600,79 @@ fn restore_node(snapshot: DockSnapshotNode) -> DockNode {
 struct DockSnapshotValidation {
     frame_ids: BTreeSet<FrameId>,
     panel_ids: BTreeSet<PanelId>,
+}
+
+fn validate_dock_snapshot(
+    snapshot: &DockSnapshot,
+) -> Result<DockSnapshotValidation, DockRestoreError> {
+    let mut validation = DockSnapshotValidation::default();
+    validate_snapshot_node(&snapshot.root, &mut validation)?;
+    if let Some(active_frame) = snapshot.active_frame
+        && !validation.frame_ids.contains(&active_frame)
+    {
+        return Err(DockRestoreError::InvalidActiveFrame);
+    }
+    Ok(validation)
+}
+
+fn validate_workspace_snapshot(
+    snapshot: &WorkspaceSnapshot,
+    descriptors: &[PanelTypeDescriptor],
+    dock_validation: &DockSnapshotValidation,
+) -> Result<(), WorkspaceRestoreError> {
+    let mut panel_types = BTreeSet::new();
+    for descriptor in descriptors {
+        if !panel_types.insert(descriptor.id) {
+            return Err(WorkspaceRestoreError::DuplicatePanelTypeDescriptor {
+                panel_type: descriptor.id,
+            });
+        }
+    }
+
+    let dock_panel_instances: BTreeSet<_> = dock_validation
+        .panel_ids
+        .iter()
+        .map(|panel| panel.instance_id())
+        .collect();
+    let mut snapshot_panel_instances = BTreeMap::new();
+
+    for instance in &snapshot.panel_instances {
+        if snapshot_panel_instances
+            .insert(instance.id, instance.panel_type)
+            .is_some()
+        {
+            return Err(WorkspaceRestoreError::DuplicatePanelInstanceId {
+                panel_instance: instance.id,
+            });
+        }
+    }
+
+    for (panel_instance, panel_type) in &snapshot_panel_instances {
+        if !panel_types.contains(panel_type) {
+            return Err(WorkspaceRestoreError::UnknownPanelType {
+                panel_instance: *panel_instance,
+                panel_type: *panel_type,
+            });
+        }
+    }
+
+    for panel_instance in &dock_panel_instances {
+        if !snapshot_panel_instances.contains_key(panel_instance) {
+            return Err(WorkspaceRestoreError::MissingPanelInstance {
+                panel_instance: *panel_instance,
+            });
+        }
+    }
+
+    for panel_instance in snapshot_panel_instances.keys() {
+        if !dock_panel_instances.contains(panel_instance) {
+            return Err(WorkspaceRestoreError::StalePanelInstance {
+                panel_instance: *panel_instance,
+            });
+        }
+    }
+
+    Ok(())
 }
 
 fn validate_snapshot_node(

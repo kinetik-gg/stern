@@ -5,8 +5,9 @@ use kinetik_ui_widgets::{
     Dock, DockDropTarget, DockNode, DockPathElement, DockPlacement, DockRestoreError, DockSnapshot,
     DockSnapshotNode, DockSplitPath, Frame, FrameId, Panel, PanelClosePolicy, PanelDockHint,
     PanelDuplicatePolicy, PanelFloatPolicy, PanelId, PanelInstanceId, PanelInstancePolicy,
-    PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, frame_tabs,
-    resolve_dock_drop_target, solve_dock_layout, solve_dock_splitters, split_ratio_from_drag,
+    PanelInstanceSnapshot, PanelTypeCategory, PanelTypeDescriptor, PanelTypeId,
+    PanelWorkspaceContext, WorkspaceRestoreError, frame_tabs, resolve_dock_drop_target,
+    solve_dock_layout, solve_dock_splitters, split_ratio_from_drag,
 };
 
 fn panel(id: u64, title: &str) -> Panel {
@@ -51,6 +52,41 @@ fn frame_rect(dock: &Dock, frame: u64, bounds: Rect) -> Rect {
         .find(|layout| layout.frame == FrameId::from_raw(frame))
         .expect("frame layout")
         .rect
+}
+
+fn workspace_panel_descriptors() -> Vec<PanelTypeDescriptor> {
+    vec![
+        PanelTypeDescriptor::new(PanelTypeId::from_raw(10), "Media"),
+        PanelTypeDescriptor::new(PanelTypeId::from_raw(20), "Viewport"),
+        PanelTypeDescriptor::new(PanelTypeId::from_raw(30), "Inspector"),
+        PanelTypeDescriptor::new(PanelTypeId::from_raw(40), "Timeline"),
+    ]
+}
+
+fn workspace_panel_instances() -> Vec<PanelInstanceSnapshot> {
+    vec![
+        PanelInstanceSnapshot::new(
+            PanelInstanceId::from_raw(1),
+            PanelTypeId::from_raw(10),
+            "Media",
+        )
+        .with_state_key("media-state"),
+        PanelInstanceSnapshot::new(
+            PanelInstanceId::from_raw(2),
+            PanelTypeId::from_raw(20),
+            "Viewport",
+        ),
+        PanelInstanceSnapshot::new(
+            PanelInstanceId::from_raw(3),
+            PanelTypeId::from_raw(30),
+            "Inspector",
+        ),
+        PanelInstanceSnapshot::new(
+            PanelInstanceId::from_raw(4),
+            PanelTypeId::from_raw(40),
+            "Timeline",
+        ),
+    ]
 }
 
 #[test]
@@ -160,6 +196,117 @@ fn panel_id_and_panel_instance_id_convert_without_changing_existing_panel_usage(
     assert_eq!(panel.id, legacy);
     assert_eq!(panel.instance_id(), instance);
     assert_eq!(Panel::new(legacy, "Graph"), panel);
+}
+
+#[test]
+fn workspace_snapshot_panel_instance_references_survive_validation_and_restore() {
+    let descriptors = workspace_panel_descriptors();
+    let instances = workspace_panel_instances();
+    let snapshot = nested_dock().workspace_snapshot(instances);
+
+    snapshot
+        .validate(&descriptors)
+        .expect("workspace validates");
+    assert_eq!(
+        snapshot.panel_instances[0].state_key.as_deref(),
+        Some("media-state")
+    );
+
+    let restored = Dock::restore_workspace(snapshot.clone(), &descriptors).expect("restore");
+    assert_eq!(restored.snapshot(), snapshot.dock);
+
+    let restored_workspace = restored.workspace_snapshot(snapshot.panel_instances.clone());
+    assert_eq!(restored_workspace, snapshot);
+    restored_workspace
+        .validate(&descriptors)
+        .expect("restored workspace validates");
+}
+
+#[test]
+fn workspace_snapshot_rejects_missing_panel_instance_record() {
+    let descriptors = workspace_panel_descriptors();
+    let mut instances = workspace_panel_instances();
+    instances.retain(|instance| instance.id != PanelInstanceId::from_raw(3));
+    let snapshot = nested_dock().workspace_snapshot(instances);
+
+    assert_eq!(
+        snapshot
+            .validate(&descriptors)
+            .expect_err("missing instance"),
+        WorkspaceRestoreError::MissingPanelInstance {
+            panel_instance: PanelInstanceId::from_raw(3),
+        }
+    );
+}
+
+#[test]
+fn workspace_snapshot_rejects_unknown_panel_type() {
+    let descriptors = workspace_panel_descriptors();
+    let mut snapshot = nested_dock().workspace_snapshot(workspace_panel_instances());
+    snapshot.panel_instances[1].panel_type = PanelTypeId::from_raw(999);
+
+    assert_eq!(
+        snapshot
+            .validate(&descriptors)
+            .expect_err("unknown panel type"),
+        WorkspaceRestoreError::UnknownPanelType {
+            panel_instance: PanelInstanceId::from_raw(2),
+            panel_type: PanelTypeId::from_raw(999),
+        }
+    );
+}
+
+#[test]
+fn workspace_snapshot_rejects_duplicate_panel_instance_ids() {
+    let descriptors = workspace_panel_descriptors();
+    let mut snapshot = nested_dock().workspace_snapshot(workspace_panel_instances());
+    snapshot.panel_instances[2].id = PanelInstanceId::from_raw(2);
+
+    assert_eq!(
+        snapshot
+            .validate(&descriptors)
+            .expect_err("duplicate panel instance"),
+        WorkspaceRestoreError::DuplicatePanelInstanceId {
+            panel_instance: PanelInstanceId::from_raw(2),
+        }
+    );
+}
+
+#[test]
+fn workspace_snapshot_rejects_duplicate_panel_type_descriptors_deterministically() {
+    let mut descriptors = workspace_panel_descriptors();
+    descriptors.push(PanelTypeDescriptor::new(
+        PanelTypeId::from_raw(20),
+        "Second Viewport",
+    ));
+    let snapshot = nested_dock().workspace_snapshot(workspace_panel_instances());
+
+    assert_eq!(
+        snapshot
+            .validate(&descriptors)
+            .expect_err("duplicate descriptor"),
+        WorkspaceRestoreError::DuplicatePanelTypeDescriptor {
+            panel_type: PanelTypeId::from_raw(20),
+        }
+    );
+}
+
+#[test]
+fn workspace_snapshot_rejects_stale_panel_instance_records_deterministically() {
+    let descriptors = workspace_panel_descriptors();
+    let mut snapshot = nested_dock().workspace_snapshot(workspace_panel_instances());
+    snapshot.panel_instances.push(PanelInstanceSnapshot::new(
+        PanelInstanceId::from_raw(99),
+        PanelTypeId::from_raw(10),
+        "Stale Media",
+    ));
+
+    assert_eq!(
+        snapshot.validate(&descriptors).expect_err("stale instance"),
+        WorkspaceRestoreError::StalePanelInstance {
+            panel_instance: PanelInstanceId::from_raw(99),
+        }
+    );
 }
 
 #[test]
