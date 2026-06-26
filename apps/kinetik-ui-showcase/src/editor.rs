@@ -7,11 +7,11 @@
 )]
 
 use kinetik_ui::core::{
-    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionQueue, ActionSource, Axis,
-    Brush, ClipId, Color, CornerRadius, CursorShape, ImagePrimitive, Key, KeyState, LinePrimitive,
-    Modifiers, PlatformRequest, Point, Primitive, Rect, RectPrimitive, RepaintRequest,
-    SemanticNode, SemanticRole, Shortcut, Size, Stroke, TextPrimitive, TextureId, Theme, Vec2,
-    WidgetId,
+    ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation, ActionQueue,
+    ActionSource, Axis, Brush, ClipId, Color, CornerRadius, CursorShape, ImagePrimitive, Key,
+    KeyState, LinePrimitive, Modifiers, PlatformRequest, Point, Primitive, Rect, RectPrimitive,
+    RepaintRequest, SemanticNode, SemanticRole, Shortcut, Size, Stroke, TextPrimitive, TextureId,
+    Theme, Vec2, WidgetId,
 };
 use kinetik_ui::render::{
     ImageAtlasRegion, ImageResource, RenderImage, RenderImageSampling, RenderResources,
@@ -21,14 +21,17 @@ use kinetik_ui::text::TextEditState;
 use kinetik_ui::widgets::{
     Dock, DockChromeStyle, DockDropTarget, DockDropZone, DockInteractionPolicy, DockNode,
     DockPlacement, DockSplitterContextActionKind, DockTabDrag, Frame, FrameId, FrameLayout,
-    FrameTab, GridColumns, GridLayout, Guide, ItemId, ListLayout, Menu, MenuItem, MenuOverlay,
-    OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayStack, PanZoom, Panel, PanelId,
-    PanelInstanceId, PanelInstancePolicy, PanelInstanceSnapshot, PanelOpenActionMetadata,
-    PanelOpenDecision, PanelRegistry, PanelTypeCategory, PanelTypeDescriptor, PanelTypeId,
-    PanelWorkspaceContext, PopoverPlacement, PopoverRequest, PropertyGridLayout, PropertyGridRow,
-    TableColumn, TableLayout, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
+    FrameTab, GridColumns, GridLayout, Guide, ItemId, ListLayout, Menu, MenuBar, MenuBarMenu,
+    MenuBarMenuId, MenuBarOverlayRequest, MenuItem, MenuOverlay, ModalAction, ModalActionRole,
+    ModalDialog, ModalDialogOverlay, OverlayDismissal, OverlayId, OverlayKind, OverlayStack,
+    PanZoom, Panel, PanelId, PanelInstanceId, PanelInstancePolicy, PanelInstanceSnapshot,
+    PanelOpenActionMetadata, PanelOpenDecision, PanelRegistry, PanelTypeCategory,
+    PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, PopoverPlacement, PropertyGridLayout,
+    PropertyGridRow, StatusBar, StatusItem, StatusItemId, StatusItemKind, StatusProgress, TabStrip,
+    TableColumn, TableLayout, Toolbar, ToolbarGroup, ToolbarGroupId, ToolbarItem,
+    ToolbarItemPresentation, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
     ViewportComposition, ViewportFit, ViewportSurface, WorkspaceSnapshot, frame_tabs,
-    icon_button_semantics, place_popover, resolve_dock_splitter_context_actions_with_policy,
+    icon_button_semantics, resolve_dock_splitter_context_actions_with_policy,
     resolve_frame_drop_zone_with_policy, solve_dock_layout, solve_dock_splitters_with_style,
 };
 
@@ -322,6 +325,37 @@ impl ToolbarIcon {
             Self::Box => PhosphorIcon::Box,
         }
     }
+
+    const fn symbol(self) -> &'static str {
+        match self {
+            Self::Select => "cursor",
+            Self::Move => "move",
+            Self::Rotate => "rotate",
+            Self::Scale => "transform",
+            Self::Grid => "grid",
+            Self::Crosshair => "crosshair",
+            Self::Reset => "reset",
+            Self::Play => "play",
+            Self::Pause => "pause",
+            Self::Stop => "stop",
+            Self::Rocket => "rocket",
+            Self::Download => "download",
+            Self::Plus => "plus",
+            Self::Dots => "dots",
+            Self::Search => "search",
+            Self::Gear => "gear",
+            Self::Layers => "layers",
+            Self::Caret => "caret",
+            Self::Eye => "eye",
+            Self::Component => "component",
+            Self::Cube => "cube",
+            Self::Archive => "archive",
+            Self::Image => "image",
+            Self::Code => "code",
+            Self::Tokens => "tokens",
+            Self::Box => "box",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -346,6 +380,52 @@ impl EditorMenuKind {
             Self::Window => 6,
             Self::Help => 7,
         }
+    }
+
+    const fn menu_bar_id(self) -> MenuBarMenuId {
+        MenuBarMenuId::from_raw(self.raw())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EditorToolbarGroupKind {
+    Tools,
+    Viewport,
+    Dock,
+    Run,
+}
+
+impl EditorToolbarGroupKind {
+    const fn id(self) -> ToolbarGroupId {
+        ToolbarGroupId::from_raw(match self {
+            Self::Tools => 1,
+            Self::Viewport => 2,
+            Self::Dock => 3,
+            Self::Run => 4,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EditorStatusItemKind {
+    Message,
+    Actions,
+    Snap,
+    Backend,
+    Jobs,
+    Timeline,
+}
+
+impl EditorStatusItemKind {
+    const fn id(self) -> StatusItemId {
+        StatusItemId::from_raw(match self {
+            Self::Message => 1,
+            Self::Actions => 2,
+            Self::Snap => 3,
+            Self::Backend => 4,
+            Self::Jobs => 5,
+            Self::Timeline => 6,
+        })
     }
 }
 
@@ -486,6 +566,7 @@ impl EditorShowcase {
         self.tool_bar(ui, viewport, &mut invocations);
         self.workspace(ui, viewport);
         self.menu_overlay(ui, viewport, &mut invocations);
+        let _modal_metadata = self.about_modal_overlay_model(viewport);
         self.status_bar(ui, viewport, action_count + invocations.len() as u32);
         invocations
     }
@@ -517,6 +598,206 @@ impl EditorShowcase {
         }
     }
 
+    fn menu_bar_model(&self) -> MenuBar {
+        let mut menu_bar =
+            MenuBar::from_menus(menu_header_rects().into_iter().map(|(kind, label, _)| {
+                MenuBarMenu::new(kind.menu_bar_id(), label, self.menu_model(kind))
+            }));
+        if let Some(kind) = self.open_menu {
+            menu_bar.open(kind.menu_bar_id());
+        }
+        menu_bar
+    }
+
+    fn toolbar_model(&self) -> Toolbar {
+        let tool_items = EDITOR_TOOL_BUTTONS
+            .into_iter()
+            .map(|(tool, icon, label, action)| {
+                ToolbarItem::new(toolbar_action(
+                    action,
+                    label,
+                    icon,
+                    Some(self.selected_tool == tool),
+                    true,
+                ))
+                .with_presentation(ToolbarItemPresentation::IconOnly)
+            });
+
+        let viewport_items = [
+            ToolbarItem::new(toolbar_action(
+                ACTION_GRID,
+                "Toggle grid",
+                ToolbarIcon::Grid,
+                Some(self.grid_visible),
+                true,
+            )),
+            ToolbarItem::new(toolbar_action(
+                ACTION_PALETTE,
+                "Frame selected",
+                ToolbarIcon::Crosshair,
+                None,
+                true,
+            )),
+            ToolbarItem::new(toolbar_action(
+                ACTION_PALETTE,
+                "Reset view",
+                ToolbarIcon::Reset,
+                None,
+                true,
+            )),
+        ];
+
+        let dock_items = [
+            ToolbarItem::new(toolbar_action(
+                ACTION_DOCK_JOIN,
+                "Join dock splitter",
+                ToolbarIcon::Component,
+                None,
+                true,
+            )),
+            ToolbarItem::new(toolbar_action(
+                ACTION_DOCK_SWAP,
+                "Swap dock frames",
+                ToolbarIcon::Layers,
+                None,
+                true,
+            )),
+        ];
+
+        let run_items = [
+            ToolbarItem::new(toolbar_action(
+                ACTION_PLAY,
+                "Play",
+                ToolbarIcon::Play,
+                Some(self.running),
+                true,
+            )),
+            ToolbarItem::new(toolbar_action(
+                ACTION_PLAY,
+                "Pause",
+                ToolbarIcon::Pause,
+                Some(!self.running),
+                true,
+            )),
+            ToolbarItem::new(toolbar_action(
+                ACTION_STOP,
+                "Stop",
+                ToolbarIcon::Stop,
+                None,
+                true,
+            )),
+            ToolbarItem::new(toolbar_action(
+                ACTION_BUILD,
+                "Build",
+                ToolbarIcon::Rocket,
+                None,
+                true,
+            )),
+            ToolbarItem::new(toolbar_action(
+                ACTION_BUILD,
+                "Export",
+                ToolbarIcon::Download,
+                None,
+                true,
+            )),
+        ];
+
+        Toolbar::from_groups([
+            ToolbarGroup::new(EditorToolbarGroupKind::Tools.id(), "Tools", tool_items),
+            ToolbarGroup::new(
+                EditorToolbarGroupKind::Viewport.id(),
+                "Viewport",
+                viewport_items,
+            ),
+            ToolbarGroup::new(EditorToolbarGroupKind::Dock.id(), "Dock", dock_items),
+            ToolbarGroup::new(EditorToolbarGroupKind::Run.id(), "Run", run_items),
+        ])
+    }
+
+    fn status_bar_model(&self, action_count: u32) -> StatusBar {
+        StatusBar::from_items([
+            StatusItem::new(
+                EditorStatusItemKind::Message.id(),
+                "Status",
+                self.status.clone(),
+                StatusItemKind::Message,
+            ),
+            StatusItem::new(
+                EditorStatusItemKind::Actions.id(),
+                "Actions",
+                format!("Actions: {action_count}"),
+                StatusItemKind::ActionCount,
+            )
+            .with_count(action_count),
+            StatusItem::new(
+                EditorStatusItemKind::Snap.id(),
+                "Snap",
+                if self.snap_enabled {
+                    "Snap 1m"
+                } else {
+                    "Snap off"
+                },
+                if self.snap_enabled {
+                    StatusItemKind::Ready
+                } else {
+                    StatusItemKind::Stale
+                },
+            ),
+            StatusItem::new(
+                EditorStatusItemKind::Backend.id(),
+                "Backend",
+                "Vello / winit",
+                StatusItemKind::Ready,
+            ),
+            StatusItem::new(
+                EditorStatusItemKind::Jobs.id(),
+                "Jobs",
+                if self.running { "Jobs: 1" } else { "Jobs: 0" },
+                StatusItemKind::JobCount,
+            )
+            .with_count(u32::from(self.running))
+            .with_visible(false),
+            StatusItem::new(
+                EditorStatusItemKind::Timeline.id(),
+                "Timeline",
+                format!("Timeline: {:.0}%", self.timeline * 100.0),
+                StatusItemKind::Progress,
+            )
+            .with_progress(StatusProgress::new(self.timeline))
+            .with_visible(false),
+        ])
+    }
+
+    fn about_modal_overlay_model(&self, viewport: Rect) -> ModalDialogOverlay {
+        let _ = self;
+        let dialog = ModalDialog::new(WidgetId::from_raw(40_001), "About Kinetik Forge")
+            .with_body("Kinetik Forge editor showcase chrome is action-driven and data-only.")
+            .with_actions([
+                ModalAction::new(
+                    modal_action(ACTION_PALETTE, "Open Docs", true),
+                    ModalActionRole::Primary,
+                ),
+                ModalAction::new(
+                    modal_action(ACTION_PALETTE, "Close", true),
+                    ModalActionRole::Cancel,
+                ),
+            ]);
+        let size = Size::new(360.0, 168.0);
+        let rect = Rect::new(
+            viewport.x + (viewport.width - size.width).max(0.0) * 0.5,
+            viewport.y + (viewport.height - size.height).max(0.0) * 0.5,
+            size.width,
+            size.height,
+        );
+        ModalDialogOverlay::placed(
+            OverlayId::from_raw(30_001),
+            rect,
+            dialog,
+            OverlayDismissal::OutsideClickOrEscape,
+            ActionContext::Editor,
+        )
+    }
+
     fn background(ui: &mut Ui<'_>, viewport: Rect) {
         rect(ui, viewport, rgb(20, 21, 23), None);
         rect(
@@ -541,7 +822,10 @@ impl EditorShowcase {
 
     fn menu_bar(&mut self, ui: &mut Ui<'_>, viewport: Rect) {
         text(ui, 12.0, 18.0, "Kinetik Forge", 13.0, rgb(226, 229, 234));
-        for (kind, label, rect) in menu_header_rects() {
+        let menu_bar = self.menu_bar_model();
+        for ((kind, _label, rect), menu) in
+            menu_header_rects().into_iter().zip(menu_bar.menus().iter())
+        {
             let response = ui.pressable(("editor.menu-header", kind), rect, false);
             let was_active = self.open_menu == Some(kind);
             if response.clicked {
@@ -555,6 +839,7 @@ impl EditorShowcase {
                 ui.request_repaint(RepaintRequest::NextFrame);
             }
             let active = self.open_menu == Some(kind);
+            debug_assert_eq!(menu.id, kind.menu_bar_id());
             if active || response.state.hovered {
                 rect_fill(
                     ui,
@@ -572,7 +857,7 @@ impl EditorShowcase {
                 ui,
                 rect.x + 10.0,
                 17.0,
-                label,
+                &menu.title,
                 11.0,
                 if active {
                     rgb(238, 240, 244)
@@ -786,33 +1071,23 @@ impl EditorShowcase {
     }
 
     fn menu_overlay_model(&self, kind: EditorMenuKind, viewport: Rect) -> MenuOverlay {
-        MenuOverlay::new(
-            Self::menu_overlay_entry(kind, viewport),
-            self.menu_model(kind),
-            ActionSource::Menu,
-            ActionContext::Editor,
-        )
-    }
-
-    fn menu_overlay_entry(kind: EditorMenuKind, viewport: Rect) -> OverlayEntry {
-        let anchor = menu_anchor(kind);
-        let size = menu_size(kind);
-        let rect = place_popover(
-            PopoverRequest {
-                anchor,
-                size,
+        let mut menu_bar = self.menu_bar_model();
+        menu_bar.open(kind.menu_bar_id());
+        menu_bar
+            .active_overlay(MenuBarOverlayRequest {
+                overlay_id: OverlayId::from_raw(10_000 + kind.raw()),
+                kind: OverlayKind::Menu,
+                anchor: menu_anchor(kind),
+                size: menu_size(kind),
                 placement: PopoverPlacement::Below,
                 offset: 2.0,
                 fit_viewport: true,
-            },
-            viewport,
-        );
-        OverlayEntry::new(
-            OverlayId::from_raw(10_000 + kind.raw()),
-            OverlayKind::Menu,
-            rect,
-        )
-        .dismiss_on(OverlayDismissal::OutsideClickOrEscape)
+                viewport,
+                dismissal: OverlayDismissal::OutsideClickOrEscape,
+                source: ActionSource::Menu,
+                context: ActionContext::Editor,
+            })
+            .expect("editor menu-bar active menu should convert to overlay")
     }
 
     fn menu_model(&self, kind: EditorMenuKind) -> Menu {
@@ -1023,18 +1298,23 @@ impl EditorShowcase {
         invocations: &mut Vec<EditorInvocation>,
     ) {
         self.tool_bar_tool_interactions(ui, invocations);
+        let toolbar = self.toolbar_model();
         let chrome = EditorChromeMetrics::from_theme(ui.theme());
         let mut x = 10.0;
-        for (tool, icon, label, action) in EDITOR_TOOL_BUTTONS {
+        let tool_items = toolbar
+            .group(EditorToolbarGroupKind::Tools.id())
+            .expect("editor toolbar declares tool group")
+            .visible_items();
+        for ((_, icon, _label, action), item) in EDITOR_TOOL_BUTTONS.into_iter().zip(tool_items) {
             let button = Rect::new(x, TOOLBAR_Y, chrome.toolbar_button, chrome.toolbar_button);
             toolbar_icon_button(
                 ui,
                 ("editor.tool", action),
                 button,
                 icon,
-                label,
-                self.selected_tool == tool,
-                false,
+                item.label(),
+                item.selected(),
+                !item.enabled(),
             );
             x += chrome.toolbar_stride;
         }
@@ -1046,21 +1326,28 @@ impl EditorShowcase {
             None,
         );
         x += 18.0;
-        for (icon, label, action) in [
+        let viewport_items = toolbar
+            .group(EditorToolbarGroupKind::Viewport.id())
+            .expect("editor toolbar declares viewport group")
+            .visible_items();
+        for ((icon, _label, action), item) in [
             (ToolbarIcon::Grid, "Toggle grid", ACTION_GRID),
             (ToolbarIcon::Crosshair, "Frame selected", ACTION_PALETTE),
             (ToolbarIcon::Reset, "Reset view", ACTION_PALETTE),
-        ] {
+        ]
+        .into_iter()
+        .zip(viewport_items)
+        {
             let response = toolbar_icon_button(
                 ui,
                 ("editor.viewport-tool", action, icon.raw()),
                 Rect::new(x, TOOLBAR_Y, chrome.toolbar_button, chrome.toolbar_button),
                 icon,
-                label,
+                item.label(),
                 false,
-                false,
+                !item.enabled(),
             );
-            if response.clicked {
+            if response.clicked && item.can_invoke() {
                 self.trigger(invocations, action, ActionSource::Button);
             }
             x += chrome.toolbar_stride;
@@ -1073,7 +1360,11 @@ impl EditorShowcase {
             None,
         );
         x += 18.0;
-        for (kind, icon, label, action) in [
+        let dock_items = toolbar
+            .group(EditorToolbarGroupKind::Dock.id())
+            .expect("editor toolbar declares dock group")
+            .visible_items();
+        for ((kind, icon, _label, action), item) in [
             (
                 DockSplitterContextActionKind::Join,
                 ToolbarIcon::Component,
@@ -1086,17 +1377,20 @@ impl EditorShowcase {
                 "Swap dock frames",
                 ACTION_DOCK_SWAP,
             ),
-        ] {
+        ]
+        .into_iter()
+        .zip(dock_items)
+        {
             let response = toolbar_icon_button(
                 ui,
                 ("editor.dock-action", action),
                 Rect::new(x, TOOLBAR_Y, chrome.toolbar_button, chrome.toolbar_button),
                 icon,
-                label,
+                item.label(),
                 false,
-                false,
+                !item.enabled(),
             );
-            if response.clicked {
+            if response.clicked && item.can_invoke() {
                 let bounds = editor_workspace_rect(ui.theme(), viewport);
                 if self.apply_splitter_context_action(bounds, kind) {
                     invocations.push(ActionInvocation::new(
@@ -1110,15 +1404,22 @@ impl EditorShowcase {
             x += chrome.toolbar_stride;
         }
 
-        for (index, icon, label, action, rect) in run_toolbar_buttons(viewport, chrome) {
+        let run_items = toolbar
+            .group(EditorToolbarGroupKind::Run.id())
+            .expect("editor toolbar declares run group")
+            .visible_items();
+        for ((index, icon, _label, action, rect), item) in run_toolbar_buttons(viewport, chrome)
+            .into_iter()
+            .zip(run_items)
+        {
             toolbar_icon_button(
                 ui,
                 ("editor.run", action, index),
                 rect,
                 icon,
-                label,
+                item.label(),
                 false,
-                false,
+                !item.enabled(),
             );
         }
     }
@@ -1211,10 +1512,19 @@ impl EditorShowcase {
         invocations: &mut Vec<EditorInvocation>,
     ) {
         let chrome = EditorChromeMetrics::from_theme(ui.theme());
+        let toolbar = self.toolbar_model();
         for (index, _icon, _label, action, rect) in run_toolbar_buttons(viewport, chrome) {
             let response = ui.pressable(("editor.run.prepass", action, index), rect, false);
             if response.clicked {
-                self.trigger(invocations, action, ActionSource::Button);
+                let mut queue = ActionQueue::new();
+                if toolbar.invoke_group_visible(
+                    EditorToolbarGroupKind::Run.id(),
+                    index,
+                    &mut queue,
+                    ActionContext::Editor,
+                ) {
+                    self.handle_action_queue(invocations, &mut queue);
+                }
             }
         }
     }
@@ -1225,13 +1535,24 @@ impl EditorShowcase {
         invocations: &mut Vec<EditorInvocation>,
     ) {
         let chrome = EditorChromeMetrics::from_theme(ui.theme());
+        let toolbar = self.toolbar_model();
         let mut x = 10.0;
-        for (_tool, _icon, _label, action) in EDITOR_TOOL_BUTTONS {
+        for (visible_index, (_tool, _icon, _label, action)) in
+            EDITOR_TOOL_BUTTONS.into_iter().enumerate()
+        {
             let button = Rect::new(x, TOOLBAR_Y, chrome.toolbar_button, chrome.toolbar_button);
             let response = ui.pressable(("editor.tool.prepass", action), button, false);
             if response.clicked {
                 ui.request_repaint(RepaintRequest::NextFrame);
-                self.trigger(invocations, action, ActionSource::Button);
+                let mut queue = ActionQueue::new();
+                if toolbar.invoke_group_visible(
+                    EditorToolbarGroupKind::Tools.id(),
+                    visible_index,
+                    &mut queue,
+                    ActionContext::Editor,
+                ) {
+                    self.handle_action_queue(invocations, &mut queue);
+                }
             }
             x += chrome.toolbar_stride;
         }
@@ -1387,17 +1708,25 @@ impl EditorShowcase {
         frame: &Frame,
         tab_drags: &mut Vec<(WidgetId, DockTabDrag)>,
     ) {
-        for (tab, tab_rect) in frame_tab_rects(frame, frame_rect, tab_height) {
+        let tab_strip = frame_tab_strip(frame);
+        for (index, (tab, tab_rect)) in frame_tab_rects(frame, frame_rect, tab_height)
+            .into_iter()
+            .enumerate()
+        {
             let response = ui.draggable(
                 ("editor.frame-tab.drag", frame_id.raw(), tab.panel.raw()),
                 tab_rect,
                 false,
             );
-            if let Some(drag) = self.dock.begin_tab_drag(frame_id, tab.panel) {
+            if let Some(target) = tab_strip.drag_target_by_index(index)
+                && let Some(drag) = self.dock.begin_tab_drag(frame_id, target.panel)
+            {
                 tab_drags.push((response.id, drag));
             }
-            if response.clicked {
-                self.dock.select_panel(frame_id, tab.panel);
+            if response.clicked
+                && let Some(target) = tab_strip.activation_target_by_index(index)
+            {
+                self.dock.select_panel(frame_id, target.panel);
                 ui.request_repaint(RepaintRequest::NextFrame);
             }
             if response.dragged && tab.draggable {
@@ -2167,41 +2496,55 @@ impl EditorShowcase {
     }
 
     fn status_bar(&self, ui: &mut Ui<'_>, viewport: Rect, action_count: u32) {
+        let status_bar = self.status_bar_model(action_count);
+        let visible_items = status_bar.visible_items();
         let bar = Rect::new(0.0, viewport.max_y() - 24.0, viewport.width, 24.0);
         rect(ui, bar, rgb(27, 29, 32), Some(rgb(52, 55, 62)));
+        let message = visible_items
+            .iter()
+            .find(|item| item.id == EditorStatusItemKind::Message.id())
+            .expect("editor status bar exposes message item");
         text(
             ui,
             10.0,
             bar.y + 16.0,
-            &self.status,
+            &message.text,
             11.0,
             rgb(198, 203, 211),
         );
+        let actions = visible_items
+            .iter()
+            .find(|item| item.id == EditorStatusItemKind::Actions.id())
+            .expect("editor status bar exposes action count item");
         text(
             ui,
             viewport.max_x() - 330.0,
             bar.y + 16.0,
-            &format!("Actions: {action_count}"),
+            &actions.text,
             11.0,
             rgb(154, 160, 168),
         );
+        let snap = visible_items
+            .iter()
+            .find(|item| item.id == EditorStatusItemKind::Snap.id())
+            .expect("editor status bar exposes snap item");
         text(
             ui,
             viewport.max_x() - 210.0,
             bar.y + 16.0,
-            if self.snap_enabled {
-                "Snap 1m"
-            } else {
-                "Snap off"
-            },
+            &snap.text,
             11.0,
             rgb(154, 160, 168),
         );
+        let backend = visible_items
+            .iter()
+            .find(|item| item.id == EditorStatusItemKind::Backend.id())
+            .expect("editor status bar exposes backend item");
         text(
             ui,
             viewport.max_x() - 92.0,
             bar.y + 16.0,
-            "Vello / winit",
+            &backend.text,
             11.0,
             rgb(154, 160, 168),
         );
@@ -2328,6 +2671,29 @@ fn menu_action(
     action.state.checked = checked;
     action.state.enabled = enabled;
     MenuItem::Action(action)
+}
+
+fn toolbar_action(
+    action_id: &'static str,
+    label: &'static str,
+    icon: ToolbarIcon,
+    checked: Option<bool>,
+    enabled: bool,
+) -> ActionDescriptor {
+    let mut action = ActionDescriptor::new(action_id, label);
+    action.icon = Some(ActionIcon::new(icon.symbol()));
+    action.tooltip = Some(label.to_owned());
+    action.keywords = vec!["editor".to_owned(), icon.symbol().to_owned()];
+    action.state.checked = checked;
+    action.state.enabled = enabled;
+    action
+}
+
+fn modal_action(action_id: &'static str, label: &'static str, enabled: bool) -> ActionDescriptor {
+    let mut action = ActionDescriptor::new(action_id, label);
+    action.keywords = vec!["editor".to_owned(), "modal".to_owned()];
+    action.state.enabled = enabled;
+    action
 }
 
 fn menu_action_from_panel_metadata(metadata: &PanelOpenActionMetadata, checked: bool) -> MenuItem {
@@ -2596,8 +2962,10 @@ fn inspector_label_width(grid_width: f32) -> f32 {
 
 fn frame_tab_rects(frame: &Frame, frame_rect: Rect, tab_height: f32) -> Vec<(FrameTab, Rect)> {
     let mut tab_x = frame_rect.x + 1.0;
-    frame_tabs(frame)
-        .into_iter()
+    frame_tab_strip(frame)
+        .tabs()
+        .iter()
+        .cloned()
         .map(|tab| {
             let width = (tab.title.len() as f32 * 7.0 + 42.0).clamp(82.0, 146.0);
             let tab_rect = Rect::new(tab_x, frame_rect.y + 1.0, width, tab_height);
@@ -2605,6 +2973,10 @@ fn frame_tab_rects(frame: &Frame, frame_rect: Rect, tab_height: f32) -> Vec<(Fra
             (tab, tab_rect)
         })
         .collect()
+}
+
+fn frame_tab_strip(frame: &Frame) -> TabStrip {
+    TabStrip::from_frame_tabs(frame_tabs(frame))
 }
 
 fn dock_drop_status(target: DockDropTarget) -> String {
@@ -2748,19 +3120,22 @@ fn run_toolbar_buttons(
 #[allow(clippy::float_cmp, clippy::items_after_test_module)]
 mod tests {
     use super::{
-        EditorChromeMetrics, EditorMenuKind, EditorShowcase, EditorTool, FRAME_BOTTOM,
-        FRAME_INSPECTOR, FRAME_VIEWPORT, PANEL_TIMELINE, TOOLBAR_Y, VIEWPORT_SIZE, frame_tab_rects,
+        ACTION_GRID, ACTION_PLAY, ACTION_SAVE, EditorChromeMetrics, EditorMenuKind, EditorShowcase,
+        EditorStatusItemKind, EditorTool, EditorToolbarGroupKind, FRAME_BOTTOM, FRAME_INSPECTOR,
+        FRAME_VIEWPORT, PANEL_TIMELINE, TOOLBAR_Y, VIEWPORT_SIZE, frame_tab_rects, frame_tab_strip,
         icon_atlas_image, inspector_label_width, item_id, phosphor_icons, register_resources, rgb,
         rgba,
     };
     use kinetik_ui::core::{
-        Brush, CursorShape, FrameContext, PhysicalSize, PlatformRequest, Point, PointerButtonState,
-        PointerInput, Primitive, Rect, RepaintRequest, ScaleFactor, SemanticActionKind,
-        SemanticRole, Size, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, default_dark_theme,
+        ActionContext, ActionId, ActionSource, Brush, CursorShape, FrameContext, PhysicalSize,
+        PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest,
+        ScaleFactor, SemanticActionKind, SemanticRole, Size, TimeInfo, UiInput, UiMemory, Vec2,
+        ViewportInfo, default_dark_theme,
     };
     use kinetik_ui::render::RenderResources;
     use kinetik_ui::widgets::{
-        DockSplitterContextActionKind, PanelOpenDecision, PanelTypeCategory, Ui, ViewportSurface,
+        DockSplitterContextActionKind, MenuItem, ModalActionRole, OverlayDismissal, OverlayKind,
+        PanelOpenDecision, PanelTypeCategory, StatusItemKind, Ui, ViewportSurface,
         resolve_dock_splitter_context_actions_with_policy, solve_dock_layout,
         solve_dock_splitters_with_style,
     };
@@ -2792,6 +3167,197 @@ mod tests {
         assert_eq!(chrome.toolbar_stride, 30.0);
         assert_eq!(chrome.toolbar_icon, 16.0);
         assert_eq!(super::workspace_top(&theme), 68.0);
+    }
+
+    #[test]
+    fn editor_chrome_menu_bar_converts_active_menu_to_overlay_contract() {
+        let mut editor = EditorShowcase::new();
+        editor.open_menu = Some(EditorMenuKind::File);
+        let viewport = Rect::new(0.0, 0.0, 1440.0, 900.0);
+        let menu_bar = editor.menu_bar_model();
+
+        assert_eq!(menu_bar.menus().len(), 7);
+        assert_eq!(
+            menu_bar.active_id(),
+            Some(EditorMenuKind::File.menu_bar_id())
+        );
+        assert_eq!(
+            menu_bar.active_menu().expect("active file menu").title,
+            "File"
+        );
+
+        let overlay = editor.menu_overlay_model(EditorMenuKind::File, viewport);
+
+        assert_eq!(overlay.entry.kind, OverlayKind::Menu);
+        assert_eq!(
+            overlay.entry.dismissal,
+            OverlayDismissal::OutsideClickOrEscape
+        );
+        assert_eq!(overlay.source, ActionSource::Menu);
+        assert_eq!(overlay.context, ActionContext::Editor);
+        assert!(overlay.entry.rect.y > super::menu_anchor(EditorMenuKind::File).max_y());
+        assert!(overlay.visible_items().iter().any(|item| matches!(
+            item,
+            MenuItem::Action(action)
+                if action.id.as_str() == ACTION_SAVE
+                    && action.label == "Save Scene"
+                    && action.can_invoke()
+        )));
+        assert!(overlay.visible_items().iter().any(|item| matches!(
+            item,
+            MenuItem::Action(action) if action.label == "Quit" && !action.can_invoke()
+        )));
+    }
+
+    #[test]
+    fn editor_chrome_toolbar_contract_tracks_checked_action_state() {
+        let mut editor = EditorShowcase::new();
+        let toolbar = editor.toolbar_model();
+        let tools = toolbar
+            .group(EditorToolbarGroupKind::Tools.id())
+            .expect("tools group")
+            .visible_items();
+
+        assert_eq!(
+            tools.iter().map(|item| item.label()).collect::<Vec<_>>(),
+            ["Select", "Move", "Rotate", "Scale"]
+        );
+        assert_eq!(tools[1].action_id().as_str(), super::ACTION_TOOL_MOVE);
+        assert_eq!(tools[1].checked(), Some(true));
+        assert_eq!(tools[0].checked(), Some(false));
+        assert_eq!(
+            tools[1].icon().map(kinetik_ui::core::ActionIcon::as_str),
+            Some("move")
+        );
+
+        let viewport_tools = toolbar
+            .group(EditorToolbarGroupKind::Viewport.id())
+            .expect("viewport group")
+            .visible_items();
+        assert_eq!(viewport_tools[0].action_id().as_str(), ACTION_GRID);
+        assert_eq!(viewport_tools[0].checked(), Some(true));
+
+        assert!(editor.apply_action(ACTION_PLAY));
+        let toolbar = editor.toolbar_model();
+        let run_items = toolbar
+            .group(EditorToolbarGroupKind::Run.id())
+            .expect("run group")
+            .visible_items();
+        assert_eq!(run_items[0].label(), "Play");
+        assert_eq!(run_items[0].checked(), Some(true));
+        assert_eq!(run_items[1].label(), "Pause");
+        assert_eq!(run_items[1].checked(), Some(false));
+
+        let invocation = toolbar
+            .invocation_for_group_visible(
+                EditorToolbarGroupKind::Run.id(),
+                0,
+                ActionContext::Editor,
+            )
+            .expect("run invocation");
+        assert_eq!(invocation.action_id, ActionId::new(ACTION_PLAY));
+        assert_eq!(invocation.source, ActionSource::Button);
+        assert_eq!(invocation.context, ActionContext::Editor);
+    }
+
+    #[test]
+    fn editor_chrome_status_bar_contract_preserves_order_counts_and_progress() {
+        let mut editor = EditorShowcase::new();
+        editor.status = "Busy".to_owned();
+        editor.running = true;
+        editor.timeline = 1.5;
+
+        let status_bar = editor.status_bar_model(12);
+        let visible = status_bar.visible_items();
+
+        assert_eq!(
+            visible
+                .iter()
+                .map(|item| item.text.as_str())
+                .collect::<Vec<_>>(),
+            ["Busy", "Actions: 12", "Snap 1m", "Vello / winit"]
+        );
+        let actions = status_bar
+            .item(EditorStatusItemKind::Actions.id())
+            .expect("action count status");
+        assert_eq!(actions.kind, StatusItemKind::ActionCount);
+        assert_eq!(actions.count, Some(12));
+
+        let jobs = status_bar
+            .item(EditorStatusItemKind::Jobs.id())
+            .expect("job status");
+        assert_eq!(jobs.kind, StatusItemKind::JobCount);
+        assert_eq!(jobs.count, Some(1));
+        assert!(!jobs.visible);
+
+        let progress = status_bar
+            .item(EditorStatusItemKind::Timeline.id())
+            .expect("timeline progress status");
+        assert_eq!(progress.kind, StatusItemKind::Progress);
+        assert_eq!(progress.progress.expect("progress metadata").value, 1.0);
+        assert!(!progress.visible);
+    }
+
+    #[test]
+    fn editor_chrome_tab_strip_contract_preserves_frame_tab_targets() {
+        let editor = EditorShowcase::new();
+        let bottom = editor.dock.frame(FRAME_BOTTOM).expect("bottom frame");
+        let strip = frame_tab_strip(bottom);
+        let rects = frame_tab_rects(bottom, bottom_frame_rect(&editor), 26.0);
+
+        assert_eq!(strip.len(), 3);
+        assert_eq!(rects.len(), strip.len());
+        assert_eq!(strip.tabs()[0].title, "Console");
+        assert_eq!(strip.tabs()[1].title, "Timeline");
+        assert_eq!(strip.active_panel(), Some(strip.tabs()[0].panel));
+        assert_eq!(
+            strip
+                .activation_target_by_index(1)
+                .expect("timeline target")
+                .panel,
+            PANEL_TIMELINE
+        );
+        assert_eq!(
+            strip
+                .drag_target_by_panel(PANEL_TIMELINE)
+                .expect("timeline drag target")
+                .index,
+            1
+        );
+    }
+
+    #[test]
+    fn editor_chrome_modal_contract_exposes_data_only_action_metadata() {
+        let editor = EditorShowcase::new();
+        let viewport = Rect::new(0.0, 0.0, 1440.0, 900.0);
+        let before = editor.status.clone();
+        let overlay = editor.about_modal_overlay_model(viewport);
+
+        assert_eq!(overlay.entry.kind, OverlayKind::Modal);
+        assert!(overlay.entry.modal);
+        assert_eq!(
+            overlay.entry.dismissal,
+            OverlayDismissal::OutsideClickOrEscape
+        );
+        assert_eq!(overlay.context, ActionContext::Editor);
+        assert_eq!(overlay.dialog.title, "About Kinetik Forge");
+        assert_eq!(overlay.visible_actions().len(), 2);
+        assert_eq!(
+            overlay
+                .visible_action_by_role(ModalActionRole::Cancel)
+                .expect("cancel action")
+                .action
+                .label,
+            "Close"
+        );
+
+        let invocation = overlay
+            .invocation_for_role(ModalActionRole::Primary)
+            .expect("primary modal action invocation");
+        assert_eq!(invocation.action_id, ActionId::new(super::ACTION_PALETTE));
+        assert_eq!(invocation.source, ActionSource::Button);
+        assert_eq!(invocation.context, ActionContext::Editor);
+        assert_eq!(editor.status, before);
     }
 
     #[test]
