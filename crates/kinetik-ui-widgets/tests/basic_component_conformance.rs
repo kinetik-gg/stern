@@ -7,8 +7,9 @@ use kinetik_ui_core::{
     WidgetId, default_dark_theme,
 };
 use kinetik_ui_widgets::{
-    RadioGroupChoice, Ui, WidgetOutput, button, checkbox_with_label, icon_button_with_label, label,
-    panel, radio_button_with_label, slider_with_label, toggle_with_label,
+    RadioGroupChoice, SliderStep, Ui, WidgetOutput, button, checkbox_with_label,
+    icon_button_with_label, label, panel, radio_button_with_label, slider_with_label,
+    toggle_with_label,
 };
 
 fn pointer_input(x: f32, y: f32, down: bool, pressed: bool, released: bool) -> UiInput {
@@ -305,6 +306,23 @@ fn checked_radio_labels(output: &kinetik_ui_core::FrameOutput) -> Vec<&str> {
         .filter(|node| node.state.selected && node.state.checked == Some(true))
         .filter_map(|node| node.label.as_deref())
         .collect()
+}
+
+fn slider_semantic_current(node: &SemanticNode) -> f32 {
+    match &node.state.value {
+        Some(SemanticValue::Number { current, .. }) => *current,
+        _ => panic!("expected numeric slider semantic value"),
+    }
+}
+
+fn frame_slider_current(output: &kinetik_ui_core::FrameOutput) -> f32 {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| node.role == SemanticRole::Slider)
+        .map(slider_semantic_current)
+        .expect("slider semantic node")
 }
 
 fn assert_enabled_basic_control_semantics(
@@ -875,6 +893,157 @@ fn stage9_slider_updates_finitely_and_respects_disabled_state() {
     assert!(!response.dragged);
     assert!((disabled_value - 0.25).abs() < f32::EPSILON);
     assert!(disabled.platform_requests.is_empty());
+}
+
+#[test]
+fn stage2_slider_keyboard_uses_default_and_configured_steps() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 100.0, 12.0);
+
+    let mut value = 0.5;
+    let mut memory = UiMemory::new();
+    memory.focus(WidgetId::from_key("root").child("slider"));
+    let input = pressed_key(Key::ArrowRight);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let response = ui.slider("slider", rect, &mut value, 0.0..=1.0, false);
+    let output = ui.finish_output();
+
+    assert!(response.keyboard_activated);
+    assert!(!response.clicked);
+    assert!((value - 0.51).abs() < f32::EPSILON);
+    assert!((frame_slider_current(&output) - 0.51).abs() < f32::EPSILON);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+    let mut configured_value = 0.5;
+    let mut memory = UiMemory::new();
+    memory.focus(WidgetId::from_key("root").child("configured-slider"));
+    let input = pressed_key(Key::ArrowUp);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let response = ui.slider_with_step(
+        "configured-slider",
+        rect,
+        &mut configured_value,
+        0.0..=1.0,
+        SliderStep::new(0.25),
+        false,
+    );
+    let output = ui.finish_output();
+
+    assert!(response.keyboard_activated);
+    assert!((configured_value - 0.75).abs() < f32::EPSILON);
+    assert!((frame_slider_current(&output) - 0.75).abs() < f32::EPSILON);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+}
+
+#[test]
+fn stage2_slider_home_end_and_page_keys_clamp_to_bounds() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 100.0, 12.0);
+
+    let mut home_value = 0.4;
+    let mut memory = UiMemory::new();
+    memory.focus(WidgetId::from_key("root").child("home-slider"));
+    let input = pressed_key(Key::Home);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    ui.slider("home-slider", rect, &mut home_value, 0.0..=1.0, false);
+    let output = ui.finish_output();
+    assert!(home_value.abs() < f32::EPSILON);
+    assert!(frame_slider_current(&output).abs() < f32::EPSILON);
+
+    let mut end_value = 0.4;
+    let mut memory = UiMemory::new();
+    memory.focus(WidgetId::from_key("root").child("end-slider"));
+    let input = pressed_key(Key::End);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    ui.slider("end-slider", rect, &mut end_value, 0.0..=1.0, false);
+    let output = ui.finish_output();
+    assert!((end_value - 1.0).abs() < f32::EPSILON);
+    assert!((frame_slider_current(&output) - 1.0).abs() < f32::EPSILON);
+
+    let mut page_up_value = 0.5;
+    let mut memory = UiMemory::new();
+    memory.focus(WidgetId::from_key("root").child("page-up-slider"));
+    let input = pressed_key(Key::PageUp);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    ui.slider("page-up-slider", rect, &mut page_up_value, 0.0..=1.0, false);
+    let output = ui.finish_output();
+    assert!((page_up_value - 0.6).abs() < f32::EPSILON);
+    assert!((frame_slider_current(&output) - 0.6).abs() < f32::EPSILON);
+
+    let mut page_down_value = 0.05;
+    let mut memory = UiMemory::new();
+    memory.focus(WidgetId::from_key("root").child("page-down-slider"));
+    let input = pressed_key(Key::PageDown);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    ui.slider(
+        "page-down-slider",
+        rect,
+        &mut page_down_value,
+        0.0..=1.0,
+        false,
+    );
+    let output = ui.finish_output();
+    assert!(page_down_value.abs() < f32::EPSILON);
+    assert!(frame_slider_current(&output).abs() < f32::EPSILON);
+}
+
+#[test]
+fn stage2_disabled_slider_ignores_keyboard_and_does_not_report_focus() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 100.0, 12.0);
+    let mut value = 0.5;
+    let mut memory = UiMemory::new();
+    memory.focus(WidgetId::from_key("root").child("slider"));
+    let input = pressed_key(Key::ArrowRight);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+
+    let response = ui.slider("slider", rect, &mut value, 0.0..=1.0, true);
+    let output = ui.finish_output();
+
+    assert!(response.state.disabled);
+    assert!(!response.state.focused);
+    assert!(!response.keyboard_activated);
+    assert!((value - 0.5).abs() < f32::EPSILON);
+    assert_eq!(output.repaint, RepaintRequest::None);
+    assert!(!output.semantics.nodes()[0].state.focused);
+}
+
+#[test]
+fn stage2_slider_keyboard_keeps_invalid_ranges_finite_and_deterministic() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 100.0, 12.0);
+
+    let mut invalid_value = f32::NAN;
+    let mut memory = UiMemory::new();
+    memory.focus(WidgetId::from_key("root").child("invalid-slider"));
+    let input = pressed_key(Key::ArrowRight);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    ui.slider(
+        "invalid-slider",
+        rect,
+        &mut invalid_value,
+        f32::NAN..=f32::INFINITY,
+        false,
+    );
+    let output = ui.finish_output();
+    assert!(invalid_value.is_finite());
+    assert!(frame_slider_current(&output).is_finite());
+
+    let mut equal_range_value = 8.0;
+    let mut memory = UiMemory::new();
+    memory.focus(WidgetId::from_key("root").child("equal-range-slider"));
+    let input = pressed_key(Key::ArrowRight);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    ui.slider(
+        "equal-range-slider",
+        rect,
+        &mut equal_range_value,
+        4.0..=4.0,
+        false,
+    );
+    let output = ui.finish_output();
+    assert!((equal_range_value - 4.0).abs() < f32::EPSILON);
+    assert!((frame_slider_current(&output) - 4.0).abs() < f32::EPSILON);
 }
 
 #[test]

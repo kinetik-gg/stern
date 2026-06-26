@@ -17,8 +17,9 @@ use kinetik_ui_text::{
 use crate::{
     CommandPaletteOverlay, DropdownCloseResult, DropdownItemId, DropdownOverlay, IconId,
     IconLibrary, MenuOverlay, MultiLineTextFieldOutput, NumericInputOutput, OverlayStack,
-    PanelFrame, SearchFieldOutput, TextFieldOutput, WidgetOutput, button as button_widget,
-    checkbox as checkbox_widget, checkbox_with_label as checkbox_with_label_widget,
+    PanelFrame, SearchFieldOutput, SliderStep, TextFieldOutput, WidgetOutput,
+    button as button_widget, checkbox as checkbox_widget,
+    checkbox_with_label as checkbox_with_label_widget,
     checkbox_with_label_target as checkbox_with_label_target_widget,
     icon_button as fallback_icon_button_widget,
     icon_button_with_label as fallback_icon_button_with_label_widget,
@@ -35,7 +36,9 @@ use crate::{
     radio_button_with_label_target as radio_button_with_label_target_widget,
     search_field_with_text_layouts_and_caret_visibility as search_field_widget,
     separator as separator_widget, slider as slider_widget,
-    slider_with_label as slider_with_label_widget, tab_button as tab_button_widget,
+    slider_with_label as slider_with_label_widget,
+    slider_with_label_and_step as slider_with_label_and_step_widget,
+    slider_with_step as slider_with_step_widget, tab_button as tab_button_widget,
     text_field_with_text_layouts_and_caret_visibility as text_field_widget,
     toggle as toggle_widget, toggle_with_label as toggle_with_label_widget,
     toggle_with_label_target as toggle_with_label_target_widget,
@@ -1231,8 +1234,36 @@ impl<'a> Ui<'a> {
     ) -> Response {
         let id = self.id(key);
         let theme = self.theme;
+        let before = *value;
         let (input, memory) = self.runtime.input_and_memory_mut();
         let output = slider_widget(id, rect, value, range, input, memory, theme, disabled);
+        let value_changed = slider_value_changed(before, *value);
+        if value_changed {
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        self.push_interactive(output)
+    }
+
+    /// Emits a slider with an explicit keyboard step contract.
+    pub fn slider_with_step(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        value: &mut f32,
+        range: core::ops::RangeInclusive<f32>,
+        step: SliderStep,
+        disabled: bool,
+    ) -> Response {
+        let id = self.id(key);
+        let theme = self.theme;
+        let before = *value;
+        let (input, memory) = self.runtime.input_and_memory_mut();
+        let output =
+            slider_with_step_widget(id, rect, value, range, step, input, memory, theme, disabled);
+        let value_changed = slider_value_changed(before, *value);
+        if value_changed {
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
         self.push_interactive(output)
     }
 
@@ -1248,10 +1279,41 @@ impl<'a> Ui<'a> {
     ) -> Response {
         let id = self.id(key);
         let theme = self.theme;
+        let before = *value;
         let (input, memory) = self.runtime.input_and_memory_mut();
         let output = slider_with_label_widget(
             id, rect, label, value, range, input, memory, theme, disabled,
         );
+        let value_changed = slider_value_changed(before, *value);
+        if value_changed {
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        self.push_interactive(output)
+    }
+
+    /// Emits a labeled slider with an explicit keyboard step contract.
+    #[allow(clippy::too_many_arguments)]
+    pub fn slider_with_label_and_step(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        label: impl Into<String>,
+        value: &mut f32,
+        range: core::ops::RangeInclusive<f32>,
+        step: SliderStep,
+        disabled: bool,
+    ) -> Response {
+        let id = self.id(key);
+        let theme = self.theme;
+        let before = *value;
+        let (input, memory) = self.runtime.input_and_memory_mut();
+        let output = slider_with_label_and_step_widget(
+            id, rect, label, value, range, step, input, memory, theme, disabled,
+        );
+        let value_changed = slider_value_changed(before, *value);
+        if value_changed {
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
         self.push_interactive(output)
     }
 
@@ -1526,6 +1588,10 @@ fn response_requests_followup_repaint(response: Response, input: &UiInput) -> bo
 
 fn response_activated(response: &Response) -> bool {
     response.clicked || response.keyboard_activated
+}
+
+fn slider_value_changed(before: f32, after: f32) -> bool {
+    !(before.is_nan() && after.is_nan()) && before.to_bits() != after.to_bits()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
