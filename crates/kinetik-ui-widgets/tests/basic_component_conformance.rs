@@ -2,8 +2,8 @@
 
 use kinetik_ui_core::{
     CursorShape, IconId, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect,
-    RepaintRequest, SemanticRole, SemanticValue, Theme, UiInput, UiMemory, WidgetId,
-    default_dark_theme,
+    RepaintRequest, Response, SemanticActionKind, SemanticNode, SemanticRole, SemanticValue, Theme,
+    UiInput, UiMemory, WidgetId, default_dark_theme,
 };
 use kinetik_ui_widgets::{
     Ui, WidgetOutput, button, checkbox_with_label, icon_button_with_label, label, panel,
@@ -69,6 +69,28 @@ impl BasicComponentCase {
             Self::Radio => "radio",
             Self::Toggle => "toggle",
             Self::Slider => "slider",
+        }
+    }
+
+    fn role(self) -> SemanticRole {
+        match self {
+            Self::Button => SemanticRole::Button,
+            Self::IconButton => SemanticRole::IconButton,
+            Self::Checkbox => SemanticRole::CheckBox,
+            Self::Radio => SemanticRole::RadioButton,
+            Self::Toggle => SemanticRole::Toggle,
+            Self::Slider => SemanticRole::Slider,
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Button => "Run",
+            Self::IconButton => "Save",
+            Self::Checkbox => "Snap",
+            Self::Radio => "Mode",
+            Self::Toggle => "Loop",
+            Self::Slider => "Opacity",
         }
     }
 }
@@ -246,6 +268,72 @@ fn assert_selection_control_clicks_and_respects_disabled(case: BasicComponentCas
     assert!(disabled.platform_requests.is_empty(), "{name}");
 }
 
+fn has_semantic_action(node: &SemanticNode, kind: &SemanticActionKind) -> bool {
+    node.actions.iter().any(|action| action.kind == *kind)
+}
+
+fn assert_enabled_basic_control_semantics(
+    case: BasicComponentCase,
+    node: &SemanticNode,
+    response: Response,
+) {
+    assert_eq!(node.role, case.role(), "{}", case.name());
+    assert_eq!(node.label.as_deref(), Some(case.label()), "{}", case.name());
+    assert!(node.focusable, "{}", case.name());
+    assert!(!node.state.disabled, "{}", case.name());
+    assert!(!response.state.disabled, "{}", case.name());
+    assert!(
+        has_semantic_action(node, &SemanticActionKind::Focus),
+        "{}",
+        case.name()
+    );
+
+    match case {
+        BasicComponentCase::Button | BasicComponentCase::IconButton => {
+            assert!(has_semantic_action(node, &SemanticActionKind::Invoke));
+            assert_eq!(node.state.checked, None, "{}", case.name());
+            assert!(!node.state.selected, "{}", case.name());
+            assert_eq!(node.state.value, None, "{}", case.name());
+        }
+        BasicComponentCase::Checkbox | BasicComponentCase::Radio | BasicComponentCase::Toggle => {
+            assert!(has_semantic_action(node, &SemanticActionKind::Invoke));
+            assert_eq!(node.state.checked, Some(false), "{}", case.name());
+            assert!(!node.state.selected, "{}", case.name());
+            assert_eq!(node.state.value, None, "{}", case.name());
+        }
+        BasicComponentCase::Slider => {
+            assert!(has_semantic_action(node, &SemanticActionKind::Increment));
+            assert!(has_semantic_action(node, &SemanticActionKind::Decrement));
+            assert!(has_semantic_action(node, &SemanticActionKind::SetValue));
+            assert!(matches!(
+                node.state.value,
+                Some(SemanticValue::Number { current, min, max })
+                    if (current - 0.25).abs() < f32::EPSILON
+                        && (min - 0.0).abs() < f32::EPSILON
+                        && (max - 1.0).abs() < f32::EPSILON
+            ));
+        }
+    }
+}
+
+fn assert_disabled_basic_control_semantics(
+    case: BasicComponentCase,
+    node: &SemanticNode,
+    response: Response,
+) {
+    assert_eq!(node.role, case.role(), "{}", case.name());
+    assert_eq!(node.label.as_deref(), Some(case.label()), "{}", case.name());
+    assert!(response.state.disabled, "{}", case.name());
+    assert!(node.state.disabled, "{}", case.name());
+    assert!(!node.focusable, "{}", case.name());
+    assert!(
+        !has_semantic_action(node, &SemanticActionKind::Focus),
+        "{}",
+        case.name()
+    );
+    assert!(!node.state.focused, "{}", case.name());
+}
+
 #[test]
 fn stage9_basic_components_emit_stable_primitive_categories() {
     let theme = default_dark_theme();
@@ -415,6 +503,61 @@ fn stage9_basic_components_expose_semantic_roles_states_and_values() {
     assert!(nodes.iter().any(|node| {
         node.role == SemanticRole::Panel && node.label.as_deref() == Some("Panel")
     }));
+}
+
+#[test]
+fn stage1_basic_control_matrix_exposes_semantic_contracts() {
+    let theme = default_dark_theme();
+    let rect = stage9_rect();
+
+    for case in [
+        BasicComponentCase::Button,
+        BasicComponentCase::IconButton,
+        BasicComponentCase::Checkbox,
+        BasicComponentCase::Radio,
+        BasicComponentCase::Toggle,
+        BasicComponentCase::Slider,
+    ] {
+        let mut memory = UiMemory::new();
+        let output = component_output(
+            case,
+            WidgetId::from_key(format!("{}-enabled", case.key())),
+            rect,
+            &UiInput::default(),
+            &mut memory,
+            &theme,
+            false,
+        );
+        let response = output
+            .response
+            .unwrap_or_else(|| panic!("{} response", case.name()));
+        let node = output
+            .semantics
+            .first()
+            .unwrap_or_else(|| panic!("{} semantic node", case.name()));
+        assert_enabled_basic_control_semantics(case, node, response);
+
+        let disabled_id = WidgetId::from_key(format!("{}-disabled", case.key()));
+        let mut memory = UiMemory::new();
+        memory.focus(disabled_id);
+        let disabled = component_output(
+            case,
+            disabled_id,
+            rect,
+            &pressed_at(4.0, 4.0),
+            &mut memory,
+            &theme,
+            true,
+        );
+        let disabled_response = disabled
+            .response
+            .unwrap_or_else(|| panic!("{} disabled response", case.name()));
+        let disabled_node = disabled
+            .semantics
+            .first()
+            .unwrap_or_else(|| panic!("{} disabled semantic node", case.name()));
+        assert_disabled_basic_control_semantics(case, disabled_node, disabled_response);
+    }
 }
 
 #[test]
