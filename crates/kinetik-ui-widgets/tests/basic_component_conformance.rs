@@ -7,8 +7,8 @@ use kinetik_ui_core::{
     WidgetId, default_dark_theme,
 };
 use kinetik_ui_widgets::{
-    Ui, WidgetOutput, button, checkbox_with_label, icon_button_with_label, label, panel,
-    radio_button_with_label, slider_with_label, toggle_with_label,
+    RadioGroupChoice, Ui, WidgetOutput, button, checkbox_with_label, icon_button_with_label, label,
+    panel, radio_button_with_label, slider_with_label, toggle_with_label,
 };
 
 fn pointer_input(x: f32, y: f32, down: bool, pressed: bool, released: bool) -> UiInput {
@@ -286,6 +286,25 @@ fn assert_selection_control_clicks_and_respects_disabled(case: BasicComponentCas
 
 fn has_semantic_action(node: &SemanticNode, kind: &SemanticActionKind) -> bool {
     node.actions.iter().any(|action| action.kind == *kind)
+}
+
+fn radio_group_choices() -> Vec<RadioGroupChoice<u8>> {
+    vec![
+        RadioGroupChoice::new("first", Rect::new(0.0, 0.0, 20.0, 20.0), "First", 1),
+        RadioGroupChoice::new("second", Rect::new(0.0, 28.0, 20.0, 20.0), "Second", 2),
+        RadioGroupChoice::new("third", Rect::new(0.0, 56.0, 20.0, 20.0), "Third", 3),
+    ]
+}
+
+fn checked_radio_labels(output: &kinetik_ui_core::FrameOutput) -> Vec<&str> {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .filter(|node| node.role == SemanticRole::RadioButton)
+        .filter(|node| node.state.selected && node.state.checked == Some(true))
+        .filter_map(|node| node.label.as_deref())
+        .collect()
 }
 
 fn assert_enabled_basic_control_semantics(
@@ -1151,4 +1170,113 @@ fn stage2_disabled_choice_label_targets_do_not_activate() {
     assert!(!response.state.pressed);
     assert!(!response.clicked);
     assert!(!toggle_value);
+}
+
+#[test]
+fn stage2_radio_group_activation_leaves_exactly_one_selected_option() {
+    let theme = default_dark_theme();
+    let choices = radio_group_choices();
+    let mut selected = 1_u8;
+    let mut memory = UiMemory::new();
+
+    let press = pressed_at(4.0, 32.0);
+    let mut ui = Ui::new(&press, &mut memory, &theme);
+    ui.radio_group_value("modes", &mut selected, &choices);
+    assert_eq!(ui.finish_output().repaint, RepaintRequest::NextFrame);
+
+    let release = released_at(4.0, 32.0);
+    let mut ui = Ui::new(&release, &mut memory, &theme);
+    let group = ui.radio_group_value("modes", &mut selected, &choices);
+    let output = ui.finish_output();
+
+    assert!(group.changed);
+    assert_eq!(selected, 2);
+    assert_eq!(group.selected, 2);
+    assert_eq!(group.selected_index, Some(1));
+    assert_eq!(group.activated, Some(2));
+    assert_eq!(group.activated_index, Some(1));
+    assert_eq!(
+        group
+            .responses
+            .iter()
+            .filter(|response| response.state.selected)
+            .count(),
+        1
+    );
+    assert_eq!(checked_radio_labels(&output), vec!["Second"]);
+}
+
+#[test]
+fn stage2_radio_group_disabled_options_cannot_become_selected() {
+    let theme = default_dark_theme();
+    let choices = vec![
+        RadioGroupChoice::new("first", Rect::new(0.0, 0.0, 20.0, 20.0), "First", 1),
+        RadioGroupChoice::new("second", Rect::new(0.0, 28.0, 20.0, 20.0), "Second", 2)
+            .disabled(true),
+        RadioGroupChoice::new("third", Rect::new(0.0, 56.0, 20.0, 20.0), "Third", 3),
+    ];
+    let mut selected = 1_u8;
+    let mut memory = UiMemory::new();
+
+    let press = pressed_at(4.0, 32.0);
+    let mut ui = Ui::new(&press, &mut memory, &theme);
+    let pressed = ui.radio_group_value("modes", &mut selected, &choices);
+    assert!(!pressed.responses[1].state.pressed);
+    assert!(pressed.responses[1].state.disabled);
+    assert_eq!(selected, 1);
+
+    let release = released_at(4.0, 32.0);
+    let mut ui = Ui::new(&release, &mut memory, &theme);
+    let group = ui.radio_group_value("modes", &mut selected, &choices);
+    let output = ui.finish_output();
+
+    assert!(!group.changed);
+    assert_eq!(selected, 1);
+    assert_eq!(group.selected_index, Some(0));
+    assert_eq!(group.activated, None);
+    assert_eq!(checked_radio_labels(&output), vec!["First"]);
+}
+
+#[test]
+fn stage2_radio_group_reselecting_current_option_is_stable() {
+    let theme = default_dark_theme();
+    let choices = radio_group_choices();
+    let mut selected = 2_u8;
+    let mut memory = UiMemory::new();
+
+    let press = pressed_at(4.0, 32.0);
+    let mut ui = Ui::new(&press, &mut memory, &theme);
+    ui.radio_group_value("modes", &mut selected, &choices);
+
+    let release = released_at(4.0, 32.0);
+    let mut ui = Ui::new(&release, &mut memory, &theme);
+    let group = ui.radio_group_value("modes", &mut selected, &choices);
+    let output = ui.finish_output();
+
+    assert!(!group.changed);
+    assert_eq!(selected, 2);
+    assert_eq!(group.selected_index, Some(1));
+    assert_eq!(group.activated, Some(2));
+    assert_eq!(checked_radio_labels(&output), vec!["Second"]);
+}
+
+#[test]
+fn stage2_radio_group_keyboard_activation_uses_choice_control_semantics() {
+    let theme = default_dark_theme();
+    let choices = radio_group_choices();
+    let mut selected = 1_u8;
+    let mut memory = UiMemory::new();
+    memory.focus(WidgetId::from_key("root").child("modes").child("third"));
+
+    let input = pressed_key(Key::Space);
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let group = ui.radio_group_value("modes", &mut selected, &choices);
+    let output = ui.finish_output();
+
+    assert!(group.changed);
+    assert_eq!(selected, 3);
+    assert_eq!(group.selected_index, Some(2));
+    assert!(group.responses[2].keyboard_activated);
+    assert_eq!(checked_radio_labels(&output), vec!["Third"]);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
 }

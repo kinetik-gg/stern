@@ -4,11 +4,11 @@ use std::{hash::Hash, time::Duration};
 
 use kinetik_ui_core::{
     ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionSource, ClipId,
-    DropTargetResponse, FrameContext, FrameOutput, ImageId, Insets, PhysicalSize, PlatformRequest,
-    Primitive, Rect, RepaintRequest, Response, ScaleFactor, ScrollResponse, SemanticNode, Size,
-    TextPrimitive, Theme, TimeInfo, Transform, Ui as CoreUi, UiInput, UiMemory, Vec2, ViewportInfo,
-    WidgetId, context_menu_trigger, draggable, drop_target, focusable, pressable, scrollable,
-    selectable, tooltip_trigger,
+    ComponentState, DropTargetResponse, FrameContext, FrameOutput, ImageId, Insets, PhysicalSize,
+    PlatformRequest, Primitive, Rect, RepaintRequest, Response, ScaleFactor, ScrollResponse,
+    SemanticNode, Size, TextPrimitive, Theme, TimeInfo, Transform, Ui as CoreUi, UiInput, UiMemory,
+    Vec2, ViewportInfo, WidgetId, context_menu_trigger, draggable, drop_target, focusable,
+    pressable, scrollable, selectable, tooltip_trigger,
 };
 use kinetik_ui_text::{
     TextComposition, TextEditState, TextLayoutKey, TextLayoutStore, TextSelection, TextStyle,
@@ -69,6 +69,68 @@ pub struct ScrollAreaOutput<T> {
     pub scroll: ScrollResponse,
     /// Value returned by the scroll-area content closure.
     pub inner: T,
+}
+
+/// One rendered choice in a radio group.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RadioGroupChoice<T> {
+    /// Stable key used to derive the radio button widget ID inside the group scope.
+    pub key: String,
+    /// Radio control rectangle.
+    pub rect: Rect,
+    /// Optional label activation rectangle paired with the radio control.
+    pub label_rect: Rect,
+    /// Accessible label for the radio item.
+    pub label: String,
+    /// Value assigned when the choice is activated.
+    pub value: T,
+    /// Whether this choice is unavailable for selection.
+    pub disabled: bool,
+}
+
+impl<T> RadioGroupChoice<T> {
+    /// Creates an enabled radio-group choice.
+    pub fn new(key: impl Into<String>, rect: Rect, label: impl Into<String>, value: T) -> Self {
+        Self {
+            key: key.into(),
+            rect,
+            label_rect: Rect::ZERO,
+            label: label.into(),
+            value,
+            disabled: false,
+        }
+    }
+
+    /// Sets the paired label activation rectangle.
+    #[must_use]
+    pub const fn with_label_rect(mut self, label_rect: Rect) -> Self {
+        self.label_rect = label_rect;
+        self
+    }
+
+    /// Sets whether the choice is disabled.
+    #[must_use]
+    pub const fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+/// Output returned by [`Ui::radio_group_value`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct RadioGroupOutput<T> {
+    /// Selected value after normalization and activation handling.
+    pub selected: T,
+    /// Index of the selected enabled choice, when one is available.
+    pub selected_index: Option<usize>,
+    /// Value activated this frame, if an enabled choice was activated.
+    pub activated: Option<T>,
+    /// Index activated this frame, if an enabled choice was activated.
+    pub activated_index: Option<usize>,
+    /// True when the selected value changed during this frame.
+    pub changed: bool,
+    /// Per-choice interaction responses in input order.
+    pub responses: Vec<Response>,
 }
 
 impl<'a> Ui<'a> {
@@ -986,6 +1048,79 @@ impl<'a> Ui<'a> {
         response
     }
 
+    /// Emits a radio group and keeps one enabled choice selected when available.
+    pub fn radio_group_value<T: Copy + Eq>(
+        &mut self,
+        key: impl Hash,
+        selected: &mut T,
+        choices: &[RadioGroupChoice<T>],
+    ) -> RadioGroupOutput<T> {
+        let normalized_index = normalize_radio_group_selection(selected, choices);
+        let mut changed = normalized_index.changed;
+        let mut activated_index = None;
+        let mut item_outputs = Vec::with_capacity(choices.len());
+
+        self.runtime.push_id_scope(key);
+        for (index, choice) in choices.iter().enumerate() {
+            let id = self.id(&choice.key);
+            let is_selected = normalized_index.index == Some(index);
+            let theme = self.theme;
+            let (input, memory) = self.runtime.input_and_memory_mut();
+            let output = radio_button_with_label_target_widget(
+                id,
+                choice.rect,
+                choice.label_rect,
+                choice.label.clone(),
+                is_selected,
+                input,
+                memory,
+                theme,
+                choice.disabled,
+            );
+            if !choice.disabled && output.response.as_ref().is_some_and(response_activated) {
+                activated_index = Some(index);
+            }
+            item_outputs.push(output);
+        }
+        self.runtime.pop_id_scope();
+
+        if let Some(index) = activated_index {
+            let value = choices[index].value;
+            if *selected != value {
+                *selected = value;
+                changed = true;
+                self.request_repaint(RepaintRequest::NextFrame);
+            }
+        } else if changed {
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+
+        let selected_index =
+            activated_index.or_else(|| selected_radio_group_index(*selected, choices));
+        let activated = activated_index.map(|index| choices[index].value);
+        let mut responses = Vec::with_capacity(item_outputs.len());
+        for (index, mut output) in item_outputs.into_iter().enumerate() {
+            update_radio_group_output_selection(
+                &mut output,
+                self.theme,
+                selected_index == Some(index),
+            );
+            if let Some(response) = output.response {
+                responses.push(response);
+            }
+            self.push_widget_output(&output);
+        }
+
+        RadioGroupOutput {
+            selected: *selected,
+            selected_index,
+            activated,
+            activated_index,
+            changed,
+            responses,
+        }
+    }
+
     /// Emits a toggle and returns its interaction response.
     pub fn toggle(&mut self, key: impl Hash, rect: Rect, on: bool, disabled: bool) -> Response {
         let id = self.id(key);
@@ -1391,6 +1526,72 @@ fn response_requests_followup_repaint(response: Response, input: &UiInput) -> bo
 
 fn response_activated(response: &Response) -> bool {
     response.clicked || response.keyboard_activated
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct NormalizedRadioGroupSelection {
+    index: Option<usize>,
+    changed: bool,
+}
+
+fn normalize_radio_group_selection<T: Copy + Eq>(
+    selected: &mut T,
+    choices: &[RadioGroupChoice<T>],
+) -> NormalizedRadioGroupSelection {
+    if let Some(index) = selected_radio_group_index(*selected, choices) {
+        return NormalizedRadioGroupSelection {
+            index: Some(index),
+            changed: false,
+        };
+    }
+
+    if let Some(index) = choices.iter().position(|choice| !choice.disabled) {
+        *selected = choices[index].value;
+        return NormalizedRadioGroupSelection {
+            index: Some(index),
+            changed: true,
+        };
+    }
+
+    NormalizedRadioGroupSelection {
+        index: None,
+        changed: false,
+    }
+}
+
+fn selected_radio_group_index<T: Copy + Eq>(
+    selected: T,
+    choices: &[RadioGroupChoice<T>],
+) -> Option<usize> {
+    choices
+        .iter()
+        .position(|choice| !choice.disabled && choice.value == selected)
+}
+
+fn update_radio_group_output_selection(output: &mut WidgetOutput, theme: &Theme, selected: bool) {
+    let Some(response) = output.response.as_mut() else {
+        return;
+    };
+
+    response.state.selected = selected;
+    let recipe = theme.radio_button(ComponentState {
+        hovered: response.state.hovered,
+        pressed: response.state.pressed && !response.state.disabled,
+        focused: response.state.focused && !response.state.disabled,
+        disabled: response.state.disabled,
+        selected,
+    });
+
+    if let Some(Primitive::Rect(primitive)) = output.primitives.first_mut() {
+        primitive.fill = Some(recipe.fill);
+        primitive.stroke = Some(recipe.border);
+        primitive.radius = recipe.radius;
+    }
+
+    for node in &mut output.semantics {
+        node.state.selected = selected;
+        node.state.checked = Some(selected);
+    }
 }
 
 fn text_caret_visible(time: TimeInfo) -> bool {
