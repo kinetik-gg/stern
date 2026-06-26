@@ -10,10 +10,10 @@ use kinetik_ui_text::TextEditState;
 use kinetik_ui_widgets::{
     COMPONENT_METADATA, ComponentCategory, ComponentConformanceStatus, ComponentMetadata,
     DropdownCloseReason, DropdownItem, DropdownItemId, DropdownModel, DropdownOverlay, OverlayId,
-    OverlayStack, PopoverPlacement, PropertyGridLayout, PropertyGridRow, PropertyGridRowState,
-    PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice, SliderStep, Ui,
-    classify_numeric_input_draft, component_metadata, components_by_category, numeric_input,
-    slider_with_step,
+    OverlayStack, PanelId, PopoverPlacement, PropertyGridLayout, PropertyGridRow,
+    PropertyGridRowState, PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice,
+    SliderStep, TabStrip, Ui, classify_numeric_input_draft, component_metadata,
+    components_by_category, numeric_input, slider_with_step,
 };
 
 fn entry(name: &str) -> &'static ComponentMetadata {
@@ -229,6 +229,40 @@ fn component_taxonomy_conformance_reports_stage6_status_bar_partial() {
         "StatusBar",
         ComponentCategory::System,
         ComponentConformanceStatus::Partial,
+    );
+}
+
+#[test]
+fn component_taxonomy_conformance_reports_stage6_tabs_partial() {
+    assert_entry(
+        "Tabs",
+        ComponentCategory::Docking,
+        ComponentConformanceStatus::Partial,
+    );
+
+    let strip = TabStrip::from_tabs([
+        kinetik_ui_widgets::FrameTab {
+            panel: PanelId::from_raw(1),
+            title: "Viewport".to_owned(),
+            active: true,
+            close_visible: true,
+            draggable: true,
+        },
+        kinetik_ui_widgets::FrameTab {
+            panel: PanelId::from_raw(2),
+            title: "Inspector".to_owned(),
+            active: false,
+            close_visible: false,
+            draggable: true,
+        },
+    ]);
+
+    assert_eq!(strip.active_panel(), Some(PanelId::from_raw(1)));
+    assert_eq!(
+        strip
+            .activation_target_by_panel(PanelId::from_raw(2))
+            .map(|target| target.index),
+        Some(1)
     );
 }
 

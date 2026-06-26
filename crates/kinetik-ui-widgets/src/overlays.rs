@@ -445,6 +445,35 @@ impl DropdownItem {
     }
 }
 
+/// Data-only presentation metadata for a dropdown/select trigger.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DropdownTriggerPresentation {
+    /// Label to present on the closed trigger.
+    pub label: String,
+    /// Selected enabled item identity, if the trigger is showing a selection.
+    pub selected_id: Option<DropdownItemId>,
+    /// Whether the label is the placeholder fallback.
+    pub placeholder: bool,
+    /// Whether the trigger should be presented as disabled.
+    pub disabled: bool,
+    /// Whether the dropdown/select surface is currently open.
+    pub open: bool,
+}
+
+impl DropdownTriggerPresentation {
+    /// Returns true when the trigger is showing a selected enabled item.
+    #[must_use]
+    pub fn selected(&self) -> bool {
+        self.selected_id.is_some() && !self.placeholder
+    }
+
+    /// Returns true when this trigger metadata permits invocation.
+    #[must_use]
+    pub const fn can_invoke(&self) -> bool {
+        !self.disabled
+    }
+}
+
 /// Keyboard-style dropdown highlight movement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DropdownHighlightMove {
@@ -504,6 +533,34 @@ impl DropdownModel {
     pub fn selected_item(&self) -> Option<&DropdownItem> {
         self.selected
             .and_then(|id| self.enabled_item_by_id(id).map(|(_, item)| item))
+    }
+
+    /// Resolves the trigger label from the selected enabled item or placeholder.
+    #[must_use]
+    pub fn trigger_label(&self, placeholder: impl AsRef<str>) -> String {
+        self.selected_item().map_or_else(
+            || placeholder.as_ref().to_owned(),
+            |item| item.label.clone(),
+        )
+    }
+
+    /// Resolves closed-trigger presentation metadata for select-like dropdowns.
+    #[must_use]
+    pub fn trigger_presentation(
+        &self,
+        placeholder: impl Into<String>,
+        disabled: bool,
+        open: bool,
+    ) -> DropdownTriggerPresentation {
+        let placeholder = placeholder.into();
+        let selected = self.selected_item();
+        DropdownTriggerPresentation {
+            label: selected.map_or(placeholder, |item| item.label.clone()),
+            selected_id: selected.map(|item| item.id),
+            placeholder: selected.is_none(),
+            disabled,
+            open,
+        }
     }
 
     /// Selects an enabled item by stable ID.

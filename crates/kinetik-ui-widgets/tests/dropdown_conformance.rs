@@ -142,6 +142,63 @@ fn replacing_items_clears_now_disabled_selection_and_highlight() {
 }
 
 #[test]
+fn select_trigger_presentation_uses_selected_label_or_placeholder() {
+    let mut dropdown = DropdownModel::from_items([item(1, "Normal"), item(2, "Screen")]);
+
+    assert_eq!(dropdown.trigger_label("Blend mode"), "Blend mode");
+    let placeholder = dropdown.trigger_presentation("Blend mode", false, false);
+    assert_eq!(placeholder.label, "Blend mode");
+    assert_eq!(placeholder.selected_id, None);
+    assert!(placeholder.placeholder);
+    assert!(!placeholder.selected());
+    assert!(placeholder.can_invoke());
+
+    assert!(dropdown.set_selected_id(id(2)));
+    let selected = dropdown.trigger_presentation("Blend mode", false, true);
+    assert_eq!(selected.label, "Screen");
+    assert_eq!(selected.selected_id, Some(id(2)));
+    assert!(!selected.placeholder);
+    assert!(selected.selected());
+    assert!(!selected.disabled);
+    assert!(selected.open);
+    assert_eq!(dropdown.trigger_label("Blend mode"), "Screen");
+}
+
+#[test]
+fn select_trigger_falls_back_when_selection_disappears_or_becomes_disabled() {
+    let mut dropdown = DropdownModel::from_items([item(1, "Draft"), item(2, "Final")]);
+
+    assert!(dropdown.set_selected_id(id(2)));
+    dropdown.replace_items([item(1, "Draft")]);
+    let missing = dropdown.trigger_presentation("Quality", false, false);
+    assert_eq!(missing.label, "Quality");
+    assert_eq!(missing.selected_id, None);
+    assert!(missing.placeholder);
+
+    assert!(dropdown.set_selected_id(id(1)));
+    dropdown.replace_items([disabled_item(1, "Draft")]);
+    let disabled = dropdown.trigger_presentation("Quality", false, false);
+    assert_eq!(disabled.label, "Quality");
+    assert_eq!(disabled.selected_id, None);
+    assert!(disabled.placeholder);
+}
+
+#[test]
+fn disabled_select_trigger_presentation_is_non_invokable_metadata() {
+    let mut dropdown = DropdownModel::from_items([item(1, "Output")]);
+    assert!(dropdown.set_selected_id(id(1)));
+
+    let presentation = dropdown.trigger_presentation("Target", true, false);
+
+    assert_eq!(presentation.label, "Output");
+    assert_eq!(presentation.selected_id, Some(id(1)));
+    assert!(presentation.selected());
+    assert!(presentation.disabled);
+    assert!(!presentation.open);
+    assert!(!presentation.can_invoke());
+}
+
+#[test]
 fn open_helper_describes_dropdown_overlay_with_trigger_identity() {
     let trigger = WidgetId::from_key("blend-mode-trigger");
     let dropdown = DropdownOverlay::anchored(
