@@ -4,15 +4,16 @@ use kinetik_ui_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
 use kinetik_ui_widgets::{
     Dock, DockDropTarget, DockNeighborDirection, DockNode, DockPathElement, DockPlacement,
     DockRestoreError, DockSnapshot, DockSnapshotDiagnosticCode, DockSnapshotNode,
-    DockSnapshotSplitValue, DockSplitPath, Frame, FrameId, FrameLayout, FrameNeighbors, Panel,
-    PanelClosePolicy, PanelDockHint, PanelDuplicatePolicy, PanelFloatPolicy, PanelId,
-    PanelInstanceId, PanelInstanceLocation, PanelInstancePolicy, PanelInstanceSnapshot,
-    PanelOpenDecision, PanelPolicyMetadata, PanelTypeCategory, PanelTypeDescriptor, PanelTypeId,
-    PanelWorkspaceContext, SnapshotDiagnosticSeverity, WorkspaceRestoreError,
-    WorkspaceSnapshotDiagnosticCode, frame_neighbor, frame_tabs, resolve_dock_drop_target,
-    resolve_panel_affordances, resolve_panel_close_request, resolve_panel_duplicate_request,
-    resolve_panel_float_request, resolve_panel_open_decision, solve_dock_layout,
-    solve_dock_neighbors, solve_dock_splitters, split_ratio_from_drag,
+    DockSnapshotSplitValue, DockSplitPath, Frame, FrameId, FrameLayout, FrameNeighbors,
+    FrameSplitAffordanceRequest, Panel, PanelClosePolicy, PanelDockHint, PanelDuplicatePolicy,
+    PanelFloatPolicy, PanelId, PanelInstanceId, PanelInstanceLocation, PanelInstancePolicy,
+    PanelInstanceSnapshot, PanelOpenDecision, PanelPolicyMetadata, PanelTypeCategory,
+    PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, SnapshotDiagnosticSeverity,
+    WorkspaceRestoreError, WorkspaceSnapshotDiagnosticCode, frame_neighbor, frame_tabs,
+    resolve_dock_drop_target, resolve_frame_split_affordance_request, resolve_panel_affordances,
+    resolve_panel_close_request, resolve_panel_duplicate_request, resolve_panel_float_request,
+    resolve_panel_open_decision, solve_dock_layout, solve_dock_neighbors, solve_dock_splitters,
+    split_ratio_from_drag,
 };
 
 fn panel(id: u64, title: &str) -> Panel {
@@ -1115,6 +1116,178 @@ fn drop_targets_distinguish_center_merge_from_edge_split() {
             new_frame,
         ))
     );
+}
+
+#[test]
+fn frame_split_affordance_requests_resolve_edges_and_corners() {
+    let mut dock = nested_dock();
+    assert!(dock.select_panel(FrameId::from_raw(2), PanelId::from_raw(3)));
+    let before = dock.snapshot();
+    let layout = solve_dock_layout(&dock, Rect::new(0.0, 0.0, 1000.0, 500.0));
+    let new_frame = FrameId::from_raw(9);
+
+    for (point, target_frame, placement) in [
+        (
+            Point::new(301.0, 150.0),
+            FrameId::from_raw(2),
+            DockPlacement::Left,
+        ),
+        (
+            Point::new(998.0, 150.0),
+            FrameId::from_raw(2),
+            DockPlacement::Right,
+        ),
+        (
+            Point::new(650.0, 2.0),
+            FrameId::from_raw(2),
+            DockPlacement::Top,
+        ),
+        (
+            Point::new(650.0, 298.0),
+            FrameId::from_raw(2),
+            DockPlacement::Bottom,
+        ),
+        (
+            Point::new(302.0, 2.0),
+            FrameId::from_raw(2),
+            DockPlacement::Left,
+        ),
+        (
+            Point::new(998.0, 2.0),
+            FrameId::from_raw(2),
+            DockPlacement::Right,
+        ),
+    ] {
+        assert_eq!(
+            resolve_frame_split_affordance_request(
+                &dock,
+                &layout,
+                FrameId::from_raw(2),
+                point,
+                new_frame,
+            ),
+            Some(FrameSplitAffordanceRequest {
+                source_frame: FrameId::from_raw(2),
+                target_frame,
+                placement,
+                active_panel: Some(PanelInstanceLocation {
+                    panel_instance: PanelInstanceId::from_raw(3),
+                    panel: PanelId::from_raw(3),
+                    frame: FrameId::from_raw(2),
+                }),
+                new_frame,
+            })
+        );
+    }
+
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn frame_split_affordance_requests_reject_center_and_invalid_inputs() {
+    let dock = nested_dock();
+    let before = dock.snapshot();
+    let layout = solve_dock_layout(&dock, Rect::new(0.0, 0.0, 1000.0, 500.0));
+    let new_frame = FrameId::from_raw(9);
+
+    assert_eq!(
+        resolve_frame_split_affordance_request(
+            &dock,
+            &layout,
+            FrameId::from_raw(2),
+            Point::new(650.0, 150.0),
+            new_frame,
+        ),
+        None
+    );
+    assert_eq!(
+        resolve_frame_split_affordance_request(
+            &dock,
+            &layout,
+            FrameId::from_raw(2),
+            Point::new(f32::NAN, 150.0),
+            new_frame,
+        ),
+        None
+    );
+    assert_eq!(
+        resolve_frame_split_affordance_request(
+            &dock,
+            &[FrameLayout {
+                frame: FrameId::from_raw(2),
+                rect: Rect::new(300.0, 0.0, f32::INFINITY, 300.0),
+            }],
+            FrameId::from_raw(2),
+            Point::new(301.0, 150.0),
+            new_frame,
+        ),
+        None
+    );
+    assert_eq!(
+        resolve_frame_split_affordance_request(
+            &dock,
+            &layout,
+            FrameId::from_raw(99),
+            Point::new(301.0, 150.0),
+            new_frame,
+        ),
+        None
+    );
+
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn frame_split_affordance_requests_keep_center_distinct_from_overlapping_edge() {
+    let dock = Dock::new(DockNode::Frame(frame(1, vec![panel(1, "A")])));
+    let before = dock.snapshot();
+    let layout = [
+        FrameLayout {
+            frame: FrameId::from_raw(1),
+            rect: Rect::new(0.0, 0.0, 100.0, 100.0),
+        },
+        FrameLayout {
+            frame: FrameId::from_raw(1),
+            rect: Rect::new(40.0, 40.0, 100.0, 100.0),
+        },
+    ];
+
+    assert_eq!(
+        resolve_frame_split_affordance_request(
+            &dock,
+            &layout,
+            FrameId::from_raw(1),
+            Point::new(50.0, 50.0),
+            FrameId::from_raw(9),
+        ),
+        None
+    );
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn frame_split_affordance_request_allows_missing_active_panel_identity() {
+    let dock = Dock::new(DockNode::Frame(Frame::new(FrameId::from_raw(1), vec![])));
+    let before = dock.snapshot();
+    let layout = solve_dock_layout(&dock, Rect::new(0.0, 0.0, 100.0, 100.0));
+
+    assert_eq!(
+        resolve_frame_split_affordance_request(
+            &dock,
+            &layout,
+            FrameId::from_raw(1),
+            Point::new(1.0, 50.0),
+            FrameId::from_raw(9),
+        ),
+        Some(FrameSplitAffordanceRequest {
+            source_frame: FrameId::from_raw(1),
+            target_frame: FrameId::from_raw(1),
+            placement: DockPlacement::Left,
+            active_panel: None,
+            new_frame: FrameId::from_raw(9),
+        })
+    );
+    assert_eq!(dock.snapshot(), before);
 }
 
 #[test]

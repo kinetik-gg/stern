@@ -503,6 +503,24 @@ pub struct PanelFloatRequest {
     pub source: PanelInstanceLocation,
 }
 
+/// Request for an application-owned frame edge split affordance.
+///
+/// This is separate from tab drag/drop: it describes split intent only and does
+/// not mutate the dock tree, create panels, or execute application commands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FrameSplitAffordanceRequest {
+    /// Frame that owns the active panel or command source.
+    pub source_frame: FrameId,
+    /// Frame whose edge/corner affordance was targeted.
+    pub target_frame: FrameId,
+    /// Placement of the new frame relative to the target frame.
+    pub placement: DockPlacement,
+    /// Active source panel identity when the source frame has one.
+    pub active_panel: Option<PanelInstanceLocation>,
+    /// Application-supplied identity for the frame to be created.
+    pub new_frame: FrameId,
+}
+
 /// Finds an open panel instance in deterministic dock tree order.
 #[must_use]
 pub fn locate_panel_instance(
@@ -624,6 +642,33 @@ pub fn resolve_panel_float_request(
         })
 }
 
+/// Resolves an app-owned frame edge split request from frame layouts.
+///
+/// Center/tab-merge zones and invalid geometry return `None`. The returned
+/// request is metadata only; callers decide what panel content to create or
+/// move before applying any future dock mutation.
+#[must_use]
+pub fn resolve_frame_split_affordance_request(
+    dock: &Dock,
+    frames: &[FrameLayout],
+    source_frame: FrameId,
+    point: Point,
+    new_frame: FrameId,
+) -> Option<FrameSplitAffordanceRequest> {
+    let source = dock.frame(source_frame)?;
+    let active_panel = active_panel_location(source);
+    let (target_frame, placement) = resolve_frame_split_affordance(frames, point)?;
+    dock.frame(target_frame)?;
+
+    Some(FrameSplitAffordanceRequest {
+        source_frame,
+        target_frame,
+        placement,
+        active_panel,
+        new_frame,
+    })
+}
+
 fn locate_first_panel_type_instance(
     dock: &Dock,
     panel_instances: &[PanelInstanceSnapshot],
@@ -641,6 +686,14 @@ fn locate_first_panel_type_instance(
                     frame: frame.id,
                 })
         })
+    })
+}
+
+fn active_panel_location(frame: &Frame) -> Option<PanelInstanceLocation> {
+    frame.active_panel().map(|panel| PanelInstanceLocation {
+        panel_instance: panel.instance_id(),
+        panel: panel.id,
+        frame: frame.id,
     })
 }
 
@@ -1653,6 +1706,20 @@ pub fn resolve_dock_drop_target(
             None => DockDropTarget::tab(layout.frame),
         })
     })
+}
+
+fn resolve_frame_split_affordance(
+    frames: &[FrameLayout],
+    point: Point,
+) -> Option<(FrameId, DockPlacement)> {
+    for layout in frames {
+        let Some(zone) = resolve_frame_drop_zone(layout.rect, point) else {
+            continue;
+        };
+        return zone.placement().map(|placement| (layout.frame, placement));
+    }
+
+    None
 }
 
 fn valid_drop_rect(rect: Rect) -> bool {
