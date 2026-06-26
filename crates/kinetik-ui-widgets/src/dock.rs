@@ -552,6 +552,37 @@ impl DockJoinRequest {
     }
 }
 
+/// Topology-validated request to swap one frame with an adjacent neighbor.
+///
+/// The request is resolved from frame neighbor topology and is applied by
+/// swapping whole frame leaves in the dock tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DockSwapRequest {
+    source_frame: FrameId,
+    direction: DockNeighborDirection,
+    target_frame: FrameId,
+}
+
+impl DockSwapRequest {
+    /// Returns the source frame that will trade dock-tree positions.
+    #[must_use]
+    pub const fn source_frame(self) -> FrameId {
+        self.source_frame
+    }
+
+    /// Returns the requested neighbor direction from the source frame.
+    #[must_use]
+    pub const fn direction(self) -> DockNeighborDirection {
+        self.direction
+    }
+
+    /// Returns the resolved neighboring frame that will trade positions.
+    #[must_use]
+    pub const fn target_frame(self) -> FrameId {
+        self.target_frame
+    }
+}
+
 /// Finds an open panel instance in deterministic dock tree order.
 #[must_use]
 pub fn locate_panel_instance(
@@ -729,7 +760,42 @@ pub fn resolve_dock_join_request(
     })
 }
 
+/// Resolves a neighbor swap request from solved frame neighbor topology.
+///
+/// The source frame must have a distinct resolved target in the requested
+/// direction, and that target must also appear in the supplied topology.
+#[must_use]
+pub fn resolve_dock_swap_request(
+    neighbors: &[FrameNeighbors],
+    source_frame: FrameId,
+    direction: DockNeighborDirection,
+) -> Option<DockSwapRequest> {
+    let source_neighbors = neighbors
+        .iter()
+        .find(|neighbors| neighbors.frame == source_frame)?;
+    let target_frame = source_neighbors.neighbor(direction)?;
+    if target_frame == source_frame
+        || !neighbors
+            .iter()
+            .any(|neighbors| neighbors.frame == target_frame)
+    {
+        return None;
+    }
+
+    Some(DockSwapRequest {
+        source_frame,
+        direction,
+        target_frame,
+    })
+}
+
 fn join_request_matches_layout(frames: &[FrameLayout], request: DockJoinRequest) -> bool {
+    request.source_frame != request.target_frame
+        && frame_neighbor(frames, request.source_frame, request.direction)
+            == Some(request.target_frame)
+}
+
+fn swap_request_matches_layout(frames: &[FrameLayout], request: DockSwapRequest) -> bool {
     request.source_frame != request.target_frame
         && frame_neighbor(frames, request.source_frame, request.direction)
             == Some(request.target_frame)
@@ -1149,6 +1215,40 @@ impl Dock {
         self.merge_frames(source_frame, target_frame)
     }
 
+    /// Applies a resolved neighbor swap request against the current dock layout.
+    pub fn apply_swap_request(&mut self, bounds: Rect, request: DockSwapRequest) -> bool {
+        let layout = solve_dock_layout(self, bounds);
+        if !swap_request_matches_layout(&layout, request) {
+            return false;
+        }
+
+        swap_frame_leaves(&mut self.root, request.source_frame, request.target_frame)
+    }
+
+    /// Resolves and applies a neighbor swap against the current dock layout.
+    pub fn swap_neighbor(
+        &mut self,
+        bounds: Rect,
+        source_frame: FrameId,
+        direction: DockNeighborDirection,
+    ) -> bool {
+        let layout = solve_dock_layout(self, bounds);
+        let Some(target_frame) = frame_neighbor(&layout, source_frame, direction) else {
+            return false;
+        };
+        let request = DockSwapRequest {
+            source_frame,
+            direction,
+            target_frame,
+        };
+
+        if !swap_request_matches_layout(&layout, request) {
+            return false;
+        }
+
+        swap_frame_leaves(&mut self.root, source_frame, target_frame)
+    }
+
     /// Starts a tab drag when the frame owns the panel.
     #[must_use]
     pub fn begin_tab_drag(&self, source_frame: FrameId, panel: PanelId) -> Option<DockTabDrag> {
@@ -1426,6 +1526,94 @@ fn insert_frame_split(node: &mut DockNode, insertion: DockSplitInsertion, insert
             insert_frame_split(first, insertion, inserted.clone())
                 || insert_frame_split(second, insertion, inserted)
         }
+    }
+}
+
+fn swap_frame_leaves(root: &mut DockNode, first: FrameId, second: FrameId) -> bool {
+    if first == second {
+        return false;
+    }
+
+    let Some(first_path) = find_frame_path(root, first) else {
+        return false;
+    };
+    let Some(second_path) = find_frame_path(root, second) else {
+        return false;
+    };
+    if first_path == second_path {
+        return false;
+    }
+
+    let Some(first_frame) = frame_at_path(root, &first_path).cloned() else {
+        return false;
+    };
+    let Some(second_frame) = frame_at_path(root, &second_path).cloned() else {
+        return false;
+    };
+
+    let Some(target) = frame_at_path_mut(root, &first_path) else {
+        return false;
+    };
+    *target = second_frame;
+
+    let Some(target) = frame_at_path_mut(root, &second_path) else {
+        return false;
+    };
+    *target = first_frame;
+    true
+}
+
+fn find_frame_path(root: &DockNode, frame: FrameId) -> Option<Vec<DockPathElement>> {
+    let mut path = Vec::new();
+    find_frame_path_inner(root, frame, &mut path).then_some(path)
+}
+
+fn find_frame_path_inner(node: &DockNode, frame: FrameId, path: &mut Vec<DockPathElement>) -> bool {
+    match node {
+        DockNode::Frame(candidate) => candidate.id == frame,
+        DockNode::Split { first, second, .. } => {
+            path.push(DockPathElement::First);
+            if find_frame_path_inner(first, frame, path) {
+                return true;
+            }
+            path.pop();
+
+            path.push(DockPathElement::Second);
+            if find_frame_path_inner(second, frame, path) {
+                return true;
+            }
+            path.pop();
+            false
+        }
+    }
+}
+
+fn frame_at_path<'a>(node: &'a DockNode, path: &[DockPathElement]) -> Option<&'a Frame> {
+    match (node, path) {
+        (DockNode::Frame(frame), []) => Some(frame),
+        (DockNode::Split { first, .. }, [DockPathElement::First, rest @ ..]) => {
+            frame_at_path(first, rest)
+        }
+        (DockNode::Split { second, .. }, [DockPathElement::Second, rest @ ..]) => {
+            frame_at_path(second, rest)
+        }
+        _ => None,
+    }
+}
+
+fn frame_at_path_mut<'a>(
+    node: &'a mut DockNode,
+    path: &[DockPathElement],
+) -> Option<&'a mut Frame> {
+    match (node, path) {
+        (DockNode::Frame(frame), []) => Some(frame),
+        (DockNode::Split { first, .. }, [DockPathElement::First, rest @ ..]) => {
+            frame_at_path_mut(first, rest)
+        }
+        (DockNode::Split { second, .. }, [DockPathElement::Second, rest @ ..]) => {
+            frame_at_path_mut(second, rest)
+        }
+        _ => None,
     }
 }
 

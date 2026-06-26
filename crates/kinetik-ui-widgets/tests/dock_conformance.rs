@@ -11,9 +11,10 @@ use kinetik_ui_widgets::{
     PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext,
     SnapshotDiagnosticSeverity, WorkspaceRestoreError, WorkspaceSnapshotDiagnosticCode,
     frame_neighbor, frame_tabs, resolve_dock_drop_target, resolve_dock_join_request,
-    resolve_frame_split_affordance_request, resolve_panel_affordances, resolve_panel_close_request,
-    resolve_panel_duplicate_request, resolve_panel_float_request, resolve_panel_open_decision,
-    solve_dock_layout, solve_dock_neighbors, solve_dock_splitters, split_ratio_from_drag,
+    resolve_dock_swap_request, resolve_frame_split_affordance_request, resolve_panel_affordances,
+    resolve_panel_close_request, resolve_panel_duplicate_request, resolve_panel_float_request,
+    resolve_panel_open_decision, solve_dock_layout, solve_dock_neighbors, solve_dock_splitters,
+    split_ratio_from_drag,
 };
 
 fn panel(id: u64, title: &str) -> Panel {
@@ -66,6 +67,10 @@ fn neighbors_for(neighbors: &[FrameNeighbors], frame: u64) -> FrameNeighbors {
         .find(|neighbors| neighbors.frame == FrameId::from_raw(frame))
         .copied()
         .expect("frame neighbors")
+}
+
+fn panel_ids(frame: &Frame) -> Vec<PanelId> {
+    frame.panels.iter().map(|panel| panel.id).collect()
 }
 
 fn workspace_panel_descriptors() -> Vec<PanelTypeDescriptor> {
@@ -1331,6 +1336,236 @@ fn dock_join_requests_follow_neighbor_t_junction_ties() {
     .expect("join request");
 
     assert_eq!(request.target_frame(), FrameId::from_raw(2));
+}
+
+#[test]
+fn dock_swap_requests_resolve_left_right_up_down_neighbors() {
+    let dock = nested_dock();
+    let neighbors = solve_dock_neighbors(&dock, Rect::new(0.0, 0.0, 1000.0, 500.0));
+
+    for (source, direction, target) in [
+        (1, DockNeighborDirection::Right, 2),
+        (2, DockNeighborDirection::Left, 1),
+        (2, DockNeighborDirection::Down, 3),
+        (3, DockNeighborDirection::Up, 2),
+    ] {
+        let request = resolve_dock_swap_request(&neighbors, FrameId::from_raw(source), direction)
+            .expect("swap request");
+
+        assert_eq!(request.source_frame(), FrameId::from_raw(source));
+        assert_eq!(request.direction(), direction);
+        assert_eq!(request.target_frame(), FrameId::from_raw(target));
+    }
+}
+
+#[test]
+fn dock_swap_exchanges_frame_leaves_for_each_neighbor_direction() {
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+
+    for (source, direction, target) in [
+        (1, DockNeighborDirection::Right, 2),
+        (2, DockNeighborDirection::Left, 1),
+        (2, DockNeighborDirection::Down, 3),
+        (3, DockNeighborDirection::Up, 2),
+    ] {
+        let mut dock = nested_dock();
+        let source_id = FrameId::from_raw(source);
+        let target_id = FrameId::from_raw(target);
+        let source_rect = frame_rect(&dock, source, bounds);
+        let target_rect = frame_rect(&dock, target, bounds);
+        let source_panels = panel_ids(dock.frame(source_id).expect("source before"));
+        let target_panels = panel_ids(dock.frame(target_id).expect("target before"));
+        let neighbors = solve_dock_neighbors(&dock, bounds);
+        let request =
+            resolve_dock_swap_request(&neighbors, source_id, direction).expect("swap request");
+
+        assert!(dock.apply_swap_request(bounds, request));
+
+        assert_eq!(frame_rect(&dock, source, bounds), target_rect);
+        assert_eq!(frame_rect(&dock, target, bounds), source_rect);
+        assert_eq!(
+            panel_ids(dock.frame(source_id).expect("source after")),
+            source_panels
+        );
+        assert_eq!(
+            panel_ids(dock.frame(target_id).expect("target after")),
+            target_panels
+        );
+    }
+}
+
+#[test]
+fn dock_swap_preserves_frame_state_and_round_trips() {
+    let mut dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+    assert!(dock.select_panel(FrameId::from_raw(2), PanelId::from_raw(3)));
+    dock.frame_mut(FrameId::from_raw(2))
+        .expect("source frame")
+        .set_panel_dismissible(PanelId::from_raw(3), false);
+    assert!(dock.set_active_frame(FrameId::from_raw(2)));
+    let prior = dock.snapshot();
+
+    assert!(dock.swap_neighbor(bounds, FrameId::from_raw(2), DockNeighborDirection::Left));
+
+    assert_eq!(dock.active_frame(), Some(FrameId::from_raw(2)));
+    assert_eq!(
+        frame_rect(&dock, 2, bounds),
+        frame_rect(&nested_dock(), 1, bounds)
+    );
+    assert_eq!(
+        panel_ids(dock.frame(FrameId::from_raw(2)).expect("source after")),
+        vec![PanelId::from_raw(2), PanelId::from_raw(3)]
+    );
+    let source = dock.frame(FrameId::from_raw(2)).expect("source after");
+    assert_eq!(
+        source.active_panel().expect("active panel").id,
+        PanelId::from_raw(3)
+    );
+    assert!(source.panel_dismissible(PanelId::from_raw(2)));
+    assert!(!source.panel_dismissible(PanelId::from_raw(3)));
+    assert_eq!(
+        panel_ids(dock.frame(FrameId::from_raw(1)).expect("target after")),
+        vec![PanelId::from_raw(1)]
+    );
+
+    let snapshot = dock.snapshot();
+    let restored = Dock::restore(snapshot.clone()).expect("restore");
+    assert_eq!(restored.snapshot(), snapshot);
+    assert_eq!(restored.active_frame(), Some(FrameId::from_raw(2)));
+    let restored_source = restored
+        .frame(FrameId::from_raw(2))
+        .expect("restored source");
+    assert_eq!(
+        restored_source
+            .active_panel()
+            .expect("restored active panel")
+            .id,
+        PanelId::from_raw(3)
+    );
+    assert!(!restored_source.panel_dismissible(PanelId::from_raw(3)));
+
+    assert!(dock.swap_neighbor(bounds, FrameId::from_raw(2), DockNeighborDirection::Right));
+    assert_eq!(dock.snapshot(), prior);
+}
+
+#[test]
+fn dock_swap_rejects_invalid_topology_without_mutation() {
+    let mut dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+    let before = dock.snapshot();
+    let neighbors = solve_dock_neighbors(&dock, bounds);
+
+    assert_eq!(
+        resolve_dock_swap_request(
+            &neighbors,
+            FrameId::from_raw(99),
+            DockNeighborDirection::Right
+        ),
+        None
+    );
+    assert!(!dock.swap_neighbor(bounds, FrameId::from_raw(99), DockNeighborDirection::Right));
+    assert_eq!(dock.snapshot(), before);
+
+    assert_eq!(
+        resolve_dock_swap_request(
+            &neighbors,
+            FrameId::from_raw(1),
+            DockNeighborDirection::Left
+        ),
+        None
+    );
+    assert!(!dock.swap_neighbor(bounds, FrameId::from_raw(1), DockNeighborDirection::Left));
+    assert_eq!(dock.snapshot(), before);
+
+    let self_swap = [FrameNeighbors {
+        frame: FrameId::from_raw(1),
+        left: Some(FrameId::from_raw(1)),
+        right: None,
+        up: None,
+        down: None,
+    }];
+    assert_eq!(
+        resolve_dock_swap_request(
+            &self_swap,
+            FrameId::from_raw(1),
+            DockNeighborDirection::Left
+        ),
+        None
+    );
+    assert_eq!(dock.snapshot(), before);
+
+    let missing_target = [FrameNeighbors {
+        frame: FrameId::from_raw(1),
+        left: None,
+        right: Some(FrameId::from_raw(99)),
+        up: None,
+        down: None,
+    }];
+    assert_eq!(
+        resolve_dock_swap_request(
+            &missing_target,
+            FrameId::from_raw(1),
+            DockNeighborDirection::Right,
+        ),
+        None
+    );
+    assert_eq!(dock.snapshot(), before);
+
+    let forged_neighbors = [
+        FrameNeighbors {
+            frame: FrameId::from_raw(1),
+            left: None,
+            right: None,
+            up: None,
+            down: Some(FrameId::from_raw(3)),
+        },
+        FrameNeighbors::empty(FrameId::from_raw(3)),
+    ];
+    let request = resolve_dock_swap_request(
+        &forged_neighbors,
+        FrameId::from_raw(1),
+        DockNeighborDirection::Down,
+    )
+    .expect("forged request still resolves as pure metadata");
+
+    assert!(!dock.apply_swap_request(bounds, request));
+    assert!(!dock.swap_neighbor(bounds, FrameId::from_raw(1), DockNeighborDirection::Down));
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn dock_swap_rejects_stale_resolved_requests_without_mutation() {
+    let mut dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+    let original_neighbors = solve_dock_neighbors(&dock, bounds);
+    let stale_request = resolve_dock_swap_request(
+        &original_neighbors,
+        FrameId::from_raw(2),
+        DockNeighborDirection::Left,
+    )
+    .expect("original swap request");
+
+    assert!(dock.split_panel(
+        FrameId::from_raw(2),
+        PanelId::from_raw(3),
+        DockSplitInsertion::new(
+            FrameId::from_raw(2),
+            DockPlacement::Left,
+            FrameId::from_raw(9),
+        ),
+    ));
+    assert_eq!(
+        frame_neighbor(
+            &solve_dock_layout(&dock, bounds),
+            FrameId::from_raw(2),
+            DockNeighborDirection::Left,
+        ),
+        Some(FrameId::from_raw(9))
+    );
+    let before_stale_apply = dock.snapshot();
+
+    assert!(!dock.apply_swap_request(bounds, stale_request));
+    assert_eq!(dock.snapshot(), before_stale_apply);
 }
 
 #[test]
