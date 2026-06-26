@@ -140,7 +140,7 @@ pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
     ComponentMetadata::new("Viewport", "viewport", Viewport, Partial),
     ComponentMetadata::new("Ruler", "ruler", Viewport, Partial),
     ComponentMetadata::new("Dropdown", "dropdown", Overlay, Partial),
-    ComponentMetadata::new("MenuBar", "menu-bar", Overlay, Planned),
+    ComponentMetadata::new("MenuBar", "menu-bar", Overlay, Partial),
     ComponentMetadata::new("Tabs", "tabs", Docking, Planned),
     ComponentMetadata::new("Toolbar", "toolbar", System, Planned),
     ComponentMetadata::new("StatusBar", "status-bar", System, Planned),

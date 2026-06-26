@@ -1,5 +1,6 @@
 //! Reusable widgets built from Kinetik UI core primitives.
 
+pub mod chrome;
 pub mod collections;
 pub mod dock;
 pub mod inspector;
@@ -8,6 +9,7 @@ pub mod taxonomy;
 pub mod ui;
 pub mod viewport;
 
+pub use chrome::*;
 pub use collections::*;
 pub use dock::*;
 pub use inspector::*;
