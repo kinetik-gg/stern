@@ -546,6 +546,30 @@ impl PanelRegistry {
     ) -> Option<PanelOpenDecision> {
         resolve_panel_open_decision(self.descriptor(panel_type)?, panel_instances, dock, context)
     }
+
+    /// Resolves panel affordances and app-owned request metadata for one open
+    /// panel instance.
+    ///
+    /// The returned value is pure metadata. It does not create, close,
+    /// duplicate, float, focus, or otherwise mutate panels or application state.
+    #[must_use]
+    pub fn resolve_policy_context(
+        &self,
+        panel_instances: &[PanelInstanceSnapshot],
+        dock: &Dock,
+        panel_instance: PanelInstanceId,
+        frame: FrameId,
+        workspace_context: PanelWorkspaceContext,
+    ) -> PanelPolicyResolution {
+        resolve_panel_policy_context(PanelPolicyContext::new(
+            self,
+            panel_instances,
+            dock,
+            panel_instance,
+            frame,
+            workspace_context,
+        ))
+    }
 }
 
 /// Application-owned metadata carried by panel policy requests.
@@ -671,6 +695,101 @@ pub struct PanelFloatRequest {
     pub metadata: PanelPolicyMetadata,
     /// Panel instance that may be floated by the application/platform layer.
     pub source: PanelInstanceLocation,
+}
+
+/// Inputs used to resolve policy metadata for one panel instance.
+///
+/// This context borrows the current application-owned registry and panel
+/// instance records, plus the dock/frame state needed to resolve frame-owned
+/// affordances. It is intentionally read-only.
+#[derive(Debug, Clone, Copy)]
+pub struct PanelPolicyContext<'a> {
+    /// Registry containing developer-declared panel descriptors.
+    pub registry: &'a PanelRegistry,
+    /// Current application-owned open panel instance records.
+    pub panel_instances: &'a [PanelInstanceSnapshot],
+    /// Current dock tree used for location and singleton focus lookup.
+    pub dock: &'a Dock,
+    /// Open panel instance to resolve.
+    pub panel_instance: PanelInstanceId,
+    /// Frame expected to currently contain the panel instance.
+    pub frame: FrameId,
+    /// Workspace context requested by the caller.
+    pub workspace_context: PanelWorkspaceContext,
+}
+
+impl<'a> PanelPolicyContext<'a> {
+    /// Creates a read-only panel policy context.
+    #[must_use]
+    pub const fn new(
+        registry: &'a PanelRegistry,
+        panel_instances: &'a [PanelInstanceSnapshot],
+        dock: &'a Dock,
+        panel_instance: PanelInstanceId,
+        frame: FrameId,
+        workspace_context: PanelWorkspaceContext,
+    ) -> Self {
+        Self {
+            registry,
+            panel_instances,
+            dock,
+            panel_instance,
+            frame,
+            workspace_context,
+        }
+    }
+}
+
+/// Deterministic reason a panel policy context could not produce requests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanelPolicyUnavailableReason {
+    /// No application-owned instance record exists for the requested panel.
+    MissingPanelInstance,
+    /// The instance record references a panel type missing from the registry.
+    MissingDescriptor,
+    /// The instance record exists, but the panel is not present in the dock.
+    MissingPanelLocation,
+    /// The requested frame does not currently own the panel instance.
+    MissingFrameMembership,
+    /// The requested workspace context is not allowed by the descriptor.
+    DisallowedContext,
+}
+
+/// Pure result for one resolved panel policy context.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PanelPolicyResolution {
+    /// Requested panel instance.
+    pub panel_instance: PanelInstanceId,
+    /// Resolved panel type from the instance record, when available.
+    pub panel_type: Option<PanelTypeId>,
+    /// Frame requested by the caller.
+    pub frame: FrameId,
+    /// Dock location found for the panel instance, when available.
+    pub location: Option<PanelInstanceLocation>,
+    /// Workspace context requested by the caller.
+    pub workspace_context: PanelWorkspaceContext,
+    /// Deterministic unavailable reason. `None` means all requests were
+    /// resolved against a valid descriptor, instance, frame, and context.
+    pub unavailable: Option<PanelPolicyUnavailableReason>,
+    /// Descriptor/frame-derived affordances, when enough context exists.
+    pub affordances: Option<PanelAffordances>,
+    /// Optional open or focus metadata for the requested context.
+    pub open_decision: Option<PanelOpenDecision>,
+    /// Optional close metadata for the current panel instance.
+    pub close_request: Option<PanelCloseRequest>,
+    /// Optional duplicate metadata for the current panel instance.
+    pub duplicate_request: Option<PanelDuplicateRequest>,
+    /// Optional future floating-surface metadata for the current panel instance.
+    pub float_request: Option<PanelFloatRequest>,
+}
+
+impl PanelPolicyResolution {
+    /// Returns true when the resolver produced requests for an available
+    /// descriptor, panel instance, frame membership, and workspace context.
+    #[must_use]
+    pub const fn is_available(&self) -> bool {
+        self.unavailable.is_none()
+    }
 }
 
 /// Request for an application-owned frame edge split affordance.
@@ -960,6 +1079,134 @@ pub fn resolve_panel_float_request(
             metadata: PanelPolicyMetadata::from_descriptor(descriptor),
             source: PanelInstanceLocation::new(panel_instance, frame.id),
         })
+}
+
+/// Resolves panel affordances and app-owned request metadata from registry,
+/// instance, dock, frame, and workspace context.
+///
+/// The resolver is metadata-only. It composes the focused panel policy helpers
+/// and does not mutate dock state, create panels, close panels, duplicate
+/// panels, open native windows, or execute application commands.
+#[must_use]
+pub fn resolve_panel_policy_context(context: PanelPolicyContext<'_>) -> PanelPolicyResolution {
+    let Some(instance) = context
+        .panel_instances
+        .iter()
+        .find(|instance| instance.id == context.panel_instance)
+    else {
+        return unavailable_panel_policy_resolution(
+            &context,
+            None,
+            None,
+            None,
+            PanelPolicyUnavailableReason::MissingPanelInstance,
+        );
+    };
+
+    let panel_type = Some(instance.panel_type);
+    let location = locate_panel_instance(context.dock, context.panel_instance);
+
+    let Some(descriptor) = context.registry.descriptor(instance.panel_type) else {
+        return unavailable_panel_policy_resolution(
+            &context,
+            panel_type,
+            location,
+            None,
+            PanelPolicyUnavailableReason::MissingDescriptor,
+        );
+    };
+
+    let Some(location) = location else {
+        return unavailable_panel_policy_resolution(
+            &context,
+            panel_type,
+            None,
+            None,
+            PanelPolicyUnavailableReason::MissingPanelLocation,
+        );
+    };
+
+    let panel = PanelId::from_instance_id(context.panel_instance);
+    let Some(frame) = context.dock.frame(context.frame) else {
+        return unavailable_panel_policy_resolution(
+            &context,
+            panel_type,
+            Some(location),
+            None,
+            PanelPolicyUnavailableReason::MissingFrameMembership,
+        );
+    };
+
+    if location.frame != context.frame || !frame.panels.iter().any(|item| item.id == panel) {
+        return unavailable_panel_policy_resolution(
+            &context,
+            panel_type,
+            Some(location),
+            None,
+            PanelPolicyUnavailableReason::MissingFrameMembership,
+        );
+    }
+
+    let affordances = resolve_panel_affordances(descriptor, context.panel_instance, frame);
+
+    if !descriptor
+        .allowed_contexts
+        .contains(&context.workspace_context)
+    {
+        return unavailable_panel_policy_resolution(
+            &context,
+            panel_type,
+            Some(location),
+            Some(affordances),
+            PanelPolicyUnavailableReason::DisallowedContext,
+        );
+    }
+
+    PanelPolicyResolution {
+        panel_instance: context.panel_instance,
+        panel_type,
+        frame: context.frame,
+        location: Some(location),
+        workspace_context: context.workspace_context,
+        unavailable: None,
+        affordances: Some(affordances),
+        open_decision: resolve_panel_open_decision(
+            descriptor,
+            context.panel_instances,
+            context.dock,
+            context.workspace_context,
+        ),
+        close_request: resolve_panel_close_request(descriptor, context.panel_instance, frame),
+        duplicate_request: resolve_panel_duplicate_request(
+            descriptor,
+            context.panel_instance,
+            frame,
+            context.workspace_context,
+        ),
+        float_request: resolve_panel_float_request(descriptor, context.panel_instance, frame),
+    }
+}
+
+fn unavailable_panel_policy_resolution(
+    context: &PanelPolicyContext<'_>,
+    panel_type: Option<PanelTypeId>,
+    location: Option<PanelInstanceLocation>,
+    affordances: Option<PanelAffordances>,
+    reason: PanelPolicyUnavailableReason,
+) -> PanelPolicyResolution {
+    PanelPolicyResolution {
+        panel_instance: context.panel_instance,
+        panel_type,
+        frame: context.frame,
+        location,
+        workspace_context: context.workspace_context,
+        unavailable: Some(reason),
+        affordances,
+        open_decision: None,
+        close_request: None,
+        duplicate_request: None,
+        float_request: None,
+    }
 }
 
 /// Resolves an app-owned frame edge split request from frame layouts.

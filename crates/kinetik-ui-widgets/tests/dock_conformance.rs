@@ -6,16 +6,18 @@ use kinetik_ui_widgets::{
     DockRestoreError, DockSnapshot, DockSnapshotDiagnosticCode, DockSnapshotNode,
     DockSnapshotSplitValue, DockSplitInsertion, DockSplitPath, DockSplitterContextAction,
     DockSplitterContextActionKind, DockSplitterSide, Frame, FrameId, FrameLayout, FrameNeighbors,
-    FrameSplitAffordanceRequest, Panel, PanelClosePolicy, PanelDockHint, PanelDuplicatePolicy,
-    PanelFloatPolicy, PanelId, PanelInstanceId, PanelInstanceLocation, PanelInstancePolicy,
-    PanelInstanceSnapshot, PanelOpenActionMetadata, PanelOpenDecision, PanelPolicyMetadata,
-    PanelRegistry, PanelRegistryError, PanelTypeCategory, PanelTypeDescriptor, PanelTypeId,
-    PanelWorkspaceContext, SnapshotDiagnosticSeverity, WorkspaceRestoreError,
-    WorkspaceSnapshotDiagnosticCode, frame_neighbor, frame_tabs, resolve_dock_drop_target,
-    resolve_dock_join_request, resolve_dock_splitter_context_actions, resolve_dock_swap_request,
+    FrameSplitAffordanceRequest, Panel, PanelAffordances, PanelClosePolicy, PanelDockHint,
+    PanelDuplicatePolicy, PanelFloatPolicy, PanelId, PanelInstanceId, PanelInstanceLocation,
+    PanelInstancePolicy, PanelInstanceSnapshot, PanelOpenActionMetadata, PanelOpenDecision,
+    PanelPolicyContext, PanelPolicyMetadata, PanelPolicyUnavailableReason, PanelRegistry,
+    PanelRegistryError, PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext,
+    SnapshotDiagnosticSeverity, WorkspaceRestoreError, WorkspaceSnapshotDiagnosticCode,
+    frame_neighbor, frame_tabs, resolve_dock_drop_target, resolve_dock_join_request,
+    resolve_dock_splitter_context_actions, resolve_dock_swap_request,
     resolve_frame_split_affordance_request, resolve_panel_affordances, resolve_panel_close_request,
     resolve_panel_duplicate_request, resolve_panel_float_request, resolve_panel_open_decision,
-    solve_dock_layout, solve_dock_neighbors, solve_dock_splitters, split_ratio_from_drag,
+    resolve_panel_policy_context, solve_dock_layout, solve_dock_neighbors, solve_dock_splitters,
+    split_ratio_from_drag,
 };
 
 fn panel(id: u64, title: &str) -> Panel {
@@ -662,6 +664,285 @@ fn panel_policy_future_float_request_is_metadata_only() {
     );
     assert_eq!(request.metadata.panel_type, PanelTypeId::from_raw(30));
     assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn panel_policy_context_resolves_registry_instance_frame_and_requests() {
+    let mut dock = nested_dock();
+    assert!(
+        dock.frame_mut(FrameId::from_raw(2))
+            .expect("frame")
+            .set_panel_dismissible(PanelId::from_raw(2), false)
+    );
+    let registry = PanelRegistry::from_descriptors([PanelTypeDescriptor::new(
+        PanelTypeId::from_raw(20),
+        "Viewport",
+    )
+    .with_default_size(Size::new(640.0, 360.0))
+    .with_default_open_action(ActionId::new("workspace.open.viewport"))
+    .with_float_policy(PanelFloatPolicy::Allowed)])
+    .expect("registry");
+
+    let resolution = registry.resolve_policy_context(
+        &workspace_panel_instances(),
+        &dock,
+        PanelInstanceId::from_raw(2),
+        FrameId::from_raw(2),
+        PanelWorkspaceContext::Docked,
+    );
+
+    assert!(resolution.is_available());
+    assert_eq!(resolution.unavailable, None);
+    assert_eq!(resolution.panel_type, Some(PanelTypeId::from_raw(20)));
+    assert_eq!(
+        resolution.location,
+        Some(PanelInstanceLocation {
+            panel_instance: PanelInstanceId::from_raw(2),
+            panel: PanelId::from_raw(2),
+            frame: FrameId::from_raw(2),
+        })
+    );
+    assert_eq!(
+        resolution.affordances,
+        Some(PanelAffordances {
+            panel_type: PanelTypeId::from_raw(20),
+            panel_instance: PanelInstanceId::from_raw(2),
+            close_visible: false,
+            duplicate_available: true,
+            float_available: true,
+        })
+    );
+    assert!(resolution.close_request.is_none());
+    assert!(matches!(
+        resolution.open_decision,
+        Some(PanelOpenDecision::OpenNew(_))
+    ));
+    assert_eq!(
+        resolution
+            .duplicate_request
+            .as_ref()
+            .expect("duplicate")
+            .source
+            .panel_instance,
+        PanelInstanceId::from_raw(2)
+    );
+    assert_eq!(
+        resolution
+            .float_request
+            .as_ref()
+            .expect("float")
+            .source
+            .panel_instance,
+        PanelInstanceId::from_raw(2)
+    );
+}
+
+#[test]
+fn panel_policy_context_reports_missing_descriptor_with_location_context() {
+    let dock = nested_dock();
+    let registry = PanelRegistry::new();
+
+    let resolution = registry.resolve_policy_context(
+        &workspace_panel_instances(),
+        &dock,
+        PanelInstanceId::from_raw(2),
+        FrameId::from_raw(2),
+        PanelWorkspaceContext::Docked,
+    );
+
+    assert_eq!(
+        resolution.unavailable,
+        Some(PanelPolicyUnavailableReason::MissingDescriptor)
+    );
+    assert_eq!(resolution.panel_type, Some(PanelTypeId::from_raw(20)));
+    assert_eq!(
+        resolution.location.expect("location").frame,
+        FrameId::from_raw(2)
+    );
+    assert!(resolution.affordances.is_none());
+    assert!(resolution.open_decision.is_none());
+    assert!(resolution.duplicate_request.is_none());
+}
+
+#[test]
+fn panel_policy_context_reports_missing_instance_location_and_frame_membership() {
+    let dock = nested_dock();
+    let registry = PanelRegistry::from_descriptors([PanelTypeDescriptor::new(
+        PanelTypeId::from_raw(20),
+        "Viewport",
+    )])
+    .expect("registry");
+
+    let missing_instance = registry.resolve_policy_context(
+        &workspace_panel_instances()
+            .into_iter()
+            .filter(|instance| instance.id != PanelInstanceId::from_raw(2))
+            .collect::<Vec<_>>(),
+        &dock,
+        PanelInstanceId::from_raw(2),
+        FrameId::from_raw(2),
+        PanelWorkspaceContext::Docked,
+    );
+    assert_eq!(
+        missing_instance.unavailable,
+        Some(PanelPolicyUnavailableReason::MissingPanelInstance)
+    );
+    assert_eq!(missing_instance.panel_type, None);
+    assert_eq!(missing_instance.location, None);
+
+    let missing_location_instances = [PanelInstanceSnapshot::new(
+        PanelInstanceId::from_raw(99),
+        PanelTypeId::from_raw(20),
+        "Detached Viewport",
+    )];
+    let missing_location = registry.resolve_policy_context(
+        &missing_location_instances,
+        &dock,
+        PanelInstanceId::from_raw(99),
+        FrameId::from_raw(2),
+        PanelWorkspaceContext::Docked,
+    );
+    assert_eq!(
+        missing_location.unavailable,
+        Some(PanelPolicyUnavailableReason::MissingPanelLocation)
+    );
+    assert_eq!(missing_location.panel_type, Some(PanelTypeId::from_raw(20)));
+    assert_eq!(missing_location.location, None);
+
+    let missing_membership = registry.resolve_policy_context(
+        &workspace_panel_instances(),
+        &dock,
+        PanelInstanceId::from_raw(2),
+        FrameId::from_raw(1),
+        PanelWorkspaceContext::Docked,
+    );
+    assert_eq!(
+        missing_membership.unavailable,
+        Some(PanelPolicyUnavailableReason::MissingFrameMembership)
+    );
+    assert_eq!(
+        missing_membership.location.expect("actual location").frame,
+        FrameId::from_raw(2)
+    );
+    assert!(missing_membership.affordances.is_none());
+}
+
+#[test]
+fn panel_policy_context_denies_singleton_duplicate_and_disallowed_context_requests() {
+    let dock = nested_dock();
+    let singleton_registry = PanelRegistry::from_descriptors([PanelTypeDescriptor::new(
+        PanelTypeId::from_raw(30),
+        "Inspector",
+    )
+    .with_instance_policy(PanelInstancePolicy::Singleton)])
+    .expect("registry");
+
+    let singleton = singleton_registry.resolve_policy_context(
+        &workspace_panel_instances(),
+        &dock,
+        PanelInstanceId::from_raw(3),
+        FrameId::from_raw(2),
+        PanelWorkspaceContext::Docked,
+    );
+
+    assert!(singleton.is_available());
+    assert!(
+        !singleton
+            .affordances
+            .expect("singleton affordances")
+            .duplicate_available
+    );
+    assert!(singleton.duplicate_request.is_none());
+    assert!(matches!(
+        singleton.open_decision,
+        Some(PanelOpenDecision::FocusExisting(_))
+    ));
+
+    let modal_only_registry = PanelRegistry::from_descriptors([PanelTypeDescriptor::new(
+        PanelTypeId::from_raw(20),
+        "Viewport",
+    )
+    .with_allowed_contexts([PanelWorkspaceContext::Modal])])
+    .expect("registry");
+
+    let disallowed = modal_only_registry.resolve_policy_context(
+        &workspace_panel_instances(),
+        &dock,
+        PanelInstanceId::from_raw(2),
+        FrameId::from_raw(2),
+        PanelWorkspaceContext::Docked,
+    );
+
+    assert_eq!(
+        disallowed.unavailable,
+        Some(PanelPolicyUnavailableReason::DisallowedContext)
+    );
+    assert!(disallowed.affordances.is_some());
+    assert!(disallowed.open_decision.is_none());
+    assert!(disallowed.close_request.is_none());
+    assert!(disallowed.duplicate_request.is_none());
+    assert!(disallowed.float_request.is_none());
+}
+
+#[test]
+fn panel_policy_context_float_request_is_metadata_only_when_allowed() {
+    let dock = nested_dock();
+    let registry = PanelRegistry::from_descriptors([PanelTypeDescriptor::new(
+        PanelTypeId::from_raw(30),
+        "Inspector",
+    )
+    .with_float_policy(PanelFloatPolicy::Allowed)])
+    .expect("registry");
+    let before = dock.snapshot();
+
+    let resolution = registry.resolve_policy_context(
+        &workspace_panel_instances(),
+        &dock,
+        PanelInstanceId::from_raw(3),
+        FrameId::from_raw(2),
+        PanelWorkspaceContext::Docked,
+    );
+
+    assert!(resolution.is_available());
+    assert_eq!(
+        resolution.float_request.expect("float").source,
+        PanelInstanceLocation {
+            panel_instance: PanelInstanceId::from_raw(3),
+            panel: PanelId::from_raw(3),
+            frame: FrameId::from_raw(2),
+        }
+    );
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn panel_policy_context_resolver_is_pure_metadata() {
+    let dock = nested_dock();
+    let dock_before = dock.snapshot();
+    let registry = PanelRegistry::from_descriptors([PanelTypeDescriptor::new(
+        PanelTypeId::from_raw(20),
+        "Viewport",
+    )
+    .with_float_policy(PanelFloatPolicy::Allowed)])
+    .expect("registry");
+    let registry_before = registry.clone();
+    let instances = workspace_panel_instances();
+    let instances_before = instances.clone();
+
+    let resolution = resolve_panel_policy_context(PanelPolicyContext::new(
+        &registry,
+        &instances,
+        &dock,
+        PanelInstanceId::from_raw(2),
+        FrameId::from_raw(2),
+        PanelWorkspaceContext::Docked,
+    ));
+
+    assert!(resolution.is_available());
+    assert!(resolution.open_decision.is_some());
+    assert_eq!(dock.snapshot(), dock_before);
+    assert_eq!(registry, registry_before);
+    assert_eq!(instances, instances_before);
 }
 
 #[test]
