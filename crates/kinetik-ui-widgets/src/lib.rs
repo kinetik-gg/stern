@@ -338,13 +338,20 @@ fn clipboard_shortcut(event: &kinetik_ui_core::KeyEvent) -> Option<ClipboardShor
     {
         return None;
     }
-    let Key::Character(character) = &event.key else {
-        return None;
-    };
-    match character.to_ascii_lowercase().as_str() {
-        "c" => Some(ClipboardShortcut::Copy),
-        "x" => Some(ClipboardShortcut::Cut),
-        "v" => Some(ClipboardShortcut::Paste),
+
+    if let Key::Character(character) = &event.key {
+        match character.to_ascii_lowercase().as_str() {
+            "c" => return Some(ClipboardShortcut::Copy),
+            "x" => return Some(ClipboardShortcut::Cut),
+            "v" => return Some(ClipboardShortcut::Paste),
+            _ => {}
+        }
+    }
+
+    match event.physical_key {
+        kinetik_ui_core::PhysicalKey::KeyC => Some(ClipboardShortcut::Copy),
+        kinetik_ui_core::PhysicalKey::KeyX => Some(ClipboardShortcut::Cut),
+        kinetik_ui_core::PhysicalKey::KeyV => Some(ClipboardShortcut::Paste),
         _ => None,
     }
 }

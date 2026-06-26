@@ -5,8 +5,8 @@ use std::time::Duration;
 use kinetik_ui_core::{
     ActionBinding, ActionContext, ActionDescriptor, ActionPriority, ActionRouter,
     ActionRoutingContext, ComponentState, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
-    PhysicalSize, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect,
-    RepaintRequest, ScaleFactor, SemanticRole, SemanticValue, Shortcut, Size, TextInputEvent,
+    PhysicalKey, PhysicalSize, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive,
+    Rect, RepaintRequest, ScaleFactor, SemanticRole, SemanticValue, Shortcut, Size, TextInputEvent,
     TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId, default_dark_theme,
 };
 use kinetik_ui_text::{TextEditState, TextLayoutStore, TextSelection};
@@ -33,6 +33,16 @@ fn shortcut(character: &str) -> Shortcut {
 fn shortcut_event(character: &str) -> KeyEvent {
     KeyEvent::new(
         Key::Character(character.to_owned()),
+        KeyState::Pressed,
+        ctrl(),
+        false,
+    )
+}
+
+fn physical_shortcut_event(character: &str, physical_key: PhysicalKey) -> KeyEvent {
+    KeyEvent::with_physical_key(
+        Key::Character(character.to_owned()),
+        physical_key,
         KeyState::Pressed,
         ctrl(),
         false,
@@ -398,6 +408,163 @@ fn text_field_clipboard_requests_are_targeted_and_targeted_text_is_applied() {
 
     assert!(applied.changed);
     assert_eq!(state.text, "aXYd");
+}
+
+#[test]
+fn focused_text_field_handles_physical_clipboard_shortcuts_with_mismatched_logical_keys() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("field");
+    let mut memory = UiMemory::new();
+    memory.focus(id);
+    memory.set_text_input_owner(id);
+
+    let mut copy_state = TextEditState::new("abcd");
+    copy_state.set_selection(TextSelection::new(1, 3));
+    let copy_input = UiInput {
+        keyboard: KeyboardInput {
+            modifiers: ctrl(),
+            events: vec![physical_shortcut_event("j", PhysicalKey::KeyC)],
+        },
+        ..UiInput::default()
+    };
+
+    let copy = text_field(
+        id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut copy_state,
+        &copy_input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(!copy.changed);
+    assert_eq!(copy_state.text, "abcd");
+    assert!(copy.widget.platform_requests.iter().any(|request| {
+        matches!(request, PlatformRequest::CopyToClipboard(text) if text == "bc")
+    }));
+
+    let mut cut_state = TextEditState::new("abcd");
+    cut_state.set_selection(TextSelection::new(1, 3));
+    let cut_input = UiInput {
+        keyboard: KeyboardInput {
+            modifiers: ctrl(),
+            events: vec![physical_shortcut_event("q", PhysicalKey::KeyX)],
+        },
+        ..UiInput::default()
+    };
+
+    let cut = text_field(
+        id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut cut_state,
+        &cut_input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(cut.changed);
+    assert_eq!(cut_state.text, "ad");
+    assert!(cut.widget.platform_requests.iter().any(|request| {
+        matches!(request, PlatformRequest::CopyToClipboard(text) if text == "bc")
+    }));
+    assert!(cut_state.undo());
+    assert_eq!(cut_state.text, "abcd");
+
+    let mut paste_state = TextEditState::new("abcd");
+    paste_state.set_caret(2);
+    let paste_input = UiInput {
+        keyboard: KeyboardInput {
+            modifiers: ctrl(),
+            events: vec![physical_shortcut_event("m", PhysicalKey::KeyV)],
+        },
+        ..UiInput::default()
+    };
+
+    let paste = text_field(
+        id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut paste_state,
+        &paste_input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    assert!(!paste.changed);
+    assert_eq!(paste_state.text, "abcd");
+    assert!(paste.widget.platform_requests.iter().any(|request| {
+        matches!(request, PlatformRequest::RequestClipboardText { target } if *target == id)
+    }));
+}
+
+#[test]
+fn unfocused_and_disabled_text_fields_ignore_clipboard_shortcuts_and_targeted_text() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("field");
+    let input = UiInput {
+        keyboard: KeyboardInput {
+            modifiers: ctrl(),
+            events: vec![
+                physical_shortcut_event("j", PhysicalKey::KeyC),
+                physical_shortcut_event("q", PhysicalKey::KeyX),
+                physical_shortcut_event("m", PhysicalKey::KeyV),
+            ],
+        },
+        clipboard_text: vec![kinetik_ui_core::ClipboardText::new(id, "XY")],
+        ..UiInput::default()
+    };
+
+    let mut unfocused_memory = UiMemory::new();
+    let mut unfocused_state = TextEditState::new("abcd");
+    unfocused_state.set_selection(TextSelection::new(1, 3));
+    let unfocused = text_field(
+        id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut unfocused_state,
+        &input,
+        &mut unfocused_memory,
+        &theme,
+        false,
+    );
+    assert!(!unfocused.changed);
+    assert_eq!(unfocused_state.text, "abcd");
+    assert!(
+        !unfocused
+            .widget
+            .platform_requests
+            .iter()
+            .any(is_clipboard_platform_request)
+    );
+
+    let mut disabled_memory = UiMemory::new();
+    disabled_memory.focus(id);
+    disabled_memory.set_text_input_owner(id);
+    let mut disabled_state = TextEditState::new("abcd");
+    disabled_state.set_selection(TextSelection::new(1, 3));
+    let disabled = text_field(
+        id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut disabled_state,
+        &input,
+        &mut disabled_memory,
+        &theme,
+        true,
+    );
+    assert!(!disabled.changed);
+    assert_eq!(disabled_state.text, "abcd");
+    assert!(
+        !disabled
+            .widget
+            .platform_requests
+            .iter()
+            .any(is_clipboard_platform_request)
+    );
+}
+
+fn is_clipboard_platform_request(request: &PlatformRequest) -> bool {
+    matches!(
+        request,
+        PlatformRequest::CopyToClipboard(_) | PlatformRequest::RequestClipboardText { .. }
+    )
 }
 
 #[test]
