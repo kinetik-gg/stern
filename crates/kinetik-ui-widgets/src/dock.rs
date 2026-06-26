@@ -521,6 +521,37 @@ pub struct FrameSplitAffordanceRequest {
     pub new_frame: FrameId,
 }
 
+/// Topology-validated request to join one frame into an adjacent neighbor.
+///
+/// The request is resolved from frame neighbor topology and is applied by
+/// moving the source frame's tabs into the target frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DockJoinRequest {
+    source_frame: FrameId,
+    direction: DockNeighborDirection,
+    target_frame: FrameId,
+}
+
+impl DockJoinRequest {
+    /// Returns the frame whose tabs will move into the target frame.
+    #[must_use]
+    pub const fn source_frame(self) -> FrameId {
+        self.source_frame
+    }
+
+    /// Returns the requested neighbor direction from the source frame.
+    #[must_use]
+    pub const fn direction(self) -> DockNeighborDirection {
+        self.direction
+    }
+
+    /// Returns the resolved neighboring frame that will survive the join.
+    #[must_use]
+    pub const fn target_frame(self) -> FrameId {
+        self.target_frame
+    }
+}
+
 /// Finds an open panel instance in deterministic dock tree order.
 #[must_use]
 pub fn locate_panel_instance(
@@ -667,6 +698,41 @@ pub fn resolve_frame_split_affordance_request(
         active_panel,
         new_frame,
     })
+}
+
+/// Resolves a neighbor join request from solved frame neighbor topology.
+///
+/// The source frame must have a distinct resolved target in the requested
+/// direction, and that target must also appear in the supplied topology.
+#[must_use]
+pub fn resolve_dock_join_request(
+    neighbors: &[FrameNeighbors],
+    source_frame: FrameId,
+    direction: DockNeighborDirection,
+) -> Option<DockJoinRequest> {
+    let source_neighbors = neighbors
+        .iter()
+        .find(|neighbors| neighbors.frame == source_frame)?;
+    let target_frame = source_neighbors.neighbor(direction)?;
+    if target_frame == source_frame
+        || !neighbors
+            .iter()
+            .any(|neighbors| neighbors.frame == target_frame)
+    {
+        return None;
+    }
+
+    Some(DockJoinRequest {
+        source_frame,
+        direction,
+        target_frame,
+    })
+}
+
+fn join_request_matches_layout(frames: &[FrameLayout], request: DockJoinRequest) -> bool {
+    request.source_frame != request.target_frame
+        && frame_neighbor(frames, request.source_frame, request.direction)
+            == Some(request.target_frame)
 }
 
 fn locate_first_panel_type_instance(
@@ -1047,6 +1113,40 @@ impl Dock {
         self.active_frame = Some(target);
         self.refresh_active_frame();
         true
+    }
+
+    /// Applies a resolved neighbor join request against the current dock layout.
+    pub fn apply_join_request(&mut self, bounds: Rect, request: DockJoinRequest) -> bool {
+        let layout = solve_dock_layout(self, bounds);
+        if !join_request_matches_layout(&layout, request) {
+            return false;
+        }
+
+        self.merge_frames(request.source_frame, request.target_frame)
+    }
+
+    /// Resolves and applies a neighbor join against the current dock layout.
+    pub fn join_neighbor(
+        &mut self,
+        bounds: Rect,
+        source_frame: FrameId,
+        direction: DockNeighborDirection,
+    ) -> bool {
+        let layout = solve_dock_layout(self, bounds);
+        let Some(target_frame) = frame_neighbor(&layout, source_frame, direction) else {
+            return false;
+        };
+        let request = DockJoinRequest {
+            source_frame,
+            direction,
+            target_frame,
+        };
+
+        if !join_request_matches_layout(&layout, request) {
+            return false;
+        }
+
+        self.merge_frames(source_frame, target_frame)
     }
 
     /// Starts a tab drag when the frame owns the panel.

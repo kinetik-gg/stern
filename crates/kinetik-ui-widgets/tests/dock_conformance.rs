@@ -4,16 +4,16 @@ use kinetik_ui_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
 use kinetik_ui_widgets::{
     Dock, DockDropTarget, DockNeighborDirection, DockNode, DockPathElement, DockPlacement,
     DockRestoreError, DockSnapshot, DockSnapshotDiagnosticCode, DockSnapshotNode,
-    DockSnapshotSplitValue, DockSplitPath, Frame, FrameId, FrameLayout, FrameNeighbors,
-    FrameSplitAffordanceRequest, Panel, PanelClosePolicy, PanelDockHint, PanelDuplicatePolicy,
-    PanelFloatPolicy, PanelId, PanelInstanceId, PanelInstanceLocation, PanelInstancePolicy,
-    PanelInstanceSnapshot, PanelOpenDecision, PanelPolicyMetadata, PanelTypeCategory,
-    PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, SnapshotDiagnosticSeverity,
-    WorkspaceRestoreError, WorkspaceSnapshotDiagnosticCode, frame_neighbor, frame_tabs,
-    resolve_dock_drop_target, resolve_frame_split_affordance_request, resolve_panel_affordances,
-    resolve_panel_close_request, resolve_panel_duplicate_request, resolve_panel_float_request,
-    resolve_panel_open_decision, solve_dock_layout, solve_dock_neighbors, solve_dock_splitters,
-    split_ratio_from_drag,
+    DockSnapshotSplitValue, DockSplitInsertion, DockSplitPath, Frame, FrameId, FrameLayout,
+    FrameNeighbors, FrameSplitAffordanceRequest, Panel, PanelClosePolicy, PanelDockHint,
+    PanelDuplicatePolicy, PanelFloatPolicy, PanelId, PanelInstanceId, PanelInstanceLocation,
+    PanelInstancePolicy, PanelInstanceSnapshot, PanelOpenDecision, PanelPolicyMetadata,
+    PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext,
+    SnapshotDiagnosticSeverity, WorkspaceRestoreError, WorkspaceSnapshotDiagnosticCode,
+    frame_neighbor, frame_tabs, resolve_dock_drop_target, resolve_dock_join_request,
+    resolve_frame_split_affordance_request, resolve_panel_affordances, resolve_panel_close_request,
+    resolve_panel_duplicate_request, resolve_panel_float_request, resolve_panel_open_decision,
+    solve_dock_layout, solve_dock_neighbors, solve_dock_splitters, split_ratio_from_drag,
 };
 
 fn panel(id: u64, title: &str) -> Panel {
@@ -1088,6 +1088,249 @@ fn invalid_and_empty_geometry_returns_no_dock_neighbors() {
         frame_neighbor(&[], FrameId::from_raw(1), DockNeighborDirection::Right),
         None
     );
+}
+
+#[test]
+fn dock_join_requests_resolve_left_right_up_down_neighbors() {
+    let dock = nested_dock();
+    let neighbors = solve_dock_neighbors(&dock, Rect::new(0.0, 0.0, 1000.0, 500.0));
+
+    for (source, direction, target) in [
+        (1, DockNeighborDirection::Right, 2),
+        (2, DockNeighborDirection::Left, 1),
+        (2, DockNeighborDirection::Down, 3),
+        (3, DockNeighborDirection::Up, 2),
+    ] {
+        let request = resolve_dock_join_request(&neighbors, FrameId::from_raw(source), direction)
+            .expect("join request");
+
+        assert_eq!(request.source_frame(), FrameId::from_raw(source));
+        assert_eq!(request.direction(), direction);
+        assert_eq!(request.target_frame(), FrameId::from_raw(target));
+    }
+}
+
+#[test]
+fn dock_join_requests_reject_invalid_topology_without_mutation() {
+    let mut dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+    let before = dock.snapshot();
+    let neighbors = solve_dock_neighbors(&dock, bounds);
+
+    assert_eq!(
+        resolve_dock_join_request(
+            &neighbors,
+            FrameId::from_raw(99),
+            DockNeighborDirection::Right
+        ),
+        None
+    );
+    assert!(!dock.join_neighbor(bounds, FrameId::from_raw(99), DockNeighborDirection::Right));
+    assert_eq!(dock.snapshot(), before);
+
+    assert_eq!(
+        resolve_dock_join_request(
+            &neighbors,
+            FrameId::from_raw(1),
+            DockNeighborDirection::Left
+        ),
+        None
+    );
+    assert!(!dock.join_neighbor(bounds, FrameId::from_raw(1), DockNeighborDirection::Left));
+    assert_eq!(dock.snapshot(), before);
+
+    assert_eq!(
+        resolve_dock_join_request(
+            &neighbors,
+            FrameId::from_raw(1),
+            DockNeighborDirection::Down
+        ),
+        None
+    );
+    assert!(!dock.join_neighbor(bounds, FrameId::from_raw(1), DockNeighborDirection::Down));
+    assert_eq!(dock.snapshot(), before);
+
+    let self_join = [FrameNeighbors {
+        frame: FrameId::from_raw(1),
+        left: Some(FrameId::from_raw(1)),
+        right: None,
+        up: None,
+        down: None,
+    }];
+    assert_eq!(
+        resolve_dock_join_request(
+            &self_join,
+            FrameId::from_raw(1),
+            DockNeighborDirection::Left
+        ),
+        None
+    );
+    assert_eq!(dock.snapshot(), before);
+
+    let missing_target = [FrameNeighbors {
+        frame: FrameId::from_raw(1),
+        left: None,
+        right: Some(FrameId::from_raw(99)),
+        up: None,
+        down: None,
+    }];
+    assert_eq!(
+        resolve_dock_join_request(
+            &missing_target,
+            FrameId::from_raw(1),
+            DockNeighborDirection::Right,
+        ),
+        None
+    );
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn dock_join_moves_source_tabs_into_neighbor_and_round_trips() {
+    let mut dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+    assert!(dock.select_panel(FrameId::from_raw(2), PanelId::from_raw(3)));
+    dock.frame_mut(FrameId::from_raw(2))
+        .expect("source frame")
+        .set_panel_dismissible(PanelId::from_raw(3), false);
+    let neighbors = solve_dock_neighbors(&dock, bounds);
+    let request = resolve_dock_join_request(
+        &neighbors,
+        FrameId::from_raw(2),
+        DockNeighborDirection::Left,
+    )
+    .expect("join request");
+
+    assert!(dock.apply_join_request(bounds, request));
+
+    assert!(dock.frame(FrameId::from_raw(2)).is_none());
+    assert_eq!(dock.active_frame(), Some(FrameId::from_raw(1)));
+    let target = dock.frame(FrameId::from_raw(1)).expect("target frame");
+    assert_eq!(
+        target
+            .panels
+            .iter()
+            .map(|panel| panel.id)
+            .collect::<Vec<_>>(),
+        vec![
+            PanelId::from_raw(1),
+            PanelId::from_raw(2),
+            PanelId::from_raw(3),
+        ]
+    );
+    assert_eq!(
+        target.active_panel().expect("active panel").id,
+        PanelId::from_raw(3)
+    );
+    assert!(target.panel_dismissible(PanelId::from_raw(1)));
+    assert!(target.panel_dismissible(PanelId::from_raw(2)));
+    assert!(!target.panel_dismissible(PanelId::from_raw(3)));
+
+    let snapshot = dock.snapshot();
+    let restored = Dock::restore(snapshot.clone()).expect("restore");
+    assert_eq!(restored.snapshot(), snapshot);
+    let restored_target = restored
+        .frame(FrameId::from_raw(1))
+        .expect("restored target");
+    assert_eq!(
+        restored_target
+            .active_panel()
+            .expect("restored active panel")
+            .id,
+        PanelId::from_raw(3)
+    );
+    assert!(!restored_target.panel_dismissible(PanelId::from_raw(3)));
+}
+
+#[test]
+fn dock_join_rejects_forged_non_adjacent_topology_without_mutation() {
+    let mut dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+    let before = dock.snapshot();
+    let forged_neighbors = [
+        FrameNeighbors {
+            frame: FrameId::from_raw(1),
+            left: None,
+            right: None,
+            up: None,
+            down: Some(FrameId::from_raw(3)),
+        },
+        FrameNeighbors::empty(FrameId::from_raw(3)),
+    ];
+    let request = resolve_dock_join_request(
+        &forged_neighbors,
+        FrameId::from_raw(1),
+        DockNeighborDirection::Down,
+    )
+    .expect("forged request still resolves as pure metadata");
+
+    assert!(!dock.apply_join_request(bounds, request));
+    assert!(!dock.join_neighbor(bounds, FrameId::from_raw(1), DockNeighborDirection::Down));
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn dock_join_rejects_stale_resolved_requests_without_mutation() {
+    let mut dock = nested_dock();
+    let bounds = Rect::new(0.0, 0.0, 1000.0, 500.0);
+    let original_neighbors = solve_dock_neighbors(&dock, bounds);
+    let stale_request = resolve_dock_join_request(
+        &original_neighbors,
+        FrameId::from_raw(2),
+        DockNeighborDirection::Left,
+    )
+    .expect("original join request");
+
+    assert!(dock.split_panel(
+        FrameId::from_raw(2),
+        PanelId::from_raw(3),
+        DockSplitInsertion::new(
+            FrameId::from_raw(2),
+            DockPlacement::Left,
+            FrameId::from_raw(9),
+        ),
+    ));
+    assert_eq!(
+        frame_neighbor(
+            &solve_dock_layout(&dock, bounds),
+            FrameId::from_raw(2),
+            DockNeighborDirection::Left,
+        ),
+        Some(FrameId::from_raw(9))
+    );
+    let before_stale_apply = dock.snapshot();
+
+    assert!(!dock.apply_join_request(bounds, stale_request));
+    assert_eq!(dock.snapshot(), before_stale_apply);
+}
+
+#[test]
+fn dock_join_requests_follow_neighbor_t_junction_ties() {
+    let dock = Dock::new(DockNode::Split {
+        axis: Axis::Horizontal,
+        ratio: 0.5,
+        min_first: 0.0,
+        min_second: 0.0,
+        first: Box::new(DockNode::Frame(frame(1, vec![panel(1, "Left")]))),
+        second: Box::new(DockNode::Split {
+            axis: Axis::Vertical,
+            ratio: 0.5,
+            min_first: 0.0,
+            min_second: 0.0,
+            first: Box::new(DockNode::Frame(frame(3, vec![panel(3, "Top Right")]))),
+            second: Box::new(DockNode::Frame(frame(2, vec![panel(2, "Bottom Right")]))),
+        }),
+    });
+    let neighbors = solve_dock_neighbors(&dock, Rect::new(0.0, 0.0, 1000.0, 500.0));
+
+    let request = resolve_dock_join_request(
+        &neighbors,
+        FrameId::from_raw(1),
+        DockNeighborDirection::Right,
+    )
+    .expect("join request");
+
+    assert_eq!(request.target_frame(), FrameId::from_raw(2));
 }
 
 #[test]
