@@ -6,8 +6,8 @@ use kinetik_ui_core::{
     ActionBinding, ActionContext, ActionDescriptor, ActionPriority, ActionRouter,
     ActionRoutingContext, ComponentState, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
     PhysicalKey, PhysicalSize, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive,
-    Rect, RepaintRequest, ScaleFactor, SemanticRole, SemanticValue, Shortcut, Size, TextInputEvent,
-    TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId, default_dark_theme,
+    Rect, RepaintRequest, ScaleFactor, SemanticActionKind, SemanticRole, SemanticValue, Shortcut,
+    Size, TextInputEvent, TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId, default_dark_theme,
 };
 use kinetik_ui_text::{TextEditState, TextLayoutStore, TextSelection};
 use kinetik_ui_widgets::{
@@ -132,6 +132,179 @@ fn has_selection_highlight(
                     && rect.rect.height > 1.0
         )
     })
+}
+
+#[derive(Clone, Copy)]
+enum TextWrapperCase {
+    TextField,
+    MultiLineTextField,
+    SearchField,
+    NumericInput,
+}
+
+impl TextWrapperCase {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::TextField => "TextField",
+            Self::MultiLineTextField => "MultiLineTextField",
+            Self::SearchField => "SearchField",
+            Self::NumericInput => "NumericInput",
+        }
+    }
+
+    const fn key(self) -> &'static str {
+        match self {
+            Self::TextField => "text",
+            Self::MultiLineTextField => "multi",
+            Self::SearchField => "search",
+            Self::NumericInput => "number",
+        }
+    }
+
+    fn role(self) -> SemanticRole {
+        match self {
+            Self::TextField | Self::MultiLineTextField | Self::NumericInput => {
+                SemanticRole::TextField
+            }
+            Self::SearchField => SemanticRole::SearchField,
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::SearchField => "Search",
+            Self::TextField | Self::MultiLineTextField | Self::NumericInput => "Text field",
+        }
+    }
+
+    const fn text(self) -> &'static str {
+        match self {
+            Self::TextField => "clip",
+            Self::MultiLineTextField => "one\ntwo",
+            Self::SearchField => "media",
+            Self::NumericInput => "42.5",
+        }
+    }
+
+    fn rect(self) -> Rect {
+        match self {
+            Self::MultiLineTextField => Rect::new(0.0, 0.0, 180.0, 80.0),
+            Self::TextField | Self::SearchField | Self::NumericInput => {
+                Rect::new(0.0, 0.0, 180.0, 24.0)
+            }
+        }
+    }
+}
+
+fn render_text_wrapper(case: TextWrapperCase, disabled: bool) -> kinetik_ui_core::FrameOutput {
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let id = root_child(case.key());
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new(case.text());
+    if disabled {
+        memory.focus(id);
+        memory.set_text_input_owner(id);
+    }
+
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    match case {
+        TextWrapperCase::TextField => {
+            ui.text_field(case.key(), case.rect(), &mut state, disabled);
+        }
+        TextWrapperCase::MultiLineTextField => {
+            ui.multi_line_text_field(case.key(), case.rect(), &mut state, disabled);
+        }
+        TextWrapperCase::SearchField => {
+            let output = ui.search_field(case.key(), case.rect(), &mut state, disabled);
+            assert_eq!(output.query, case.text(), "{}", case.name());
+            assert!(!output.empty, "{}", case.name());
+        }
+        TextWrapperCase::NumericInput => {
+            let output = ui.numeric_input(case.key(), case.rect(), &mut state, disabled);
+            assert!(output.valid, "{}", case.name());
+            assert_eq!(output.value, Some(42.5), "{}", case.name());
+        }
+    }
+    ui.finish_output()
+}
+
+fn has_semantic_action(node: &kinetik_ui_core::SemanticNode, kind: &SemanticActionKind) -> bool {
+    node.actions.iter().any(|action| action.kind == *kind)
+}
+
+#[test]
+fn stage1_text_wrapper_matrix_exposes_semantic_contracts() {
+    for case in [
+        TextWrapperCase::TextField,
+        TextWrapperCase::MultiLineTextField,
+        TextWrapperCase::SearchField,
+        TextWrapperCase::NumericInput,
+    ] {
+        let output = render_text_wrapper(case, false);
+        let id = root_child(case.key());
+        let node = output
+            .semantics
+            .get(id)
+            .unwrap_or_else(|| panic!("{} semantic node", case.name()));
+
+        assert_eq!(node.role, case.role(), "{}", case.name());
+        assert_eq!(node.label.as_deref(), Some(case.label()), "{}", case.name());
+        assert_eq!(node.bounds, case.rect(), "{}", case.name());
+        assert!(node.focusable, "{}", case.name());
+        assert!(!node.state.disabled, "{}", case.name());
+        assert!(!node.state.focused, "{}", case.name());
+        assert!(
+            has_semantic_action(node, &SemanticActionKind::Focus),
+            "{}",
+            case.name()
+        );
+        assert!(
+            has_semantic_action(node, &SemanticActionKind::SetText),
+            "{}",
+            case.name()
+        );
+        assert_eq!(
+            node.state.value,
+            Some(SemanticValue::Text(case.text().to_owned())),
+            "{}",
+            case.name()
+        );
+        assert_eq!(node.state.checked, None, "{}", case.name());
+        assert!(!node.state.selected, "{}", case.name());
+
+        let disabled_output = render_text_wrapper(case, true);
+        let disabled_node = disabled_output
+            .semantics
+            .get(id)
+            .unwrap_or_else(|| panic!("{} disabled semantic node", case.name()));
+        assert_eq!(disabled_node.role, case.role(), "{}", case.name());
+        assert_eq!(
+            disabled_node.label.as_deref(),
+            Some(case.label()),
+            "{}",
+            case.name()
+        );
+        assert!(disabled_node.state.disabled, "{}", case.name());
+        assert!(!disabled_node.state.focused, "{}", case.name());
+        assert!(!disabled_node.focusable, "{}", case.name());
+        assert!(
+            !has_semantic_action(disabled_node, &SemanticActionKind::Focus),
+            "{}",
+            case.name()
+        );
+        assert!(
+            has_semantic_action(disabled_node, &SemanticActionKind::SetText),
+            "{}",
+            case.name()
+        );
+        assert_eq!(
+            disabled_node.state.value,
+            Some(SemanticValue::Text(case.text().to_owned())),
+            "{}",
+            case.name()
+        );
+    }
 }
 
 #[test]

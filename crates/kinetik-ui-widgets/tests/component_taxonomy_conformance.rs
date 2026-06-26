@@ -133,6 +133,24 @@ fn stage9_basic_components_report_current_conformance_statuses() {
 }
 
 #[test]
+fn stage1_basic_control_matrix_reports_complete_statuses() {
+    for (name, category) in [
+        ("TextField", ComponentCategory::TextEditing),
+        ("MultiLineTextField", ComponentCategory::TextEditing),
+        ("SearchField", ComponentCategory::TextEditing),
+        ("NumericInput", ComponentCategory::Input),
+        ("Button", ComponentCategory::Control),
+        ("IconButton", ComponentCategory::Control),
+        ("Checkbox", ComponentCategory::Input),
+        ("RadioButton", ComponentCategory::Input),
+        ("Toggle", ComponentCategory::Input),
+        ("Slider", ComponentCategory::Input),
+    ] {
+        assert_entry(name, category, ComponentConformanceStatus::Implemented);
+    }
+}
+
+#[test]
 fn lookup_by_name_returns_registry_entry() {
     for metadata in COMPONENT_METADATA {
         assert_eq!(component_metadata(metadata.name), Some(metadata));
