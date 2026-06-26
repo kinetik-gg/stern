@@ -121,6 +121,11 @@ fn representative_components_report_honest_categories_and_statuses() {
         ComponentCategory::Viewport,
         ComponentConformanceStatus::Partial,
     );
+    assert_entry(
+        "StatusBar",
+        ComponentCategory::System,
+        ComponentConformanceStatus::Partial,
+    );
 }
 
 #[test]
@@ -216,6 +221,15 @@ fn stage2_control_taxonomy_reports_honest_statuses() {
     ] {
         assert_entry(name, category, status);
     }
+}
+
+#[test]
+fn component_taxonomy_conformance_reports_stage6_status_bar_partial() {
+    assert_entry(
+        "StatusBar",
+        ComponentCategory::System,
+        ComponentConformanceStatus::Partial,
+    );
 }
 
 #[test]
