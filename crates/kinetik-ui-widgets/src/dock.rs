@@ -378,6 +378,176 @@ impl PanelTypeDescriptor {
     }
 }
 
+/// App-owned open action metadata derived from a panel type descriptor.
+///
+/// This is presentation data only. Applications still own action registration,
+/// dispatch, and panel instance creation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelOpenActionMetadata {
+    /// Panel type the action would open or focus.
+    pub panel_type: PanelTypeId,
+    /// Display label for menus, palettes, or pickers.
+    pub title: String,
+    /// Optional symbolic icon from the descriptor.
+    pub icon: Option<IconId>,
+    /// Presentation category from the descriptor.
+    pub category: PanelTypeCategory,
+    /// Optional application-owned action from the descriptor.
+    pub default_open_action: Option<ActionId>,
+}
+
+impl PanelOpenActionMetadata {
+    /// Creates open action metadata from a panel type descriptor.
+    #[must_use]
+    pub fn from_descriptor(descriptor: &PanelTypeDescriptor) -> Self {
+        Self {
+            panel_type: descriptor.id,
+            title: descriptor.title.clone(),
+            icon: descriptor.icon,
+            category: descriptor.category.clone(),
+            default_open_action: descriptor.default_open_action.clone(),
+        }
+    }
+}
+
+/// Error returned when building a [`PanelRegistry`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanelRegistryError {
+    /// Two descriptors used the same panel type ID.
+    DuplicatePanelTypeDescriptor {
+        /// Duplicated panel type identity.
+        panel_type: PanelTypeId,
+        /// First descriptor position using this panel type ID.
+        first_index: usize,
+        /// Later descriptor position using this panel type ID.
+        duplicate_index: usize,
+    },
+}
+
+/// Deterministic metadata registry for developer-declared panel types.
+///
+/// The registry preserves descriptor order for presentation while providing
+/// stable lookup by [`PanelTypeId`]. It does not execute actions, create panel
+/// instances, or own application panel content.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PanelRegistry {
+    descriptors: Vec<PanelTypeDescriptor>,
+    descriptors_by_id: BTreeMap<PanelTypeId, usize>,
+}
+
+impl PanelRegistry {
+    /// Creates an empty panel registry.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates a registry from descriptors in deterministic presentation order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PanelRegistryError::DuplicatePanelTypeDescriptor`] when a
+    /// later descriptor repeats an earlier [`PanelTypeId`].
+    pub fn from_descriptors(
+        descriptors: impl IntoIterator<Item = PanelTypeDescriptor>,
+    ) -> Result<Self, PanelRegistryError> {
+        let mut registry = Self::new();
+
+        for descriptor in descriptors {
+            registry.register(descriptor)?;
+        }
+
+        Ok(registry)
+    }
+
+    /// Registers one descriptor at the end of the presentation order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PanelRegistryError::DuplicatePanelTypeDescriptor`] when the
+    /// descriptor repeats an existing [`PanelTypeId`].
+    pub fn register(&mut self, descriptor: PanelTypeDescriptor) -> Result<(), PanelRegistryError> {
+        let index = self.descriptors.len();
+        match self.descriptors_by_id.entry(descriptor.id) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(index);
+                self.descriptors.push(descriptor);
+                Ok(())
+            }
+            std::collections::btree_map::Entry::Occupied(entry) => {
+                Err(PanelRegistryError::DuplicatePanelTypeDescriptor {
+                    panel_type: descriptor.id,
+                    first_index: *entry.get(),
+                    duplicate_index: index,
+                })
+            }
+        }
+    }
+
+    /// Returns descriptors in presentation order.
+    #[must_use]
+    pub fn descriptors(&self) -> &[PanelTypeDescriptor] {
+        &self.descriptors
+    }
+
+    /// Iterates descriptors in presentation order.
+    pub fn iter(&self) -> impl Iterator<Item = &PanelTypeDescriptor> {
+        self.descriptors.iter()
+    }
+
+    /// Returns the descriptor for a panel type ID.
+    #[must_use]
+    pub fn descriptor(&self, panel_type: PanelTypeId) -> Option<&PanelTypeDescriptor> {
+        self.descriptors_by_id
+            .get(&panel_type)
+            .map(|index| &self.descriptors[*index])
+    }
+
+    /// Returns unique categories in first-seen descriptor order.
+    #[must_use]
+    pub fn categories(&self) -> Vec<&PanelTypeCategory> {
+        let mut categories = Vec::new();
+        for descriptor in &self.descriptors {
+            if !categories.contains(&&descriptor.category) {
+                categories.push(&descriptor.category);
+            }
+        }
+        categories
+    }
+
+    /// Iterates descriptors in a category while preserving descriptor order.
+    pub fn descriptors_in_category<'a>(
+        &'a self,
+        category: &'a PanelTypeCategory,
+    ) -> impl Iterator<Item = &'a PanelTypeDescriptor> + 'a {
+        self.descriptors
+            .iter()
+            .filter(move |descriptor| &descriptor.category == category)
+    }
+
+    /// Iterates app-owned open action metadata in descriptor order.
+    pub fn open_actions(&self) -> impl Iterator<Item = PanelOpenActionMetadata> + '_ {
+        self.descriptors
+            .iter()
+            .map(PanelOpenActionMetadata::from_descriptor)
+    }
+
+    /// Resolves whether opening a registered panel type should focus or open.
+    ///
+    /// The returned decision is metadata only; applications decide whether and
+    /// how to execute any action or create any panel instance.
+    #[must_use]
+    pub fn resolve_open_decision(
+        &self,
+        panel_type: PanelTypeId,
+        panel_instances: &[PanelInstanceSnapshot],
+        dock: &Dock,
+        context: PanelWorkspaceContext,
+    ) -> Option<PanelOpenDecision> {
+        resolve_panel_open_decision(self.descriptor(panel_type)?, panel_instances, dock, context)
+    }
+}
+
 /// Application-owned metadata carried by panel policy requests.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PanelPolicyMetadata {
