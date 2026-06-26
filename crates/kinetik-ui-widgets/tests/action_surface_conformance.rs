@@ -4,7 +4,9 @@ use kinetik_ui_core::{
     ActionContext, ActionDescriptor, ActionId, ActionQueue, ActionSource, MouseButton, Point, Rect,
     UiInput, UiMemory, WidgetId, default_dark_theme,
 };
-use kinetik_ui_widgets::{CommandPalette, Menu, MenuItem, Ui};
+use kinetik_ui_widgets::{
+    CommandPalette, Menu, MenuItem, Toolbar, ToolbarGroup, ToolbarGroupId, Ui,
+};
 
 fn descriptor(id: &str, label: &str) -> ActionDescriptor {
     ActionDescriptor::new(id, label)
@@ -259,5 +261,46 @@ fn action_surface_conformance_command_palette_clamps_selection_and_empty_results
     assert!(!palette.invoke_selected(&mut queue, ActionContext::Global));
     palette.move_selection(1);
     assert_eq!(palette.selected, 0);
+    assert!(queue.is_empty());
+}
+
+#[test]
+fn action_surface_conformance_toolbar_reuses_descriptor_metadata_and_button_source() {
+    let context = ActionContext::Widget(WidgetId::from_key("toolbar"));
+    let mut save = descriptor("file.save", "Save");
+    save.icon = Some(kinetik_ui_core::ActionIcon::new("save"));
+    save.state.checked = Some(true);
+    let mut hidden = descriptor("hidden", "Hidden");
+    hidden.state.visible = false;
+    let mut disabled = descriptor("disabled", "Disabled");
+    disabled.state.enabled = false;
+    let toolbar = Toolbar::from_groups([ToolbarGroup::from_actions(
+        ToolbarGroupId::from_raw(1),
+        "File",
+        [save.clone(), hidden.clone(), disabled.clone()],
+    )]);
+    let menu = Menu::from_actions([save.clone(), hidden.clone(), disabled.clone()]);
+    let palette = CommandPalette::from_actions(&[save, hidden, disabled]);
+    let mut queue = ActionQueue::new();
+
+    let toolbar_items = toolbar.visible_groups()[0].visible_items();
+    assert_eq!(toolbar_items.len(), 2);
+    assert_eq!(toolbar_items[0].action_id(), &ActionId::new("file.save"));
+    assert_eq!(
+        toolbar_items[0]
+            .icon()
+            .map(kinetik_ui_core::ActionIcon::as_str),
+        Some("save")
+    );
+    assert_eq!(toolbar_items[0].checked(), Some(true));
+    assert_eq!(menu.visible_items().len(), 2);
+    assert_eq!(palette.matches().len(), 2);
+
+    assert!(toolbar.invoke_visible(0, 0, &mut queue, context.clone()));
+    assert!(!toolbar.invoke_visible(0, 1, &mut queue, context.clone()));
+    let invocation = queue.pop_front().expect("toolbar invocation");
+    assert_eq!(invocation.action_id, ActionId::new("file.save"));
+    assert_eq!(invocation.source, ActionSource::Button);
+    assert_eq!(invocation.context, context);
     assert!(queue.is_empty());
 }
