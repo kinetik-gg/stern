@@ -378,6 +378,271 @@ impl PanelTypeDescriptor {
     }
 }
 
+/// Application-owned metadata carried by panel policy requests.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelPolicyMetadata {
+    /// Developer-declared panel type identity.
+    pub panel_type: PanelTypeId,
+    /// Descriptor title used by default app surfaces.
+    pub title: String,
+    /// Optional application-owned default open action from the descriptor.
+    pub default_open_action: Option<ActionId>,
+}
+
+impl PanelPolicyMetadata {
+    /// Creates request metadata from a panel type descriptor.
+    #[must_use]
+    pub fn from_descriptor(descriptor: &PanelTypeDescriptor) -> Self {
+        Self {
+            panel_type: descriptor.id,
+            title: descriptor.title.clone(),
+            default_open_action: descriptor.default_open_action.clone(),
+        }
+    }
+}
+
+/// Location of an open panel instance in the current dock tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PanelInstanceLocation {
+    /// Stable open panel instance identity.
+    pub panel_instance: PanelInstanceId,
+    /// Compatibility panel identity used by current dock callers.
+    pub panel: PanelId,
+    /// Frame currently containing the panel.
+    pub frame: FrameId,
+}
+
+impl PanelInstanceLocation {
+    /// Creates a location from panel instance vocabulary.
+    #[must_use]
+    pub const fn new(panel_instance: PanelInstanceId, frame: FrameId) -> Self {
+        Self {
+            panel_instance,
+            panel: PanelId::from_instance_id(panel_instance),
+            frame,
+        }
+    }
+}
+
+/// Resolved tab and panel affordances for a specific panel instance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PanelAffordances {
+    /// Panel type the affordances were resolved from.
+    pub panel_type: PanelTypeId,
+    /// Open panel instance identity.
+    pub panel_instance: PanelInstanceId,
+    /// Whether close chrome should be visible.
+    pub close_visible: bool,
+    /// Whether duplicate/open-another should be available.
+    pub duplicate_available: bool,
+    /// Whether future floating-surface affordances should be available.
+    pub float_available: bool,
+}
+
+/// Request for the application to open a new panel instance.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PanelOpenRequest {
+    /// Application-owned metadata for the request.
+    pub metadata: PanelPolicyMetadata,
+    /// Workspace context requested by the caller.
+    pub context: PanelWorkspaceContext,
+    /// Preferred dock placement hint, when the descriptor provides one.
+    pub dock_hint: Option<PanelDockHint>,
+    /// Preferred logical size from the descriptor.
+    pub default_size: Size,
+}
+
+/// Request for the application to focus an already-open singleton instance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelFocusRequest {
+    /// Application-owned metadata for the request.
+    pub metadata: PanelPolicyMetadata,
+    /// Existing panel instance to focus.
+    pub target: PanelInstanceLocation,
+}
+
+/// Decision produced when the user asks to open a panel type.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PanelOpenDecision {
+    /// Focus an existing singleton instance instead of opening another one.
+    FocusExisting(PanelFocusRequest),
+    /// Ask the application to open a new panel instance.
+    OpenNew(PanelOpenRequest),
+}
+
+/// Request for the application to close a panel instance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelCloseRequest {
+    /// Application-owned metadata for the request.
+    pub metadata: PanelPolicyMetadata,
+    /// Panel instance the application may close.
+    pub target: PanelInstanceLocation,
+}
+
+/// Request for the application to duplicate a panel instance.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PanelDuplicateRequest {
+    /// Application-owned metadata for the request.
+    pub metadata: PanelPolicyMetadata,
+    /// Source panel instance to duplicate.
+    pub source: PanelInstanceLocation,
+    /// Workspace context requested by the caller.
+    pub context: PanelWorkspaceContext,
+    /// Preferred dock placement hint, when the descriptor provides one.
+    pub dock_hint: Option<PanelDockHint>,
+    /// Preferred logical size from the descriptor.
+    pub default_size: Size,
+}
+
+/// Request for a future floating surface without creating a native window.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelFloatRequest {
+    /// Application-owned metadata for the request.
+    pub metadata: PanelPolicyMetadata,
+    /// Panel instance that may be floated by the application/platform layer.
+    pub source: PanelInstanceLocation,
+}
+
+/// Finds an open panel instance in deterministic dock tree order.
+#[must_use]
+pub fn locate_panel_instance(
+    dock: &Dock,
+    panel_instance: PanelInstanceId,
+) -> Option<PanelInstanceLocation> {
+    let panel = PanelId::from_instance_id(panel_instance);
+    dock.frames()
+        .into_iter()
+        .find(|frame| frame.panels.iter().any(|item| item.id == panel))
+        .map(|frame| PanelInstanceLocation {
+            panel_instance,
+            panel,
+            frame: frame.id,
+        })
+}
+
+/// Resolves tab and panel affordances without mutating dock or app state.
+#[must_use]
+pub fn resolve_panel_affordances(
+    descriptor: &PanelTypeDescriptor,
+    panel_instance: PanelInstanceId,
+    frame: &Frame,
+) -> PanelAffordances {
+    let panel = PanelId::from_instance_id(panel_instance);
+    let panel_in_frame = frame.panels.iter().any(|item| item.id == panel);
+    PanelAffordances {
+        panel_type: descriptor.id,
+        panel_instance,
+        close_visible: descriptor.close_policy == PanelClosePolicy::Closable
+            && frame.panel_dismissible(panel),
+        duplicate_available: panel_in_frame
+            && descriptor.duplicate_policy == PanelDuplicatePolicy::Allowed,
+        float_available: panel_in_frame && descriptor.float_policy == PanelFloatPolicy::Allowed,
+    }
+}
+
+/// Resolves whether opening a panel type should focus an existing singleton or
+/// ask the application to create a new instance.
+#[must_use]
+pub fn resolve_panel_open_decision(
+    descriptor: &PanelTypeDescriptor,
+    panel_instances: &[PanelInstanceSnapshot],
+    dock: &Dock,
+    context: PanelWorkspaceContext,
+) -> Option<PanelOpenDecision> {
+    if !descriptor.allowed_contexts.contains(&context) {
+        return None;
+    }
+
+    if descriptor.instance_policy == PanelInstancePolicy::Singleton
+        && let Some(target) = locate_first_panel_type_instance(dock, panel_instances, descriptor.id)
+    {
+        return Some(PanelOpenDecision::FocusExisting(PanelFocusRequest {
+            metadata: PanelPolicyMetadata::from_descriptor(descriptor),
+            target,
+        }));
+    }
+
+    Some(PanelOpenDecision::OpenNew(PanelOpenRequest {
+        metadata: PanelPolicyMetadata::from_descriptor(descriptor),
+        context,
+        dock_hint: descriptor.dock_hints.first().copied(),
+        default_size: descriptor.default_size,
+    }))
+}
+
+/// Produces an app-owned close request when descriptor and frame policy allow it.
+#[must_use]
+pub fn resolve_panel_close_request(
+    descriptor: &PanelTypeDescriptor,
+    panel_instance: PanelInstanceId,
+    frame: &Frame,
+) -> Option<PanelCloseRequest> {
+    resolve_panel_affordances(descriptor, panel_instance, frame)
+        .close_visible
+        .then(|| PanelCloseRequest {
+            metadata: PanelPolicyMetadata::from_descriptor(descriptor),
+            target: PanelInstanceLocation::new(panel_instance, frame.id),
+        })
+}
+
+/// Produces an app-owned duplicate request without creating a panel.
+#[must_use]
+pub fn resolve_panel_duplicate_request(
+    descriptor: &PanelTypeDescriptor,
+    panel_instance: PanelInstanceId,
+    frame: &Frame,
+    context: PanelWorkspaceContext,
+) -> Option<PanelDuplicateRequest> {
+    if !resolve_panel_affordances(descriptor, panel_instance, frame).duplicate_available
+        || !descriptor.allowed_contexts.contains(&context)
+    {
+        return None;
+    }
+
+    Some(PanelDuplicateRequest {
+        metadata: PanelPolicyMetadata::from_descriptor(descriptor),
+        source: PanelInstanceLocation::new(panel_instance, frame.id),
+        context,
+        dock_hint: descriptor.dock_hints.first().copied(),
+        default_size: descriptor.default_size,
+    })
+}
+
+/// Produces an app-owned future float request without creating a native window.
+#[must_use]
+pub fn resolve_panel_float_request(
+    descriptor: &PanelTypeDescriptor,
+    panel_instance: PanelInstanceId,
+    frame: &Frame,
+) -> Option<PanelFloatRequest> {
+    resolve_panel_affordances(descriptor, panel_instance, frame)
+        .float_available
+        .then(|| PanelFloatRequest {
+            metadata: PanelPolicyMetadata::from_descriptor(descriptor),
+            source: PanelInstanceLocation::new(panel_instance, frame.id),
+        })
+}
+
+fn locate_first_panel_type_instance(
+    dock: &Dock,
+    panel_instances: &[PanelInstanceSnapshot],
+    panel_type: PanelTypeId,
+) -> Option<PanelInstanceLocation> {
+    dock.frames().into_iter().find_map(|frame| {
+        frame.panels.iter().find_map(|panel| {
+            let panel_instance = panel.instance_id();
+            panel_instances
+                .iter()
+                .any(|instance| instance.id == panel_instance && instance.panel_type == panel_type)
+                .then_some(PanelInstanceLocation {
+                    panel_instance,
+                    panel: panel.id,
+                    frame: frame.id,
+                })
+        })
+    })
+}
+
 /// Resolved dock drop zone inside a frame rectangle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DockDropZone {

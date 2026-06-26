@@ -647,6 +647,11 @@ title, restoration remains allowed and diagnostics should report a warning.
 Applications still own panel content, panel instance creation, action execution,
 workspace persistence, and any domain-specific factories.
 
+Panel policy helpers may combine descriptors, panel instance metadata, and
+current Frame/Dock state to derive affordances or app-owned open, focus, close,
+duplicate, and future-float requests. These helpers must stay pure: they do not
+execute commands, create panels, remove panels, or create native windows.
+
 ## 13. Interaction Primitives
 
 Interaction primitives are behavior-only building blocks.

@@ -6,11 +6,13 @@ use kinetik_ui_widgets::{
     DockRestoreError, DockSnapshot, DockSnapshotDiagnosticCode, DockSnapshotNode,
     DockSnapshotSplitValue, DockSplitPath, Frame, FrameId, FrameLayout, FrameNeighbors, Panel,
     PanelClosePolicy, PanelDockHint, PanelDuplicatePolicy, PanelFloatPolicy, PanelId,
-    PanelInstanceId, PanelInstancePolicy, PanelInstanceSnapshot, PanelTypeCategory,
-    PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, SnapshotDiagnosticSeverity,
-    WorkspaceRestoreError, WorkspaceSnapshotDiagnosticCode, frame_neighbor, frame_tabs,
-    resolve_dock_drop_target, solve_dock_layout, solve_dock_neighbors, solve_dock_splitters,
-    split_ratio_from_drag,
+    PanelInstanceId, PanelInstanceLocation, PanelInstancePolicy, PanelInstanceSnapshot,
+    PanelOpenDecision, PanelPolicyMetadata, PanelTypeCategory, PanelTypeDescriptor, PanelTypeId,
+    PanelWorkspaceContext, SnapshotDiagnosticSeverity, WorkspaceRestoreError,
+    WorkspaceSnapshotDiagnosticCode, frame_neighbor, frame_tabs, resolve_dock_drop_target,
+    resolve_panel_affordances, resolve_panel_close_request, resolve_panel_duplicate_request,
+    resolve_panel_float_request, resolve_panel_open_decision, solve_dock_layout,
+    solve_dock_neighbors, solve_dock_splitters, split_ratio_from_drag,
 };
 
 fn panel(id: u64, title: &str) -> Panel {
@@ -191,6 +193,211 @@ fn panel_type_descriptor_represents_singleton_and_multi_instance_policy() {
     assert_eq!(singleton.duplicate_policy, PanelDuplicatePolicy::Denied);
     assert_eq!(multi.instance_policy, PanelInstancePolicy::MultiInstance);
     assert_eq!(multi.duplicate_policy, PanelDuplicatePolicy::Allowed);
+}
+
+#[test]
+fn panel_policy_non_closeable_descriptor_suppresses_close_affordance() {
+    let descriptor = PanelTypeDescriptor::new(PanelTypeId::from_raw(10), "Media")
+        .with_close_policy(PanelClosePolicy::Required);
+    let frame = frame(
+        1,
+        vec![Panel::from_instance_id(
+            PanelInstanceId::from_raw(1),
+            "Media",
+        )],
+    );
+
+    let affordances = resolve_panel_affordances(&descriptor, PanelInstanceId::from_raw(1), &frame);
+
+    assert!(frame.panel_dismissible(PanelId::from_raw(1)));
+    assert!(!affordances.close_visible);
+    assert_eq!(
+        resolve_panel_close_request(&descriptor, PanelInstanceId::from_raw(1), &frame),
+        None
+    );
+}
+
+#[test]
+fn panel_policy_frame_non_dismissible_tab_suppresses_close_affordance() {
+    let descriptor = PanelTypeDescriptor::new(PanelTypeId::from_raw(10), "Media")
+        .with_close_policy(PanelClosePolicy::Closable);
+    let mut frame = frame(
+        1,
+        vec![Panel::from_instance_id(
+            PanelInstanceId::from_raw(1),
+            "Media",
+        )],
+    );
+    assert!(frame.set_panel_dismissible(PanelId::from_raw(1), false));
+
+    let affordances = resolve_panel_affordances(&descriptor, PanelInstanceId::from_raw(1), &frame);
+
+    assert!(!affordances.close_visible);
+    assert_eq!(
+        resolve_panel_close_request(&descriptor, PanelInstanceId::from_raw(1), &frame),
+        None
+    );
+}
+
+#[test]
+fn panel_policy_singleton_open_decision_focuses_existing_instance() {
+    let dock = nested_dock();
+    let before = dock.snapshot();
+    let descriptor = PanelTypeDescriptor::new(PanelTypeId::from_raw(30), "Inspector")
+        .with_instance_policy(PanelInstancePolicy::Singleton);
+
+    let decision = resolve_panel_open_decision(
+        &descriptor,
+        &workspace_panel_instances(),
+        &dock,
+        PanelWorkspaceContext::Docked,
+    )
+    .expect("open decision");
+
+    assert_eq!(
+        decision,
+        PanelOpenDecision::FocusExisting(kinetik_ui_widgets::PanelFocusRequest {
+            metadata: PanelPolicyMetadata {
+                panel_type: PanelTypeId::from_raw(30),
+                title: "Inspector".to_owned(),
+                default_open_action: None,
+            },
+            target: PanelInstanceLocation {
+                panel_instance: PanelInstanceId::from_raw(3),
+                panel: PanelId::from_raw(3),
+                frame: FrameId::from_raw(2),
+            },
+        })
+    );
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn panel_policy_multi_instance_open_decision_allows_new_request() {
+    let dock = nested_dock();
+    let descriptor = PanelTypeDescriptor::new(PanelTypeId::from_raw(50), "Console")
+        .with_default_size(Size::new(480.0, 220.0))
+        .with_dock_hints([
+            PanelDockHint::Split(DockPlacement::Bottom),
+            PanelDockHint::Tab,
+        ])
+        .with_default_open_action(ActionId::new("workspace.open.console"));
+
+    let decision = resolve_panel_open_decision(
+        &descriptor,
+        &workspace_panel_instances(),
+        &dock,
+        PanelWorkspaceContext::Docked,
+    )
+    .expect("open decision");
+
+    let PanelOpenDecision::OpenNew(request) = decision else {
+        panic!("multi-instance panel should open a new request");
+    };
+    assert_eq!(
+        request.metadata,
+        PanelPolicyMetadata {
+            panel_type: PanelTypeId::from_raw(50),
+            title: "Console".to_owned(),
+            default_open_action: Some(ActionId::new("workspace.open.console")),
+        }
+    );
+    assert_eq!(request.context, PanelWorkspaceContext::Docked);
+    assert_eq!(
+        request.dock_hint,
+        Some(PanelDockHint::Split(DockPlacement::Bottom))
+    );
+    assert_eq!(request.default_size, Size::new(480.0, 220.0));
+}
+
+#[test]
+fn panel_policy_duplicate_request_respects_descriptor_and_is_app_owned() {
+    let descriptor = PanelTypeDescriptor::new(PanelTypeId::from_raw(20), "Viewport")
+        .with_default_size(Size::new(640.0, 360.0))
+        .with_default_open_action(ActionId::new("workspace.open.viewport"));
+    let denied = descriptor
+        .clone()
+        .with_duplicate_policy(PanelDuplicatePolicy::Denied);
+    let dock = nested_dock();
+    let before = dock.snapshot();
+    let frame = dock.frame(FrameId::from_raw(2)).expect("frame");
+
+    assert_eq!(
+        resolve_panel_duplicate_request(
+            &denied,
+            PanelInstanceId::from_raw(2),
+            frame,
+            PanelWorkspaceContext::Docked,
+        ),
+        None
+    );
+
+    let request = resolve_panel_duplicate_request(
+        &descriptor,
+        PanelInstanceId::from_raw(2),
+        frame,
+        PanelWorkspaceContext::Docked,
+    )
+    .expect("duplicate request");
+
+    assert_eq!(
+        request.metadata,
+        PanelPolicyMetadata {
+            panel_type: PanelTypeId::from_raw(20),
+            title: "Viewport".to_owned(),
+            default_open_action: Some(ActionId::new("workspace.open.viewport")),
+        }
+    );
+    assert_eq!(
+        request.source,
+        PanelInstanceLocation {
+            panel_instance: PanelInstanceId::from_raw(2),
+            panel: PanelId::from_raw(2),
+            frame: FrameId::from_raw(2),
+        }
+    );
+    assert_eq!(request.context, PanelWorkspaceContext::Docked);
+    assert_eq!(request.dock_hint, Some(PanelDockHint::Tab));
+    assert_eq!(request.default_size, Size::new(640.0, 360.0));
+    assert_eq!(dock.snapshot(), before);
+}
+
+#[test]
+fn panel_policy_future_float_request_is_metadata_only() {
+    let unavailable = PanelTypeDescriptor::new(PanelTypeId::from_raw(30), "Inspector")
+        .with_float_policy(PanelFloatPolicy::Unavailable);
+    let allowed = unavailable
+        .clone()
+        .with_float_policy(PanelFloatPolicy::Allowed);
+    let dock = nested_dock();
+    let before = dock.snapshot();
+    let frame = dock.frame(FrameId::from_raw(2)).expect("frame");
+
+    assert!(
+        !resolve_panel_affordances(&unavailable, PanelInstanceId::from_raw(3), frame)
+            .float_available
+    );
+    assert_eq!(
+        resolve_panel_float_request(&unavailable, PanelInstanceId::from_raw(3), frame),
+        None
+    );
+
+    let request =
+        resolve_panel_float_request(&allowed, PanelInstanceId::from_raw(3), frame).expect("float");
+
+    assert!(
+        resolve_panel_affordances(&allowed, PanelInstanceId::from_raw(3), frame).float_available
+    );
+    assert_eq!(
+        request.source,
+        PanelInstanceLocation {
+            panel_instance: PanelInstanceId::from_raw(3),
+            panel: PanelId::from_raw(3),
+            frame: FrameId::from_raw(2),
+        }
+    );
+    assert_eq!(request.metadata.panel_type, PanelTypeId::from_raw(30));
+    assert_eq!(dock.snapshot(), before);
 }
 
 #[test]
