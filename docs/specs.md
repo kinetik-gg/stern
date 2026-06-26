@@ -209,6 +209,13 @@ Frame
 Panel
   Passive content surface inside a Frame.
 
+PanelTypeId
+  Stable identity for a developer-declared kind of panel.
+
+PanelInstanceId
+  Stable identity for one open instance of a panel type. Existing `PanelId`
+  vocabulary is compatibility terminology for panel instances.
+
 ViewportSurface
   UI-managed rectangle that displays domain-rendered texture content.
 ```
@@ -590,6 +597,28 @@ Responsibilities:
 Panels do not decide their own dock placement, outer size, drag behavior, dismissal, merge behavior, or workspace arrangement.
 
 The same Panel should be reusable inside different Frames, tabs, split regions, showcase sections, or future modal-like contexts.
+
+Panel vocabulary separates developer-declared panel kinds from open panel instances:
+
+```text
+PanelTypeId
+  Stable ID for a panel kind such as Scene, Inspector, Viewport, Timeline, or Console.
+
+PanelInstanceId
+  Stable ID for one open instance of a panel type. `PanelId` remains supported
+  as existing compatibility terminology for current dock callers.
+
+PanelTypeDescriptor
+  UI metadata for panel pickers, menus, palettes, tabs, and workspace policy.
+```
+
+`PanelTypeDescriptor` is toolkit-owned metadata only. It may describe title,
+optional icon, category, singleton or multi-instance policy, default size,
+allowed workspace contexts, dock placement hints, close/duplicate/future-float
+affordance policy, and an optional application-owned default open action.
+
+Applications still own panel content, panel instance creation, action execution,
+workspace persistence, and any domain-specific factories.
 
 ## 13. Interaction Primitives
 

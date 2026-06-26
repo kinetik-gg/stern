@@ -1,9 +1,11 @@
 //! Windowless Dock/Frame/Panel model conformance tests.
 
-use kinetik_ui_core::{Axis, Point, Rect, Vec2};
+use kinetik_ui_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
 use kinetik_ui_widgets::{
     Dock, DockDropTarget, DockNode, DockPathElement, DockPlacement, DockRestoreError, DockSnapshot,
-    DockSnapshotNode, DockSplitPath, Frame, FrameId, Panel, PanelId, frame_tabs,
+    DockSnapshotNode, DockSplitPath, Frame, FrameId, Panel, PanelClosePolicy, PanelDockHint,
+    PanelDuplicatePolicy, PanelFloatPolicy, PanelId, PanelInstanceId, PanelInstancePolicy,
+    PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, frame_tabs,
     resolve_dock_drop_target, solve_dock_layout, solve_dock_splitters, split_ratio_from_drag,
 };
 
@@ -49,6 +51,115 @@ fn frame_rect(dock: &Dock, frame: u64, bounds: Rect) -> Rect {
         .find(|layout| layout.frame == FrameId::from_raw(frame))
         .expect("frame layout")
         .rect
+}
+
+#[test]
+fn panel_type_id_raw_bits_are_stable() {
+    let id = PanelTypeId::from_raw(42);
+
+    assert_eq!(id.raw(), 42);
+    assert_eq!(PanelTypeId::from_raw(id.raw()), id);
+}
+
+#[test]
+fn panel_type_descriptor_defaults_are_deterministic_and_editor_appropriate() {
+    let descriptor = PanelTypeDescriptor::new(PanelTypeId::from_raw(7), "Inspector");
+
+    assert_eq!(descriptor.id, PanelTypeId::from_raw(7));
+    assert_eq!(descriptor.title, "Inspector");
+    assert_eq!(descriptor.icon, None);
+    assert_eq!(descriptor.category, PanelTypeCategory::General);
+    assert_eq!(
+        descriptor.instance_policy,
+        PanelInstancePolicy::MultiInstance
+    );
+    assert_eq!(descriptor.default_size, Size::new(320.0, 240.0));
+    assert_eq!(
+        descriptor.allowed_contexts,
+        vec![PanelWorkspaceContext::Docked]
+    );
+    assert_eq!(descriptor.dock_hints, vec![PanelDockHint::Tab]);
+    assert_eq!(descriptor.close_policy, PanelClosePolicy::Closable);
+    assert_eq!(descriptor.duplicate_policy, PanelDuplicatePolicy::Allowed);
+    assert_eq!(descriptor.float_policy, PanelFloatPolicy::Unavailable);
+    assert_eq!(descriptor.default_open_action, None);
+}
+
+#[test]
+fn panel_type_descriptor_represents_workspace_metadata() {
+    let descriptor = PanelTypeDescriptor::new(PanelTypeId::from_raw(8), "Timeline")
+        .with_icon(IconId::from_raw(99))
+        .with_category(PanelTypeCategory::Timeline)
+        .with_default_size(Size::new(640.0, 180.0))
+        .with_allowed_contexts([
+            PanelWorkspaceContext::Docked,
+            PanelWorkspaceContext::Floating,
+        ])
+        .with_dock_hints([
+            PanelDockHint::Split(DockPlacement::Bottom),
+            PanelDockHint::Tab,
+        ])
+        .with_close_policy(PanelClosePolicy::Required)
+        .with_float_policy(PanelFloatPolicy::Allowed)
+        .with_default_open_action(ActionId::new("workspace.open.timeline"));
+
+    assert_eq!(descriptor.icon, Some(IconId::from_raw(99)));
+    assert_eq!(descriptor.category, PanelTypeCategory::Timeline);
+    assert_eq!(descriptor.default_size, Size::new(640.0, 180.0));
+    assert_eq!(
+        descriptor.allowed_contexts,
+        vec![
+            PanelWorkspaceContext::Docked,
+            PanelWorkspaceContext::Floating
+        ]
+    );
+    assert_eq!(
+        descriptor.dock_hints,
+        vec![
+            PanelDockHint::Split(DockPlacement::Bottom),
+            PanelDockHint::Tab,
+        ]
+    );
+    assert_eq!(descriptor.close_policy, PanelClosePolicy::Required);
+    assert_eq!(descriptor.float_policy, PanelFloatPolicy::Allowed);
+    assert_eq!(
+        descriptor
+            .default_open_action
+            .as_ref()
+            .map(ActionId::as_str),
+        Some("workspace.open.timeline")
+    );
+}
+
+#[test]
+fn panel_type_descriptor_represents_singleton_and_multi_instance_policy() {
+    let singleton = PanelTypeDescriptor::new(PanelTypeId::from_raw(10), "Scene")
+        .with_instance_policy(PanelInstancePolicy::Singleton)
+        .with_duplicate_policy(PanelDuplicatePolicy::Denied);
+    let multi = PanelTypeDescriptor::new(PanelTypeId::from_raw(11), "Viewport")
+        .with_instance_policy(PanelInstancePolicy::MultiInstance)
+        .with_duplicate_policy(PanelDuplicatePolicy::Allowed);
+
+    assert_eq!(singleton.instance_policy, PanelInstancePolicy::Singleton);
+    assert_eq!(singleton.duplicate_policy, PanelDuplicatePolicy::Denied);
+    assert_eq!(multi.instance_policy, PanelInstancePolicy::MultiInstance);
+    assert_eq!(multi.duplicate_policy, PanelDuplicatePolicy::Allowed);
+}
+
+#[test]
+fn panel_id_and_panel_instance_id_convert_without_changing_existing_panel_usage() {
+    let legacy = PanelId::from_raw(123);
+    let instance = PanelInstanceId::from_raw(123);
+
+    assert_eq!(legacy.instance_id(), instance);
+    assert_eq!(PanelInstanceId::from(legacy), instance);
+    assert_eq!(PanelId::from(instance), legacy);
+    assert_eq!(PanelId::from_instance_id(instance), legacy);
+
+    let panel = Panel::from_instance_id(instance, "Graph");
+    assert_eq!(panel.id, legacy);
+    assert_eq!(panel.instance_id(), instance);
+    assert_eq!(Panel::new(legacy, "Graph"), panel);
 }
 
 #[test]

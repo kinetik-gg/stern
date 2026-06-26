@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use kinetik_ui_core::{Axis, Point, Rect, Vec2};
+use kinetik_ui_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
 
 const DEFAULT_SPLIT_RATIO: f32 = 0.5;
 const DEFAULT_SPLIT_MINIMUM: f32 = 100.0;
@@ -15,6 +15,66 @@ pub struct PanelId(u64);
 
 impl PanelId {
     /// Creates a panel ID from raw bits.
+    #[must_use]
+    pub const fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    /// Returns raw ID bits.
+    #[must_use]
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
+
+    /// Creates a panel ID from a panel instance ID.
+    #[must_use]
+    pub const fn from_instance_id(id: PanelInstanceId) -> Self {
+        Self(id.raw())
+    }
+
+    /// Returns this legacy panel ID as the panel instance vocabulary.
+    #[must_use]
+    pub const fn instance_id(self) -> PanelInstanceId {
+        PanelInstanceId::from_raw(self.0)
+    }
+}
+
+impl From<PanelInstanceId> for PanelId {
+    fn from(value: PanelInstanceId) -> Self {
+        Self::from_instance_id(value)
+    }
+}
+
+impl From<PanelId> for PanelInstanceId {
+    fn from(value: PanelId) -> Self {
+        value.instance_id()
+    }
+}
+
+/// Stable identity for a developer-declared panel kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PanelTypeId(u64);
+
+impl PanelTypeId {
+    /// Creates a panel type ID from raw bits.
+    #[must_use]
+    pub const fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    /// Returns raw ID bits.
+    #[must_use]
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
+}
+
+/// Stable identity for one open instance of a panel type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PanelInstanceId(u64);
+
+impl PanelInstanceId {
+    /// Creates a panel instance ID from raw bits.
     #[must_use]
     pub const fn from_raw(raw: u64) -> Self {
         Self(raw)
@@ -109,6 +169,209 @@ impl DockPlacement {
 
     const fn insert_before_target(self) -> bool {
         matches!(self, Self::Left | Self::Top)
+    }
+}
+
+/// Broad grouping used when presenting available panel types.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PanelTypeCategory {
+    /// General editor workspace panels.
+    General,
+    /// Scene, hierarchy, outliner, or object tree panels.
+    Hierarchy,
+    /// Property, inspector, or details panels.
+    Inspector,
+    /// Viewport or preview panels.
+    Viewport,
+    /// Asset, file, media, or library panels.
+    Assets,
+    /// Timeline, graph, sequencer, or animation panels.
+    Timeline,
+    /// Console, log, diagnostics, or job panels.
+    Diagnostics,
+    /// Application-defined category label.
+    Custom(String),
+}
+
+/// Whether a panel type can have one or many open instances.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanelInstancePolicy {
+    /// Only one open instance of this panel type should exist in a workspace.
+    Singleton,
+    /// Multiple open instances of this panel type may exist in a workspace.
+    MultiInstance,
+}
+
+/// Workspace contexts where a panel type may be opened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum PanelWorkspaceContext {
+    /// A docked frame tab inside the editor dock.
+    Docked,
+    /// A modal-like toolkit context.
+    Modal,
+    /// A future floating editor surface.
+    Floating,
+}
+
+/// Workspace placement hint for a panel type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanelDockHint {
+    /// Prefer opening as a tab in an existing frame.
+    Tab,
+    /// Prefer opening as a new split relative to the active frame.
+    Split(DockPlacement),
+}
+
+/// Whether a panel type may expose close affordances.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanelClosePolicy {
+    /// The panel may be closed or dismissed by the user.
+    Closable,
+    /// The panel is required by the workspace and should not expose close.
+    Required,
+}
+
+/// Whether a panel type may expose duplicate/open-another affordances.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanelDuplicatePolicy {
+    /// The panel type may be duplicated.
+    Allowed,
+    /// The panel type should not expose duplicate.
+    Denied,
+}
+
+/// Whether a panel type may use future floating-surface affordances.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanelFloatPolicy {
+    /// Floating is not currently available for this panel type.
+    Unavailable,
+    /// The panel type may be floated when a platform surface exists.
+    Allowed,
+}
+
+/// Editor workspace metadata for a developer-declared panel kind.
+///
+/// The descriptor is a UI contract only: applications own panel content,
+/// instance creation, action execution, and persistence decisions.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PanelTypeDescriptor {
+    /// Stable developer-declared panel type identity.
+    pub id: PanelTypeId,
+    /// Display title used in menus, palettes, and default tabs.
+    pub title: String,
+    /// Optional symbolic icon for panel picker and tab chrome.
+    pub icon: Option<IconId>,
+    /// Presentation category for panel pickers and command palettes.
+    pub category: PanelTypeCategory,
+    /// Singleton or multi-instance workspace policy.
+    pub instance_policy: PanelInstancePolicy,
+    /// Initial preferred logical size when the workspace needs one.
+    pub default_size: Size,
+    /// Contexts where this panel type may be opened.
+    pub allowed_contexts: Vec<PanelWorkspaceContext>,
+    /// Dock placement preferences in priority order.
+    pub dock_hints: Vec<PanelDockHint>,
+    /// Close/dismiss affordance policy.
+    pub close_policy: PanelClosePolicy,
+    /// Duplicate/open-another affordance policy.
+    pub duplicate_policy: PanelDuplicatePolicy,
+    /// Future floating-surface affordance policy.
+    pub float_policy: PanelFloatPolicy,
+    /// Optional application-owned action that opens this panel type.
+    pub default_open_action: Option<ActionId>,
+}
+
+impl PanelTypeDescriptor {
+    /// Creates a panel type descriptor with deterministic editor defaults.
+    #[must_use]
+    pub fn new(id: PanelTypeId, title: impl Into<String>) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            icon: None,
+            category: PanelTypeCategory::General,
+            instance_policy: PanelInstancePolicy::MultiInstance,
+            default_size: Size::new(320.0, 240.0),
+            allowed_contexts: vec![PanelWorkspaceContext::Docked],
+            dock_hints: vec![PanelDockHint::Tab],
+            close_policy: PanelClosePolicy::Closable,
+            duplicate_policy: PanelDuplicatePolicy::Allowed,
+            float_policy: PanelFloatPolicy::Unavailable,
+            default_open_action: None,
+        }
+    }
+
+    /// Sets the optional symbolic icon.
+    #[must_use]
+    pub const fn with_icon(mut self, icon: IconId) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Sets the presentation category.
+    #[must_use]
+    pub fn with_category(mut self, category: PanelTypeCategory) -> Self {
+        self.category = category;
+        self
+    }
+
+    /// Sets singleton or multi-instance policy.
+    #[must_use]
+    pub const fn with_instance_policy(mut self, policy: PanelInstancePolicy) -> Self {
+        self.instance_policy = policy;
+        self
+    }
+
+    /// Sets the preferred default logical size.
+    #[must_use]
+    pub const fn with_default_size(mut self, size: Size) -> Self {
+        self.default_size = size;
+        self
+    }
+
+    /// Replaces the allowed workspace contexts.
+    #[must_use]
+    pub fn with_allowed_contexts(
+        mut self,
+        contexts: impl IntoIterator<Item = PanelWorkspaceContext>,
+    ) -> Self {
+        self.allowed_contexts = contexts.into_iter().collect();
+        self
+    }
+
+    /// Replaces the dock placement hints.
+    #[must_use]
+    pub fn with_dock_hints(mut self, hints: impl IntoIterator<Item = PanelDockHint>) -> Self {
+        self.dock_hints = hints.into_iter().collect();
+        self
+    }
+
+    /// Sets the close/dismiss affordance policy.
+    #[must_use]
+    pub const fn with_close_policy(mut self, policy: PanelClosePolicy) -> Self {
+        self.close_policy = policy;
+        self
+    }
+
+    /// Sets the duplicate/open-another affordance policy.
+    #[must_use]
+    pub const fn with_duplicate_policy(mut self, policy: PanelDuplicatePolicy) -> Self {
+        self.duplicate_policy = policy;
+        self
+    }
+
+    /// Sets the future floating-surface affordance policy.
+    #[must_use]
+    pub const fn with_float_policy(mut self, policy: PanelFloatPolicy) -> Self {
+        self.float_policy = policy;
+        self
+    }
+
+    /// Sets the optional application-owned default open action.
+    #[must_use]
+    pub fn with_default_open_action(mut self, action: ActionId) -> Self {
+        self.default_open_action = Some(action);
+        self
     }
 }
 
@@ -228,6 +491,18 @@ impl Panel {
             id,
             title: title.into(),
         }
+    }
+
+    /// Creates a panel from the panel instance vocabulary.
+    #[must_use]
+    pub fn from_instance_id(id: PanelInstanceId, title: impl Into<String>) -> Self {
+        Self::new(PanelId::from_instance_id(id), title)
+    }
+
+    /// Returns this panel identity as a panel instance ID.
+    #[must_use]
+    pub const fn instance_id(&self) -> PanelInstanceId {
+        self.id.instance_id()
     }
 }
 
