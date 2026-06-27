@@ -1011,6 +1011,14 @@ impl NodeGraphViewport {
         )
     }
 
+    /// Converts a UI logical screen-space delta to graph-space units.
+    #[must_use]
+    pub fn screen_delta_to_graph(self, delta: GraphVector) -> GraphVector {
+        let delta = delta.sanitized();
+        let zoom = self.effective_pan_zoom().zoom;
+        GraphVector::new(finite_div(delta.x, zoom), finite_div(delta.y, zoom))
+    }
+
     /// Converts a graph-space rectangle to UI logical screen coordinates.
     #[must_use]
     pub fn graph_rect_to_screen(self, rect: GraphRect) -> Rect {
@@ -1146,6 +1154,18 @@ impl NodeGraphSelection {
         self.selected.iter().copied().collect()
     }
 
+    /// Returns selected node IDs in deterministic sorted order.
+    #[must_use]
+    pub fn selected_nodes(&self) -> Vec<NodeId> {
+        self.selected
+            .iter()
+            .filter_map(|target| match target {
+                NodeGraphSelectionTarget::Node(node) => Some(*node),
+                NodeGraphSelectionTarget::Edge(_) | NodeGraphSelectionTarget::Port(_) => None,
+            })
+            .collect()
+    }
+
     /// Returns the most recent operation target, when one is present.
     #[must_use]
     pub const fn active(&self) -> Option<NodeGraphSelectionTarget> {
@@ -1231,6 +1251,109 @@ impl NodeGraphSelection {
         NodeGraphSelectionTarget::from_hit_target(hit)
             .map_or_else(|| self.clone(), |target| self.replace(target))
     }
+}
+
+/// Metadata for one selected node move candidate.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NodeGraphNodeMove {
+    /// Node to move.
+    pub node: NodeId,
+    /// Graph-space movement delta for this node.
+    pub delta: GraphVector,
+}
+
+/// Data-only request metadata for moving the currently selected nodes.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeGraphSelectedNodeMoveRequest {
+    /// Selection snapshot used to derive this request.
+    pub selection: NodeGraphSelection,
+    /// Sanitized UI logical screen-space drag delta.
+    pub screen_delta: GraphVector,
+    /// Sanitized graph-space drag delta.
+    pub graph_delta: GraphVector,
+    /// Per-node move candidates in deterministic selected-node order.
+    pub nodes: Vec<NodeGraphNodeMove>,
+}
+
+impl NodeGraphSelectedNodeMoveRequest {
+    /// Creates selected-node move request metadata from a viewport and selection.
+    #[must_use]
+    pub fn new(
+        viewport: NodeGraphViewport,
+        selection: NodeGraphSelection,
+        screen_delta: GraphVector,
+    ) -> Self {
+        let screen_delta = screen_delta.sanitized();
+        let graph_delta = node_graph_drag_delta(viewport, screen_delta);
+        let nodes = selection
+            .selected_nodes()
+            .into_iter()
+            .map(|node| NodeGraphNodeMove {
+                node,
+                delta: graph_delta,
+            })
+            .collect();
+
+        Self {
+            selection,
+            screen_delta,
+            graph_delta,
+            nodes,
+        }
+    }
+
+    /// Returns true when the request has no node movement to apply.
+    #[must_use]
+    pub fn is_noop(&self) -> bool {
+        self.nodes.is_empty() || self.graph_delta == GraphVector::ZERO
+    }
+}
+
+/// Data-only request metadata for panning the graph canvas.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeGraphCanvasPanRequest {
+    /// Selection snapshot preserved while panning.
+    pub selection: NodeGraphSelection,
+    /// Sanitized UI logical screen-space drag delta.
+    pub screen_delta: GraphVector,
+    /// Screen-space pan delta to apply to the viewport pan offset.
+    pub pan_delta: GraphVector,
+}
+
+impl NodeGraphCanvasPanRequest {
+    /// Creates canvas pan request metadata.
+    #[must_use]
+    pub fn new(selection: NodeGraphSelection, screen_delta: GraphVector) -> Self {
+        let screen_delta = screen_delta.sanitized();
+        Self {
+            selection,
+            screen_delta,
+            pan_delta: screen_delta,
+        }
+    }
+
+    /// Returns a new pan/zoom state with this request's pan delta applied.
+    #[must_use]
+    pub fn next_pan_zoom(&self, pan_zoom: NodeGraphPanZoom) -> NodeGraphPanZoom {
+        let mut pan_zoom = pan_zoom.sanitized();
+        pan_zoom.pan_by(self.pan_delta);
+        pan_zoom
+    }
+
+    /// Returns true when the request has no viewport pan to apply.
+    #[must_use]
+    pub fn is_noop(&self) -> bool {
+        self.pan_delta == GraphVector::ZERO
+    }
+}
+
+/// Converts a node drag delta from UI logical screen space to graph space.
+#[must_use]
+pub fn node_graph_drag_delta(
+    viewport: NodeGraphViewport,
+    screen_delta: GraphVector,
+) -> GraphVector {
+    viewport.screen_delta_to_graph(screen_delta)
 }
 
 /// Deterministic node graph hit test geometry.
