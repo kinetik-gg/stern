@@ -126,6 +126,11 @@ fn representative_components_report_honest_categories_and_statuses() {
         ComponentConformanceStatus::Partial,
     );
     assert_entry(
+        "NodeGraph",
+        ComponentCategory::Viewport,
+        ComponentConformanceStatus::Partial,
+    );
+    assert_entry(
         "StatusBar",
         ComponentCategory::System,
         ComponentConformanceStatus::Partial,
