@@ -202,6 +202,110 @@ impl EdgeDescriptor {
     }
 }
 
+/// Source or target side of an edge descriptor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgeEndpointRole {
+    /// The edge source endpoint.
+    Source,
+    /// The edge target endpoint.
+    Target,
+}
+
+/// Resolved node graph endpoint with descriptor references and anchor geometry.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedEndpoint<'a> {
+    /// Source or target role for this resolved endpoint.
+    pub role: EdgeEndpointRole,
+    /// Stable endpoint address from the edge descriptor.
+    pub endpoint: PortEndpoint,
+    /// Owning node descriptor.
+    pub node: &'a NodeDescriptor,
+    /// Port descriptor.
+    pub port: &'a PortDescriptor,
+    /// Graph-space anchor for later backend-independent edge drawing.
+    pub anchor: GraphPoint,
+}
+
+/// Resolved edge with source and target descriptor references.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedEdge<'a> {
+    /// Edge descriptor.
+    pub edge: &'a EdgeDescriptor,
+    /// Resolved output endpoint.
+    pub from: ResolvedEndpoint<'a>,
+    /// Resolved input endpoint.
+    pub to: ResolvedEndpoint<'a>,
+}
+
+/// Structured edge endpoint resolution failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgeResolutionError {
+    /// The graph contains a duplicate edge ID.
+    DuplicateEdgeId {
+        /// Duplicated edge ID.
+        edge: EdgeId,
+    },
+    /// An edge endpoint references a missing node.
+    MissingNode {
+        /// Edge being resolved.
+        edge: EdgeId,
+        /// Source or target endpoint role.
+        endpoint: EdgeEndpointRole,
+        /// Missing node ID.
+        node: NodeId,
+    },
+    /// An edge endpoint references a missing port on an existing node.
+    MissingPort {
+        /// Edge being resolved.
+        edge: EdgeId,
+        /// Source or target endpoint role.
+        endpoint: EdgeEndpointRole,
+        /// Existing node ID.
+        node: NodeId,
+        /// Missing port ID.
+        port: PortId,
+    },
+    /// An endpoint exists but has the wrong directed flow for its edge side.
+    WrongDirection {
+        /// Edge being resolved.
+        edge: EdgeId,
+        /// Source or target endpoint role.
+        endpoint: EdgeEndpointRole,
+        /// Owning node ID.
+        node: NodeId,
+        /// Port ID.
+        port: PortId,
+        /// Required port direction.
+        expected: PortDirection,
+        /// Actual port direction.
+        actual: PortDirection,
+    },
+    /// An endpoint exists but its port is disabled.
+    DisabledPort {
+        /// Edge being resolved.
+        edge: EdgeId,
+        /// Source or target endpoint role.
+        endpoint: EdgeEndpointRole,
+        /// Owning node ID.
+        node: NodeId,
+        /// Port ID.
+        port: PortId,
+    },
+    /// Resolved output and input ports use different compatibility keys.
+    IncompatiblePortType {
+        /// Edge being resolved.
+        edge: EdgeId,
+        /// Source endpoint address.
+        from: PortEndpoint,
+        /// Target endpoint address.
+        to: PortEndpoint,
+        /// Source port compatibility key.
+        output: PortTypeId,
+        /// Target port compatibility key.
+        input: PortTypeId,
+    },
+}
+
 /// Data-only frame descriptor for node graph surfaces.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeFrameDescriptor {
@@ -311,6 +415,17 @@ impl NodeGraphDescriptor {
     /// node contains duplicate port IDs.
     pub fn validate(&self) -> Result<(), NodeGraphValidationError> {
         validate_node_graph_descriptors(&self.nodes)
+    }
+
+    /// Resolves edge endpoints against node and port descriptors.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured resolution error for duplicate edge IDs, missing
+    /// nodes or ports, wrong endpoint directions, disabled ports, or
+    /// incompatible port types.
+    pub fn resolve_edges(&self) -> Result<Vec<ResolvedEdge<'_>>, EdgeResolutionError> {
+        resolve_node_graph_edges(self)
     }
 }
 
@@ -430,6 +545,145 @@ pub fn validate_port_compatibility(
 #[must_use]
 pub fn ports_are_compatible(output: &PortDescriptor, input: &PortDescriptor) -> bool {
     validate_port_compatibility(output, input).is_ok()
+}
+
+/// Resolves all edge endpoints in descriptor order.
+///
+/// # Errors
+///
+/// Returns the first structured topology error encountered while walking edge
+/// descriptors in order.
+pub fn resolve_node_graph_edges(
+    graph: &NodeGraphDescriptor,
+) -> Result<Vec<ResolvedEdge<'_>>, EdgeResolutionError> {
+    let mut seen_edges = BTreeSet::new();
+    let mut resolved = Vec::with_capacity(graph.edges.len());
+
+    for edge in &graph.edges {
+        if !seen_edges.insert(edge.id) {
+            return Err(EdgeResolutionError::DuplicateEdgeId { edge: edge.id });
+        }
+
+        let from = resolve_endpoint(
+            &graph.nodes,
+            edge.id,
+            EdgeEndpointRole::Source,
+            edge.from,
+            PortDirection::Output,
+        )?;
+        let to = resolve_endpoint(
+            &graph.nodes,
+            edge.id,
+            EdgeEndpointRole::Target,
+            edge.to,
+            PortDirection::Input,
+        )?;
+
+        if !from.port.enabled {
+            return Err(EdgeResolutionError::DisabledPort {
+                edge: edge.id,
+                endpoint: EdgeEndpointRole::Source,
+                node: from.endpoint.node,
+                port: from.endpoint.port,
+            });
+        }
+
+        if !to.port.enabled {
+            return Err(EdgeResolutionError::DisabledPort {
+                edge: edge.id,
+                endpoint: EdgeEndpointRole::Target,
+                node: to.endpoint.node,
+                port: to.endpoint.port,
+            });
+        }
+
+        if from.port.port_type != to.port.port_type {
+            return Err(EdgeResolutionError::IncompatiblePortType {
+                edge: edge.id,
+                from: edge.from,
+                to: edge.to,
+                output: from.port.port_type,
+                input: to.port.port_type,
+            });
+        }
+
+        resolved.push(ResolvedEdge { edge, from, to });
+    }
+
+    Ok(resolved)
+}
+
+fn resolve_endpoint(
+    nodes: &[NodeDescriptor],
+    edge: EdgeId,
+    role: EdgeEndpointRole,
+    endpoint: PortEndpoint,
+    expected_direction: PortDirection,
+) -> Result<ResolvedEndpoint<'_>, EdgeResolutionError> {
+    let node = nodes.iter().find(|node| node.id == endpoint.node).ok_or(
+        EdgeResolutionError::MissingNode {
+            edge,
+            endpoint: role,
+            node: endpoint.node,
+        },
+    )?;
+    let port = node
+        .ports
+        .iter()
+        .find(|port| port.id == endpoint.port)
+        .ok_or(EdgeResolutionError::MissingPort {
+            edge,
+            endpoint: role,
+            node: endpoint.node,
+            port: endpoint.port,
+        })?;
+
+    if port.direction != expected_direction {
+        return Err(EdgeResolutionError::WrongDirection {
+            edge,
+            endpoint: role,
+            node: endpoint.node,
+            port: endpoint.port,
+            expected: expected_direction,
+            actual: port.direction,
+        });
+    }
+
+    Ok(ResolvedEndpoint {
+        role,
+        endpoint,
+        node,
+        port,
+        anchor: port_anchor(node, port),
+    })
+}
+
+fn port_anchor(node: &NodeDescriptor, port: &PortDescriptor) -> GraphPoint {
+    let rect = node.rect.sanitized();
+    let same_direction_count = node
+        .ports
+        .iter()
+        .filter(|candidate| candidate.direction == port.direction)
+        .count();
+    let same_direction_index = node
+        .ports
+        .iter()
+        .filter(|candidate| candidate.direction == port.direction)
+        .position(|candidate| candidate.id == port.id)
+        .unwrap_or(0);
+    let slot = usize_to_graph_slot(same_direction_index) + 1.0;
+    let slot_count = usize_to_graph_slot(same_direction_count) + 1.0;
+    let x = match port.direction {
+        PortDirection::Input => rect.x,
+        PortDirection::Output => finite_sum(rect.x, rect.width),
+    };
+    let y = finite_sum(rect.y, finite_product(rect.height, slot / slot_count));
+
+    GraphPoint::new(x, y)
+}
+
+fn usize_to_graph_slot(value: usize) -> f32 {
+    f32::from(u16::try_from(value).unwrap_or(u16::MAX))
 }
 
 /// A point in node graph content space.
