@@ -3,11 +3,12 @@
 mod node_graph_conformance {
     use kinetik_ui_core::{Point, Rect};
     use kinetik_ui_widgets::{
-        EdgeDescriptor, EdgeId, GraphPoint, GraphRect, GraphVector, NodeDescriptor,
-        NodeFrameDescriptor, NodeFrameId, NodeGraphDescriptor, NodeGraphPanZoom,
-        NodeGraphValidationError, NodeGraphViewport, NodeGroupDescriptor, NodeGroupId, NodeId,
-        PortCompatibilityError, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
-        ports_are_compatible, validate_node_graph_descriptors, validate_port_compatibility,
+        EdgeDescriptor, EdgeEndpointRole, EdgeId, EdgeResolutionError, GraphPoint, GraphRect,
+        GraphVector, NodeDescriptor, NodeFrameDescriptor, NodeFrameId, NodeGraphDescriptor,
+        NodeGraphPanZoom, NodeGraphValidationError, NodeGraphViewport, NodeGroupDescriptor,
+        NodeGroupId, NodeId, PortCompatibilityError, PortDescriptor, PortDirection, PortEndpoint,
+        PortId, PortTypeId, ports_are_compatible, validate_node_graph_descriptors,
+        validate_port_compatibility,
     };
 
     fn assert_close(actual: f32, expected: f32) {
@@ -226,6 +227,373 @@ mod node_graph_conformance {
             })
         );
         assert!(!ports_are_compatible(&output, &disabled_input));
+    }
+
+    #[test]
+    fn valid_edge_resolves_descriptors_and_anchor_points() {
+        let number = PortTypeId::from_raw(10);
+        let source = NodeDescriptor::new(
+            NodeId::from_raw(1),
+            "Source",
+            GraphRect::new(10.0, 20.0, 100.0, 80.0),
+        )
+        .with_ports(vec![
+            PortDescriptor::new(
+                PortId::from_raw(9),
+                PortDirection::Input,
+                "Passthrough",
+                number,
+            ),
+            PortDescriptor::new(
+                PortId::from_raw(1),
+                PortDirection::Output,
+                "Primary",
+                number,
+            ),
+            PortDescriptor::new(
+                PortId::from_raw(2),
+                PortDirection::Output,
+                "Secondary",
+                number,
+            ),
+        ]);
+        let target = NodeDescriptor::new(
+            NodeId::from_raw(2),
+            "Target",
+            GraphRect::new(200.0, 40.0, 120.0, 60.0),
+        )
+        .with_ports(vec![
+            PortDescriptor::new(PortId::from_raw(3), PortDirection::Input, "A", number),
+            PortDescriptor::new(PortId::from_raw(4), PortDirection::Input, "B", number),
+            PortDescriptor::new(PortId::from_raw(8), PortDirection::Output, "Mirror", number),
+        ]);
+        let graph = NodeGraphDescriptor {
+            nodes: vec![source, target],
+            edges: vec![EdgeDescriptor::new(
+                EdgeId::from_raw(50),
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(4)),
+            )],
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+
+        let resolved = graph.resolve_edges().expect("edge should resolve");
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].edge.id, EdgeId::from_raw(50));
+        assert_eq!(resolved[0].from.role, EdgeEndpointRole::Source);
+        assert_eq!(resolved[0].from.node.id, NodeId::from_raw(1));
+        assert_eq!(resolved[0].from.port.id, PortId::from_raw(1));
+        assert_eq!(resolved[0].from.port.direction, PortDirection::Output);
+        assert_graph_point_close(resolved[0].from.anchor, GraphPoint::new(110.0, 46.666_668));
+        assert_eq!(resolved[0].to.role, EdgeEndpointRole::Target);
+        assert_eq!(resolved[0].to.node.id, NodeId::from_raw(2));
+        assert_eq!(resolved[0].to.port.id, PortId::from_raw(4));
+        assert_eq!(resolved[0].to.port.direction, PortDirection::Input);
+        assert_graph_point_close(resolved[0].to.anchor, GraphPoint::new(200.0, 80.0));
+    }
+
+    #[test]
+    fn edge_resolution_reports_missing_node_and_port_with_endpoint_context() {
+        let number = PortTypeId::from_raw(10);
+        let node =
+            NodeDescriptor::new(NodeId::from_raw(1), "Node", GraphRect::ZERO).with_ports(vec![
+                PortDescriptor::new(PortId::from_raw(1), PortDirection::Output, "Out", number),
+            ]);
+        let missing_node_graph = NodeGraphDescriptor {
+            nodes: vec![node.clone()],
+            edges: vec![EdgeDescriptor::new(
+                EdgeId::from_raw(20),
+                PortEndpoint::new(NodeId::from_raw(9), PortId::from_raw(1)),
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+            )],
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+        let missing_port_graph = NodeGraphDescriptor {
+            nodes: vec![node],
+            edges: vec![EdgeDescriptor::new(
+                EdgeId::from_raw(21),
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(99)),
+            )],
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+
+        assert_eq!(
+            missing_node_graph.resolve_edges(),
+            Err(EdgeResolutionError::MissingNode {
+                edge: EdgeId::from_raw(20),
+                endpoint: EdgeEndpointRole::Source,
+                node: NodeId::from_raw(9),
+            })
+        );
+        assert_eq!(
+            missing_port_graph.resolve_edges(),
+            Err(EdgeResolutionError::MissingPort {
+                edge: EdgeId::from_raw(21),
+                endpoint: EdgeEndpointRole::Target,
+                node: NodeId::from_raw(1),
+                port: PortId::from_raw(99),
+            })
+        );
+    }
+
+    #[test]
+    fn edge_resolution_reports_wrong_direction_deterministically() {
+        let number = PortTypeId::from_raw(10);
+        let graph = NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(NodeId::from_raw(1), "Source", GraphRect::ZERO).with_ports(
+                    vec![PortDescriptor::new(
+                        PortId::from_raw(1),
+                        PortDirection::Input,
+                        "Wrong",
+                        number,
+                    )],
+                ),
+                NodeDescriptor::new(NodeId::from_raw(2), "Target", GraphRect::ZERO).with_ports(
+                    vec![PortDescriptor::new(
+                        PortId::from_raw(2),
+                        PortDirection::Input,
+                        "In",
+                        number,
+                    )],
+                ),
+            ],
+            edges: vec![EdgeDescriptor::new(
+                EdgeId::from_raw(30),
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+            )],
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+
+        assert_eq!(
+            graph.resolve_edges(),
+            Err(EdgeResolutionError::WrongDirection {
+                edge: EdgeId::from_raw(30),
+                endpoint: EdgeEndpointRole::Source,
+                node: NodeId::from_raw(1),
+                port: PortId::from_raw(1),
+                expected: PortDirection::Output,
+                actual: PortDirection::Input,
+            })
+        );
+    }
+
+    #[test]
+    fn edge_resolution_reports_incompatible_and_disabled_ports() {
+        let number = PortTypeId::from_raw(10);
+        let vector = PortTypeId::from_raw(11);
+        let incompatible_graph = NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(NodeId::from_raw(1), "Source", GraphRect::ZERO).with_ports(
+                    vec![PortDescriptor::new(
+                        PortId::from_raw(1),
+                        PortDirection::Output,
+                        "Out",
+                        number,
+                    )],
+                ),
+                NodeDescriptor::new(NodeId::from_raw(2), "Target", GraphRect::ZERO).with_ports(
+                    vec![PortDescriptor::new(
+                        PortId::from_raw(2),
+                        PortDirection::Input,
+                        "In",
+                        vector,
+                    )],
+                ),
+            ],
+            edges: vec![EdgeDescriptor::new(
+                EdgeId::from_raw(40),
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+            )],
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+        let disabled_graph = NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(NodeId::from_raw(1), "Source", GraphRect::ZERO).with_ports(
+                    vec![PortDescriptor::new(
+                        PortId::from_raw(1),
+                        PortDirection::Output,
+                        "Out",
+                        number,
+                    )],
+                ),
+                NodeDescriptor::new(NodeId::from_raw(2), "Target", GraphRect::ZERO).with_ports(
+                    vec![
+                        PortDescriptor::new(
+                            PortId::from_raw(2),
+                            PortDirection::Input,
+                            "In",
+                            number,
+                        )
+                        .with_enabled(false),
+                    ],
+                ),
+            ],
+            edges: vec![EdgeDescriptor::new(
+                EdgeId::from_raw(41),
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+            )],
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+
+        assert_eq!(
+            incompatible_graph.resolve_edges(),
+            Err(EdgeResolutionError::IncompatiblePortType {
+                edge: EdgeId::from_raw(40),
+                from: PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                to: PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+                output: number,
+                input: vector,
+            })
+        );
+        assert_eq!(
+            disabled_graph.resolve_edges(),
+            Err(EdgeResolutionError::DisabledPort {
+                edge: EdgeId::from_raw(41),
+                endpoint: EdgeEndpointRole::Target,
+                node: NodeId::from_raw(2),
+                port: PortId::from_raw(2),
+            })
+        );
+    }
+
+    #[test]
+    fn edge_resolution_reports_duplicate_edge_ids_deterministically() {
+        let number = PortTypeId::from_raw(10);
+        let graph = NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(NodeId::from_raw(1), "Source", GraphRect::ZERO).with_ports(
+                    vec![PortDescriptor::new(
+                        PortId::from_raw(1),
+                        PortDirection::Output,
+                        "Out",
+                        number,
+                    )],
+                ),
+                NodeDescriptor::new(NodeId::from_raw(2), "Target", GraphRect::ZERO).with_ports(
+                    vec![PortDescriptor::new(
+                        PortId::from_raw(2),
+                        PortDirection::Input,
+                        "In",
+                        number,
+                    )],
+                ),
+            ],
+            edges: vec![
+                EdgeDescriptor::new(
+                    EdgeId::from_raw(50),
+                    PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                    PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+                ),
+                EdgeDescriptor::new(
+                    EdgeId::from_raw(51),
+                    PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                    PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+                ),
+                EdgeDescriptor::new(
+                    EdgeId::from_raw(50),
+                    PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                    PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+                ),
+            ],
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+
+        assert_eq!(
+            graph.resolve_edges(),
+            Err(EdgeResolutionError::DuplicateEdgeId {
+                edge: EdgeId::from_raw(50),
+            })
+        );
+    }
+
+    #[test]
+    fn edge_resolution_preserves_descriptor_order() {
+        let number = PortTypeId::from_raw(10);
+        let graph = NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(NodeId::from_raw(1), "Source", GraphRect::ZERO).with_ports(
+                    vec![PortDescriptor::new(
+                        PortId::from_raw(1),
+                        PortDirection::Output,
+                        "Out",
+                        number,
+                    )],
+                ),
+                NodeDescriptor::new(NodeId::from_raw(2), "Target", GraphRect::ZERO).with_ports(
+                    vec![
+                        PortDescriptor::new(PortId::from_raw(2), PortDirection::Input, "A", number),
+                        PortDescriptor::new(PortId::from_raw(3), PortDirection::Input, "B", number),
+                    ],
+                ),
+            ],
+            edges: vec![
+                EdgeDescriptor::new(
+                    EdgeId::from_raw(70),
+                    PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                    PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(3)),
+                ),
+                EdgeDescriptor::new(
+                    EdgeId::from_raw(60),
+                    PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                    PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+                ),
+            ],
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+
+        let resolved = graph.resolve_edges().expect("edges should resolve");
+
+        assert_eq!(
+            resolved.iter().map(|edge| edge.edge.id).collect::<Vec<_>>(),
+            vec![EdgeId::from_raw(70), EdgeId::from_raw(60)]
+        );
+    }
+
+    #[test]
+    fn edge_resolution_allows_same_node_edges() {
+        let number = PortTypeId::from_raw(10);
+        let graph = NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(
+                    NodeId::from_raw(1),
+                    "Node",
+                    GraphRect::new(-10.0, 5.0, 80.0, 50.0),
+                )
+                .with_ports(vec![
+                    PortDescriptor::new(PortId::from_raw(1), PortDirection::Output, "Out", number),
+                    PortDescriptor::new(PortId::from_raw(2), PortDirection::Input, "In", number),
+                ]),
+            ],
+            edges: vec![EdgeDescriptor::new(
+                EdgeId::from_raw(80),
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(2)),
+            )],
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+
+        let resolved = graph
+            .resolve_edges()
+            .expect("same-node edge should resolve");
+
+        assert_eq!(resolved[0].from.node.id, resolved[0].to.node.id);
+        assert_graph_point_close(resolved[0].from.anchor, GraphPoint::new(70.0, 30.0));
+        assert_graph_point_close(resolved[0].to.anchor, GraphPoint::new(-10.0, 30.0));
     }
 
     #[test]
