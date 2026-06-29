@@ -8,8 +8,9 @@ use kinetik_ui_core::{
 };
 
 use crate::{
-    InlineEditBeginRequest, InlineEditEligibility, ItemId, Selection, TreeExpansion, TreeItem,
-    TreeLayout, TreeModel, TreeModelError, inline_edit_widget_id,
+    CollectionContextTarget, CollectionDragSource, InlineEditBeginRequest, InlineEditEligibility,
+    ItemId, Selection, TreeExpansion, TreeItem, TreeLayout, TreeModel, TreeModelError,
+    inline_edit_widget_id,
 };
 
 /// Optional app-owned resource metadata attached to an outliner item.
@@ -417,6 +418,26 @@ impl OutlinerRow {
             self.flags.inline_edit_eligibility(),
         )
     }
+
+    /// Creates stable drag source metadata for this row.
+    #[must_use]
+    pub fn drag_source(&self, selection: &Selection) -> Option<CollectionDragSource> {
+        (!self.flags.disabled).then(|| CollectionDragSource::from_selection(self.id, selection))
+    }
+
+    /// Creates a context-menu target for this row.
+    #[must_use]
+    pub fn context_target(&self, selection: &Selection) -> Option<CollectionContextTarget> {
+        if self.flags.disabled {
+            return None;
+        }
+
+        if selection.contains(self.id) {
+            CollectionContextTarget::selection(selection.selected())
+        } else {
+            Some(CollectionContextTarget::item(self.id))
+        }
+    }
 }
 
 impl OutlinerItem {
@@ -477,6 +498,28 @@ pub struct OutlinerLockToggleRequest {
     pub target: ItemId,
     /// Current app-owned lock state.
     pub locked: bool,
+}
+
+/// Outliner row drop zone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutlinerDropZoneKind {
+    /// Drop before the target row.
+    Before,
+    /// Drop inside the target row.
+    Inside,
+    /// Drop after the target row.
+    After,
+}
+
+/// Data-only outliner drop target metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutlinerDropTarget {
+    /// Drag source represented by the drop.
+    pub source: CollectionDragSource,
+    /// Target row.
+    pub target: ItemId,
+    /// Target row zone.
+    pub zone: OutlinerDropZoneKind,
 }
 
 /// Row zone hit target.
@@ -608,6 +651,27 @@ impl OutlinerRowZones {
             None
         }
     }
+
+    /// Resolves a deterministic drop target for a point over this row.
+    #[must_use]
+    pub fn drop_target(
+        &self,
+        point: Point,
+        source: &CollectionDragSource,
+    ) -> Option<OutlinerDropTarget> {
+        if self.row.flags.disabled
+            || source.contains(self.row.id)
+            || !self.context_rect.contains_point(point)
+        {
+            return None;
+        }
+
+        Some(OutlinerDropTarget {
+            source: source.clone(),
+            target: self.row.id,
+            zone: outliner_drop_zone(self.rect, point),
+        })
+    }
 }
 
 /// Builds semantic list and row nodes for visible outliner rows.
@@ -686,6 +750,29 @@ pub fn outliner_semantics(
     semantics
 }
 
+/// Resolves an item, selection, or background context target at a point.
+#[must_use]
+pub fn outliner_context_target_at(
+    bounds: Rect,
+    rows: &[OutlinerRowZones],
+    point: Point,
+    selection: &Selection,
+) -> Option<CollectionContextTarget> {
+    let bounds = finite_rect(bounds);
+    if !bounds.contains_point(point) {
+        return None;
+    }
+
+    if let Some(row) = rows
+        .iter()
+        .find(|row| row.context_rect.contains_point(point))
+    {
+        return row.row.context_target(selection);
+    }
+
+    Some(CollectionContextTarget::background())
+}
+
 /// Derives a stable semantic widget ID for an outliner row.
 #[must_use]
 pub fn outliner_row_widget_id(root: WidgetId, item: ItemId) -> WidgetId {
@@ -701,6 +788,21 @@ fn outliner_tree_row(row: &OutlinerRow) -> crate::TreeRow {
         depth: row.depth,
         has_children: row.has_children,
         expanded: row.expanded,
+    }
+}
+
+fn outliner_drop_zone(rect: Rect, point: Point) -> OutlinerDropZoneKind {
+    let rect = finite_rect(rect);
+    let y = finite_coordinate(point.y);
+    let top = rect.y + rect.height * 0.25;
+    let bottom = rect.y + rect.height * 0.75;
+
+    if y < top {
+        OutlinerDropZoneKind::Before
+    } else if y >= bottom {
+        OutlinerDropZoneKind::After
+    } else {
+        OutlinerDropZoneKind::Inside
     }
 }
 
