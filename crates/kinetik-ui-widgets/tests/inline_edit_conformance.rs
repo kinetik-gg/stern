@@ -65,6 +65,36 @@ fn rename_starts_from_selected_outliner_item_and_preserves_selection() {
 }
 
 #[test]
+fn inline_rename_requires_active_item_to_remain_selected() {
+    let outliner = OutlinerModel::new(vec![
+        OutlinerItem::new(id(10), "World"),
+        OutlinerItem::new(id(20), "Camera"),
+    ]);
+    let assets = AssetBrowserModel::new(vec![
+        AssetBrowserItem::new(id(10), "World", "scene"),
+        AssetBrowserItem::new(id(20), "Camera", "image"),
+    ]);
+    let mut selection = Selection::new();
+    selection.replace(id(10));
+    selection.toggle(id(20));
+    selection.toggle(id(20));
+
+    assert_eq!(selection.selected(), vec![id(10)]);
+    assert_eq!(selection.active, Some(id(20)));
+    assert!(!selection.contains(id(20)));
+    assert!(
+        outliner
+            .inline_rename_begin_from_selection(&selection, WidgetId::from_key("outliner"))
+            .is_none()
+    );
+    assert!(
+        assets
+            .inline_rename_begin_from_selection(&selection, WidgetId::from_key("assets"))
+            .is_none()
+    );
+}
+
+#[test]
 fn text_ownership_targets_inline_edit_widget_id_and_clipboard_is_isolated() {
     let model = AssetBrowserModel::new(vec![
         AssetBrowserItem::new(id(10), "Image", "image"),

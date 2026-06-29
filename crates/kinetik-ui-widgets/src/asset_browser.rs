@@ -188,7 +188,12 @@ impl AssetBrowserModel {
         selection: &Selection,
         root: WidgetId,
     ) -> Option<InlineEditBeginRequest> {
-        let item = self.item_by_id(selection.active?)?;
+        let active = selection.active?;
+        if !selection.contains(active) {
+            return None;
+        }
+
+        let item = self.item_by_id(active)?;
         item.inline_rename_begin_request(root)
     }
 
