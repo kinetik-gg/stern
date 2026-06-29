@@ -6,13 +6,15 @@ mod node_graph_conformance {
     };
     use kinetik_ui_widgets::{
         EdgeDescriptor, EdgeEndpointRole, EdgeId, EdgeResolutionError, GraphPoint, GraphRect,
-        GraphVector, NodeDescriptor, NodeFrameDescriptor, NodeFrameId, NodeGraphCanvasPanRequest,
-        NodeGraphDescriptor, NodeGraphEmissionError, NodeGraphGridStyle, NodeGraphHitTarget,
-        NodeGraphHitTestConfig, NodeGraphHitTestError, NodeGraphPanZoom, NodeGraphPortState,
-        NodeGraphSelectedNodeMoveRequest, NodeGraphSelection, NodeGraphSelectionOperation,
-        NodeGraphSelectionTarget, NodeGraphStaticView, NodeGraphStyle, NodeGraphValidationError,
-        NodeGraphViewport, NodeGroupDescriptor, NodeGroupId, NodeId, PortCompatibilityError,
-        PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId, node_graph_drag_delta,
+        GraphVector, NodeDescriptor, NodeFrameDescriptor, NodeFrameId, NodeGraphBoxSelectionMode,
+        NodeGraphBoxSelectionRequest, NodeGraphCanvasPanRequest, NodeGraphDescriptor,
+        NodeGraphEmissionError, NodeGraphGridStyle, NodeGraphHitTarget, NodeGraphHitTestConfig,
+        NodeGraphHitTestError, NodeGraphPanZoom, NodeGraphPortState,
+        NodeGraphSelectedNodeMoveRequest, NodeGraphSelection, NodeGraphSelectionIntent,
+        NodeGraphSelectionOperation, NodeGraphSelectionTarget, NodeGraphStaticView, NodeGraphStyle,
+        NodeGraphValidationError, NodeGraphViewport, NodeGroupDescriptor, NodeGroupId, NodeId,
+        PortCompatibilityError, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
+        node_graph_drag_delta, node_graph_snap_delta, node_graph_snap_point, node_graph_snap_rect,
         ports_are_compatible, validate_node_graph_descriptors, validate_port_compatibility,
     };
 
@@ -1282,6 +1284,244 @@ mod node_graph_conformance {
     }
 
     #[test]
+    fn box_selection_converts_screen_rect_to_graph_across_pan_zoom() {
+        let graph = static_graph();
+        let viewport = NodeGraphViewport::new(
+            Rect::new(100.0, 50.0, 400.0, 300.0),
+            NodeGraphPanZoom::new(GraphVector::new(20.0, -10.0), 2.0),
+        );
+
+        let request = NodeGraphBoxSelectionRequest::new(
+            viewport,
+            Rect::new(340.0, 240.0, -205.0, -165.0),
+            NodeGraphBoxSelectionMode::Contains,
+            NodeGraphSelectionIntent::Replace,
+        );
+        let selection = request.select(&graph);
+
+        assert_rect_close(request.screen_rect, Rect::new(135.0, 75.0, 205.0, 165.0));
+        assert_graph_rect_close(request.graph_rect, GraphRect::new(7.5, 17.5, 102.5, 82.5));
+        assert_eq!(
+            selection.targets,
+            vec![NodeGraphSelectionTarget::Node(NodeId::from_raw(1))]
+        );
+        assert_eq!(
+            selection.operations,
+            vec![NodeGraphSelectionOperation::Replace(
+                NodeGraphSelectionTarget::Node(NodeId::from_raw(1))
+            )]
+        );
+    }
+
+    #[test]
+    fn box_selection_contains_and_intersects_modes_are_distinct() {
+        let graph = NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(
+                    NodeId::from_raw(1),
+                    "Inside",
+                    GraphRect::new(0.0, 0.0, 100.0, 100.0),
+                ),
+                NodeDescriptor::new(
+                    NodeId::from_raw(2),
+                    "Crossing",
+                    GraphRect::new(90.0, 0.0, 50.0, 50.0),
+                ),
+                NodeDescriptor::new(
+                    NodeId::from_raw(3),
+                    "Outside",
+                    GraphRect::new(120.0, 0.0, 20.0, 20.0),
+                ),
+            ],
+            edges: Vec::new(),
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+        let contains = NodeGraphBoxSelectionRequest::from_graph_rect(
+            GraphRect::new(0.0, 0.0, 100.0, 100.0),
+            NodeGraphBoxSelectionMode::Contains,
+            NodeGraphSelectionIntent::Add,
+        )
+        .select(&graph);
+        let intersects = NodeGraphBoxSelectionRequest::from_graph_rect(
+            GraphRect::new(0.0, 0.0, 100.0, 100.0),
+            NodeGraphBoxSelectionMode::Intersects,
+            NodeGraphSelectionIntent::Add,
+        )
+        .select(&graph);
+
+        assert_eq!(
+            contains.targets,
+            vec![NodeGraphSelectionTarget::Node(NodeId::from_raw(1))]
+        );
+        assert_eq!(
+            intersects.targets,
+            vec![
+                NodeGraphSelectionTarget::Node(NodeId::from_raw(1)),
+                NodeGraphSelectionTarget::Node(NodeId::from_raw(2)),
+            ]
+        );
+    }
+
+    #[test]
+    fn box_selection_additive_and_subtractive_metadata_is_deterministic() {
+        let graph = NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(
+                    NodeId::from_raw(3),
+                    "Third",
+                    GraphRect::new(0.0, 0.0, 10.0, 10.0),
+                ),
+                NodeDescriptor::new(
+                    NodeId::from_raw(1),
+                    "First",
+                    GraphRect::new(5.0, 5.0, 10.0, 10.0),
+                ),
+                NodeDescriptor::new(
+                    NodeId::from_raw(2),
+                    "Disabled",
+                    GraphRect::new(0.0, 0.0, 10.0, 10.0),
+                )
+                .with_enabled(false),
+            ],
+            edges: Vec::new(),
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+
+        let add = NodeGraphBoxSelectionRequest::from_graph_rect(
+            GraphRect::new(0.0, 0.0, 20.0, 20.0),
+            NodeGraphBoxSelectionMode::Intersects,
+            NodeGraphSelectionIntent::Add,
+        )
+        .select(&graph);
+        let subtract = NodeGraphBoxSelectionRequest::from_graph_rect(
+            GraphRect::new(0.0, 0.0, 20.0, 20.0),
+            NodeGraphBoxSelectionMode::Intersects,
+            NodeGraphSelectionIntent::Subtract,
+        )
+        .select(&graph);
+
+        let targets = vec![
+            NodeGraphSelectionTarget::Node(NodeId::from_raw(1)),
+            NodeGraphSelectionTarget::Node(NodeId::from_raw(3)),
+        ];
+        assert_eq!(add.targets, targets);
+        assert_eq!(
+            add.operations,
+            vec![
+                NodeGraphSelectionOperation::Extend(NodeGraphSelectionTarget::Node(
+                    NodeId::from_raw(1)
+                )),
+                NodeGraphSelectionOperation::Extend(NodeGraphSelectionTarget::Node(
+                    NodeId::from_raw(3)
+                )),
+            ]
+        );
+        assert_eq!(
+            subtract.operations,
+            vec![
+                NodeGraphSelectionOperation::Remove(NodeGraphSelectionTarget::Node(
+                    NodeId::from_raw(1)
+                )),
+                NodeGraphSelectionOperation::Remove(NodeGraphSelectionTarget::Node(
+                    NodeId::from_raw(3)
+                )),
+            ]
+        );
+    }
+
+    #[test]
+    fn box_selection_empty_and_invalid_inputs_are_deterministic() {
+        let request = NodeGraphBoxSelectionRequest::new(
+            NodeGraphViewport::new(
+                Rect::new(f32::NAN, f32::INFINITY, -10.0, f32::NAN),
+                NodeGraphPanZoom::new(GraphVector::new(f32::INFINITY, f32::NAN), 0.0),
+            ),
+            Rect::new(f32::NAN, f32::INFINITY, -30.0, f32::NEG_INFINITY),
+            NodeGraphBoxSelectionMode::Intersects,
+            NodeGraphSelectionIntent::Replace,
+        );
+        let selection = request.select(&NodeGraphDescriptor::new());
+
+        assert!(request.is_empty());
+        assert_rect_close(request.screen_rect, Rect::ZERO);
+        assert_graph_rect_close(request.graph_rect, GraphRect::ZERO);
+        assert!(selection.targets.is_empty());
+        assert_eq!(
+            selection.operations,
+            vec![NodeGraphSelectionOperation::Clear]
+        );
+    }
+
+    #[test]
+    fn box_selection_finite_origin_with_non_finite_size_is_noop() {
+        let graph = NodeGraphDescriptor {
+            nodes: vec![NodeDescriptor::new(
+                NodeId::from_raw(1),
+                "Would Have Matched",
+                GraphRect::new(20.0, 15.0, 5.0, 5.0),
+            )],
+            edges: Vec::new(),
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+        let request = NodeGraphBoxSelectionRequest::new(
+            NodeGraphViewport::new(Rect::ZERO, NodeGraphPanZoom::default()),
+            Rect::new(100.0, 10.0, f32::INFINITY, 20.0),
+            NodeGraphBoxSelectionMode::Intersects,
+            NodeGraphSelectionIntent::Add,
+        );
+        let selection = request.select(&graph);
+
+        assert!(request.is_empty());
+        assert_rect_close(request.screen_rect, Rect::ZERO);
+        assert_graph_rect_close(request.graph_rect, GraphRect::ZERO);
+        assert!(selection.targets.is_empty());
+        assert!(selection.is_noop());
+    }
+
+    #[test]
+    fn box_selection_graph_rect_non_finite_components_are_noop() {
+        let graph = NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(
+                    NodeId::from_raw(1),
+                    "Would Have Matched Sanitized X",
+                    GraphRect::new(0.0, 10.0, 20.0, 20.0),
+                ),
+                NodeDescriptor::new(
+                    NodeId::from_raw(2),
+                    "Would Have Matched Sanitized Y",
+                    GraphRect::new(10.0, 0.0, 20.0, 20.0),
+                ),
+            ],
+            edges: Vec::new(),
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+
+        for graph_rect in [
+            GraphRect::new(f32::INFINITY, 10.0, 20.0, 20.0),
+            GraphRect::new(10.0, f32::NAN, 20.0, 20.0),
+            GraphRect::new(10.0, 10.0, f32::INFINITY, 20.0),
+            GraphRect::new(10.0, 10.0, 20.0, f32::NEG_INFINITY),
+        ] {
+            let request = NodeGraphBoxSelectionRequest::from_graph_rect(
+                graph_rect,
+                NodeGraphBoxSelectionMode::Intersects,
+                NodeGraphSelectionIntent::Add,
+            );
+            let selection = request.select(&graph);
+
+            assert!(request.is_empty());
+            assert_graph_rect_close(request.graph_rect, GraphRect::ZERO);
+            assert!(selection.targets.is_empty());
+            assert!(selection.is_noop());
+        }
+    }
+
+    #[test]
     fn drag_delta_accounts_for_viewport_zoom_and_sanitizes_invalid_input() {
         let viewport = NodeGraphViewport::new(
             Rect::new(50.0, 30.0, 300.0, 200.0),
@@ -1305,6 +1545,48 @@ mod node_graph_conformance {
             node_graph_drag_delta(invalid, GraphVector::new(f32::INFINITY, -12.0)),
             GraphVector::new(0.0, -12.0)
         );
+    }
+
+    #[test]
+    fn snap_helpers_handle_negative_coordinates_and_fractional_zoom() {
+        let viewport = NodeGraphViewport::new(
+            Rect::new(0.0, 0.0, 300.0, 200.0),
+            NodeGraphPanZoom::new(GraphVector::ZERO, 2.5),
+        );
+        let graph_delta = node_graph_drag_delta(viewport, GraphVector::new(-31.25, 18.75));
+
+        assert_graph_point_close(
+            node_graph_snap_point(GraphPoint::new(-12.5, 12.49), 5.0),
+            GraphPoint::new(-15.0, 10.0),
+        );
+        assert_graph_rect_close(
+            node_graph_snap_rect(GraphRect::new(-12.5, 7.5, 12.4, 17.6), 5.0),
+            GraphRect::new(-15.0, 10.0, 10.0, 20.0),
+        );
+        assert_graph_vector_close(graph_delta, GraphVector::new(-12.5, 7.5));
+        assert_graph_vector_close(
+            node_graph_snap_delta(graph_delta, 5.0),
+            GraphVector::new(-15.0, 10.0),
+        );
+    }
+
+    #[test]
+    fn snap_helpers_sanitize_invalid_grid_sizes_without_snapping() {
+        let point = GraphPoint::new(f32::NAN, f32::NEG_INFINITY);
+        let rect = GraphRect::new(f32::INFINITY, -12.0, -5.0, 9.0);
+        let delta = GraphVector::new(7.5, f32::NAN);
+
+        for invalid_grid in [0.0, -4.0, f32::NAN, f32::INFINITY] {
+            assert_graph_point_close(node_graph_snap_point(point, invalid_grid), GraphPoint::ZERO);
+            assert_graph_rect_close(
+                node_graph_snap_rect(rect, invalid_grid),
+                GraphRect::new(0.0, -12.0, 0.0, 9.0),
+            );
+            assert_graph_vector_close(
+                node_graph_snap_delta(delta, invalid_grid),
+                GraphVector::new(7.5, 0.0),
+            );
+        }
     }
 
     #[test]

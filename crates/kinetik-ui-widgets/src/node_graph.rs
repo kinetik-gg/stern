@@ -898,6 +898,42 @@ impl GraphRect {
             finite_non_negative(self.height),
         )
     }
+
+    /// Creates a graph-space rectangle from two corners.
+    #[must_use]
+    pub fn from_min_max(min: GraphPoint, max: GraphPoint) -> Self {
+        let min = min.sanitized();
+        let max = max.sanitized();
+        let x = min.x.min(max.x);
+        let y = min.y.min(max.y);
+        Self::new(x, y, (max.x - min.x).abs(), (max.y - min.y).abs())
+    }
+
+    /// Returns true when this rectangle fully contains another rectangle.
+    #[must_use]
+    pub fn contains_rect(self, other: GraphRect) -> bool {
+        let rect = self.sanitized();
+        let other = other.sanitized();
+        !rect.is_empty()
+            && !other.is_empty()
+            && other.x >= rect.x
+            && other.y >= rect.y
+            && other.max_x() <= rect.max_x()
+            && other.max_y() <= rect.max_y()
+    }
+
+    /// Returns true when this rectangle overlaps another rectangle.
+    #[must_use]
+    pub fn intersects_rect(self, other: GraphRect) -> bool {
+        let rect = self.sanitized();
+        let other = other.sanitized();
+        !rect.is_empty()
+            && !other.is_empty()
+            && rect.x < other.max_x()
+            && rect.max_x() > other.x
+            && rect.y < other.max_y()
+            && rect.max_y() > other.y
+    }
 }
 
 /// Pan and zoom state for a node graph viewport.
@@ -1253,6 +1289,140 @@ impl NodeGraphSelection {
     }
 }
 
+/// Geometry mode used for node graph box selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeGraphBoxSelectionMode {
+    /// Select only nodes fully contained by the box.
+    Contains,
+    /// Select nodes that overlap the box at all.
+    Intersects,
+}
+
+/// Selection change intent for a node graph box selection request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeGraphSelectionIntent {
+    /// Replace the current selection with the box selection.
+    Replace,
+    /// Add the box selection to the current selection.
+    Add,
+    /// Remove the box selection from the current selection.
+    Subtract,
+}
+
+/// Data-only metadata for one node graph box selection request.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NodeGraphBoxSelectionRequest {
+    /// Sanitized UI logical screen-space rectangle.
+    pub screen_rect: Rect,
+    /// Box rectangle converted to graph space.
+    pub graph_rect: GraphRect,
+    /// Node inclusion mode.
+    pub mode: NodeGraphBoxSelectionMode,
+    /// Selection change intent.
+    pub intent: NodeGraphSelectionIntent,
+}
+
+impl NodeGraphBoxSelectionRequest {
+    /// Creates box selection metadata from a screen-space rectangle.
+    #[must_use]
+    pub fn new(
+        viewport: NodeGraphViewport,
+        screen_rect: Rect,
+        mode: NodeGraphBoxSelectionMode,
+        intent: NodeGraphSelectionIntent,
+    ) -> Self {
+        let screen_rect = normalize_screen_rect(screen_rect);
+        let graph_min = viewport.screen_to_graph(screen_rect.origin());
+        let graph_max =
+            viewport.screen_to_graph(Point::new(screen_rect.max_x(), screen_rect.max_y()));
+        Self {
+            screen_rect,
+            graph_rect: GraphRect::from_min_max(graph_min, graph_max),
+            mode,
+            intent,
+        }
+    }
+
+    /// Creates box selection metadata from an already graph-space rectangle.
+    #[must_use]
+    pub fn from_graph_rect(
+        graph_rect: GraphRect,
+        mode: NodeGraphBoxSelectionMode,
+        intent: NodeGraphSelectionIntent,
+    ) -> Self {
+        let graph_rect = if graph_rect.x.is_finite()
+            && graph_rect.y.is_finite()
+            && graph_rect.width.is_finite()
+            && graph_rect.height.is_finite()
+        {
+            graph_rect.sanitized()
+        } else {
+            GraphRect::ZERO
+        };
+
+        Self {
+            screen_rect: Rect::ZERO,
+            graph_rect,
+            mode,
+            intent,
+        }
+    }
+
+    /// Returns true when the request contains no selectable area.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.graph_rect.sanitized().is_empty()
+    }
+
+    /// Returns true when a node rectangle matches this request's geometry mode.
+    #[must_use]
+    pub fn matches_node_rect(self, rect: GraphRect) -> bool {
+        match self.mode {
+            NodeGraphBoxSelectionMode::Contains => self.graph_rect.contains_rect(rect),
+            NodeGraphBoxSelectionMode::Intersects => self.graph_rect.intersects_rect(rect),
+        }
+    }
+
+    /// Resolves this request against graph nodes without mutating graph state.
+    #[must_use]
+    pub fn select(self, graph: &NodeGraphDescriptor) -> NodeGraphBoxSelection {
+        let targets = graph
+            .nodes
+            .iter()
+            .filter(|node| node.enabled && self.matches_node_rect(node.rect))
+            .map(|node| NodeGraphSelectionTarget::Node(node.id))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let operations = box_selection_operations(self.intent, &targets);
+
+        NodeGraphBoxSelection {
+            request: self,
+            targets,
+            operations,
+        }
+    }
+}
+
+/// Data-only output metadata for one node graph box selection request.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeGraphBoxSelection {
+    /// Request metadata used to derive this output.
+    pub request: NodeGraphBoxSelectionRequest,
+    /// Matching selectable targets in deterministic order.
+    pub targets: Vec<NodeGraphSelectionTarget>,
+    /// Selection operations that represent the requested change.
+    pub operations: Vec<NodeGraphSelectionOperation>,
+}
+
+impl NodeGraphBoxSelection {
+    /// Returns true when the request would not alter selection through operations.
+    #[must_use]
+    pub fn is_noop(&self) -> bool {
+        self.operations.is_empty()
+    }
+}
+
 /// Metadata for one selected node move candidate.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NodeGraphNodeMove {
@@ -1354,6 +1524,50 @@ pub fn node_graph_drag_delta(
     screen_delta: GraphVector,
 ) -> GraphVector {
     viewport.screen_delta_to_graph(screen_delta)
+}
+
+/// Snaps a graph-space point to the nearest grid intersection.
+#[must_use]
+pub fn node_graph_snap_point(point: GraphPoint, grid_size: f32) -> GraphPoint {
+    let point = point.sanitized();
+    let Some(grid_size) = effective_snap_grid_size(grid_size) else {
+        return point;
+    };
+
+    GraphPoint::new(
+        snap_graph_component(point.x, grid_size),
+        snap_graph_component(point.y, grid_size),
+    )
+}
+
+/// Snaps a graph-space rectangle's origin and size to the nearest grid units.
+#[must_use]
+pub fn node_graph_snap_rect(rect: GraphRect, grid_size: f32) -> GraphRect {
+    let rect = rect.sanitized();
+    let Some(grid_size) = effective_snap_grid_size(grid_size) else {
+        return rect;
+    };
+
+    GraphRect::new(
+        snap_graph_component(rect.x, grid_size),
+        snap_graph_component(rect.y, grid_size),
+        snap_graph_component(rect.width, grid_size).max(0.0),
+        snap_graph_component(rect.height, grid_size).max(0.0),
+    )
+}
+
+/// Snaps a graph-space movement delta to the nearest grid units.
+#[must_use]
+pub fn node_graph_snap_delta(delta: GraphVector, grid_size: f32) -> GraphVector {
+    let delta = delta.sanitized();
+    let Some(grid_size) = effective_snap_grid_size(grid_size) else {
+        return delta;
+    };
+
+    GraphVector::new(
+        snap_graph_component(delta.x, grid_size),
+        snap_graph_component(delta.y, grid_size),
+    )
 }
 
 /// Deterministic node graph hit test geometry.
@@ -2247,6 +2461,26 @@ fn sanitize_rect(rect: Rect) -> Rect {
     )
 }
 
+fn normalize_screen_rect(rect: Rect) -> Rect {
+    if !rect.x.is_finite()
+        || !rect.y.is_finite()
+        || !rect.width.is_finite()
+        || !rect.height.is_finite()
+    {
+        return Rect::ZERO;
+    }
+
+    let min = sanitize_point(rect.origin());
+    let max = sanitize_point(Point::new(
+        finite_rect_extent(rect.x, rect.width),
+        finite_rect_extent(rect.y, rect.height),
+    ));
+    Rect::from_min_max(
+        Point::new(min.x.min(max.x), min.y.min(max.y)),
+        Point::new(min.x.max(max.x), min.y.max(max.y)),
+    )
+}
+
 fn sanitize_point(point: Point) -> Point {
     Point::new(finite_or_zero(point.x), finite_or_zero(point.y))
 }
@@ -2296,4 +2530,52 @@ fn finite_product(lhs: f32, rhs: f32) -> f32 {
 fn finite_div(lhs: f32, rhs: f32) -> f32 {
     let quotient = lhs / rhs;
     finite_or_zero(quotient)
+}
+
+fn finite_rect_extent(origin: f32, size: f32) -> f32 {
+    if origin.is_finite() && size.is_finite() {
+        finite_or_zero(origin + size)
+    } else {
+        0.0
+    }
+}
+
+fn box_selection_operations(
+    intent: NodeGraphSelectionIntent,
+    targets: &[NodeGraphSelectionTarget],
+) -> Vec<NodeGraphSelectionOperation> {
+    match intent {
+        NodeGraphSelectionIntent::Replace => {
+            let Some((first, rest)) = targets.split_first() else {
+                return vec![NodeGraphSelectionOperation::Clear];
+            };
+
+            let mut operations = Vec::with_capacity(targets.len());
+            operations.push(NodeGraphSelectionOperation::Replace(*first));
+            operations.extend(
+                rest.iter()
+                    .copied()
+                    .map(NodeGraphSelectionOperation::Extend),
+            );
+            operations
+        }
+        NodeGraphSelectionIntent::Add => targets
+            .iter()
+            .copied()
+            .map(NodeGraphSelectionOperation::Extend)
+            .collect(),
+        NodeGraphSelectionIntent::Subtract => targets
+            .iter()
+            .copied()
+            .map(NodeGraphSelectionOperation::Remove)
+            .collect(),
+    }
+}
+
+fn effective_snap_grid_size(grid_size: f32) -> Option<f32> {
+    (grid_size.is_finite() && grid_size > 0.0).then_some(grid_size)
+}
+
+fn snap_graph_component(value: f32, grid_size: f32) -> f32 {
+    finite_product((finite_div(value, grid_size)).round(), grid_size)
 }
