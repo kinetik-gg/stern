@@ -7,7 +7,10 @@ use kinetik_ui_core::{
     Size, WidgetId,
 };
 
-use crate::{GridLayout, ItemId, ListLayout, Selection, VirtualWindowRequest, virtual_window};
+use crate::{
+    GridLayout, InlineEditBeginRequest, InlineEditEligibility, ItemId, ListLayout, Selection,
+    VirtualWindowRequest, inline_edit_widget_id, virtual_window,
+};
 
 /// Generic asset browser view mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +58,10 @@ pub struct AssetBrowserItem {
     pub fallback: AssetIconFallback,
     /// Whether this item is presented as unavailable.
     pub disabled: bool,
+    /// Whether this item is visible but not mutable.
+    pub read_only: bool,
+    /// Whether this item exposes inline rename/edit.
+    pub renamable: bool,
 }
 
 impl AssetBrowserItem {
@@ -70,6 +77,8 @@ impl AssetBrowserItem {
             fallback: AssetIconFallback::new(kind.clone(), fallback_label(&kind)),
             kind,
             disabled: false,
+            read_only: false,
+            renamable: true,
         }
     }
 
@@ -99,6 +108,31 @@ impl AssetBrowserItem {
     pub const fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+
+    /// Assigns read-only presentation state.
+    #[must_use]
+    pub const fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+
+    /// Assigns inline rename availability.
+    #[must_use]
+    pub const fn renamable(mut self, renamable: bool) -> Self {
+        self.renamable = renamable;
+        self
+    }
+
+    /// Creates an inline rename begin request for this asset.
+    #[must_use]
+    pub fn inline_rename_begin_request(&self, root: WidgetId) -> Option<InlineEditBeginRequest> {
+        InlineEditBeginRequest::new(
+            self.id,
+            self.name.clone(),
+            inline_edit_widget_id(root, self.id),
+            InlineEditEligibility::new(self.disabled, self.read_only, self.renamable),
+        )
     }
 }
 
@@ -147,6 +181,22 @@ impl AssetBrowserModel {
         self.items.iter().find(|item| item.id == id)
     }
 
+    /// Creates an inline rename begin request for the active selected item.
+    #[must_use]
+    pub fn inline_rename_begin_from_selection(
+        &self,
+        selection: &Selection,
+        root: WidgetId,
+    ) -> Option<InlineEditBeginRequest> {
+        let active = selection.active?;
+        if !selection.contains(active) {
+            return None;
+        }
+
+        let item = self.item_by_id(active)?;
+        item.inline_rename_begin_request(root)
+    }
+
     /// Validates model identity.
     ///
     /// # Errors
@@ -176,6 +226,7 @@ pub enum AssetBrowserModelError {
 
 /// App-owned presentation state resolved for an asset cell or row.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct AssetBrowserItemState {
     /// Item ID is present in the current multi-selection.
     pub selected: bool,
@@ -183,6 +234,10 @@ pub struct AssetBrowserItemState {
     pub hovered: bool,
     /// Item is unavailable for interaction.
     pub disabled: bool,
+    /// Item is visible but not mutable.
+    pub read_only: bool,
+    /// Item exposes inline rename/edit.
+    pub renamable: bool,
 }
 
 /// Selection operation requested from an asset browser item.
@@ -245,6 +300,8 @@ impl AssetBrowserResolvedItem {
                 selected: selection.contains(item.id),
                 hovered: hovered == Some(item.id),
                 disabled: item.disabled,
+                read_only: item.read_only,
+                renamable: item.renamable,
             },
         }
     }
@@ -263,6 +320,21 @@ impl AssetBrowserResolvedItem {
                 operation,
             })
         }
+    }
+
+    /// Creates an inline rename begin request for this asset item.
+    #[must_use]
+    pub fn inline_rename_begin_request(&self, root: WidgetId) -> Option<InlineEditBeginRequest> {
+        InlineEditBeginRequest::new(
+            self.id,
+            self.name.clone(),
+            inline_edit_widget_id(root, self.id),
+            InlineEditEligibility::new(
+                self.state.disabled,
+                self.state.read_only,
+                self.state.renamable,
+            ),
+        )
     }
 }
 
@@ -523,6 +595,12 @@ pub fn asset_browser_semantics(
             node.actions.push(SemanticAction::new(
                 SemanticActionKind::Invoke,
                 "Select asset",
+            ));
+        }
+        if !item.item.state.disabled && !item.item.state.read_only && item.item.state.renamable {
+            node.actions.push(SemanticAction::new(
+                SemanticActionKind::Custom("rename".to_owned()),
+                "Rename asset",
             ));
         }
         node

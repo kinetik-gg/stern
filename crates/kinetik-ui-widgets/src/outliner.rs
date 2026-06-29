@@ -7,7 +7,10 @@ use kinetik_ui_core::{
     SemanticValue, WidgetId,
 };
 
-use crate::{ItemId, Selection, TreeExpansion, TreeItem, TreeLayout, TreeModel, TreeModelError};
+use crate::{
+    InlineEditBeginRequest, InlineEditEligibility, ItemId, Selection, TreeExpansion, TreeItem,
+    TreeLayout, TreeModel, TreeModelError, inline_edit_widget_id,
+};
 
 /// Optional app-owned resource metadata attached to an outliner item.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +42,8 @@ pub struct OutlinerRowFlags {
     pub disabled: bool,
     /// Row is read-only and cannot emit visibility or lock toggle requests.
     pub read_only: bool,
+    /// Row can request inline rename/edit.
+    pub renamable: bool,
     /// App-owned visibility state.
     pub visible: bool,
     /// Visibility toggle affordance is available.
@@ -57,6 +62,7 @@ impl OutlinerRowFlags {
             selectable: true,
             disabled: false,
             read_only: false,
+            renamable: true,
             visible: true,
             visibility_toggle_available: true,
             locked: false,
@@ -80,6 +86,18 @@ impl OutlinerRowFlags {
     #[must_use]
     pub const fn can_request_lock_toggle(self) -> bool {
         self.lock_toggle_available && !self.disabled && !self.read_only
+    }
+
+    /// Returns true when the row can request inline rename/edit.
+    #[must_use]
+    pub const fn can_request_rename(self) -> bool {
+        !self.disabled && !self.read_only && self.renamable
+    }
+
+    /// Returns the row's inline edit eligibility.
+    #[must_use]
+    pub const fn inline_edit_eligibility(self) -> InlineEditEligibility {
+        InlineEditEligibility::new(self.disabled, self.read_only, self.renamable)
     }
 }
 
@@ -234,6 +252,28 @@ impl OutlinerModel {
             .collect()
     }
 
+    /// Returns an item descriptor by stable ID.
+    #[must_use]
+    pub fn item_by_id(&self, id: ItemId) -> Option<&OutlinerItem> {
+        self.items.iter().find(|item| item.id == id)
+    }
+
+    /// Creates an inline rename begin request for the active selected item.
+    #[must_use]
+    pub fn inline_rename_begin_from_selection(
+        &self,
+        selection: &Selection,
+        root: WidgetId,
+    ) -> Option<InlineEditBeginRequest> {
+        let active = selection.active?;
+        if !selection.contains(active) {
+            return None;
+        }
+
+        let item = self.item_by_id(active)?;
+        item.inline_rename_begin_request(root)
+    }
+
     /// Returns expansion state containing only IDs present in a valid model.
     #[must_use]
     pub fn preserved_expansion(&self, expansion: &TreeExpansion) -> TreeExpansion {
@@ -365,6 +405,30 @@ impl OutlinerRow {
         } else {
             None
         }
+    }
+
+    /// Creates an inline rename begin request for this row.
+    #[must_use]
+    pub fn inline_rename_begin_request(&self, root: WidgetId) -> Option<InlineEditBeginRequest> {
+        InlineEditBeginRequest::new(
+            self.id,
+            self.label.clone(),
+            inline_edit_widget_id(root, self.id),
+            self.flags.inline_edit_eligibility(),
+        )
+    }
+}
+
+impl OutlinerItem {
+    /// Creates an inline rename begin request for this item.
+    #[must_use]
+    pub fn inline_rename_begin_request(&self, root: WidgetId) -> Option<InlineEditBeginRequest> {
+        InlineEditBeginRequest::new(
+            self.id,
+            self.label.clone(),
+            inline_edit_widget_id(root, self.id),
+            self.flags.inline_edit_eligibility(),
+        )
     }
 }
 
@@ -608,6 +672,12 @@ pub fn outliner_semantics(
             node.actions.push(SemanticAction::new(
                 SemanticActionKind::Custom("toggle-lock".to_owned()),
                 "Toggle lock",
+            ));
+        }
+        if zones.row.flags.can_request_rename() {
+            node.actions.push(SemanticAction::new(
+                SemanticActionKind::Custom("rename".to_owned()),
+                "Rename row",
             ));
         }
         node
