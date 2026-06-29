@@ -484,6 +484,73 @@ impl NodeGraphDescriptor {
     ) -> Result<NodeGraphLinkDraft, NodeGraphLinkDraftEndpointError> {
         NodeGraphLinkDraft::start(self, start, current_pointer)
     }
+
+    /// Creates application-owned metadata for a new link request.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error when either endpoint cannot be resolved or
+    /// the endpoints are not a compatible output-to-input pair.
+    pub fn create_link_request(
+        &self,
+        from: PortEndpoint,
+        to: PortEndpoint,
+    ) -> Result<NodeGraphLinkEditRequest, NodeGraphLinkEditRequestError> {
+        NodeGraphLinkEditRequest::create_link(self, from, to)
+    }
+
+    /// Creates application-owned metadata for reconnecting an edge source.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error when the edge or replacement endpoint cannot
+    /// be resolved, or when the replacement is not compatible with the current target.
+    pub fn reconnect_link_source_request(
+        &self,
+        edge: EdgeId,
+        new_source: PortEndpoint,
+    ) -> Result<NodeGraphLinkEditRequest, NodeGraphLinkEditRequestError> {
+        NodeGraphLinkEditRequest::reconnect_source(self, edge, new_source)
+    }
+
+    /// Creates application-owned metadata for reconnecting an edge target.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error when the edge or replacement endpoint cannot
+    /// be resolved, or when the replacement is not compatible with the current source.
+    pub fn reconnect_link_target_request(
+        &self,
+        edge: EdgeId,
+        new_target: PortEndpoint,
+    ) -> Result<NodeGraphLinkEditRequest, NodeGraphLinkEditRequestError> {
+        NodeGraphLinkEditRequest::reconnect_target(self, edge, new_target)
+    }
+
+    /// Creates application-owned metadata for detaching one edge endpoint.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error when the edge cannot be resolved.
+    pub fn detach_link_endpoint_request(
+        &self,
+        edge: EdgeId,
+        endpoint: EdgeEndpointRole,
+    ) -> Result<NodeGraphLinkEditRequest, NodeGraphLinkEditRequestError> {
+        NodeGraphLinkEditRequest::detach_edge(self, edge, endpoint)
+    }
+
+    /// Creates application-owned metadata for cutting an edge.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error when the edge cannot be resolved.
+    pub fn cut_link_request(
+        &self,
+        edge: EdgeId,
+    ) -> Result<NodeGraphLinkEditRequest, NodeGraphLinkEditRequestError> {
+        NodeGraphLinkEditRequest::cut_edge(self, edge)
+    }
 }
 
 /// Structured validation error for node graph descriptors.
@@ -817,6 +884,125 @@ fn link_draft_compatibility(
     }
 
     Ok(())
+}
+
+fn resolve_link_edit_request_endpoint(
+    graph: &NodeGraphDescriptor,
+    endpoint: PortEndpoint,
+) -> Result<NodeGraphLinkDraftEndpoint, NodeGraphLinkEditRequestError> {
+    resolve_link_draft_endpoint(graph, endpoint).map_err(NodeGraphLinkEditRequestError::Endpoint)
+}
+
+fn validate_link_edit_compatibility(
+    from: NodeGraphLinkDraftEndpoint,
+    to: NodeGraphLinkDraftEndpoint,
+) -> Result<(), NodeGraphLinkEditRequestError> {
+    let error = if from.direction != PortDirection::Output || to.direction != PortDirection::Input {
+        Some(PortCompatibilityError::DirectionMismatch {
+            output: from.direction,
+            input: to.direction,
+        })
+    } else if from.port_type != to.port_type {
+        Some(PortCompatibilityError::TypeMismatch {
+            output: from.port_type,
+            input: to.port_type,
+        })
+    } else {
+        None
+    };
+
+    if let Some(error) = error {
+        return Err(NodeGraphLinkEditRequestError::IncompatiblePort {
+            from: from.endpoint,
+            to: to.endpoint,
+            error,
+        });
+    }
+
+    Ok(())
+}
+
+fn resolve_link_edit_edge(
+    graph: &NodeGraphDescriptor,
+    edge: EdgeId,
+) -> Result<NodeGraphLinkEditEdgeContext, NodeGraphLinkEditRequestError> {
+    graph.validate()?;
+
+    let mut seen_edges = BTreeSet::new();
+    let mut resolved = None;
+    for candidate in &graph.edges {
+        if !seen_edges.insert(candidate.id) {
+            return Err(EdgeResolutionError::DuplicateEdgeId { edge: candidate.id }.into());
+        }
+
+        if candidate.id == edge {
+            resolved = Some(*candidate);
+        }
+    }
+
+    let edge = resolved.ok_or(NodeGraphLinkEditRequestError::MissingEdge { edge })?;
+    let from = resolve_endpoint(
+        &graph.nodes,
+        edge.id,
+        EdgeEndpointRole::Source,
+        edge.from,
+        PortDirection::Output,
+    )?;
+    let to = resolve_endpoint(
+        &graph.nodes,
+        edge.id,
+        EdgeEndpointRole::Target,
+        edge.to,
+        PortDirection::Input,
+    )?;
+
+    if !from.port.enabled {
+        return Err(EdgeResolutionError::DisabledPort {
+            edge: edge.id,
+            endpoint: EdgeEndpointRole::Source,
+            node: from.endpoint.node,
+            port: from.endpoint.port,
+        }
+        .into());
+    }
+
+    if !to.port.enabled {
+        return Err(EdgeResolutionError::DisabledPort {
+            edge: edge.id,
+            endpoint: EdgeEndpointRole::Target,
+            node: to.endpoint.node,
+            port: to.endpoint.port,
+        }
+        .into());
+    }
+
+    if from.port.port_type != to.port.port_type {
+        return Err(EdgeResolutionError::IncompatiblePortType {
+            edge: edge.id,
+            from: from.endpoint,
+            to: to.endpoint,
+            output: from.port.port_type,
+            input: to.port.port_type,
+        }
+        .into());
+    }
+
+    Ok(NodeGraphLinkEditEdgeContext {
+        edge: edge.id,
+        from: NodeGraphLinkDraftEndpoint {
+            endpoint: from.endpoint,
+            direction: from.port.direction,
+            port_type: from.port.port_type,
+            anchor: from.anchor,
+        },
+        to: NodeGraphLinkDraftEndpoint {
+            endpoint: to.endpoint,
+            direction: to.port.direction,
+            port_type: to.port.port_type,
+            anchor: to.anchor,
+        },
+        enabled: edge.enabled,
+    })
 }
 
 fn port_anchor(node: &NodeDescriptor, port: &PortDescriptor) -> GraphPoint {
@@ -1685,6 +1871,233 @@ pub enum NodeGraphLinkDraftCompletionError {
         /// Generic directed compatibility failure.
         error: PortCompatibilityError,
     },
+}
+
+/// Data-only application-owned link edit request.
+#[derive(Debug, Clone, PartialEq)]
+pub enum NodeGraphLinkEditRequest {
+    /// Request to create a new link between two compatible endpoints.
+    CreateLink(NodeGraphCreateLinkRequest),
+    /// Request to reconnect an existing edge source endpoint.
+    ReconnectSource(NodeGraphReconnectLinkSourceRequest),
+    /// Request to reconnect an existing edge target endpoint.
+    ReconnectTarget(NodeGraphReconnectLinkTargetRequest),
+    /// Request to detach one endpoint from an existing edge.
+    DetachEdge(NodeGraphDetachLinkRequest),
+    /// Request to cut an existing edge.
+    CutEdge(NodeGraphCutLinkRequest),
+}
+
+impl NodeGraphLinkEditRequest {
+    /// Creates metadata for a new app-owned link creation request.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error when either endpoint cannot be resolved or
+    /// the endpoints are not a compatible output-to-input pair.
+    pub fn create_link(
+        graph: &NodeGraphDescriptor,
+        from: PortEndpoint,
+        to: PortEndpoint,
+    ) -> Result<Self, NodeGraphLinkEditRequestError> {
+        let from = resolve_link_edit_request_endpoint(graph, from)?;
+        let to = resolve_link_edit_request_endpoint(graph, to)?;
+        validate_link_edit_compatibility(from, to)?;
+
+        Ok(Self::CreateLink(NodeGraphCreateLinkRequest { from, to }))
+    }
+
+    /// Creates metadata for reconnecting an edge source endpoint.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error when the edge or replacement endpoint cannot
+    /// be resolved, or when the replacement is not compatible with the current target.
+    pub fn reconnect_source(
+        graph: &NodeGraphDescriptor,
+        edge: EdgeId,
+        new_source: PortEndpoint,
+    ) -> Result<Self, NodeGraphLinkEditRequestError> {
+        let edge = resolve_link_edit_edge(graph, edge)?;
+        let new_source = resolve_link_edit_request_endpoint(graph, new_source)?;
+        validate_link_edit_compatibility(new_source, edge.to)?;
+
+        Ok(Self::ReconnectSource(NodeGraphReconnectLinkSourceRequest {
+            edge,
+            old_source: edge.from,
+            new_source,
+            target: edge.to,
+        }))
+    }
+
+    /// Creates metadata for reconnecting an edge target endpoint.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error when the edge or replacement endpoint cannot
+    /// be resolved, or when the replacement is not compatible with the current source.
+    pub fn reconnect_target(
+        graph: &NodeGraphDescriptor,
+        edge: EdgeId,
+        new_target: PortEndpoint,
+    ) -> Result<Self, NodeGraphLinkEditRequestError> {
+        let edge = resolve_link_edit_edge(graph, edge)?;
+        let new_target = resolve_link_edit_request_endpoint(graph, new_target)?;
+        validate_link_edit_compatibility(edge.from, new_target)?;
+
+        Ok(Self::ReconnectTarget(NodeGraphReconnectLinkTargetRequest {
+            edge,
+            source: edge.from,
+            old_target: edge.to,
+            new_target,
+        }))
+    }
+
+    /// Creates metadata for detaching one endpoint from an existing edge.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error when the edge cannot be resolved.
+    pub fn detach_edge(
+        graph: &NodeGraphDescriptor,
+        edge: EdgeId,
+        detached: EdgeEndpointRole,
+    ) -> Result<Self, NodeGraphLinkEditRequestError> {
+        let edge = resolve_link_edit_edge(graph, edge)?;
+        let endpoint = match detached {
+            EdgeEndpointRole::Source => edge.from,
+            EdgeEndpointRole::Target => edge.to,
+        };
+
+        Ok(Self::DetachEdge(NodeGraphDetachLinkRequest {
+            edge,
+            detached,
+            endpoint,
+        }))
+    }
+
+    /// Creates metadata for cutting an existing edge.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error when the edge cannot be resolved.
+    pub fn cut_edge(
+        graph: &NodeGraphDescriptor,
+        edge: EdgeId,
+    ) -> Result<Self, NodeGraphLinkEditRequestError> {
+        Ok(Self::CutEdge(NodeGraphCutLinkRequest {
+            edge: resolve_link_edit_edge(graph, edge)?,
+        }))
+    }
+}
+
+/// Resolved edge context captured by link edit requests.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NodeGraphLinkEditEdgeContext {
+    /// Stable edge identity.
+    pub edge: EdgeId,
+    /// Current source endpoint metadata.
+    pub from: NodeGraphLinkDraftEndpoint,
+    /// Current target endpoint metadata.
+    pub to: NodeGraphLinkDraftEndpoint,
+    /// Whether the edge is currently enabled.
+    pub enabled: bool,
+}
+
+/// Metadata for an app-owned create-link request.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NodeGraphCreateLinkRequest {
+    /// Requested source endpoint.
+    pub from: NodeGraphLinkDraftEndpoint,
+    /// Requested target endpoint.
+    pub to: NodeGraphLinkDraftEndpoint,
+}
+
+/// Metadata for an app-owned reconnect-source request.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NodeGraphReconnectLinkSourceRequest {
+    /// Resolved existing edge context.
+    pub edge: NodeGraphLinkEditEdgeContext,
+    /// Current source endpoint before reconnect.
+    pub old_source: NodeGraphLinkDraftEndpoint,
+    /// Requested replacement source endpoint.
+    pub new_source: NodeGraphLinkDraftEndpoint,
+    /// Unchanged target endpoint.
+    pub target: NodeGraphLinkDraftEndpoint,
+}
+
+/// Metadata for an app-owned reconnect-target request.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NodeGraphReconnectLinkTargetRequest {
+    /// Resolved existing edge context.
+    pub edge: NodeGraphLinkEditEdgeContext,
+    /// Unchanged source endpoint.
+    pub source: NodeGraphLinkDraftEndpoint,
+    /// Current target endpoint before reconnect.
+    pub old_target: NodeGraphLinkDraftEndpoint,
+    /// Requested replacement target endpoint.
+    pub new_target: NodeGraphLinkDraftEndpoint,
+}
+
+/// Metadata for an app-owned detach-edge request.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NodeGraphDetachLinkRequest {
+    /// Resolved existing edge context.
+    pub edge: NodeGraphLinkEditEdgeContext,
+    /// Endpoint role to detach.
+    pub detached: EdgeEndpointRole,
+    /// Endpoint metadata for the detached side.
+    pub endpoint: NodeGraphLinkDraftEndpoint,
+}
+
+/// Metadata for an app-owned cut-edge request.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NodeGraphCutLinkRequest {
+    /// Resolved existing edge context.
+    pub edge: NodeGraphLinkEditEdgeContext,
+}
+
+/// Structured link edit request creation failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeGraphLinkEditRequestError {
+    /// Descriptor validation failed before request creation could run.
+    Validation(NodeGraphValidationError),
+    /// A requested edge does not exist.
+    MissingEdge {
+        /// Missing edge ID.
+        edge: EdgeId,
+    },
+    /// Existing edge context could not be resolved.
+    Edge(EdgeResolutionError),
+    /// A requested replacement endpoint could not be resolved.
+    Endpoint(NodeGraphLinkDraftEndpointError),
+    /// The requested output-to-input pair is not generically compatible.
+    IncompatiblePort {
+        /// Requested source endpoint.
+        from: PortEndpoint,
+        /// Requested target endpoint.
+        to: PortEndpoint,
+        /// Generic directed compatibility failure.
+        error: PortCompatibilityError,
+    },
+}
+
+impl From<NodeGraphValidationError> for NodeGraphLinkEditRequestError {
+    fn from(error: NodeGraphValidationError) -> Self {
+        Self::Validation(error)
+    }
+}
+
+impl From<EdgeResolutionError> for NodeGraphLinkEditRequestError {
+    fn from(error: EdgeResolutionError) -> Self {
+        Self::Edge(error)
+    }
+}
+
+impl From<NodeGraphLinkDraftEndpointError> for NodeGraphLinkEditRequestError {
+    fn from(error: NodeGraphLinkDraftEndpointError) -> Self {
+        Self::Endpoint(error)
+    }
 }
 
 /// Geometry mode used for node graph box selection.
