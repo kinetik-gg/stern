@@ -9,13 +9,15 @@ mod node_graph_conformance {
         GraphVector, NodeDescriptor, NodeFrameDescriptor, NodeFrameId, NodeGraphBoxSelectionMode,
         NodeGraphBoxSelectionRequest, NodeGraphCanvasPanRequest, NodeGraphDescriptor,
         NodeGraphEmissionError, NodeGraphGridStyle, NodeGraphHitTarget, NodeGraphHitTestConfig,
-        NodeGraphHitTestError, NodeGraphPanZoom, NodeGraphPortState,
-        NodeGraphSelectedNodeMoveRequest, NodeGraphSelection, NodeGraphSelectionIntent,
-        NodeGraphSelectionOperation, NodeGraphSelectionTarget, NodeGraphStaticView, NodeGraphStyle,
-        NodeGraphValidationError, NodeGraphViewport, NodeGroupDescriptor, NodeGroupId, NodeId,
-        PortCompatibilityError, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
-        node_graph_drag_delta, node_graph_snap_delta, node_graph_snap_point, node_graph_snap_rect,
-        ports_are_compatible, validate_node_graph_descriptors, validate_port_compatibility,
+        NodeGraphHitTestError, NodeGraphLinkDraftCompletionError, NodeGraphLinkDraftEndpoint,
+        NodeGraphLinkDraftEndpointError, NodeGraphLinkDraftOutcome, NodeGraphLinkDraftTarget,
+        NodeGraphPanZoom, NodeGraphPortState, NodeGraphSelectedNodeMoveRequest, NodeGraphSelection,
+        NodeGraphSelectionIntent, NodeGraphSelectionOperation, NodeGraphSelectionTarget,
+        NodeGraphStaticView, NodeGraphStyle, NodeGraphValidationError, NodeGraphViewport,
+        NodeGroupDescriptor, NodeGroupId, NodeId, PortCompatibilityError, PortDescriptor,
+        PortDirection, PortEndpoint, PortId, PortTypeId, node_graph_drag_delta,
+        node_graph_snap_delta, node_graph_snap_point, node_graph_snap_rect, ports_are_compatible,
+        validate_node_graph_descriptors, validate_port_compatibility,
     };
 
     fn assert_close(actual: f32, expected: f32) {
@@ -111,6 +113,48 @@ mod node_graph_conformance {
             Rect::new(100.0, 50.0, 400.0, 300.0),
             NodeGraphPanZoom::new(GraphVector::new(20.0, 10.0), 2.0),
         )
+    }
+
+    fn link_draft_graph() -> NodeGraphDescriptor {
+        let number = PortTypeId::from_raw(10);
+        let vector = PortTypeId::from_raw(11);
+        NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(
+                    NodeId::from_raw(1),
+                    "Source",
+                    GraphRect::new(0.0, 0.0, 100.0, 120.0),
+                )
+                .with_ports(vec![
+                    PortDescriptor::new(PortId::from_raw(1), PortDirection::Output, "Out", number),
+                    PortDescriptor::new(
+                        PortId::from_raw(9),
+                        PortDirection::Input,
+                        "Disabled",
+                        number,
+                    )
+                    .with_enabled(false),
+                ]),
+                NodeDescriptor::new(
+                    NodeId::from_raw(2),
+                    "Target",
+                    GraphRect::new(200.0, 0.0, 100.0, 120.0),
+                )
+                .with_ports(vec![
+                    PortDescriptor::new(PortId::from_raw(2), PortDirection::Input, "In", number),
+                    PortDescriptor::new(PortId::from_raw(3), PortDirection::Input, "Vec", vector),
+                    PortDescriptor::new(
+                        PortId::from_raw(4),
+                        PortDirection::Output,
+                        "Mirror",
+                        number,
+                    ),
+                ]),
+            ],
+            edges: Vec::new(),
+            frames: Vec::new(),
+            groups: Vec::new(),
+        }
     }
 
     #[test]
@@ -1155,6 +1199,200 @@ mod node_graph_conformance {
                 NodeGraphValidationError::DuplicateGroupId { id: duplicate }
             ))
         );
+    }
+
+    #[test]
+    fn link_draft_starts_from_allowed_endpoint() {
+        let graph = link_draft_graph();
+        let start = PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1));
+        let draft = graph
+            .start_link_draft(start, Point::new(f32::NAN, 12.0))
+            .expect("link draft should start from enabled port");
+
+        assert_eq!(
+            draft.start,
+            NodeGraphLinkDraftEndpoint {
+                endpoint: start,
+                direction: PortDirection::Output,
+                port_type: PortTypeId::from_raw(10),
+                anchor: GraphPoint::new(100.0, 60.0),
+            }
+        );
+        assert_point_close(draft.current_pointer, Point::new(0.0, 12.0));
+        assert_eq!(draft.current_graph_point, None);
+        assert_eq!(
+            draft.target,
+            NodeGraphLinkDraftTarget::Hit(NodeGraphHitTarget::Canvas)
+        );
+        assert_eq!(
+            graph.start_link_draft(
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(9)),
+                Point::new(0.0, 0.0)
+            ),
+            Err(NodeGraphLinkDraftEndpointError::DisabledPort {
+                node: NodeId::from_raw(1),
+                port: PortId::from_raw(9),
+            })
+        );
+    }
+
+    #[test]
+    fn link_draft_hover_target_reports_compatible_and_incompatible_ports() {
+        let graph = link_draft_graph();
+        let viewport = NodeGraphViewport::new(
+            Rect::new(0.0, 0.0, 400.0, 240.0),
+            NodeGraphPanZoom::default(),
+        );
+        let config = NodeGraphHitTestConfig::new().with_port_size(24.0);
+        let draft = graph
+            .start_link_draft(
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                Point::new(100.0, 60.0),
+            )
+            .expect("link draft should start");
+
+        let compatible = draft
+            .resolve_hover_target_with_config(&graph, viewport, Point::new(200.0, 40.0), config)
+            .expect("compatible hover target should resolve");
+        assert!(compatible.target.is_compatible());
+        assert_graph_point_close(
+            compatible.current_graph_point.expect("graph pointer"),
+            GraphPoint::new(200.0, 40.0),
+        );
+        assert_eq!(
+            compatible.target,
+            NodeGraphLinkDraftTarget::Port(kinetik_ui_widgets::NodeGraphLinkDraftPortTarget {
+                endpoint: NodeGraphLinkDraftEndpoint {
+                    endpoint: PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+                    direction: PortDirection::Input,
+                    port_type: PortTypeId::from_raw(10),
+                    anchor: GraphPoint::new(200.0, 40.0),
+                },
+                compatibility: Ok(()),
+            })
+        );
+
+        let incompatible = draft
+            .resolve_hover_target_with_config(&graph, viewport, Point::new(200.0, 80.0), config)
+            .expect("incompatible hover target should resolve");
+        assert_eq!(
+            incompatible.target,
+            NodeGraphLinkDraftTarget::Port(kinetik_ui_widgets::NodeGraphLinkDraftPortTarget {
+                endpoint: NodeGraphLinkDraftEndpoint {
+                    endpoint: PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(3)),
+                    direction: PortDirection::Input,
+                    port_type: PortTypeId::from_raw(11),
+                    anchor: GraphPoint::new(200.0, 80.0),
+                },
+                compatibility: Err(PortCompatibilityError::TypeMismatch {
+                    output: PortTypeId::from_raw(10),
+                    input: PortTypeId::from_raw(11),
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn link_draft_cancel_behavior_is_deterministic() {
+        let graph = link_draft_graph();
+        let viewport = NodeGraphViewport::new(
+            Rect::new(0.0, 0.0, 400.0, 240.0),
+            NodeGraphPanZoom::default(),
+        );
+        let draft = graph
+            .start_link_draft(
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                Point::new(100.0, 60.0),
+            )
+            .expect("link draft should start")
+            .resolve_hover_target(&graph, viewport, Point::new(10.0, 10.0))
+            .expect("non-port hover target should resolve");
+
+        assert_eq!(draft.cancel(), draft.cancel());
+        match draft.cancel() {
+            NodeGraphLinkDraftOutcome::Cancelled(cancelled) => {
+                assert_eq!(cancelled.start, draft.start);
+                assert_point_close(cancelled.current_pointer, Point::new(10.0, 10.0));
+                assert_eq!(
+                    cancelled.current_graph_point,
+                    Some(GraphPoint::new(10.0, 10.0))
+                );
+                assert_eq!(
+                    cancelled.target,
+                    NodeGraphLinkDraftTarget::Hit(NodeGraphHitTarget::NodeTitle(NodeId::from_raw(
+                        1
+                    )))
+                );
+            }
+            outcome => panic!("expected cancelled outcome, got {outcome:?}"),
+        }
+    }
+
+    #[test]
+    fn link_draft_completion_returns_metadata_without_mutating_descriptors() {
+        let graph = link_draft_graph();
+        let original = graph.clone();
+        let viewport = NodeGraphViewport::new(
+            Rect::new(0.0, 0.0, 400.0, 240.0),
+            NodeGraphPanZoom::default(),
+        );
+        let config = NodeGraphHitTestConfig::new().with_port_size(24.0);
+        let draft = graph
+            .start_link_draft(
+                PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+                Point::new(200.0, 40.0),
+            )
+            .expect("link draft can start from input")
+            .resolve_hover_target_with_config(&graph, viewport, Point::new(100.0, 60.0), config)
+            .expect("output hover target should resolve");
+
+        match draft.complete() {
+            NodeGraphLinkDraftOutcome::Completed(completed) => {
+                assert_eq!(
+                    completed.from.endpoint,
+                    PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1))
+                );
+                assert_eq!(completed.from.direction, PortDirection::Output);
+                assert_eq!(
+                    completed.to.endpoint,
+                    PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2))
+                );
+                assert_eq!(completed.to.direction, PortDirection::Input);
+                assert_point_close(completed.current_pointer, Point::new(100.0, 60.0));
+                assert_eq!(
+                    completed.current_graph_point,
+                    Some(GraphPoint::new(100.0, 60.0))
+                );
+            }
+            outcome => panic!("expected completed outcome, got {outcome:?}"),
+        }
+        assert_eq!(graph, original);
+        assert!(graph.edges.is_empty());
+
+        let rejected = graph
+            .start_link_draft(
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                Point::new(100.0, 60.0),
+            )
+            .expect("link draft should start")
+            .resolve_hover_target_with_config(&graph, viewport, Point::new(200.0, 80.0), config)
+            .expect("incompatible hover target should resolve")
+            .complete();
+
+        assert!(matches!(
+            rejected,
+            NodeGraphLinkDraftOutcome::Rejected(kinetik_ui_widgets::NodeGraphLinkDraftRejected {
+                error: NodeGraphLinkDraftCompletionError::IncompatiblePort {
+                    error: PortCompatibilityError::TypeMismatch {
+                        output,
+                        input,
+                    },
+                    ..
+                },
+                ..
+            }) if output == PortTypeId::from_raw(10) && input == PortTypeId::from_raw(11)
+        ));
+        assert_eq!(graph, original);
     }
 
     #[test]
