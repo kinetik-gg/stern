@@ -3,13 +3,14 @@
 use std::ops::Range;
 
 use kinetik_ui_core::{
-    ImageId, Rect, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, SemanticValue,
-    Size, WidgetId,
+    ImageId, Point, Rect, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
+    SemanticValue, Size, WidgetId,
 };
 
 use crate::{
-    GridLayout, InlineEditBeginRequest, InlineEditEligibility, ItemId, ListLayout, Selection,
-    VirtualWindowRequest, inline_edit_widget_id, virtual_window,
+    CollectionContextTarget, CollectionDragSource, GridLayout, InlineEditBeginRequest,
+    InlineEditEligibility, ItemId, ListLayout, Selection, VirtualWindowRequest,
+    inline_edit_widget_id, virtual_window,
 };
 
 /// Generic asset browser view mode.
@@ -336,6 +337,26 @@ impl AssetBrowserResolvedItem {
             ),
         )
     }
+
+    /// Creates stable drag source metadata for this asset item.
+    #[must_use]
+    pub fn drag_source(&self, selection: &Selection) -> Option<CollectionDragSource> {
+        (!self.state.disabled).then(|| CollectionDragSource::from_selection(self.id, selection))
+    }
+
+    /// Creates a context-menu target for this asset item.
+    #[must_use]
+    pub fn context_target(&self, selection: &Selection) -> Option<CollectionContextTarget> {
+        if self.state.disabled {
+            return None;
+        }
+
+        if selection.contains(self.id) {
+            CollectionContextTarget::selection(selection.selected())
+        } else {
+            Some(CollectionContextTarget::item(self.id))
+        }
+    }
 }
 
 /// Rectangle and metadata assigned to one materialized asset item.
@@ -351,6 +372,47 @@ pub struct AssetBrowserItemRect {
     pub name_rect: Rect,
     /// Kind label rectangle.
     pub kind_rect: Rect,
+}
+
+impl AssetBrowserItemRect {
+    /// Resolves this item as a drop target for a drag source.
+    #[must_use]
+    pub fn drop_target(&self, source: &CollectionDragSource) -> Option<AssetBrowserDropTarget> {
+        if self.item.state.disabled || source.contains(self.item.id) {
+            return None;
+        }
+
+        Some(AssetBrowserDropTarget {
+            source: source.clone(),
+            kind: AssetBrowserDropTargetKind::Item {
+                target: self.item.id,
+            },
+        })
+    }
+}
+
+/// Data-only asset browser drop target metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetBrowserDropTarget {
+    /// Drag source represented by the drop.
+    pub source: CollectionDragSource,
+    /// Target kind resolved by the asset browser surface.
+    pub kind: AssetBrowserDropTargetKind,
+}
+
+/// Asset browser drop target kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssetBrowserDropTargetKind {
+    /// Drop on a materialized asset item.
+    Item {
+        /// Target item.
+        target: ItemId,
+    },
+    /// Drop on empty grid/list space.
+    EmptySpace {
+        /// Stable insertion index derived from the resolved layout.
+        index: usize,
+    },
 }
 
 /// Asset browser layout contract.
@@ -552,6 +614,59 @@ impl AssetBrowserLayoutResult {
     #[must_use]
     pub fn materialized_item_ids(&self) -> Vec<ItemId> {
         self.items.iter().map(|item| item.item.id).collect()
+    }
+
+    /// Resolves a deterministic item or empty-space drop target.
+    #[must_use]
+    pub fn drop_target_at(
+        &self,
+        bounds: Rect,
+        point: Point,
+        source: &CollectionDragSource,
+    ) -> Option<AssetBrowserDropTarget> {
+        let bounds = finite_rect(bounds);
+        if !bounds.contains_point(point) {
+            return None;
+        }
+
+        if let Some(item) = self
+            .items
+            .iter()
+            .find(|item| item.rect.contains_point(point))
+        {
+            return item.drop_target(source);
+        }
+
+        Some(AssetBrowserDropTarget {
+            source: source.clone(),
+            kind: AssetBrowserDropTargetKind::EmptySpace {
+                index: self.visible_range.end,
+            },
+        })
+    }
+
+    /// Resolves an item or background context target at a point.
+    #[must_use]
+    pub fn context_target_at(
+        &self,
+        bounds: Rect,
+        point: Point,
+        selection: &Selection,
+    ) -> Option<CollectionContextTarget> {
+        let bounds = finite_rect(bounds);
+        if !bounds.contains_point(point) {
+            return None;
+        }
+
+        if let Some(item) = self
+            .items
+            .iter()
+            .find(|item| item.rect.contains_point(point))
+        {
+            return item.item.context_target(selection);
+        }
+
+        Some(CollectionContextTarget::background())
     }
 }
 

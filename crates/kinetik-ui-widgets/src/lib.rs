@@ -2,6 +2,7 @@
 
 pub mod asset_browser;
 pub mod chrome;
+pub mod collection_actions;
 pub mod collections;
 pub mod dock;
 pub mod inline_edit;
@@ -15,6 +16,7 @@ pub mod viewport;
 
 pub use asset_browser::*;
 pub use chrome::*;
+pub use collection_actions::*;
 pub use collections::*;
 pub use dock::*;
 pub use inline_edit::*;
