@@ -21,19 +21,24 @@ use kinetik_ui::text::TextEditState;
 use kinetik_ui::widgets::{
     AssetSlotAsset, AssetSlotConfig, Dock, DockChromeStyle, DockDropTarget, DockDropZone,
     DockInteractionPolicy, DockNode, DockPlacement, DockSplitterContextActionKind, DockTabDrag,
-    DropdownItem, DropdownItemId, DropdownModel, Frame, FrameId, FrameLayout, FrameTab,
-    GridColumns, GridLayout, Guide, ItemId, ListLayout, Menu, MenuBar, MenuBarMenu, MenuBarMenuId,
-    MenuBarOverlayRequest, MenuItem, MenuOverlay, ModalAction, ModalActionRole, ModalDialog,
-    ModalDialogOverlay, NumericScrubInputConfig, OverlayDismissal, OverlayId, OverlayKind,
+    DropdownItem, DropdownItemId, DropdownModel, EdgeDescriptor, EdgeId, Frame, FrameId,
+    FrameLayout, FrameTab, GraphPoint, GraphRect, GraphVector, GridColumns, GridLayout, Guide,
+    ItemId, ListLayout, Menu, MenuBar, MenuBarMenu, MenuBarMenuId, MenuBarOverlayRequest, MenuItem,
+    MenuOverlay, ModalAction, ModalActionRole, ModalDialog, ModalDialogOverlay, NodeDescriptor,
+    NodeFrameDescriptor, NodeFrameId, NodeGraphDescriptor, NodeGraphEdgeRoutePoint,
+    NodeGraphEmissionError, NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget,
+    NodeGraphStaticOutput, NodeGraphStaticView, NodeGraphViewport, NodeGroupDescriptor,
+    NodeGroupId, NodeId, NumericScrubInputConfig, OverlayDismissal, OverlayId, OverlayKind,
     OverlayStack, PanZoom, Panel, PanelId, PanelInstanceId, PanelInstancePolicy,
     PanelInstanceSnapshot, PanelOpenActionMetadata, PanelOpenDecision, PanelRegistry,
     PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, PathFieldConfig,
-    PopoverPlacement, PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow,
-    PropertyGridRowStatus, SelectFieldConfig, StatusBar, StatusItem, StatusItemId, StatusItemKind,
-    StatusProgress, TabStrip, TableColumn, TableLayout, Toolbar, ToolbarGroup, ToolbarGroupId,
-    ToolbarItem, ToolbarItemPresentation, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
-    VectorScrubInputConfig, ViewportComposition, ViewportFit, ViewportSurface, WorkspaceSnapshot,
-    classify_numeric_input_draft, frame_tabs, icon_button_semantics,
+    PopoverPlacement, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
+    PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow, PropertyGridRowStatus,
+    RerouteDescriptor, RerouteId, SelectFieldConfig, StatusBar, StatusItem, StatusItemId,
+    StatusItemKind, StatusProgress, TabStrip, TableColumn, TableLayout, Toolbar, ToolbarGroup,
+    ToolbarGroupId, ToolbarItem, ToolbarItemPresentation, TreeExpansion, TreeItem, TreeLayout,
+    TreeModel, Ui, VectorScrubInputConfig, ViewportComposition, ViewportFit, ViewportSurface,
+    WorkspaceSnapshot, classify_numeric_input_draft, frame_tabs, icon_button_semantics,
     property_grid_row_affordance_rects, resolve_dock_splitter_context_actions_with_policy,
     resolve_frame_drop_zone_with_policy, solve_dock_layout, solve_dock_splitters_with_style,
 };
@@ -2620,48 +2625,142 @@ impl EditorShowcase {
             rgb(218, 222, 228),
         );
 
-        let nodes = [
-            (
-                "Texture",
-                Rect::new(body.x + 18.0, body.y + 42.0, 92.0, 44.0),
-            ),
-            (
-                "Color Grade",
-                Rect::new(body.x + 150.0, body.y + 66.0, 112.0, 44.0),
-            ),
-            (
-                "Output",
-                Rect::new(body.x + 300.0, body.y + 48.0, 92.0, 44.0),
-            ),
-        ];
-        for window in nodes.windows(2) {
-            let from = window[0].1;
-            let to = window[1].1;
-            line(
-                ui,
-                Point::new(from.max_x(), from.y + from.height * 0.5),
-                Point::new(to.x, to.y + to.height * 0.5),
-                rgb(83, 137, 230),
-                2.0,
-            );
+        match Self::showcase_node_graph_output(
+            ui.id("editor.node-graph.static-view"),
+            Self::showcase_node_graph_viewport(body),
+        ) {
+            Ok(output) => {
+                ui.extend(output.primitives);
+                for semantic in output.semantics {
+                    ui.push_semantic_node(semantic);
+                }
+            }
+            Err(_) => {
+                text(
+                    ui,
+                    body.x + 10.0,
+                    body.y + 42.0,
+                    "Node graph descriptor unavailable",
+                    11.0,
+                    rgb(236, 96, 96),
+                );
+            }
         }
-        for (label, rect_bounds) in nodes {
-            rect_fill(
-                ui,
-                rect_bounds,
-                rgb(31, 33, 37),
-                Some(rgb(66, 71, 80)),
-                CornerRadius::all(4.0),
-            );
-            text(
-                ui,
-                rect_bounds.x + 10.0,
-                rect_bounds.y + 27.0,
-                label,
-                11.0,
-                rgb(228, 231, 236),
-            );
+    }
+
+    fn showcase_node_graph_output(
+        id: WidgetId,
+        viewport: NodeGraphViewport,
+    ) -> Result<NodeGraphStaticOutput, NodeGraphEmissionError> {
+        let graph = Self::showcase_node_graph_descriptor();
+        let selection = NodeGraphSelection::from_targets([
+            NodeGraphSelectionTarget::Node(NodeId::from_raw(2)),
+            NodeGraphSelectionTarget::Edge(EdgeId::from_raw(51)),
+            NodeGraphSelectionTarget::Reroute(RerouteId::from_raw(1)),
+        ]);
+
+        NodeGraphStaticView::new(id, viewport, &graph)
+            .with_selection(selection)
+            .with_incompatible_ports([PortEndpoint::new(NodeId::from_raw(3), PortId::from_raw(2))])
+            .emit()
+    }
+
+    fn showcase_node_graph_descriptor() -> NodeGraphDescriptor {
+        const COLOR: PortTypeId = PortTypeId::from_raw(1);
+        const MASK: PortTypeId = PortTypeId::from_raw(2);
+        let frame = NodeFrameId::from_raw(1);
+        let group = NodeGroupId::from_raw(1);
+
+        NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(
+                    NodeId::from_raw(1),
+                    "Texture",
+                    GraphRect::new(8.0, 28.0, 92.0, 64.0),
+                )
+                .with_ports(vec![PortDescriptor::new(
+                    PortId::from_raw(1),
+                    PortDirection::Output,
+                    "Color",
+                    COLOR,
+                )])
+                .with_frame(frame),
+                NodeDescriptor::new(
+                    NodeId::from_raw(2),
+                    "Color Grade",
+                    GraphRect::new(142.0, 54.0, 118.0, 76.0),
+                )
+                .with_ports(vec![
+                    PortDescriptor::new(PortId::from_raw(1), PortDirection::Input, "In", COLOR),
+                    PortDescriptor::new(PortId::from_raw(2), PortDirection::Output, "Out", COLOR),
+                    PortDescriptor::new(PortId::from_raw(3), PortDirection::Input, "Mask", MASK)
+                        .with_enabled(false),
+                ])
+                .with_frame(frame)
+                .with_group(group)
+                .with_label("Selected preview"),
+                NodeDescriptor::new(
+                    NodeId::from_raw(3),
+                    "Output",
+                    GraphRect::new(314.0, 36.0, 96.0, 68.0),
+                )
+                .with_ports(vec![
+                    PortDescriptor::new(
+                        PortId::from_raw(1),
+                        PortDirection::Input,
+                        "Surface",
+                        COLOR,
+                    ),
+                    PortDescriptor::new(PortId::from_raw(2), PortDirection::Input, "Mask", MASK),
+                ])
+                .with_bypassed(true),
+            ],
+            edges: vec![
+                EdgeDescriptor::new(
+                    EdgeId::from_raw(50),
+                    PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                    PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(1)),
+                ),
+                EdgeDescriptor::new(
+                    EdgeId::from_raw(51),
+                    PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+                    PortEndpoint::new(NodeId::from_raw(3), PortId::from_raw(1)),
+                )
+                .with_route_points(vec![NodeGraphEdgeRoutePoint::reroute(
+                    RerouteId::from_raw(1),
+                )]),
+            ],
+            reroutes: vec![RerouteDescriptor::new(
+                RerouteId::from_raw(1),
+                "Route A",
+                GraphPoint::new(284.0, 88.0),
+            )],
+            frames: vec![NodeFrameDescriptor::new(
+                frame,
+                "Preview Frame",
+                GraphRect::new(-4.0, 14.0, 282.0, 132.0),
+            )],
+            groups: vec![
+                NodeGroupDescriptor::new(
+                    group,
+                    "Look Dev",
+                    GraphRect::new(132.0, 44.0, 140.0, 96.0),
+                )
+                .with_nodes(vec![NodeId::from_raw(2)]),
+            ],
         }
+    }
+
+    fn showcase_node_graph_viewport(body: Rect) -> NodeGraphViewport {
+        NodeGraphViewport::new(
+            Rect::new(
+                body.x + 8.0,
+                body.y + 30.0,
+                (body.width - 16.0).max(0.0),
+                (body.height - 38.0).max(0.0),
+            ),
+            NodeGraphPanZoom::new(GraphVector::new(12.0, 8.0), 1.0),
+        )
     }
 
     fn status_bar(&self, ui: &mut Ui<'_>, viewport: Rect, action_count: u32) {
@@ -3317,14 +3416,16 @@ mod tests {
         ActionContext, ActionId, ActionSource, Brush, CursorShape, FrameContext, PhysicalSize,
         PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest,
         ScaleFactor, SemanticActionKind, SemanticRole, Size, TimeInfo, UiInput, UiMemory, Vec2,
-        ViewportInfo, default_dark_theme,
+        ViewportInfo, WidgetId, default_dark_theme,
     };
     use kinetik_ui::render::RenderResources;
     use kinetik_ui::widgets::{
-        DockSplitterContextActionKind, MenuItem, ModalActionRole, OverlayDismissal, OverlayKind,
-        PanelOpenDecision, PanelTypeCategory, StatusItemKind, Ui, ViewportSurface,
-        resolve_dock_splitter_context_actions_with_policy, solve_dock_layout,
-        solve_dock_splitters_with_style,
+        DockSplitterContextActionKind, GraphVector, MenuItem, ModalActionRole, NodeFrameId,
+        NodeGraphContextActionKind, NodeGraphContextTarget, NodeGraphHitTarget,
+        NodeGraphLinkEditRequest, NodeGraphSelection, NodeGraphSelectionTarget, NodeId,
+        OverlayDismissal, OverlayKind, PanelOpenDecision, PanelTypeCategory, PortEndpoint, PortId,
+        StatusItemKind, Ui, ViewportSurface, resolve_dock_splitter_context_actions_with_policy,
+        solve_dock_layout, solve_dock_splitters_with_style,
     };
 
     #[test]
@@ -3744,6 +3845,101 @@ mod tests {
         assert!(editor.apply_action(super::ACTION_OPEN_PROPERTIES));
         assert_eq!(editor.status, "Focused Properties");
         assert_eq!(editor.dock.active_frame(), Some(FRAME_INSPECTOR));
+    }
+
+    #[test]
+    fn editor_node_graph_panel_exercises_stage9_contracts() {
+        let mut editor = EditorShowcase::new();
+        assert!(editor.open_or_focus_panel(super::PANEL_TYPE_NODE_GRAPH));
+
+        let theme = default_dark_theme();
+        let mut memory = UiMemory::new();
+        let mut ui = Ui::begin_frame(editor_test_context(UiInput::default()), &mut memory, &theme);
+        editor.render(&mut ui, 0);
+        let frame = ui.finish_output();
+
+        assert!(frame.semantics.nodes().iter().any(|node| {
+            node.role == SemanticRole::Custom("node-graph".to_owned())
+                && node.label.as_deref() == Some("Node graph")
+        }));
+
+        let body = Rect::new(20.0, 40.0, 480.0, 180.0);
+        let viewport = super::EditorShowcase::showcase_node_graph_viewport(body);
+        let graph = super::EditorShowcase::showcase_node_graph_descriptor();
+        graph.validate().expect("showcase graph validates");
+
+        let output = super::EditorShowcase::showcase_node_graph_output(
+            WidgetId::from_key("showcase-node-graph"),
+            viewport,
+        )
+        .expect("showcase graph emits static output");
+        assert!(matches!(
+            output.primitives.first(),
+            Some(Primitive::ClipBegin { .. })
+        ));
+        assert!(matches!(
+            output.primitives.last(),
+            Some(Primitive::ClipEnd { .. })
+        ));
+        assert!(output.semantics.iter().any(|node| {
+            node.role == SemanticRole::Custom("node".to_owned())
+                && node.label.as_deref() == Some("Color Grade")
+                && node.state.selected
+        }));
+        assert!(output.semantics.iter().any(|node| {
+            node.role == SemanticRole::Custom("edge".to_owned())
+                && node.label.as_deref() == Some("Edge 51: Color Grade Out to Output Surface")
+                && node.state.selected
+        }));
+        assert!(output.semantics.iter().any(|node| {
+            node.role == SemanticRole::Custom("port".to_owned())
+                && node.label.as_deref() == Some("Input Mask")
+                && node.description.as_deref() == Some("Incompatible port")
+        }));
+
+        let color_grade_center = viewport.graph_rect_to_screen(graph.nodes[1].rect).center();
+        assert_eq!(
+            graph
+                .hit_test(viewport, color_grade_center)
+                .expect("node hit target"),
+            NodeGraphHitTarget::NodeBody(NodeId::from_raw(2))
+        );
+
+        let selection =
+            NodeGraphSelection::new().replace(NodeGraphSelectionTarget::Node(NodeId::from_raw(2)));
+        let context_actions = graph.context_actions(
+            NodeGraphContextTarget::Node(NodeId::from_raw(2)),
+            &selection,
+        );
+        assert!(
+            context_actions.iter().any(|action| {
+                action.kind == NodeGraphContextActionKind::Delete && action.enabled
+            })
+        );
+        assert!(context_actions.iter().any(|action| {
+            action.kind == NodeGraphContextActionKind::FrameSelection && action.enabled
+        }));
+
+        let link_request = graph
+            .create_link_request(
+                PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                PortEndpoint::new(NodeId::from_raw(3), PortId::from_raw(1)),
+            )
+            .expect("link request metadata");
+        assert!(matches!(
+            link_request,
+            NodeGraphLinkEditRequest::CreateLink(_)
+        ));
+
+        let move_request = graph
+            .move_frame_request(
+                viewport,
+                NodeFrameId::from_raw(1),
+                GraphVector::new(20.0, -10.0),
+            )
+            .expect("frame move metadata");
+        assert_eq!(move_request.children.len(), 2);
+        assert_eq!(move_request.graph_delta, GraphVector::new(20.0, -10.0));
     }
 
     #[test]
