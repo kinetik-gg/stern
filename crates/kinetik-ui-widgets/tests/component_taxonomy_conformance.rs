@@ -11,7 +11,10 @@ use kinetik_ui_text::TextEditState;
 use kinetik_ui_widgets::{
     COMPONENT_METADATA, ColorFieldConfig, ComponentCategory, ComponentConformanceStatus,
     ComponentMetadata, DropdownCloseReason, DropdownItem, DropdownItemId, DropdownModel,
-    DropdownOverlay, NumericScrubInputConfig, OverlayId, OverlayStack, PanelId, PopoverPlacement,
+    DropdownOverlay, EdgeDescriptor, GraphRect, NodeDescriptor, NodeGraphDescriptor,
+    NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget, NodeGraphStaticView,
+    NodeGraphViewport, NodeId, NumericScrubInputConfig, OverlayId, OverlayStack, PanelId,
+    PopoverPlacement, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
     PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow, PropertyGridRowAffordances,
     PropertyGridRowState, PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice,
     SliderStep, TabStrip, Ui, VectorComponentLayout, VectorScrubInputConfig,
@@ -308,6 +311,68 @@ fn component_taxonomy_conformance_reports_stage6_modal_partial() {
         ComponentCategory::Overlay,
         ComponentConformanceStatus::Partial,
     );
+}
+
+#[test]
+fn stage9_node_graph_taxonomy_reports_partial_status_backed_by_public_contracts() {
+    assert_entry(
+        "NodeGraph",
+        ComponentCategory::Viewport,
+        ComponentConformanceStatus::Partial,
+    );
+
+    let color = PortTypeId::from_raw(1);
+    let graph = NodeGraphDescriptor {
+        nodes: vec![
+            NodeDescriptor::new(NodeId::from_raw(1), "Source", GraphRect::ZERO).with_ports(vec![
+                PortDescriptor::new(PortId::from_raw(1), PortDirection::Output, "Out", color),
+            ]),
+            NodeDescriptor::new(
+                NodeId::from_raw(2),
+                "Target",
+                GraphRect::new(160.0, 0.0, 100.0, 70.0),
+            )
+            .with_ports(vec![PortDescriptor::new(
+                PortId::from_raw(1),
+                PortDirection::Input,
+                "In",
+                color,
+            )]),
+        ],
+        edges: vec![EdgeDescriptor::new(
+            kinetik_ui_widgets::EdgeId::from_raw(1),
+            PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+            PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(1)),
+        )],
+        reroutes: Vec::new(),
+        frames: Vec::new(),
+        groups: Vec::new(),
+    };
+    graph.validate().expect("taxonomy node graph validates");
+
+    let output = NodeGraphStaticView::new(
+        WidgetId::from_key("taxonomy-node-graph"),
+        NodeGraphViewport::new(
+            Rect::new(0.0, 0.0, 320.0, 160.0),
+            NodeGraphPanZoom::default(),
+        ),
+        &graph,
+    )
+    .with_selection(
+        NodeGraphSelection::new().replace(NodeGraphSelectionTarget::Node(NodeId::from_raw(1))),
+    )
+    .emit()
+    .expect("node graph static output");
+
+    assert!(output.semantics.iter().any(|node| {
+        node.role == SemanticRole::Custom("node-graph".to_owned())
+            && node.label.as_deref() == Some("Node graph")
+    }));
+    assert!(output.semantics.iter().any(|node| {
+        node.role == SemanticRole::Custom("node".to_owned())
+            && node.label.as_deref() == Some("Source")
+            && node.state.selected
+    }));
 }
 
 #[test]
