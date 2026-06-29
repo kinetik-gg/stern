@@ -134,6 +134,7 @@ pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
     ComponentMetadata::new("Table", "table", Collection, Partial),
     ComponentMetadata::new("Tree", "tree", Collection, Partial),
     ComponentMetadata::new("Outliner", "outliner", Collection, Partial),
+    ComponentMetadata::new("AssetBrowser", "asset-browser", Collection, Partial),
     ComponentMetadata::new("PropertyGrid", "property-grid", Inspector, Partial),
     ComponentMetadata::new(
         "PropertyAffordanceControls",
