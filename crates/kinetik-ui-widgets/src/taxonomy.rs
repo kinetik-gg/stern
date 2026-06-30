@@ -255,12 +255,6 @@ const STAGE_11_PARTIAL_EVIDENCE: &[&str] = &[
     "conformance.component-taxonomy",
     "showcase.metadata-only",
 ];
-const STAGE_12_PARTIAL_EVIDENCE: &[&str] = &[
-    "status.partial-public-contract",
-    "stage.12-viewport-tools",
-    "conformance.component-taxonomy",
-    "showcase.metadata-only",
-];
 const S10_OUTLINER_EVIDENCE: &[&str] = &[
     "status.partial-public-contract",
     "stage.10-outliner-asset-browser",
@@ -319,6 +313,60 @@ const S11_PRESERVATION_EVIDENCE: &[&str] = &[
     "status.partial-public-contract",
     "stage.11-timeline",
     "conformance.timeline-preservation-contracts",
+    "showcase.metadata-only",
+];
+const S12_VIEWPORT_EVIDENCE: &[&str] = &[
+    "status.partial-public-contract",
+    "stage.12-viewport-tools",
+    "conformance.viewport-surface-contracts",
+    "showcase.metadata-only",
+];
+const S12_VIEWPORT_TOOLS_EVIDENCE: &[&str] = &[
+    "status.partial-public-contract",
+    "stage.12-viewport-tools",
+    "conformance.viewport-tool-contracts",
+    "showcase.metadata-only",
+];
+const S12_VIEWPORT_ACTION_ROUTING_EVIDENCE: &[&str] = &[
+    "status.partial-public-contract",
+    "stage.12-viewport-tools",
+    "conformance.viewport-action-routing-contracts",
+    "showcase.metadata-only",
+];
+const S12_VIEWPORT_OVERLAY_EVIDENCE: &[&str] = &[
+    "status.partial-public-contract",
+    "stage.12-viewport-tools",
+    "conformance.viewport-overlay-contracts",
+    "showcase.metadata-only",
+];
+const STAGE_13_PARTIAL_EVIDENCE: &[&str] = &[
+    "status.partial-public-contract",
+    "stage.13-jobs-diagnostics",
+    "conformance.component-taxonomy",
+    "showcase.metadata-only",
+];
+const S13_PROGRESS_EVIDENCE: &[&str] = &[
+    "status.partial-public-contract",
+    "stage.13-jobs-diagnostics",
+    "conformance.progress-indicator-contracts",
+    "showcase.metadata-only",
+];
+const S13_JOB_LIST_EVIDENCE: &[&str] = &[
+    "status.partial-public-contract",
+    "stage.13-jobs-diagnostics",
+    "conformance.job-list-contracts",
+    "showcase.metadata-only",
+];
+const S13_DIAGNOSTIC_STRIP_EVIDENCE: &[&str] = &[
+    "status.partial-public-contract",
+    "stage.13-jobs-diagnostics",
+    "conformance.diagnostic-strip-contracts",
+    "showcase.metadata-only",
+];
+const S13_FEEDBACK_STACK_EVIDENCE: &[&str] = &[
+    "status.partial-public-contract",
+    "stage.13-jobs-diagnostics",
+    "conformance.feedback-stack-contracts",
     "showcase.metadata-only",
 ];
 
@@ -391,6 +439,70 @@ const S11_PRESERVATION_CONTRACTS: &[&str] = &[
     "TimelineSnapMetadata",
     "TimelineScale::zoom_around_anchor",
 ];
+const S12_VIEWPORT_CONTRACTS: &[&str] = &[
+    "ViewportSurface",
+    "PanZoom",
+    "ViewportOverlayDescriptor",
+    "ViewportOverlayHit",
+    "hit_test_viewport_overlays",
+];
+const S12_VIEWPORT_TOOLS_CONTRACTS: &[&str] = &[
+    "ViewportToolDescriptor",
+    "ViewportSelectionTargetDescriptor",
+    "ViewportTransformHandleSet",
+    "ViewportTransformDragCapture",
+    "ViewportTransformDragRequest",
+    "viewport_transform_handles",
+    "hit_test_viewport_transform_handles",
+];
+const S12_VIEWPORT_ACTION_ROUTING_CONTRACTS: &[&str] = &[
+    "ViewportActionDescriptor",
+    "ViewportActionRequest",
+    "ViewportActionTarget",
+    "viewport_action_requests",
+    "viewport_action_semantics",
+    "viewport_cursor_request",
+];
+const S12_VIEWPORT_OVERLAY_CONTRACTS: &[&str] = &[
+    "ViewportGuideDescriptor",
+    "ViewportRulerDescriptor",
+    "ViewportSafeAreaDescriptor",
+    "ViewportPanZoomHudDescriptor",
+    "viewport_guides",
+    "viewport_rulers",
+    "viewport_safe_areas",
+];
+const S13_PROGRESS_CONTRACTS: &[&str] = &[
+    "StatusProgress",
+    "JobProgress",
+    "StatusItem",
+    "JobList::active_status_progress",
+];
+const S13_JOB_LIST_CONTRACTS: &[&str] = &[
+    "JobList",
+    "JobRow",
+    "JobRowId",
+    "JobPhase",
+    "JobProgress",
+    "JobCancel",
+];
+const S13_DIAGNOSTIC_STRIP_CONTRACTS: &[&str] = &[
+    "DiagnosticStrip",
+    "DiagnosticStripItem",
+    "DiagnosticStripItemId",
+    "DiagnosticStripSeverity",
+    "DiagnosticField",
+    "DiagnosticSource",
+];
+const S13_FEEDBACK_STACK_CONTRACTS: &[&str] = &[
+    "FeedbackStack",
+    "FeedbackItem",
+    "FeedbackId",
+    "FeedbackLifetime",
+    "FeedbackAction",
+    "FeedbackDismiss",
+    "RepaintRequest",
+];
 
 const S10_OUTLINER_TESTS: &[&str] = &[
     "outliner_conformance::tree_visible_row_order_is_deterministic",
@@ -442,11 +554,49 @@ const S11_PRESERVATION_TESTS: &[&str] = &[
     "timeline_conformance::range_selection_metadata_survives_zoom_and_normalizes_deterministically",
     "timeline_conformance::scroll_clamping_preserves_playhead_range_and_snap_metadata",
 ];
-const STAGE_13_PARTIAL_EVIDENCE: &[&str] = &[
-    "status.partial-public-contract",
-    "stage.13-jobs-diagnostics",
-    "conformance.component-taxonomy",
-    "showcase.metadata-only",
+const S12_VIEWPORT_TESTS: &[&str] = &[
+    "viewport_conformance::content_screen_point_and_rect_conversions_round_trip_under_pan_zoom",
+    "viewport_conformance::overlay_hit_testing_transforms_content_targets_and_rejects_invalid_descriptors",
+    "viewport_conformance::overlay_hit_priority_and_id_tie_breaking_are_descriptor_order_independent",
+];
+const S12_VIEWPORT_TOOLS_TESTS: &[&str] = &[
+    "viewport_conformance::semantic_metadata_exposes_stable_viewport_and_tool_identity",
+    "viewport_conformance::selection_outlines_and_transform_handles_track_content_screen_conversion",
+    "viewport_conformance::transform_drag_capture_preserves_identity_and_reports_deltas_without_mutation",
+    "viewport_conformance::stale_target_drag_requests_preserve_capture_metadata_as_noop_error_data",
+];
+const S12_VIEWPORT_ACTION_ROUTING_TESTS: &[&str] = &[
+    "viewport_conformance::viewport_action_descriptors_preserve_order_state_and_context_metadata",
+    "viewport_conformance::disabled_and_hidden_viewport_actions_do_not_emit_requests",
+    "viewport_conformance::viewport_action_semantics_expose_button_toggle_and_action_metadata",
+    "viewport_conformance::viewport_cursor_request_priority_is_active_handle_hovered_handle_overlay_then_tool",
+];
+const S12_VIEWPORT_OVERLAY_TESTS: &[&str] = &[
+    "viewport_conformance::guide_descriptors_resolve_deterministically_and_reject_invalid_inputs",
+    "viewport_conformance::safe_area_descriptors_clamp_to_content_and_viewport_bounds",
+    "viewport_conformance::ruler_overlay_descriptors_emit_bounded_ticks_labels_and_origin_metadata",
+    "viewport_conformance::pan_zoom_hud_reports_state_and_target_metadata_without_actions",
+];
+const S13_PROGRESS_TESTS: &[&str] = &[
+    "status_bar_conformance::status_bar_progress_values_sanitize_and_clamp_deterministically",
+    "status_bar_conformance::job_progress_clamps_and_sanitizes_determinate_values_without_affecting_indeterminate",
+    "status_bar_conformance::job_list_active_progress_keeps_indeterminate_distinct_from_determinate_zero",
+];
+const S13_JOB_LIST_TESTS: &[&str] = &[
+    "status_bar_conformance::job_list_summary_counts_and_row_order_are_deterministic",
+    "status_bar_conformance::job_list_active_progress_keeps_indeterminate_distinct_from_determinate_zero",
+    "status_bar_conformance::job_cancel_metadata_preserves_job_action_identity_and_availability",
+];
+const S13_DIAGNOSTIC_STRIP_TESTS: &[&str] = &[
+    "status_bar_conformance::status_bar_diagnostics_strip_orders_by_severity_and_preserves_insertion_order_within_severity",
+    "status_bar_conformance::status_bar_diagnostics_strip_summary_counts_are_deterministic_for_empty_and_mixed_input",
+    "status_bar_conformance::status_bar_diagnostics_strip_aggregates_mixed_typed_diagnostics",
+];
+const S13_FEEDBACK_STACK_TESTS: &[&str] = &[
+    "status_bar_conformance::feedback_timed_items_expire_from_explicit_time_inputs",
+    "status_bar_conformance::feedback_stack_preserves_insertion_order_and_filters_inactive_items",
+    "status_bar_conformance::feedback_repaint_after_is_bounded_to_next_active_timed_expiry",
+    "status_bar_conformance::feedback_dismiss_and_action_metadata_preserve_feedback_and_action_identity",
 ];
 
 /// Data-only registry of stable evidence descriptors.
@@ -537,13 +687,53 @@ pub const COMPONENT_EVIDENCE: &[ComponentEvidence] = &[
         "Covered by public timeline viewport state and selection preservation contracts.",
     ),
     ComponentEvidence::new(
+        "conformance.viewport-surface-contracts",
+        Conformance,
+        "Covered by public viewport surface, pan/zoom, overlay descriptor, and hit-test contracts.",
+    ),
+    ComponentEvidence::new(
+        "conformance.viewport-tool-contracts",
+        Conformance,
+        "Covered by public viewport tool, transform handle, and drag request contracts.",
+    ),
+    ComponentEvidence::new(
+        "conformance.viewport-action-routing-contracts",
+        Conformance,
+        "Covered by public viewport action request, action semantic, and cursor routing contracts.",
+    ),
+    ComponentEvidence::new(
+        "conformance.viewport-overlay-contracts",
+        Conformance,
+        "Covered by public viewport guide, ruler, safe-area, and HUD descriptor contracts.",
+    ),
+    ComponentEvidence::new(
+        "conformance.progress-indicator-contracts",
+        Conformance,
+        "Covered by public status and job progress metadata contracts.",
+    ),
+    ComponentEvidence::new(
+        "conformance.job-list-contracts",
+        Conformance,
+        "Covered by public job row, progress, cancel, and summary metadata contracts.",
+    ),
+    ComponentEvidence::new(
+        "conformance.diagnostic-strip-contracts",
+        Conformance,
+        "Covered by public diagnostic strip item, field, severity, source, and ordering contracts.",
+    ),
+    ComponentEvidence::new(
+        "conformance.feedback-stack-contracts",
+        Conformance,
+        "Covered by public feedback lifetime, action, dismissal, ordering, and repaint contracts.",
+    ),
+    ComponentEvidence::new(
         "showcase.metadata-only",
         Showcase,
         "Tracked by taxonomy metadata only; no interactive showcase behavior is claimed.",
     ),
 ];
 
-/// Data-only conformance matrix for restarted editor-toolkit S10-S11 capabilities.
+/// Data-only conformance matrix for restarted editor-toolkit S10-S13 capabilities.
 pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
     ComponentConformanceMatrixRow::partial(
         "Outliner tree, zones, selection, and semantics",
@@ -642,6 +832,86 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S11_PRESERVATION_EVIDENCE,
     )
     .with_component_slug("timeline"),
+    ComponentConformanceMatrixRow::partial(
+        "Viewport surface, pan/zoom, and overlay hit testing",
+        "s12-viewport-surface-overlays",
+        Viewport,
+        12,
+        S12_VIEWPORT_CONTRACTS,
+        S12_VIEWPORT_TESTS,
+        S12_VIEWPORT_EVIDENCE,
+    )
+    .with_component_slug("viewport"),
+    ComponentConformanceMatrixRow::partial(
+        "Viewport tools and transform manipulators",
+        "s12-viewport-tools-transform-handles",
+        Viewport,
+        12,
+        S12_VIEWPORT_TOOLS_CONTRACTS,
+        S12_VIEWPORT_TOOLS_TESTS,
+        S12_VIEWPORT_TOOLS_EVIDENCE,
+    )
+    .with_component_slug("viewport-tools"),
+    ComponentConformanceMatrixRow::partial(
+        "Viewport action request and cursor routing",
+        "s12-viewport-action-routing",
+        Viewport,
+        12,
+        S12_VIEWPORT_ACTION_ROUTING_CONTRACTS,
+        S12_VIEWPORT_ACTION_ROUTING_TESTS,
+        S12_VIEWPORT_ACTION_ROUTING_EVIDENCE,
+    )
+    .with_component_slug("viewport-action-routing"),
+    ComponentConformanceMatrixRow::partial(
+        "Viewport guides, rulers, safe areas, and HUD metadata",
+        "s12-viewport-guides-rulers-safe-areas-hud",
+        Viewport,
+        12,
+        S12_VIEWPORT_OVERLAY_CONTRACTS,
+        S12_VIEWPORT_OVERLAY_TESTS,
+        S12_VIEWPORT_OVERLAY_EVIDENCE,
+    )
+    .with_component_slug("viewport"),
+    ComponentConformanceMatrixRow::partial(
+        "Progress indicator metadata and active job progress",
+        "s13-progress-indicator-metadata",
+        Display,
+        13,
+        S13_PROGRESS_CONTRACTS,
+        S13_PROGRESS_TESTS,
+        S13_PROGRESS_EVIDENCE,
+    )
+    .with_component_slug("progress-indicator"),
+    ComponentConformanceMatrixRow::partial(
+        "Job list summary, progress, and cancellation metadata",
+        "s13-job-list-progress-cancel",
+        System,
+        13,
+        S13_JOB_LIST_CONTRACTS,
+        S13_JOB_LIST_TESTS,
+        S13_JOB_LIST_EVIDENCE,
+    )
+    .with_component_slug("job-list"),
+    ComponentConformanceMatrixRow::partial(
+        "Diagnostic strip codes, fields, and ordering",
+        "s13-diagnostic-strip-codes-fields-ordering",
+        System,
+        13,
+        S13_DIAGNOSTIC_STRIP_CONTRACTS,
+        S13_DIAGNOSTIC_STRIP_TESTS,
+        S13_DIAGNOSTIC_STRIP_EVIDENCE,
+    )
+    .with_component_slug("diagnostic-strip"),
+    ComponentConformanceMatrixRow::partial(
+        "Feedback stack lifetime, action, and repaint metadata",
+        "s13-feedback-stack-lifetime-repaint",
+        System,
+        13,
+        S13_FEEDBACK_STACK_CONTRACTS,
+        S13_FEEDBACK_STACK_TESTS,
+        S13_FEEDBACK_STACK_EVIDENCE,
+    )
+    .with_component_slug("feedback-stack"),
 ];
 
 /// Data-only registry of Kinetik widget components and editor patterns.
@@ -741,10 +1011,10 @@ pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
         .with_evidence(PARTIAL_TAXONOMY_EVIDENCE),
     ComponentMetadata::new("Viewport", "viewport", Viewport, Partial)
         .with_stage(12)
-        .with_evidence(STAGE_12_PARTIAL_EVIDENCE),
+        .with_evidence(S12_VIEWPORT_EVIDENCE),
     ComponentMetadata::new("ViewportTools", "viewport-tools", Viewport, Partial)
         .with_stage(12)
-        .with_evidence(STAGE_12_PARTIAL_EVIDENCE),
+        .with_evidence(S12_VIEWPORT_TOOLS_EVIDENCE),
     ComponentMetadata::new(
         "ViewportActionRouting",
         "viewport-action-routing",
@@ -752,7 +1022,7 @@ pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
         Partial,
     )
     .with_stage(12)
-    .with_evidence(STAGE_12_PARTIAL_EVIDENCE),
+    .with_evidence(S12_VIEWPORT_ACTION_ROUTING_EVIDENCE),
     ComponentMetadata::new("NodeGraph", "node-graph", Viewport, Partial)
         .with_evidence(PARTIAL_TAXONOMY_EVIDENCE),
     ComponentMetadata::new("Ruler", "ruler", Viewport, Partial)
@@ -779,16 +1049,16 @@ pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
         .with_evidence(STAGE_11_PARTIAL_EVIDENCE),
     ComponentMetadata::new("ProgressIndicator", "progress-indicator", Display, Partial)
         .with_stage(13)
-        .with_evidence(STAGE_13_PARTIAL_EVIDENCE),
+        .with_evidence(S13_PROGRESS_EVIDENCE),
     ComponentMetadata::new("JobList", "job-list", System, Partial)
         .with_stage(13)
-        .with_evidence(STAGE_13_PARTIAL_EVIDENCE),
+        .with_evidence(S13_JOB_LIST_EVIDENCE),
     ComponentMetadata::new("DiagnosticStrip", "diagnostic-strip", System, Partial)
         .with_stage(13)
-        .with_evidence(STAGE_13_PARTIAL_EVIDENCE),
+        .with_evidence(S13_DIAGNOSTIC_STRIP_EVIDENCE),
     ComponentMetadata::new("FeedbackStack", "feedback-stack", System, Partial)
         .with_stage(13)
-        .with_evidence(STAGE_13_PARTIAL_EVIDENCE),
+        .with_evidence(S13_FEEDBACK_STACK_EVIDENCE),
 ];
 
 /// Looks up evidence metadata by exact stable evidence identifier.

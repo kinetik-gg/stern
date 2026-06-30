@@ -466,6 +466,200 @@ fn s10_s11_matrix_evidence_points_to_public_contracts_and_tests() {
 }
 
 #[test]
+fn s12_s13_conformance_matrix_rows_report_partial_data_only_coverage() {
+    for (slug, stage, category, component_slug) in [
+        (
+            "s12-viewport-surface-overlays",
+            12,
+            ComponentCategory::Viewport,
+            Some("viewport"),
+        ),
+        (
+            "s12-viewport-tools-transform-handles",
+            12,
+            ComponentCategory::Viewport,
+            Some("viewport-tools"),
+        ),
+        (
+            "s12-viewport-action-routing",
+            12,
+            ComponentCategory::Viewport,
+            Some("viewport-action-routing"),
+        ),
+        (
+            "s12-viewport-guides-rulers-safe-areas-hud",
+            12,
+            ComponentCategory::Viewport,
+            Some("viewport"),
+        ),
+        (
+            "s13-progress-indicator-metadata",
+            13,
+            ComponentCategory::Display,
+            Some("progress-indicator"),
+        ),
+        (
+            "s13-job-list-progress-cancel",
+            13,
+            ComponentCategory::System,
+            Some("job-list"),
+        ),
+        (
+            "s13-diagnostic-strip-codes-fields-ordering",
+            13,
+            ComponentCategory::System,
+            Some("diagnostic-strip"),
+        ),
+        (
+            "s13-feedback-stack-lifetime-repaint",
+            13,
+            ComponentCategory::System,
+            Some("feedback-stack"),
+        ),
+    ] {
+        let row = matrix_entry(slug);
+        assert_eq!(row.stage, stage, "{slug} stage");
+        assert_eq!(row.category, category, "{slug} category");
+        assert_eq!(
+            row.status,
+            ComponentConformanceStatus::Partial,
+            "{slug} must stay honest about incomplete component behavior"
+        );
+        assert_eq!(row.component_slug, component_slug, "{slug} component slug");
+
+        let categories = matrix_evidence_categories(slug);
+        for category in [
+            ComponentEvidenceCategory::Status,
+            ComponentEvidenceCategory::Stage,
+            ComponentEvidenceCategory::Conformance,
+            ComponentEvidenceCategory::Showcase,
+        ] {
+            assert!(
+                categories.contains(&category),
+                "{slug} missing {category:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn s12_s13_matrix_stage_filters_are_exact() {
+    let stage_12 = component_conformance_matrix_by_stage(12)
+        .map(|row| row.slug)
+        .collect::<BTreeSet<_>>();
+    let stage_13 = component_conformance_matrix_by_stage(13)
+        .map(|row| row.slug)
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        stage_12,
+        BTreeSet::from([
+            "s12-viewport-action-routing",
+            "s12-viewport-guides-rulers-safe-areas-hud",
+            "s12-viewport-surface-overlays",
+            "s12-viewport-tools-transform-handles",
+        ])
+    );
+    assert_eq!(
+        stage_13,
+        BTreeSet::from([
+            "s13-diagnostic-strip-codes-fields-ordering",
+            "s13-feedback-stack-lifetime-repaint",
+            "s13-job-list-progress-cancel",
+            "s13-progress-indicator-metadata",
+        ])
+    );
+}
+
+#[test]
+fn s12_s13_matrix_evidence_points_to_public_contracts_and_tests() {
+    for (slug, contract, test) in [
+        (
+            "s12-viewport-surface-overlays",
+            "ViewportSurface",
+            "viewport_conformance::overlay_hit_priority_and_id_tie_breaking_are_descriptor_order_independent",
+        ),
+        (
+            "s12-viewport-tools-transform-handles",
+            "ViewportTransformDragRequest",
+            "viewport_conformance::transform_drag_capture_preserves_identity_and_reports_deltas_without_mutation",
+        ),
+        (
+            "s12-viewport-action-routing",
+            "ViewportActionRequest",
+            "viewport_conformance::viewport_action_descriptors_preserve_order_state_and_context_metadata",
+        ),
+        (
+            "s12-viewport-guides-rulers-safe-areas-hud",
+            "ViewportPanZoomHudDescriptor",
+            "viewport_conformance::pan_zoom_hud_reports_state_and_target_metadata_without_actions",
+        ),
+        (
+            "s13-progress-indicator-metadata",
+            "StatusProgress",
+            "status_bar_conformance::job_progress_clamps_and_sanitizes_determinate_values_without_affecting_indeterminate",
+        ),
+        (
+            "s13-job-list-progress-cancel",
+            "JobCancel",
+            "status_bar_conformance::job_cancel_metadata_preserves_job_action_identity_and_availability",
+        ),
+        (
+            "s13-diagnostic-strip-codes-fields-ordering",
+            "DiagnosticStripItemId",
+            "status_bar_conformance::status_bar_diagnostics_strip_orders_by_severity_and_preserves_insertion_order_within_severity",
+        ),
+        (
+            "s13-feedback-stack-lifetime-repaint",
+            "RepaintRequest",
+            "status_bar_conformance::feedback_repaint_after_is_bounded_to_next_active_timed_expiry",
+        ),
+    ] {
+        let row = matrix_entry(slug);
+        assert!(
+            row.public_contracts.contains(&contract),
+            "{slug} missing public contract {contract}"
+        );
+        assert!(
+            row.deterministic_tests.contains(&test),
+            "{slug} missing deterministic test {test}"
+        );
+    }
+}
+
+#[test]
+fn s12_s13_matrix_evidence_uses_specific_conformance_descriptors() {
+    for (name, evidence_id) in [
+        ("Viewport", "conformance.viewport-surface-contracts"),
+        ("ViewportTools", "conformance.viewport-tool-contracts"),
+        (
+            "ViewportActionRouting",
+            "conformance.viewport-action-routing-contracts",
+        ),
+        (
+            "ProgressIndicator",
+            "conformance.progress-indicator-contracts",
+        ),
+        ("JobList", "conformance.job-list-contracts"),
+        ("DiagnosticStrip", "conformance.diagnostic-strip-contracts"),
+        ("FeedbackStack", "conformance.feedback-stack-contracts"),
+    ] {
+        let evidence = component_evidence_for(entry(name))
+            .map(|evidence| evidence.id)
+            .collect::<BTreeSet<_>>();
+
+        assert!(
+            evidence.contains(evidence_id),
+            "{name} missing specific evidence {evidence_id}"
+        );
+        assert!(
+            component_evidence(evidence_id).is_some(),
+            "{evidence_id} must resolve to a stable evidence descriptor"
+        );
+    }
+}
+
+#[test]
 fn evidence_helpers_resolve_lookup_filters_and_status_metadata() {
     let stage_12 = component_evidence("stage.12-viewport-tools").expect("stage 12 evidence");
     assert_eq!(stage_12.category, ComponentEvidenceCategory::Stage);
@@ -476,7 +670,7 @@ fn evidence_helpers_resolve_lookup_filters_and_status_metadata() {
         .collect::<BTreeSet<_>>();
     assert!(viewport_evidence.contains("status.partial-public-contract"));
     assert!(viewport_evidence.contains("stage.12-viewport-tools"));
-    assert!(viewport_evidence.contains("conformance.component-taxonomy"));
+    assert!(viewport_evidence.contains("conformance.viewport-surface-contracts"));
     assert!(viewport_evidence.contains("showcase.metadata-only"));
 
     let status_evidence = component_status_evidence(viewport).collect::<Vec<_>>();
