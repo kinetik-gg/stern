@@ -1,11 +1,17 @@
 //! Timeline ruler and coordinate contract conformance tests.
 
 mod timeline_conformance {
+    use kinetik_ui_core::{Rect, SemanticActionKind, SemanticRole, WidgetId};
     use kinetik_ui_widgets::{
-        DEFAULT_TIMELINE_RULER_MAX_TICKS, TimelineFrame, TimelineFrameRate, TimelineFrameRounding,
-        TimelineId, TimelineRange, TimelineRulerId, TimelineRulerTickKind,
-        TimelineRulerTickRequest, TimelineScale, TimelineTime, TimelineZoom, TransportControlId,
-        clamp_timeline_scroll_offset, max_timeline_scroll_offset, sanitize_timeline_zoom,
+        DEFAULT_TIMELINE_RULER_MAX_TICKS, TimelineDescriptor, TimelineDescriptorError,
+        TimelineDescriptorState, TimelineFrame, TimelineFrameRate, TimelineFrameRounding,
+        TimelineId, TimelineItemDescriptor, TimelineItemId, TimelineKeyframeDescriptor,
+        TimelineKeyframeId, TimelineLaneDescriptor, TimelineLaneId, TimelineLayout,
+        TimelineMarkerDescriptor, TimelineMarkerId, TimelineRange, TimelineRulerId,
+        TimelineRulerTickKind, TimelineRulerTickRequest, TimelineScale, TimelineTime, TimelineZoom,
+        TransportControlId, clamp_timeline_scroll_offset, max_timeline_scroll_offset,
+        sanitize_timeline_zoom, timeline_item_widget_id, timeline_keyframe_widget_id,
+        timeline_lane_widget_id, timeline_marker_widget_id, timeline_semantics,
         timeline_timecode_label,
     };
 
@@ -34,11 +40,55 @@ mod timeline_conformance {
         )
     }
 
+    fn descriptor() -> TimelineDescriptor {
+        TimelineDescriptor::new(
+            [
+                TimelineLaneDescriptor::new(TimelineLaneId::from_raw(1), "Video"),
+                TimelineLaneDescriptor::new(TimelineLaneId::from_raw(2), "Audio")
+                    .with_state(TimelineDescriptorState::default().selected(true)),
+            ],
+            [
+                TimelineItemDescriptor::new(
+                    TimelineItemId::from_raw(10),
+                    TimelineLaneId::from_raw(1),
+                    TimelineRange::seconds(-1.0, 5.0),
+                    "Opening",
+                ),
+                TimelineItemDescriptor::new(
+                    TimelineItemId::from_raw(11),
+                    TimelineLaneId::from_raw(2),
+                    TimelineRange::seconds(2.0, 4.0),
+                    "Voice",
+                )
+                .with_state(
+                    TimelineDescriptorState::default()
+                        .disabled(true)
+                        .read_only(true),
+                ),
+            ],
+            [TimelineMarkerDescriptor::new(
+                TimelineMarkerId::from_raw(30),
+                TimelineTime::from_seconds(2.0),
+                "Beat",
+            )],
+            [TimelineKeyframeDescriptor::new(
+                TimelineKeyframeId::from_raw(40),
+                TimelineItemId::from_raw(11),
+                TimelineTime::from_seconds(3.0),
+            )
+            .with_label("Opacity")],
+        )
+    }
+
     #[test]
     fn timeline_ids_round_trip_raw_bits() {
         assert_eq!(TimelineId::from_raw(1).raw(), 1);
         assert_eq!(TimelineRulerId::from_raw(2).raw(), 2);
         assert_eq!(TransportControlId::from_raw(3).raw(), 3);
+        assert_eq!(TimelineLaneId::from_raw(4).raw(), 4);
+        assert_eq!(TimelineItemId::from_raw(5).raw(), 5);
+        assert_eq!(TimelineMarkerId::from_raw(6).raw(), 6);
+        assert_eq!(TimelineKeyframeId::from_raw(7).raw(), 7);
     }
 
     #[test]
@@ -262,5 +312,320 @@ mod timeline_conformance {
             ),
             "00:00:01:00"
         );
+    }
+
+    #[test]
+    fn timeline_descriptor_duplicate_ids_are_diagnosed_deterministically() {
+        let duplicate_lane = TimelineDescriptor::new(
+            [
+                TimelineLaneDescriptor::new(TimelineLaneId::from_raw(1), "A"),
+                TimelineLaneDescriptor::new(TimelineLaneId::from_raw(1), "B"),
+            ],
+            [],
+            [],
+            [],
+        );
+
+        assert_eq!(
+            duplicate_lane.validate(),
+            Err(TimelineDescriptorError::DuplicateLaneId {
+                id: TimelineLaneId::from_raw(1)
+            })
+        );
+
+        let duplicate_item = TimelineDescriptor::new(
+            [TimelineLaneDescriptor::new(
+                TimelineLaneId::from_raw(1),
+                "A",
+            )],
+            [
+                TimelineItemDescriptor::new(
+                    TimelineItemId::from_raw(2),
+                    TimelineLaneId::from_raw(1),
+                    TimelineRange::seconds(0.0, 1.0),
+                    "First",
+                ),
+                TimelineItemDescriptor::new(
+                    TimelineItemId::from_raw(2),
+                    TimelineLaneId::from_raw(1),
+                    TimelineRange::seconds(1.0, 2.0),
+                    "Second",
+                ),
+            ],
+            [],
+            [],
+        );
+
+        assert_eq!(
+            duplicate_item.validate(),
+            Err(TimelineDescriptorError::DuplicateItemId {
+                id: TimelineItemId::from_raw(2)
+            })
+        );
+    }
+
+    #[test]
+    fn timeline_lane_visible_and_materialized_ranges_are_deterministic() {
+        let lanes = (0..6)
+            .map(|raw| TimelineLaneDescriptor::new(TimelineLaneId::from_raw(raw), "Lane"))
+            .collect::<Vec<_>>();
+        let descriptor = TimelineDescriptor::new(lanes, [], [], []);
+
+        let result = TimelineLayout::new(10.0)
+            .with_overscan(1)
+            .resolve(Rect::new(0.0, 0.0, 100.0, 24.0), scale(), &descriptor, 15.0)
+            .expect("timeline layout resolves");
+
+        assert_eq!(result.visible_lane_range, 1..4);
+        assert_eq!(result.materialized_lane_range, 0..6);
+        assert_close(result.content_height, 60.0);
+        assert_close(result.max_scroll_offset, 36.0);
+        assert_close(result.scroll_offset, 15.0);
+        assert_eq!(
+            result.materialized_lane_ids(),
+            vec![
+                TimelineLaneId::from_raw(0),
+                TimelineLaneId::from_raw(1),
+                TimelineLaneId::from_raw(2),
+                TimelineLaneId::from_raw(3),
+                TimelineLaneId::from_raw(4),
+                TimelineLaneId::from_raw(5),
+            ]
+        );
+    }
+
+    #[test]
+    fn timeline_item_rectangles_clamp_to_visible_bounds_and_preserve_source_time() {
+        let descriptor = TimelineDescriptor::new(
+            [TimelineLaneDescriptor::new(
+                TimelineLaneId::from_raw(1),
+                "Video",
+            )],
+            [TimelineItemDescriptor::new(
+                TimelineItemId::from_raw(10),
+                TimelineLaneId::from_raw(1),
+                TimelineRange::seconds(-5.0, 15.0),
+                "Long clip",
+            )],
+            [],
+            [],
+        );
+        let scale = TimelineScale::new(
+            0.0,
+            100.0,
+            TimelineRange::seconds(0.0, 20.0),
+            TimelineZoom::new(10.0),
+            0.0,
+        );
+
+        let result = TimelineLayout::new(20.0)
+            .resolve(Rect::new(0.0, 0.0, 100.0, 20.0), scale, &descriptor, 0.0)
+            .expect("timeline layout resolves");
+        let item = &result.items[0];
+
+        assert_eq!(item.descriptor.id, TimelineItemId::from_raw(10));
+        assert_seconds_close(item.time_range.start, -5.0);
+        assert_seconds_close(item.time_range.end, 15.0);
+        assert_eq!(item.rect, Rect::new(0.0, 0.0, 100.0, 20.0));
+        assert_eq!(item.unclipped_rect, Rect::new(-50.0, 0.0, 200.0, 20.0));
+        assert_seconds_close(item.visible_time_range.start, 0.0);
+        assert_seconds_close(item.visible_time_range.end, 10.0);
+    }
+
+    #[test]
+    fn timeline_marker_and_keyframe_hit_rectangles_are_finite_and_stable() {
+        let timeline = descriptor();
+        let repeated_descriptor = descriptor();
+        let result = TimelineLayout::new(20.0)
+            .with_marker_hit_width(10.0)
+            .with_keyframe_hit_size(8.0)
+            .resolve(
+                Rect::new(0.0, 0.0, 100.0, 40.0),
+                TimelineScale::new(
+                    0.0,
+                    100.0,
+                    TimelineRange::seconds(0.0, 10.0),
+                    TimelineZoom::new(10.0),
+                    0.0,
+                ),
+                &timeline,
+                0.0,
+            )
+            .expect("timeline layout resolves");
+        let repeated = TimelineLayout::new(20.0)
+            .with_marker_hit_width(10.0)
+            .with_keyframe_hit_size(8.0)
+            .resolve(
+                Rect::new(0.0, 0.0, 100.0, 40.0),
+                TimelineScale::new(
+                    0.0,
+                    100.0,
+                    TimelineRange::seconds(0.0, 10.0),
+                    TimelineZoom::new(10.0),
+                    0.0,
+                ),
+                &repeated_descriptor,
+                0.0,
+            )
+            .expect("timeline layout resolves");
+
+        assert_eq!(result.markers, repeated.markers);
+        assert_eq!(result.keyframes, repeated.keyframes);
+        assert_eq!(result.markers[0].hit_rect, Rect::new(15.0, 0.0, 10.0, 40.0));
+        assert_eq!(
+            result.keyframes[0].hit_rect,
+            Rect::new(26.0, 26.0, 8.0, 8.0)
+        );
+        assert!(result.markers[0].x.is_finite());
+        assert!(result.keyframes[0].x.is_finite());
+    }
+
+    #[test]
+    fn timeline_overlapping_items_use_stable_id_tie_breaking() {
+        let descriptor = TimelineDescriptor::new(
+            [TimelineLaneDescriptor::new(
+                TimelineLaneId::from_raw(1),
+                "Video",
+            )],
+            [
+                TimelineItemDescriptor::new(
+                    TimelineItemId::from_raw(9),
+                    TimelineLaneId::from_raw(1),
+                    TimelineRange::seconds(1.0, 3.0),
+                    "Later id",
+                ),
+                TimelineItemDescriptor::new(
+                    TimelineItemId::from_raw(4),
+                    TimelineLaneId::from_raw(1),
+                    TimelineRange::seconds(1.0, 3.0),
+                    "Earlier id",
+                ),
+            ],
+            [
+                TimelineMarkerDescriptor::new(
+                    TimelineMarkerId::from_raw(12),
+                    TimelineTime::from_seconds(2.0),
+                    "B",
+                ),
+                TimelineMarkerDescriptor::new(
+                    TimelineMarkerId::from_raw(3),
+                    TimelineTime::from_seconds(2.0),
+                    "A",
+                ),
+            ],
+            [],
+        );
+        let result = TimelineLayout::new(20.0)
+            .resolve(
+                Rect::new(0.0, 0.0, 100.0, 20.0),
+                TimelineScale::new(
+                    0.0,
+                    100.0,
+                    TimelineRange::seconds(0.0, 10.0),
+                    TimelineZoom::new(10.0),
+                    0.0,
+                ),
+                &descriptor,
+                0.0,
+            )
+            .expect("timeline layout resolves");
+
+        assert_eq!(
+            result
+                .items
+                .iter()
+                .map(|item| item.descriptor.id)
+                .collect::<Vec<_>>(),
+            vec![TimelineItemId::from_raw(4), TimelineItemId::from_raw(9)]
+        );
+        assert_eq!(
+            result
+                .markers
+                .iter()
+                .map(|marker| marker.descriptor.id)
+                .collect::<Vec<_>>(),
+            vec![
+                TimelineMarkerId::from_raw(3),
+                TimelineMarkerId::from_raw(12)
+            ]
+        );
+    }
+
+    #[test]
+    fn timeline_descriptor_state_and_semantics_are_exposed_without_renderer_dependencies() {
+        let descriptor = descriptor();
+        let result = TimelineLayout::new(20.0)
+            .resolve(
+                Rect::new(0.0, 0.0, 100.0, 40.0),
+                TimelineScale::new(
+                    0.0,
+                    100.0,
+                    TimelineRange::seconds(0.0, 10.0),
+                    TimelineZoom::new(10.0),
+                    0.0,
+                ),
+                &descriptor,
+                0.0,
+            )
+            .expect("timeline layout resolves");
+
+        assert!(result.lanes[1].descriptor.state.selected);
+        assert!(result.items[1].descriptor.state.disabled);
+        assert!(result.items[1].descriptor.state.read_only);
+
+        let root = WidgetId::from_key("timeline");
+        let semantics = timeline_semantics(root, result.bounds, &result, "Timeline");
+
+        assert_eq!(semantics[0].id, root);
+        assert_eq!(
+            semantics[0].role,
+            SemanticRole::Custom("timeline".to_owned())
+        );
+        assert!(
+            semantics[0]
+                .children
+                .contains(&timeline_lane_widget_id(root, TimelineLaneId::from_raw(1)))
+        );
+        assert!(semantics[0].children.contains(&timeline_marker_widget_id(
+            root,
+            TimelineMarkerId::from_raw(30)
+        )));
+
+        let selected_lane = semantics
+            .iter()
+            .find(|node| node.id == timeline_lane_widget_id(root, TimelineLaneId::from_raw(2)))
+            .expect("selected lane semantics");
+        assert_eq!(
+            selected_lane.role,
+            SemanticRole::Custom("timeline-lane".to_owned())
+        );
+        assert_eq!(selected_lane.label.as_deref(), Some("Audio"));
+        assert!(selected_lane.state.selected);
+
+        let disabled_item = semantics
+            .iter()
+            .find(|node| node.id == timeline_item_widget_id(root, TimelineItemId::from_raw(11)))
+            .expect("disabled item semantics");
+        assert_eq!(
+            disabled_item.role,
+            SemanticRole::Custom("timeline-item".to_owned())
+        );
+        assert!(disabled_item.state.disabled);
+        assert_eq!(disabled_item.description.as_deref(), Some("Read-only"));
+        assert!(!disabled_item.focusable);
+
+        let keyframe = semantics
+            .iter()
+            .find(|node| {
+                node.id == timeline_keyframe_widget_id(root, TimelineKeyframeId::from_raw(40))
+            })
+            .expect("keyframe semantics");
+        assert_eq!(
+            keyframe.role,
+            SemanticRole::Custom("timeline-keyframe".to_owned())
+        );
+        assert!(keyframe.actions.iter().any(|action| {
+            action.kind == SemanticActionKind::Invoke && action.label == "Select keyframe"
+        }));
     }
 }

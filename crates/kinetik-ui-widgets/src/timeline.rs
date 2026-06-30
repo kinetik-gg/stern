@@ -1,4 +1,13 @@
-//! Data-only timeline ruler, frame-rate, and coordinate contracts.
+//! Data-only timeline ruler, frame-rate, lane, item, and coordinate contracts.
+
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Range,
+};
+
+use kinetik_ui_core::{
+    Rect, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, SemanticValue, WidgetId,
+};
 
 /// Default timeline ruler scale in logical pixels per second.
 pub const DEFAULT_TIMELINE_PIXELS_PER_SECOND: f32 = 100.0;
@@ -40,6 +49,21 @@ timeline_id!(
     TransportControlId,
     "Stable identity for a timeline transport control."
 );
+timeline_id!(TimelineLaneId, "Stable identity for a timeline lane.");
+timeline_id!(
+    TimelineItemId,
+    "Stable identity for a timeline clip or item."
+);
+timeline_id!(TimelineMarkerId, "Stable identity for a timeline marker.");
+timeline_id!(
+    TimelineKeyframeId,
+    "Stable identity for a timeline keyframe target."
+);
+
+/// Compatibility name for timeline lanes used as tracks.
+pub type TimelineTrackId = TimelineLaneId;
+/// Compatibility name for timeline items used as clips.
+pub type TimelineClipId = TimelineItemId;
 
 /// Timeline time in seconds.
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
@@ -382,6 +406,644 @@ impl TimelineScale {
     }
 }
 
+/// Shared timeline descriptor state exposed by app-owned lane and item metadata.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TimelineDescriptorState {
+    /// Descriptor is currently selected.
+    pub selected: bool,
+    /// Descriptor cannot currently be operated.
+    pub disabled: bool,
+    /// Descriptor is visible but not editable.
+    pub read_only: bool,
+}
+
+impl TimelineDescriptorState {
+    /// Marks this state as selected.
+    #[must_use]
+    pub const fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    /// Marks this state as disabled.
+    #[must_use]
+    pub const fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Marks this state as read-only.
+    #[must_use]
+    pub const fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+}
+
+/// App-owned lane or track descriptor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimelineLaneDescriptor {
+    /// Stable lane identity.
+    pub id: TimelineLaneId,
+    /// Human-readable lane label.
+    pub label: String,
+    /// Generic descriptor state.
+    pub state: TimelineDescriptorState,
+}
+
+impl TimelineLaneDescriptor {
+    /// Creates a lane descriptor.
+    #[must_use]
+    pub fn new(id: TimelineLaneId, label: impl Into<String>) -> Self {
+        Self {
+            id,
+            label: label.into(),
+            state: TimelineDescriptorState::default(),
+        }
+    }
+
+    /// Sets descriptor state.
+    #[must_use]
+    pub const fn with_state(mut self, state: TimelineDescriptorState) -> Self {
+        self.state = state;
+        self
+    }
+}
+
+/// Compatibility name for timeline lanes used as tracks.
+pub type TimelineTrackDescriptor = TimelineLaneDescriptor;
+
+/// App-owned clip or item descriptor.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimelineItemDescriptor {
+    /// Stable item identity.
+    pub id: TimelineItemId,
+    /// Lane containing this item.
+    pub lane: TimelineLaneId,
+    /// Source timeline range. Resolution sanitizes ordering and finiteness.
+    pub time_range: TimelineRange,
+    /// Human-readable item label.
+    pub label: String,
+    /// Generic descriptor state.
+    pub state: TimelineDescriptorState,
+}
+
+impl TimelineItemDescriptor {
+    /// Creates an item descriptor.
+    #[must_use]
+    pub fn new(
+        id: TimelineItemId,
+        lane: TimelineLaneId,
+        time_range: TimelineRange,
+        label: impl Into<String>,
+    ) -> Self {
+        Self {
+            id,
+            lane,
+            time_range,
+            label: label.into(),
+            state: TimelineDescriptorState::default(),
+        }
+    }
+
+    /// Sets descriptor state.
+    #[must_use]
+    pub const fn with_state(mut self, state: TimelineDescriptorState) -> Self {
+        self.state = state;
+        self
+    }
+}
+
+/// Compatibility name for timeline items used as clips.
+pub type TimelineClipDescriptor = TimelineItemDescriptor;
+
+/// App-owned marker descriptor.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimelineMarkerDescriptor {
+    /// Stable marker identity.
+    pub id: TimelineMarkerId,
+    /// Marker time.
+    pub time: TimelineTime,
+    /// Human-readable marker label.
+    pub label: String,
+    /// Generic descriptor state.
+    pub state: TimelineDescriptorState,
+}
+
+impl TimelineMarkerDescriptor {
+    /// Creates a marker descriptor.
+    #[must_use]
+    pub fn new(id: TimelineMarkerId, time: TimelineTime, label: impl Into<String>) -> Self {
+        Self {
+            id,
+            time,
+            label: label.into(),
+            state: TimelineDescriptorState::default(),
+        }
+    }
+
+    /// Sets descriptor state.
+    #[must_use]
+    pub const fn with_state(mut self, state: TimelineDescriptorState) -> Self {
+        self.state = state;
+        self
+    }
+}
+
+/// App-owned keyframe descriptor.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimelineKeyframeDescriptor {
+    /// Stable keyframe identity.
+    pub id: TimelineKeyframeId,
+    /// Item containing this keyframe.
+    pub item: TimelineItemId,
+    /// Keyframe time.
+    pub time: TimelineTime,
+    /// Human-readable keyframe label.
+    pub label: String,
+    /// Generic descriptor state.
+    pub state: TimelineDescriptorState,
+}
+
+impl TimelineKeyframeDescriptor {
+    /// Creates a keyframe descriptor.
+    #[must_use]
+    pub fn new(id: TimelineKeyframeId, item: TimelineItemId, time: TimelineTime) -> Self {
+        Self {
+            id,
+            item,
+            time,
+            label: format!("Keyframe {}", id.raw()),
+            state: TimelineDescriptorState::default(),
+        }
+    }
+
+    /// Sets the keyframe label.
+    #[must_use]
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
+    }
+
+    /// Sets descriptor state.
+    #[must_use]
+    pub const fn with_state(mut self, state: TimelineDescriptorState) -> Self {
+        self.state = state;
+        self
+    }
+}
+
+/// App-owned timeline descriptor set.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TimelineDescriptor {
+    /// Lane descriptors in application presentation order.
+    pub lanes: Vec<TimelineLaneDescriptor>,
+    /// Clip/item descriptors.
+    pub items: Vec<TimelineItemDescriptor>,
+    /// Marker descriptors.
+    pub markers: Vec<TimelineMarkerDescriptor>,
+    /// Keyframe descriptors.
+    pub keyframes: Vec<TimelineKeyframeDescriptor>,
+}
+
+impl TimelineDescriptor {
+    /// Creates a timeline descriptor set.
+    #[must_use]
+    pub fn new(
+        lanes: impl Into<Vec<TimelineLaneDescriptor>>,
+        items: impl Into<Vec<TimelineItemDescriptor>>,
+        markers: impl Into<Vec<TimelineMarkerDescriptor>>,
+        keyframes: impl Into<Vec<TimelineKeyframeDescriptor>>,
+    ) -> Self {
+        Self {
+            lanes: lanes.into(),
+            items: items.into(),
+            markers: markers.into(),
+            keyframes: keyframes.into(),
+        }
+    }
+
+    /// Validates stable IDs and descriptor references.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TimelineDescriptorError`] when descriptor IDs are duplicated or
+    /// when an item/keyframe references a missing parent descriptor.
+    pub fn validate(&self) -> Result<(), TimelineDescriptorError> {
+        validate_timeline_descriptor(self)
+    }
+}
+
+/// Structured timeline descriptor validation error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TimelineDescriptorError {
+    /// The descriptor contains a duplicate lane ID.
+    DuplicateLaneId {
+        /// Duplicated lane.
+        id: TimelineLaneId,
+    },
+    /// The descriptor contains a duplicate clip/item ID.
+    DuplicateItemId {
+        /// Duplicated item.
+        id: TimelineItemId,
+    },
+    /// The descriptor contains a duplicate marker ID.
+    DuplicateMarkerId {
+        /// Duplicated marker.
+        id: TimelineMarkerId,
+    },
+    /// The descriptor contains a duplicate keyframe ID.
+    DuplicateKeyframeId {
+        /// Duplicated keyframe.
+        id: TimelineKeyframeId,
+    },
+    /// An item references an unknown lane.
+    UnknownItemLane {
+        /// Item with the invalid lane reference.
+        item: TimelineItemId,
+        /// Missing lane.
+        lane: TimelineLaneId,
+    },
+    /// A keyframe references an unknown item.
+    UnknownKeyframeItem {
+        /// Keyframe with the invalid item reference.
+        keyframe: TimelineKeyframeId,
+        /// Missing item.
+        item: TimelineItemId,
+    },
+}
+
+/// Timeline lane layout contract.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineLayout {
+    /// Fixed lane row height.
+    pub row_height: f32,
+    /// Extra lane rows to materialize before and after the visible range.
+    pub overscan: usize,
+    /// Hit target width for timeline markers.
+    pub marker_hit_width: f32,
+    /// Hit target size for keyframes.
+    pub keyframe_hit_size: f32,
+}
+
+impl TimelineLayout {
+    /// Creates a timeline layout contract.
+    #[must_use]
+    pub const fn new(row_height: f32) -> Self {
+        Self {
+            row_height,
+            overscan: 0,
+            marker_hit_width: 9.0,
+            keyframe_hit_size: 9.0,
+        }
+    }
+
+    /// Assigns overscan rows for materialization.
+    #[must_use]
+    pub const fn with_overscan(mut self, overscan: usize) -> Self {
+        self.overscan = overscan;
+        self
+    }
+
+    /// Assigns marker hit target width.
+    #[must_use]
+    pub const fn with_marker_hit_width(mut self, marker_hit_width: f32) -> Self {
+        self.marker_hit_width = marker_hit_width;
+        self
+    }
+
+    /// Assigns keyframe hit target size.
+    #[must_use]
+    pub const fn with_keyframe_hit_size(mut self, keyframe_hit_size: f32) -> Self {
+        self.keyframe_hit_size = keyframe_hit_size;
+        self
+    }
+
+    /// Resolves deterministic lane rows, clip/item rectangles, markers, and keyframes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TimelineDescriptorError`] when the supplied descriptor set does
+    /// not validate.
+    pub fn resolve(
+        self,
+        bounds: Rect,
+        scale: TimelineScale,
+        descriptor: &TimelineDescriptor,
+        scroll_offset: f32,
+    ) -> Result<TimelineLayoutResult<'_>, TimelineDescriptorError> {
+        resolve_timeline_layout(self, bounds, scale, descriptor, scroll_offset)
+    }
+}
+
+/// Resolved lane row metadata.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedTimelineLane<'a> {
+    /// Source lane descriptor.
+    pub descriptor: &'a TimelineLaneDescriptor,
+    /// Descriptor index in app-owned lane order.
+    pub source_index: usize,
+    /// Row index in the full timeline.
+    pub row_index: usize,
+    /// Materialized row rectangle.
+    pub rect: Rect,
+}
+
+/// Resolved timeline clip/item rectangle.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedTimelineItem<'a> {
+    /// Source item descriptor.
+    pub descriptor: &'a TimelineItemDescriptor,
+    /// Descriptor index in app-owned item order.
+    pub source_index: usize,
+    /// Lane row index.
+    pub lane_index: usize,
+    /// Source time range with finite ascending endpoints.
+    pub time_range: TimelineRange,
+    /// Time range represented by the clamped rectangle.
+    pub visible_time_range: TimelineRange,
+    /// Rectangle clamped to the visible timeline bounds.
+    pub rect: Rect,
+    /// Unclamped rectangle produced directly from source times and the timeline scale.
+    pub unclipped_rect: Rect,
+}
+
+/// Resolved timeline marker hit target.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedTimelineMarker<'a> {
+    /// Source marker descriptor.
+    pub descriptor: &'a TimelineMarkerDescriptor,
+    /// Descriptor index in app-owned marker order.
+    pub source_index: usize,
+    /// Sanitized marker time.
+    pub time: TimelineTime,
+    /// Marker center x coordinate.
+    pub x: f32,
+    /// Hit rectangle clamped to the visible timeline bounds.
+    pub hit_rect: Rect,
+}
+
+/// Resolved timeline keyframe hit target.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedTimelineKeyframe<'a> {
+    /// Source keyframe descriptor.
+    pub descriptor: &'a TimelineKeyframeDescriptor,
+    /// Descriptor index in app-owned keyframe order.
+    pub source_index: usize,
+    /// Containing item.
+    pub item: TimelineItemId,
+    /// Containing lane row index.
+    pub lane_index: usize,
+    /// Sanitized keyframe time.
+    pub time: TimelineTime,
+    /// Keyframe center x coordinate.
+    pub x: f32,
+    /// Hit rectangle clamped to the visible timeline bounds.
+    pub hit_rect: Rect,
+}
+
+/// Resolved timeline layout output.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimelineLayoutResult<'a> {
+    /// Sanitized viewport bounds.
+    pub bounds: Rect,
+    /// Total lane content height.
+    pub content_height: f32,
+    /// Maximum valid vertical scroll offset.
+    pub max_scroll_offset: f32,
+    /// Sanitized and clamped vertical scroll offset.
+    pub scroll_offset: f32,
+    /// Strict visible lane range before overscan.
+    pub visible_lane_range: Range<usize>,
+    /// Overscanned lane range to materialize.
+    pub materialized_lane_range: Range<usize>,
+    /// Materialized lanes in descriptor order.
+    pub lanes: Vec<ResolvedTimelineLane<'a>>,
+    /// Resolved clip/items in deterministic hit/paint order.
+    pub items: Vec<ResolvedTimelineItem<'a>>,
+    /// Resolved markers in deterministic hit/paint order.
+    pub markers: Vec<ResolvedTimelineMarker<'a>>,
+    /// Resolved keyframes in deterministic hit/paint order.
+    pub keyframes: Vec<ResolvedTimelineKeyframe<'a>>,
+}
+
+impl TimelineLayoutResult<'_> {
+    /// Returns materialized lane IDs in app descriptor order.
+    #[must_use]
+    pub fn materialized_lane_ids(&self) -> Vec<TimelineLaneId> {
+        self.lanes.iter().map(|lane| lane.descriptor.id).collect()
+    }
+}
+
+/// Builds backend-neutral semantic nodes for a resolved timeline layout.
+#[must_use]
+pub fn timeline_semantics(
+    id: WidgetId,
+    bounds: Rect,
+    result: &TimelineLayoutResult<'_>,
+    label: impl Into<String>,
+) -> Vec<SemanticNode> {
+    let root = timeline_root_semantics(id, bounds, result, label);
+    let mut semantics = Vec::with_capacity(
+        1 + result.lanes.len() + result.items.len() + result.markers.len() + result.keyframes.len(),
+    );
+    semantics.push(root);
+    semantics.extend(
+        result
+            .lanes
+            .iter()
+            .map(|lane| timeline_lane_semantics(id, lane, result)),
+    );
+    semantics.extend(
+        result
+            .items
+            .iter()
+            .map(|item| timeline_item_semantics(id, item, result)),
+    );
+    semantics.extend(
+        result
+            .markers
+            .iter()
+            .map(|marker| timeline_marker_semantics(id, marker)),
+    );
+    semantics.extend(
+        result
+            .keyframes
+            .iter()
+            .map(|keyframe| timeline_keyframe_semantics(id, keyframe)),
+    );
+    semantics
+}
+
+/// Builds the timeline root semantic node.
+#[must_use]
+pub fn timeline_root_semantics(
+    id: WidgetId,
+    bounds: Rect,
+    result: &TimelineLayoutResult<'_>,
+    label: impl Into<String>,
+) -> SemanticNode {
+    let lane_ids = result
+        .lanes
+        .iter()
+        .map(|lane| timeline_lane_widget_id(id, lane.descriptor.id));
+    let marker_ids = result
+        .markers
+        .iter()
+        .map(|marker| timeline_marker_widget_id(id, marker.descriptor.id));
+    let mut node = SemanticNode::new(
+        id,
+        SemanticRole::Custom("timeline".to_owned()),
+        finite_rect(bounds),
+    )
+    .with_label(label)
+    .with_children(lane_ids.chain(marker_ids));
+    node.state.value = Some(SemanticValue::Text(format!(
+        "{} lanes, {} items, {} markers, {} keyframes",
+        result.lanes.len(),
+        result.items.len(),
+        result.markers.len(),
+        result.keyframes.len()
+    )));
+    node
+}
+
+/// Builds a timeline lane semantic node.
+#[must_use]
+pub fn timeline_lane_semantics(
+    root: WidgetId,
+    lane: &ResolvedTimelineLane<'_>,
+    result: &TimelineLayoutResult<'_>,
+) -> SemanticNode {
+    let children = result
+        .items
+        .iter()
+        .filter(|item| item.descriptor.lane == lane.descriptor.id)
+        .map(|item| timeline_item_widget_id(root, item.descriptor.id))
+        .collect::<Vec<_>>();
+    let mut node = SemanticNode::new(
+        timeline_lane_widget_id(root, lane.descriptor.id),
+        SemanticRole::Custom("timeline-lane".to_owned()),
+        lane.rect,
+    )
+    .with_label(lane.descriptor.label.clone())
+    .with_children(children)
+    .focusable(!lane.descriptor.state.disabled);
+    apply_timeline_semantic_state(&mut node, lane.descriptor.state);
+    node.state.value = Some(SemanticValue::Text(lane.descriptor.label.clone()));
+    node
+}
+
+/// Builds a timeline clip/item semantic node.
+#[must_use]
+pub fn timeline_item_semantics(
+    root: WidgetId,
+    item: &ResolvedTimelineItem<'_>,
+    result: &TimelineLayoutResult<'_>,
+) -> SemanticNode {
+    let children = result
+        .keyframes
+        .iter()
+        .filter(|keyframe| keyframe.item == item.descriptor.id)
+        .map(|keyframe| timeline_keyframe_widget_id(root, keyframe.descriptor.id))
+        .collect::<Vec<_>>();
+    let mut node = SemanticNode::new(
+        timeline_item_widget_id(root, item.descriptor.id),
+        SemanticRole::Custom("timeline-item".to_owned()),
+        item.rect,
+    )
+    .with_label(item.descriptor.label.clone())
+    .with_children(children)
+    .focusable(!item.descriptor.state.disabled);
+    apply_timeline_semantic_state(&mut node, item.descriptor.state);
+    node.state.value = Some(SemanticValue::Text(item.descriptor.label.clone()));
+    if !item.descriptor.state.disabled {
+        node.actions.push(SemanticAction::new(
+            SemanticActionKind::Invoke,
+            "Select item",
+        ));
+    }
+    node
+}
+
+/// Builds a timeline marker semantic node.
+#[must_use]
+pub fn timeline_marker_semantics(
+    root: WidgetId,
+    marker: &ResolvedTimelineMarker<'_>,
+) -> SemanticNode {
+    let mut node = SemanticNode::new(
+        timeline_marker_widget_id(root, marker.descriptor.id),
+        SemanticRole::Custom("timeline-marker".to_owned()),
+        marker.hit_rect,
+    )
+    .with_label(marker.descriptor.label.clone())
+    .focusable(!marker.descriptor.state.disabled);
+    apply_timeline_semantic_state(&mut node, marker.descriptor.state);
+    node.state.value = Some(SemanticValue::Text(marker.descriptor.label.clone()));
+    if !marker.descriptor.state.disabled {
+        node.actions.push(SemanticAction::new(
+            SemanticActionKind::Invoke,
+            "Select marker",
+        ));
+    }
+    node
+}
+
+/// Builds a timeline keyframe semantic node.
+#[must_use]
+pub fn timeline_keyframe_semantics(
+    root: WidgetId,
+    keyframe: &ResolvedTimelineKeyframe<'_>,
+) -> SemanticNode {
+    let mut node = SemanticNode::new(
+        timeline_keyframe_widget_id(root, keyframe.descriptor.id),
+        SemanticRole::Custom("timeline-keyframe".to_owned()),
+        keyframe.hit_rect,
+    )
+    .with_label(keyframe.descriptor.label.clone())
+    .focusable(!keyframe.descriptor.state.disabled);
+    apply_timeline_semantic_state(&mut node, keyframe.descriptor.state);
+    node.state.value = Some(SemanticValue::Text(keyframe.descriptor.label.clone()));
+    if !keyframe.descriptor.state.disabled {
+        node.actions.push(SemanticAction::new(
+            SemanticActionKind::Invoke,
+            "Select keyframe",
+        ));
+    }
+    node
+}
+
+/// Derives a stable semantic widget ID for a timeline lane.
+#[must_use]
+pub fn timeline_lane_widget_id(root: WidgetId, lane: TimelineLaneId) -> WidgetId {
+    root.child(("timeline-lane", lane.raw()))
+}
+
+/// Derives a stable semantic widget ID for a timeline clip/item.
+#[must_use]
+pub fn timeline_item_widget_id(root: WidgetId, item: TimelineItemId) -> WidgetId {
+    root.child(("timeline-item", item.raw()))
+}
+
+/// Derives a stable semantic widget ID for a timeline clip.
+#[must_use]
+pub fn timeline_clip_widget_id(root: WidgetId, clip: TimelineClipId) -> WidgetId {
+    timeline_item_widget_id(root, clip)
+}
+
+/// Derives a stable semantic widget ID for a timeline marker.
+#[must_use]
+pub fn timeline_marker_widget_id(root: WidgetId, marker: TimelineMarkerId) -> WidgetId {
+    root.child(("timeline-marker", marker.raw()))
+}
+
+/// Derives a stable semantic widget ID for a timeline keyframe.
+#[must_use]
+pub fn timeline_keyframe_widget_id(root: WidgetId, keyframe: TimelineKeyframeId) -> WidgetId {
+    root.child(("timeline-keyframe", keyframe.raw()))
+}
+
 /// Ruler tick role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimelineRulerTickKind {
@@ -567,6 +1229,448 @@ pub fn timeline_timecode_label(frame: TimelineFrame, frame_rate: TimelineFrameRa
     let frame = frames % display_fps;
 
     format!("{sign}{hours:02}:{minutes:02}:{seconds:02}:{frame:02}")
+}
+
+fn validate_timeline_descriptor(
+    descriptor: &TimelineDescriptor,
+) -> Result<(), TimelineDescriptorError> {
+    let mut lane_ids = BTreeSet::new();
+    for lane in &descriptor.lanes {
+        if !lane_ids.insert(lane.id) {
+            return Err(TimelineDescriptorError::DuplicateLaneId { id: lane.id });
+        }
+    }
+
+    let mut item_ids = BTreeSet::new();
+    for item in &descriptor.items {
+        if !item_ids.insert(item.id) {
+            return Err(TimelineDescriptorError::DuplicateItemId { id: item.id });
+        }
+    }
+
+    let mut marker_ids = BTreeSet::new();
+    for marker in &descriptor.markers {
+        if !marker_ids.insert(marker.id) {
+            return Err(TimelineDescriptorError::DuplicateMarkerId { id: marker.id });
+        }
+    }
+
+    let mut keyframe_ids = BTreeSet::new();
+    for keyframe in &descriptor.keyframes {
+        if !keyframe_ids.insert(keyframe.id) {
+            return Err(TimelineDescriptorError::DuplicateKeyframeId { id: keyframe.id });
+        }
+    }
+
+    for item in &descriptor.items {
+        if !lane_ids.contains(&item.lane) {
+            return Err(TimelineDescriptorError::UnknownItemLane {
+                item: item.id,
+                lane: item.lane,
+            });
+        }
+    }
+
+    for keyframe in &descriptor.keyframes {
+        if !item_ids.contains(&keyframe.item) {
+            return Err(TimelineDescriptorError::UnknownKeyframeItem {
+                keyframe: keyframe.id,
+                item: keyframe.item,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
+fn resolve_timeline_layout(
+    layout: TimelineLayout,
+    bounds: Rect,
+    scale: TimelineScale,
+    descriptor: &TimelineDescriptor,
+    scroll_offset: f32,
+) -> Result<TimelineLayoutResult<'_>, TimelineDescriptorError> {
+    descriptor.validate()?;
+
+    let bounds = finite_rect(bounds);
+    let window = timeline_lane_window(
+        descriptor.lanes.len(),
+        layout.row_height,
+        bounds.height,
+        scroll_offset,
+        layout.overscan,
+    );
+    let row_height = finite_positive(layout.row_height).unwrap_or(0.0);
+    let scale = scale.sanitized();
+    let lane_indices = descriptor
+        .lanes
+        .iter()
+        .enumerate()
+        .map(|(index, lane)| (lane.id, index))
+        .collect::<BTreeMap<_, _>>();
+    let item_indices = descriptor
+        .items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| (item.id, index))
+        .collect::<BTreeMap<_, _>>();
+
+    let lanes = descriptor
+        .lanes
+        .iter()
+        .enumerate()
+        .skip(window.materialized_range.start)
+        .take(
+            window
+                .materialized_range
+                .end
+                .saturating_sub(window.materialized_range.start),
+        )
+        .map(|(row_index, lane)| ResolvedTimelineLane {
+            descriptor: lane,
+            source_index: row_index,
+            row_index,
+            rect: timeline_lane_rect(bounds, row_height, window.clamped_scroll_offset, row_index),
+        })
+        .collect::<Vec<_>>();
+
+    let materialized_lanes = window
+        .materialized_range
+        .clone()
+        .collect::<BTreeSet<usize>>();
+    let mut items = descriptor
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(source_index, item)| {
+            let lane_index = *lane_indices.get(&item.lane)?;
+            if !materialized_lanes.contains(&lane_index) {
+                return None;
+            }
+            resolve_timeline_item(
+                source_index,
+                item,
+                lane_index,
+                bounds,
+                row_height,
+                window.clamped_scroll_offset,
+                scale,
+            )
+        })
+        .collect::<Vec<_>>();
+    items.sort_by(compare_resolved_timeline_items);
+
+    let mut markers = descriptor
+        .markers
+        .iter()
+        .enumerate()
+        .filter_map(|(source_index, marker)| {
+            resolve_timeline_marker(source_index, marker, bounds, scale, layout.marker_hit_width)
+        })
+        .collect::<Vec<_>>();
+    markers.sort_by(compare_resolved_timeline_markers);
+
+    let mut keyframes = descriptor
+        .keyframes
+        .iter()
+        .enumerate()
+        .filter_map(|(source_index, keyframe)| {
+            let item_index = *item_indices.get(&keyframe.item)?;
+            let item = descriptor.items.get(item_index)?;
+            let lane_index = *lane_indices.get(&item.lane)?;
+            if !materialized_lanes.contains(&lane_index) {
+                return None;
+            }
+            resolve_timeline_keyframe(
+                source_index,
+                keyframe,
+                lane_index,
+                bounds,
+                row_height,
+                window.clamped_scroll_offset,
+                scale,
+                layout.keyframe_hit_size,
+            )
+        })
+        .collect::<Vec<_>>();
+    keyframes.sort_by(compare_resolved_timeline_keyframes);
+
+    Ok(TimelineLayoutResult {
+        bounds,
+        content_height: window.content_extent,
+        max_scroll_offset: window.max_scroll_offset,
+        scroll_offset: window.clamped_scroll_offset,
+        visible_lane_range: window.visible_range,
+        materialized_lane_range: window.materialized_range,
+        lanes,
+        items,
+        markers,
+        keyframes,
+    })
+}
+
+fn resolve_timeline_item(
+    source_index: usize,
+    item: &TimelineItemDescriptor,
+    lane_index: usize,
+    bounds: Rect,
+    row_height: f32,
+    scroll_offset: f32,
+    scale: TimelineScale,
+) -> Option<ResolvedTimelineItem<'_>> {
+    let time_range = item.time_range.sanitized();
+    let row = timeline_lane_rect(bounds, row_height, scroll_offset, lane_index);
+    let start_x = scale.time_to_screen_x(time_range.start);
+    let end_x = scale.time_to_screen_x(time_range.end);
+    let left = start_x.min(end_x);
+    let right = start_x.max(end_x);
+    let unclipped_rect = finite_rect(Rect::new(left, row.y, right - left, row.height));
+    let rect = intersect_rect(unclipped_rect, bounds)?;
+    let visible_time_range = TimelineRange::new(
+        scale.screen_x_to_time(rect.x),
+        scale.screen_x_to_time(rect_max_x(rect)),
+    )
+    .sanitized();
+
+    Some(ResolvedTimelineItem {
+        descriptor: item,
+        source_index,
+        lane_index,
+        time_range,
+        visible_time_range,
+        rect,
+        unclipped_rect,
+    })
+}
+
+fn resolve_timeline_marker(
+    source_index: usize,
+    marker: &TimelineMarkerDescriptor,
+    bounds: Rect,
+    scale: TimelineScale,
+    hit_width: f32,
+) -> Option<ResolvedTimelineMarker<'_>> {
+    let time = marker.time.sanitized();
+    let x = scale.time_to_screen_x(time);
+    let width = finite_positive(hit_width).unwrap_or(1.0);
+    let hit_rect = centered_rect(x, bounds.y + bounds.height * 0.5, width, bounds.height);
+    let hit_rect = intersect_rect(hit_rect, bounds)?;
+
+    Some(ResolvedTimelineMarker {
+        descriptor: marker,
+        source_index,
+        time,
+        x,
+        hit_rect,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_timeline_keyframe(
+    source_index: usize,
+    keyframe: &TimelineKeyframeDescriptor,
+    lane_index: usize,
+    bounds: Rect,
+    row_height: f32,
+    scroll_offset: f32,
+    scale: TimelineScale,
+    hit_size: f32,
+) -> Option<ResolvedTimelineKeyframe<'_>> {
+    let time = keyframe.time.sanitized();
+    let x = scale.time_to_screen_x(time);
+    let row = timeline_lane_rect(bounds, row_height, scroll_offset, lane_index);
+    let size = finite_positive(hit_size).unwrap_or(1.0);
+    let hit_rect = centered_rect(x, row.y + row.height * 0.5, size, size);
+    let hit_rect = intersect_rect(hit_rect, bounds)?;
+
+    Some(ResolvedTimelineKeyframe {
+        descriptor: keyframe,
+        source_index,
+        item: keyframe.item,
+        lane_index,
+        time,
+        x,
+        hit_rect,
+    })
+}
+
+fn apply_timeline_semantic_state(node: &mut SemanticNode, state: TimelineDescriptorState) {
+    node.state.disabled = state.disabled;
+    node.state.selected = state.selected;
+    if state.read_only {
+        node.description = Some("Read-only".to_owned());
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct TimelineLaneWindow {
+    content_extent: f32,
+    max_scroll_offset: f32,
+    clamped_scroll_offset: f32,
+    visible_range: Range<usize>,
+    materialized_range: Range<usize>,
+}
+
+impl TimelineLaneWindow {
+    fn empty() -> Self {
+        Self {
+            content_extent: 0.0,
+            max_scroll_offset: 0.0,
+            clamped_scroll_offset: 0.0,
+            visible_range: 0..0,
+            materialized_range: 0..0,
+        }
+    }
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn timeline_lane_window(
+    lane_count: usize,
+    row_height: f32,
+    viewport_height: f32,
+    scroll_offset: f32,
+    overscan: usize,
+) -> TimelineLaneWindow {
+    let Some(row_height) = finite_positive(row_height) else {
+        return TimelineLaneWindow::empty();
+    };
+    let Some(viewport_height) = finite_positive(viewport_height) else {
+        return TimelineLaneWindow::empty();
+    };
+    if lane_count == 0 {
+        return TimelineLaneWindow::empty();
+    }
+
+    let content_extent = finite_product_usize(lane_count, row_height);
+    let max_scroll_offset = (content_extent - viewport_height).max(0.0);
+    let clamped_scroll_offset = finite_f32_non_negative(scroll_offset).min(max_scroll_offset);
+    let first = ((clamped_scroll_offset / row_height).floor() as usize).min(lane_count);
+    let visible_end = ((clamped_scroll_offset + viewport_height) / row_height).ceil() as usize;
+    let visible_end = visible_end.min(lane_count).max(first);
+    let visible_range = first..visible_end;
+    let materialized_visible = ((viewport_height / row_height).ceil() as usize)
+        .saturating_add(1)
+        .min(lane_count);
+    let materialized_start = first.saturating_sub(overscan);
+    let materialized_end = first
+        .saturating_add(materialized_visible)
+        .saturating_add(overscan)
+        .min(lane_count);
+
+    TimelineLaneWindow {
+        content_extent,
+        max_scroll_offset,
+        clamped_scroll_offset,
+        visible_range,
+        materialized_range: materialized_start..materialized_end,
+    }
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn finite_product_usize(count: usize, extent: f32) -> f32 {
+    if extent.is_finite() {
+        (count as f32 * extent).max(0.0)
+    } else {
+        0.0
+    }
+}
+
+fn timeline_lane_rect(bounds: Rect, row_height: f32, scroll_offset: f32, row_index: usize) -> Rect {
+    Rect::new(
+        bounds.x,
+        finite_sum(
+            bounds.y,
+            finite_sum(row_index_to_offset(row_index, row_height), -scroll_offset),
+        ),
+        bounds.width,
+        row_height,
+    )
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn row_index_to_offset(row_index: usize, row_height: f32) -> f32 {
+    row_index as f32 * row_height
+}
+
+fn intersect_rect(rect: Rect, bounds: Rect) -> Option<Rect> {
+    let rect = finite_rect(rect);
+    let bounds = finite_rect(bounds);
+    let left = rect.x.max(bounds.x);
+    let top = rect.y.max(bounds.y);
+    let right = rect_max_x(rect).min(rect_max_x(bounds));
+    let bottom = rect_max_y(rect).min(rect_max_y(bounds));
+    (right > left && bottom > top).then(|| Rect::new(left, top, right - left, bottom - top))
+}
+
+fn centered_rect(center_x: f32, center_y: f32, width: f32, height: f32) -> Rect {
+    let width = finite_f32_non_negative(width);
+    let height = finite_f32_non_negative(height);
+    Rect::new(
+        center_x - width * 0.5,
+        center_y - height * 0.5,
+        width,
+        height,
+    )
+}
+
+fn compare_resolved_timeline_items(
+    left: &ResolvedTimelineItem<'_>,
+    right: &ResolvedTimelineItem<'_>,
+) -> std::cmp::Ordering {
+    left.lane_index
+        .cmp(&right.lane_index)
+        .then_with(|| left.rect.x.total_cmp(&right.rect.x))
+        .then_with(|| left.rect.width.total_cmp(&right.rect.width))
+        .then_with(|| left.descriptor.id.cmp(&right.descriptor.id))
+        .then_with(|| left.source_index.cmp(&right.source_index))
+}
+
+fn compare_resolved_timeline_markers(
+    left: &ResolvedTimelineMarker<'_>,
+    right: &ResolvedTimelineMarker<'_>,
+) -> std::cmp::Ordering {
+    left.x
+        .total_cmp(&right.x)
+        .then_with(|| left.descriptor.id.cmp(&right.descriptor.id))
+        .then_with(|| left.source_index.cmp(&right.source_index))
+}
+
+fn compare_resolved_timeline_keyframes(
+    left: &ResolvedTimelineKeyframe<'_>,
+    right: &ResolvedTimelineKeyframe<'_>,
+) -> std::cmp::Ordering {
+    left.lane_index
+        .cmp(&right.lane_index)
+        .then_with(|| left.x.total_cmp(&right.x))
+        .then_with(|| left.descriptor.id.cmp(&right.descriptor.id))
+        .then_with(|| left.source_index.cmp(&right.source_index))
+}
+
+fn finite_rect(rect: Rect) -> Rect {
+    Rect::new(
+        finite_f32_or_zero(rect.x),
+        finite_f32_or_zero(rect.y),
+        finite_f32_non_negative(rect.width),
+        finite_f32_non_negative(rect.height),
+    )
+}
+
+fn finite_positive(value: f32) -> Option<f32> {
+    (value.is_finite() && value > 0.0).then_some(value)
+}
+
+fn finite_sum(a: f32, b: f32) -> f32 {
+    let sum = f64::from(finite_f32_or_zero(a)) + f64::from(finite_f32_or_zero(b));
+    finite_f64_to_f32(sum)
+}
+
+fn rect_max_x(rect: Rect) -> f32 {
+    finite_sum(rect.x, rect.width)
+}
+
+fn rect_max_y(rect: Rect) -> f32 {
+    finite_sum(rect.y, rect.height)
 }
 
 fn finite_f32_or_zero(value: f32) -> f32 {
