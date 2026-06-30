@@ -177,6 +177,9 @@ pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
     ComponentMetadata::new("Timeline", "timeline", Viewport, Partial),
     ComponentMetadata::new("TransportControls", "transport-controls", Control, Partial),
     ComponentMetadata::new("ProgressIndicator", "progress-indicator", Display, Partial),
+    ComponentMetadata::new("JobList", "job-list", System, Partial),
+    ComponentMetadata::new("DiagnosticStrip", "diagnostic-strip", System, Partial),
+    ComponentMetadata::new("FeedbackStack", "feedback-stack", System, Partial),
 ];
 
 /// Looks up component metadata by exact public name.

@@ -605,6 +605,21 @@ fn stage13_job_progress_taxonomy_reports_partial_status_backed_by_public_contrac
         ComponentCategory::Display,
         ComponentConformanceStatus::Partial,
     );
+    assert_entry(
+        "JobList",
+        ComponentCategory::System,
+        ComponentConformanceStatus::Partial,
+    );
+    assert_entry(
+        "DiagnosticStrip",
+        ComponentCategory::System,
+        ComponentConformanceStatus::Partial,
+    );
+    assert_entry(
+        "FeedbackStack",
+        ComponentCategory::System,
+        ComponentConformanceStatus::Partial,
+    );
 
     let jobs = JobList::from_rows([
         JobRow::new(JobRowId::from_raw(1), "Render", JobPhase::Running)

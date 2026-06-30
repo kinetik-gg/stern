@@ -6,6 +6,8 @@
     clippy::too_many_lines
 )]
 
+use std::time::Duration;
+
 use kinetik_ui::core::{
     ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation, ActionQueue,
     ActionSource, Axis, Brush, ClipId, Color, CornerRadius, CursorShape, ImagePrimitive, Key,
@@ -19,26 +21,29 @@ use kinetik_ui::render::{
 };
 use kinetik_ui::text::TextEditState;
 use kinetik_ui::widgets::{
-    AssetSlotAsset, AssetSlotConfig, Dock, DockChromeStyle, DockDropTarget, DockDropZone,
-    DockInteractionPolicy, DockNode, DockPlacement, DockSplitterContextActionKind, DockTabDrag,
-    DropdownItem, DropdownItemId, DropdownModel, EdgeDescriptor, EdgeId, Frame, FrameId,
-    FrameLayout, FrameTab, GraphPoint, GraphRect, GraphVector, GridColumns, GridLayout, Guide,
-    ItemId, ListLayout, Menu, MenuBar, MenuBarMenu, MenuBarMenuId, MenuBarOverlayRequest, MenuItem,
-    MenuOverlay, ModalAction, ModalActionRole, ModalDialog, ModalDialogOverlay, NodeDescriptor,
-    NodeFrameDescriptor, NodeFrameId, NodeGraphDescriptor, NodeGraphEdgeRoutePoint,
-    NodeGraphEmissionError, NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget,
-    NodeGraphStaticOutput, NodeGraphStaticView, NodeGraphViewport, NodeGroupDescriptor,
-    NodeGroupId, NodeId, NumericScrubInputConfig, OverlayDismissal, OverlayId, OverlayKind,
-    OverlayStack, PanZoom, Panel, PanelId, PanelInstanceId, PanelInstancePolicy,
-    PanelInstanceSnapshot, PanelOpenActionMetadata, PanelOpenDecision, PanelRegistry,
-    PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, PathFieldConfig,
-    PopoverPlacement, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
-    PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow, PropertyGridRowStatus,
-    RerouteDescriptor, RerouteId, SelectFieldConfig, StatusBar, StatusItem, StatusItemId,
-    StatusItemKind, StatusProgress, TabStrip, TableColumn, TableLayout, Toolbar, ToolbarGroup,
-    ToolbarGroupId, ToolbarItem, ToolbarItemPresentation, TreeExpansion, TreeItem, TreeLayout,
-    TreeModel, Ui, VectorScrubInputConfig, ViewportComposition, ViewportFit, ViewportSurface,
-    WorkspaceSnapshot, classify_numeric_input_draft, frame_tabs, icon_button_semantics,
+    AssetSlotAsset, AssetSlotConfig, DiagnosticSource, DiagnosticStrip, DiagnosticStripItem,
+    DiagnosticStripItemId, DiagnosticStripSeverity, Dock, DockChromeStyle, DockDropTarget,
+    DockDropZone, DockInteractionPolicy, DockNode, DockPlacement, DockSplitterContextActionKind,
+    DockTabDrag, DropdownItem, DropdownItemId, DropdownModel, EdgeDescriptor, EdgeId,
+    FeedbackAction, FeedbackDismiss, FeedbackId, FeedbackItem, FeedbackKind, FeedbackStack, Frame,
+    FrameId, FrameLayout, FrameTab, GraphPoint, GraphRect, GraphVector, GridColumns, GridLayout,
+    Guide, ItemId, JobCancel, JobList, JobPhase, JobProgress, JobRow, JobRowId, ListLayout, Menu,
+    MenuBar, MenuBarMenu, MenuBarMenuId, MenuBarOverlayRequest, MenuItem, MenuOverlay, ModalAction,
+    ModalActionRole, ModalDialog, ModalDialogOverlay, NodeDescriptor, NodeFrameDescriptor,
+    NodeFrameId, NodeGraphDescriptor, NodeGraphEdgeRoutePoint, NodeGraphEmissionError,
+    NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget, NodeGraphStaticOutput,
+    NodeGraphStaticView, NodeGraphViewport, NodeGroupDescriptor, NodeGroupId, NodeId,
+    NumericScrubInputConfig, OverlayDismissal, OverlayId, OverlayKind, OverlayStack, PanZoom,
+    Panel, PanelId, PanelInstanceId, PanelInstancePolicy, PanelInstanceSnapshot,
+    PanelOpenActionMetadata, PanelOpenDecision, PanelRegistry, PanelTypeCategory,
+    PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, PathFieldConfig, PopoverPlacement,
+    PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId, PropertyGridAffordanceLayout,
+    PropertyGridLayout, PropertyGridRow, PropertyGridRowStatus, RerouteDescriptor, RerouteId,
+    SelectFieldConfig, StatusBar, StatusItem, StatusItemId, StatusItemKind, StatusProgress,
+    TabStrip, TableColumn, TableLayout, Toolbar, ToolbarGroup, ToolbarGroupId, ToolbarItem,
+    ToolbarItemPresentation, TreeExpansion, TreeItem, TreeLayout, TreeModel, Ui,
+    VectorScrubInputConfig, ViewportComposition, ViewportFit, ViewportSurface, WorkspaceSnapshot,
+    classify_numeric_input_draft, frame_tabs, icon_button_semantics,
     property_grid_row_affordance_rects, resolve_dock_splitter_context_actions_with_policy,
     resolve_frame_drop_zone_with_policy, solve_dock_layout, solve_dock_splitters_with_style,
 };
@@ -75,6 +80,10 @@ const ACTION_OPEN_ASSET_BROWSER: &str = "editor.panel.open.asset-browser";
 const ACTION_OPEN_TIMELINE: &str = "editor.panel.open.timeline";
 const ACTION_OPEN_CONSOLE: &str = "editor.panel.open.console";
 const ACTION_OPEN_NODE_GRAPH: &str = "editor.panel.open.node-graph";
+const ACTION_CANCEL_ACTIVE_FIXTURE_JOB: &str = "editor.jobs.cancel-active-fixture";
+const ACTION_CANCEL_QUEUED_FIXTURE_JOB: &str = "editor.jobs.cancel-queued-fixture";
+const ACTION_OPEN_FEEDBACK_REPORT: &str = "editor.feedback.open-report";
+const ACTION_DISMISS_FEEDBACK_REPORT: &str = "editor.feedback.dismiss-report";
 
 const VIEWPORT_TEXTURE: TextureId = TextureId::from_raw(9_001);
 const VIEWPORT_SIZE: Size = Size::new(1280.0, 720.0);
@@ -428,6 +437,8 @@ enum EditorStatusItemKind {
     Snap,
     Backend,
     Jobs,
+    Diagnostics,
+    Feedback,
     Timeline,
 }
 
@@ -439,7 +450,9 @@ impl EditorStatusItemKind {
             Self::Snap => 3,
             Self::Backend => 4,
             Self::Jobs => 5,
-            Self::Timeline => 6,
+            Self::Diagnostics => 6,
+            Self::Feedback => 7,
+            Self::Timeline => 8,
         })
     }
 }
@@ -764,6 +777,14 @@ impl EditorShowcase {
     }
 
     fn status_bar_model(&self, action_count: u32) -> StatusBar {
+        let jobs = Self::showcase_job_list();
+        let job_summary = jobs.summary();
+        let job_progress = jobs.active_status_progress();
+        let diagnostics = Self::showcase_diagnostics();
+        let diagnostic_summary = diagnostics.summary();
+        let feedback = Self::showcase_feedback_stack();
+        let active_feedback = feedback.active_items(showcase_feedback_now());
+
         StatusBar::from_items([
             StatusItem::new(
                 EditorStatusItemKind::Message.id(),
@@ -801,11 +822,38 @@ impl EditorShowcase {
             StatusItem::new(
                 EditorStatusItemKind::Jobs.id(),
                 "Jobs",
-                if self.running { "Jobs: 1" } else { "Jobs: 0" },
+                format!(
+                    "Jobs: {} active / {} total",
+                    job_summary.active(),
+                    job_summary.total()
+                ),
                 StatusItemKind::JobCount,
             )
-            .with_count(u32::from(self.running))
-            .with_visible(false),
+            .with_count(job_summary.active())
+            .with_progress(job_progress.unwrap_or_else(|| StatusProgress::new(0.0))),
+            StatusItem::new(
+                EditorStatusItemKind::Diagnostics.id(),
+                "Diagnostics",
+                format!(
+                    "Diagnostics: {}E {}W {}I",
+                    diagnostic_summary.errors, diagnostic_summary.warnings, diagnostic_summary.info
+                ),
+                if diagnostic_summary.errors > 0 {
+                    StatusItemKind::Error
+                } else if diagnostic_summary.warnings > 0 {
+                    StatusItemKind::Stale
+                } else {
+                    StatusItemKind::Ready
+                },
+            )
+            .with_count(diagnostic_summary.total()),
+            StatusItem::new(
+                EditorStatusItemKind::Feedback.id(),
+                "Feedback",
+                format!("Feedback: {}", active_feedback.len()),
+                StatusItemKind::Message,
+            )
+            .with_count(active_feedback.len() as u32),
             StatusItem::new(
                 EditorStatusItemKind::Timeline.id(),
                 "Timeline",
@@ -2558,8 +2606,257 @@ impl EditorShowcase {
         model
     }
 
+    fn showcase_job_list() -> JobList {
+        JobList::from_rows([
+            JobRow::new(job_row_id(1), "Active showcase job", JobPhase::Running)
+                .with_progress(JobProgress::determinate(0.60))
+                .with_detail("Deterministic fixture progress 3/5")
+                .with_cancel(JobCancel::new(
+                    ActionDescriptor::new(ACTION_CANCEL_ACTIVE_FIXTURE_JOB, "Cancel active job"),
+                    ActionContext::Editor,
+                )),
+            JobRow::new(job_row_id(2), "Queued showcase job", JobPhase::Queued)
+                .with_progress(JobProgress::determinate(0.20))
+                .with_detail("Waiting in fixture queue")
+                .with_cancel(JobCancel::new(
+                    ActionDescriptor::new(ACTION_CANCEL_QUEUED_FIXTURE_JOB, "Cancel queued job"),
+                    ActionContext::Editor,
+                )),
+            JobRow::new(job_row_id(3), "Completed showcase job", JobPhase::Succeeded)
+                .with_progress(JobProgress::determinate(1.0))
+                .with_detail("Finished fixture row"),
+            JobRow::new(job_row_id(4), "Failed showcase job", JobPhase::Failed)
+                .with_progress(JobProgress::determinate(0.80))
+                .with_detail("Fixture failure for diagnostics presentation"),
+        ])
+    }
+
+    fn showcase_diagnostics() -> DiagnosticStrip {
+        DiagnosticStrip::from_items([
+            DiagnosticStripItem::new(
+                diagnostic_item_id(1),
+                DiagnosticStripSeverity::Warning,
+                "showcase.fixture.warning",
+                "Fixture warning keeps diagnostics visible",
+            )
+            .with_source(DiagnosticSource::Application)
+            .with_field("panel", "Console"),
+            DiagnosticStripItem::new(
+                diagnostic_item_id(2),
+                DiagnosticStripSeverity::Info,
+                "showcase.fixture.info",
+                "Fixture metadata is application-owned",
+            )
+            .with_source(DiagnosticSource::Application)
+            .with_field("state", "deterministic"),
+            DiagnosticStripItem::new(
+                diagnostic_item_id(3),
+                DiagnosticStripSeverity::Error,
+                "showcase.fixture.error",
+                "Fixture error demonstrates summary counts",
+            )
+            .with_source(DiagnosticSource::Application)
+            .with_field("recoverable", "true"),
+        ])
+    }
+
+    fn showcase_feedback_stack() -> FeedbackStack {
+        FeedbackStack::from_items([
+            FeedbackItem::timed(
+                feedback_id(1),
+                FeedbackKind::Success,
+                "Saved",
+                "Fixture save completed",
+                Duration::from_secs(2),
+                Duration::from_secs(8),
+            )
+            .with_dismiss(FeedbackDismiss::new(
+                ActionDescriptor::new(ACTION_DISMISS_FEEDBACK_REPORT, "Dismiss feedback"),
+                ActionContext::Editor,
+            )),
+            FeedbackItem::pinned(
+                feedback_id(2),
+                FeedbackKind::Warning,
+                "Report",
+                "Fixture report needs review",
+            )
+            .with_action(FeedbackAction::new(
+                ActionDescriptor::new(ACTION_OPEN_FEEDBACK_REPORT, "Open report"),
+                ActionContext::Editor,
+            ))
+            .with_dismiss(FeedbackDismiss::new(
+                ActionDescriptor::new(ACTION_DISMISS_FEEDBACK_REPORT, "Dismiss report"),
+                ActionContext::Editor,
+            )),
+            FeedbackItem::timed(
+                feedback_id(3),
+                FeedbackKind::Info,
+                "Expired",
+                "Expired fixture toast",
+                Duration::from_secs(0),
+                Duration::from_secs(2),
+            ),
+        ])
+    }
+
     fn console_panel(ui: &mut Ui<'_>, body: Rect) {
         rect(ui, body, rgb(20, 21, 23), None);
+        let diagnostics = Self::showcase_diagnostics();
+        let jobs = Self::showcase_job_list();
+        let feedback = Self::showcase_feedback_stack();
+        let summary = diagnostics.summary();
+        let active_feedback = feedback.active_items(showcase_feedback_now());
+        let diagnostics_header = Rect::new(body.x + 8.0, body.y + 8.0, body.width - 16.0, 24.0);
+        text(
+            ui,
+            diagnostics_header.x,
+            diagnostics_header.y + 16.0,
+            &format!(
+                "Diagnostics: {} error, {} warning, {} info",
+                summary.errors, summary.warnings, summary.info
+            ),
+            12.0,
+            rgb(222, 225, 230),
+        );
+
+        let diagnostics_layout = ListLayout::new(22.0);
+        let diagnostic_rows = diagnostics.ordered_items();
+        let diagnostics_bounds = Rect::new(
+            body.x + 8.0,
+            body.y + 36.0,
+            body.width - 16.0,
+            (diagnostic_rows.len() as f32 * 22.0).min(72.0),
+        );
+        for item in diagnostics_layout.row_rects(
+            diagnostics_bounds,
+            diagnostic_rows.len(),
+            0..diagnostic_rows.len(),
+        ) {
+            let diagnostic = diagnostic_rows[item.index];
+            rect(ui, item.rect, rgb(22, 23, 25), Some(rgb(38, 40, 45)));
+            text(
+                ui,
+                item.rect.x + 8.0,
+                item.rect.y + 15.0,
+                severity_label(diagnostic.severity),
+                10.0,
+                severity_color(diagnostic.severity),
+            );
+            text(
+                ui,
+                item.rect.x + 76.0,
+                item.rect.y + 15.0,
+                &diagnostic.code,
+                10.0,
+                rgb(178, 183, 190),
+            );
+            text(
+                ui,
+                item.rect.x + 216.0,
+                item.rect.y + 15.0,
+                &diagnostic.message,
+                10.0,
+                rgb(218, 221, 226),
+            );
+        }
+
+        let jobs_y = diagnostics_bounds.max_y() + 12.0;
+        let job_summary = jobs.summary();
+        text(
+            ui,
+            body.x + 8.0,
+            jobs_y + 16.0,
+            &format!(
+                "Jobs: {} active, {} complete, {} failed",
+                job_summary.active(),
+                job_summary.succeeded,
+                job_summary.failed
+            ),
+            12.0,
+            rgb(222, 225, 230),
+        );
+        let job_layout = ListLayout::new(24.0);
+        let job_bounds = Rect::new(
+            body.x + 8.0,
+            jobs_y + 28.0,
+            body.width - 16.0,
+            (jobs.rows().len() as f32 * 24.0).min(96.0),
+        );
+        for item in job_layout.row_rects(job_bounds, jobs.rows().len(), 0..jobs.rows().len()) {
+            let job = &jobs.rows()[item.index];
+            rect(ui, item.rect, rgb(22, 23, 25), Some(rgb(38, 40, 45)));
+            text(
+                ui,
+                item.rect.x + 8.0,
+                item.rect.y + 16.0,
+                job_phase_label(job.phase),
+                10.0,
+                job_phase_color(job.phase),
+            );
+            text(
+                ui,
+                item.rect.x + 86.0,
+                item.rect.y + 16.0,
+                &job.label,
+                11.0,
+                rgb(218, 221, 226),
+            );
+            if let Some(progress) = job.progress.status_progress() {
+                let bar = Rect::new(item.rect.max_x() - 136.0, item.rect.y + 9.0, 72.0, 6.0);
+                rect(ui, bar, rgb(39, 42, 47), Some(rgb(56, 59, 65)));
+                rect(
+                    ui,
+                    Rect::new(bar.x, bar.y, bar.width * progress.value, bar.height),
+                    rgb(69, 123, 220),
+                    None,
+                );
+                text(
+                    ui,
+                    bar.max_x() + 8.0,
+                    item.rect.y + 16.0,
+                    &format!("{:.0}%", progress.value * 100.0),
+                    10.0,
+                    rgb(154, 160, 168),
+                );
+            }
+        }
+
+        let feedback_y = job_bounds.max_y() + 12.0;
+        text(
+            ui,
+            body.x + 8.0,
+            feedback_y + 16.0,
+            &format!("Feedback: {} active toast(s)", active_feedback.len()),
+            12.0,
+            rgb(222, 225, 230),
+        );
+        for (index, item) in active_feedback.iter().enumerate() {
+            let row = Rect::new(
+                body.x + 8.0,
+                feedback_y + 28.0 + index as f32 * 22.0,
+                body.width - 16.0,
+                20.0,
+            );
+            rect(ui, row, rgb(22, 23, 25), Some(rgb(38, 40, 45)));
+            text(
+                ui,
+                row.x + 8.0,
+                row.y + 14.0,
+                feedback_kind_label(item.kind),
+                10.0,
+                feedback_kind_color(item.kind),
+            );
+            text(
+                ui,
+                row.x + 78.0,
+                row.y + 14.0,
+                &item.text,
+                10.0,
+                rgb(218, 221, 226),
+            );
+        }
+
+        let log_y = feedback_y + 84.0;
         let table = TableLayout {
             columns: vec![
                 TableColumn {
@@ -2582,7 +2879,12 @@ impl EditorShowcase {
             row_height: 24.0,
             sort: None,
         };
-        let bounds = body.inset(8.0);
+        let bounds = Rect::new(
+            body.x + 8.0,
+            log_y,
+            body.width - 16.0,
+            (body.max_y() - log_y - 8.0).max(0.0),
+        );
         for header in table.header_rects(bounds) {
             rect(ui, header.rect, rgb(31, 33, 36), Some(rgb(48, 50, 56)));
             text(
@@ -2823,42 +3125,26 @@ impl EditorShowcase {
             11.0,
             rgb(198, 203, 211),
         );
-        let actions = visible_items
+        let mut x = viewport.max_x() - 92.0;
+        for item in visible_items
             .iter()
-            .find(|item| item.id == EditorStatusItemKind::Actions.id())
-            .expect("editor status bar exposes action count item");
-        text(
-            ui,
-            viewport.max_x() - 330.0,
-            bar.y + 16.0,
-            &actions.text,
-            11.0,
-            rgb(154, 160, 168),
-        );
-        let snap = visible_items
-            .iter()
-            .find(|item| item.id == EditorStatusItemKind::Snap.id())
-            .expect("editor status bar exposes snap item");
-        text(
-            ui,
-            viewport.max_x() - 210.0,
-            bar.y + 16.0,
-            &snap.text,
-            11.0,
-            rgb(154, 160, 168),
-        );
-        let backend = visible_items
-            .iter()
-            .find(|item| item.id == EditorStatusItemKind::Backend.id())
-            .expect("editor status bar exposes backend item");
-        text(
-            ui,
-            viewport.max_x() - 92.0,
-            bar.y + 16.0,
-            &backend.text,
-            11.0,
-            rgb(154, 160, 168),
-        );
+            .filter(|item| item.id != EditorStatusItemKind::Message.id())
+            .rev()
+        {
+            let width = status_item_text_width(&item.text);
+            let color = match item.kind {
+                StatusItemKind::Error => rgb(236, 96, 96),
+                StatusItemKind::Stale => rgb(232, 179, 90),
+                StatusItemKind::Ready
+                | StatusItemKind::Pending
+                | StatusItemKind::Message
+                | StatusItemKind::ActionCount
+                | StatusItemKind::JobCount
+                | StatusItemKind::Progress => rgb(154, 160, 168),
+            };
+            text(ui, x, bar.y + 16.0, &item.text, 11.0, color);
+            x -= width;
+        }
     }
 }
 
@@ -3448,6 +3734,8 @@ fn run_toolbar_buttons(
 #[cfg(test)]
 #[allow(clippy::float_cmp, clippy::items_after_test_module)]
 mod tests {
+    use std::time::Duration;
+
     use super::{
         ACTION_GRID, ACTION_PLAY, ACTION_SAVE, ACTION_STOP, ACTION_VIEWPORT_ACTUAL_SIZE,
         ACTION_VIEWPORT_FIT_CONTENT, ACTION_VIEWPORT_FIT_SELECTION, ACTION_VIEWPORT_FOCUS_SELECTED,
@@ -3465,11 +3753,11 @@ mod tests {
     };
     use kinetik_ui::render::RenderResources;
     use kinetik_ui::widgets::{
-        DockSplitterContextActionKind, GraphVector, MenuItem, ModalActionRole, NodeFrameId,
-        NodeGraphContextActionKind, NodeGraphContextTarget, NodeGraphHitTarget,
-        NodeGraphLinkEditRequest, NodeGraphSelection, NodeGraphSelectionTarget, NodeId,
-        OverlayDismissal, OverlayKind, PanZoom, PanelOpenDecision, PanelTypeCategory, PortEndpoint,
-        PortId, StatusItemKind, TimelineDescriptor, TimelineFrameRate, TimelineId,
+        DockSplitterContextActionKind, FeedbackKind, GraphVector, JobPhase, MenuItem,
+        ModalActionRole, NodeFrameId, NodeGraphContextActionKind, NodeGraphContextTarget,
+        NodeGraphHitTarget, NodeGraphLinkEditRequest, NodeGraphSelection, NodeGraphSelectionTarget,
+        NodeId, OverlayDismissal, OverlayKind, PanZoom, PanelOpenDecision, PanelTypeCategory,
+        PortEndpoint, PortId, StatusItemKind, TimelineDescriptor, TimelineFrameRate, TimelineId,
         TimelineItemDescriptor, TimelineItemId, TimelineKeyframeDescriptor, TimelineKeyframeId,
         TimelineLaneDescriptor, TimelineLaneId, TimelineLayout, TimelineMarkerDescriptor,
         TimelineMarkerId, TimelineRange, TimelineScale, TimelineSelection, TimelineSelectionTarget,
@@ -3852,7 +4140,15 @@ mod tests {
                 .iter()
                 .map(|item| item.text.as_str())
                 .collect::<Vec<_>>(),
-            ["Busy", "Actions: 12", "Snap 1m", "Vello / winit"]
+            [
+                "Busy",
+                "Actions: 12",
+                "Snap 1m",
+                "Vello / winit",
+                "Jobs: 2 active / 4 total",
+                "Diagnostics: 1E 1W 1I",
+                "Feedback: 2"
+            ]
         );
         let actions = status_bar
             .item(EditorStatusItemKind::Actions.id())
@@ -3864,8 +4160,21 @@ mod tests {
             .item(EditorStatusItemKind::Jobs.id())
             .expect("job status");
         assert_eq!(jobs.kind, StatusItemKind::JobCount);
-        assert_eq!(jobs.count, Some(1));
-        assert!(!jobs.visible);
+        assert_eq!(jobs.count, Some(2));
+        assert!((jobs.progress.expect("job progress").value - 0.4).abs() < f32::EPSILON);
+        assert!(jobs.visible);
+
+        let diagnostics = status_bar
+            .item(EditorStatusItemKind::Diagnostics.id())
+            .expect("diagnostics status");
+        assert_eq!(diagnostics.kind, StatusItemKind::Error);
+        assert_eq!(diagnostics.count, Some(3));
+
+        let feedback = status_bar
+            .item(EditorStatusItemKind::Feedback.id())
+            .expect("feedback status");
+        assert_eq!(feedback.kind, StatusItemKind::Message);
+        assert_eq!(feedback.count, Some(2));
 
         let progress = status_bar
             .item(EditorStatusItemKind::Timeline.id())
@@ -3873,6 +4182,134 @@ mod tests {
         assert_eq!(progress.kind, StatusItemKind::Progress);
         assert_eq!(progress.progress.expect("progress metadata").value, 1.0);
         assert!(!progress.visible);
+    }
+
+    #[test]
+    fn editor_showcase_job_fixture_is_deterministic_and_app_owned() {
+        let jobs = EditorShowcase::showcase_job_list();
+        let summary = jobs.summary();
+        let progress = jobs.active_progress().expect("active fixture jobs");
+
+        assert_eq!(jobs.rows().len(), 4);
+        assert_eq!(
+            jobs.rows()
+                .iter()
+                .map(|row| row.label.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "Active showcase job",
+                "Queued showcase job",
+                "Completed showcase job",
+                "Failed showcase job"
+            ]
+        );
+        assert_eq!(summary.running, 1);
+        assert_eq!(summary.queued, 1);
+        assert_eq!(summary.succeeded, 1);
+        assert_eq!(summary.failed, 1);
+        assert_eq!(summary.active(), 2);
+        assert_eq!(progress.active, 2);
+        assert_eq!(progress.determinate, 2);
+        assert_eq!(progress.indeterminate, 0);
+        assert!(
+            (progress.status_progress().expect("status progress").value - 0.4).abs() < f32::EPSILON
+        );
+        assert_eq!(jobs.rows()[0].phase, JobPhase::Running);
+        assert!(jobs.rows()[0].can_cancel());
+        assert_eq!(
+            jobs.cancel_request(super::job_row_id(1))
+                .expect("cancel request")
+                .invocation
+                .action_id,
+            ActionId::new(super::ACTION_CANCEL_ACTIVE_FIXTURE_JOB)
+        );
+    }
+
+    #[test]
+    fn editor_showcase_diagnostics_fixture_summarizes_ordered_app_metadata() {
+        let diagnostics = EditorShowcase::showcase_diagnostics();
+        let summary = diagnostics.summary();
+        let ordered = diagnostics.ordered_items();
+
+        assert_eq!(summary.errors, 1);
+        assert_eq!(summary.warnings, 1);
+        assert_eq!(summary.info, 1);
+        assert_eq!(summary.total(), 3);
+        assert_eq!(
+            ordered
+                .iter()
+                .map(|item| item.code.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "showcase.fixture.error",
+                "showcase.fixture.warning",
+                "showcase.fixture.info"
+            ]
+        );
+        assert!(diagnostics.items().iter().all(|item| {
+            item.source == Some(kinetik_ui::widgets::DiagnosticSource::Application)
+        }));
+    }
+
+    #[test]
+    fn editor_showcase_feedback_fixture_preserves_lifetime_action_and_dismiss_metadata() {
+        let feedback = EditorShowcase::showcase_feedback_stack();
+        let active = feedback.active_items(super::showcase_feedback_now());
+
+        assert_eq!(feedback.items().len(), 3);
+        assert_eq!(active.len(), 2);
+        assert_eq!(
+            active.iter().map(|item| item.kind).collect::<Vec<_>>(),
+            [FeedbackKind::Success, FeedbackKind::Warning]
+        );
+        assert_eq!(
+            feedback
+                .item(super::feedback_id(1))
+                .expect("timed feedback")
+                .remaining_lifetime(super::showcase_feedback_now()),
+            Some(Duration::from_secs(4))
+        );
+        assert_eq!(
+            feedback
+                .item(super::feedback_id(3))
+                .expect("expired feedback")
+                .remaining_lifetime(super::showcase_feedback_now()),
+            None
+        );
+        assert_eq!(
+            feedback
+                .action_request(super::feedback_id(2), super::showcase_feedback_now())
+                .expect("feedback action")
+                .invocation
+                .action_id,
+            ActionId::new(super::ACTION_OPEN_FEEDBACK_REPORT)
+        );
+        assert_eq!(
+            feedback
+                .dismiss_request(super::feedback_id(2), super::showcase_feedback_now())
+                .expect("feedback dismiss")
+                .invocation
+                .action_id,
+            ActionId::new(super::ACTION_DISMISS_FEEDBACK_REPORT)
+        );
+    }
+
+    #[test]
+    fn editor_showcase_frame_emits_no_core_warnings() {
+        let theme = default_dark_theme();
+        let mut memory = UiMemory::new();
+        let context = editor_test_context(UiInput::default());
+        let mut ui = Ui::begin_frame(context, &mut memory, &theme);
+        let mut editor = EditorShowcase::new();
+
+        editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+
+        assert!(
+            output.diagnostics().is_empty(),
+            "{:?}",
+            output.diagnostics()
+        );
     }
 
     #[test]
@@ -5355,6 +5792,80 @@ fn tree_item(raw: u64, parent: Option<u64>, has_children: bool) -> TreeItem {
 
 const fn item_id(raw: u64) -> ItemId {
     ItemId::from_raw(raw)
+}
+
+const fn job_row_id(raw: u64) -> JobRowId {
+    JobRowId::from_raw(raw)
+}
+
+const fn diagnostic_item_id(raw: u64) -> DiagnosticStripItemId {
+    DiagnosticStripItemId::from_raw(raw)
+}
+
+const fn feedback_id(raw: u64) -> FeedbackId {
+    FeedbackId::from_raw(raw)
+}
+
+fn showcase_feedback_now() -> Duration {
+    Duration::from_secs(6)
+}
+
+fn status_item_text_width(text: &str) -> f32 {
+    text.len() as f32 * 6.4 + 28.0
+}
+
+fn severity_label(severity: DiagnosticStripSeverity) -> &'static str {
+    match severity {
+        DiagnosticStripSeverity::Error => "Error",
+        DiagnosticStripSeverity::Warning => "Warning",
+        DiagnosticStripSeverity::Info => "Info",
+    }
+}
+
+fn severity_color(severity: DiagnosticStripSeverity) -> Color {
+    match severity {
+        DiagnosticStripSeverity::Error => rgb(236, 96, 96),
+        DiagnosticStripSeverity::Warning => rgb(232, 179, 90),
+        DiagnosticStripSeverity::Info => rgb(135, 176, 236),
+    }
+}
+
+fn job_phase_label(phase: JobPhase) -> &'static str {
+    match phase {
+        JobPhase::Queued => "Queued",
+        JobPhase::Running => "Running",
+        JobPhase::Cancelling => "Cancelling",
+        JobPhase::Succeeded => "Done",
+        JobPhase::Failed => "Failed",
+    }
+}
+
+fn job_phase_color(phase: JobPhase) -> Color {
+    match phase {
+        JobPhase::Queued => rgb(154, 160, 168),
+        JobPhase::Running => rgb(135, 176, 236),
+        JobPhase::Cancelling => rgb(232, 179, 90),
+        JobPhase::Succeeded => rgb(114, 190, 145),
+        JobPhase::Failed => rgb(236, 96, 96),
+    }
+}
+
+fn feedback_kind_label(kind: FeedbackKind) -> &'static str {
+    match kind {
+        FeedbackKind::Info => "Info",
+        FeedbackKind::Success => "Success",
+        FeedbackKind::Warning => "Warning",
+        FeedbackKind::Error => "Error",
+    }
+}
+
+fn feedback_kind_color(kind: FeedbackKind) -> Color {
+    match kind {
+        FeedbackKind::Info => rgb(135, 176, 236),
+        FeedbackKind::Success => rgb(114, 190, 145),
+        FeedbackKind::Warning => rgb(232, 179, 90),
+        FeedbackKind::Error => rgb(236, 96, 96),
+    }
 }
 
 struct Asset {
