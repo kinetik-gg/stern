@@ -445,6 +445,108 @@ fn transform_drag_capture_preserves_identity_and_reports_deltas_without_mutation
 }
 
 #[test]
+fn transform_drag_update_reports_invalid_pointer_as_noop_error_data() {
+    let surface = surface();
+    let target = selection_target(11);
+    let hit = hit_test_viewport_transform_handles(
+        surface,
+        std::slice::from_ref(&target),
+        Point::new(135.0, 85.0),
+    )
+    .expect("resize handle hit");
+    let capture = ViewportTransformDragCapture::from_hit(&hit);
+    let request = ViewportTransformDragRequest::update(
+        surface,
+        std::slice::from_ref(&target),
+        &capture,
+        Point::new(f32::NAN, 95.0),
+    );
+
+    assert_eq!(request.status, ViewportTransformDragStatus::InvalidPointer);
+    assert!(request.is_noop());
+    assert_eq!(
+        request.current_content_rect,
+        Some(Rect::new(10.0, 5.0, 20.0, 10.0))
+    );
+    assert_point_close(
+        request.pointer_current_screen,
+        capture.pointer_origin_screen,
+    );
+    assert_vec_close(request.screen_delta, Vec2::ZERO);
+    assert_vec_close(request.content_delta, Vec2::ZERO);
+}
+
+#[test]
+fn transform_drag_update_reports_invalid_scale_as_noop_error_data() {
+    let surface = surface();
+    let target = selection_target(11);
+    let hit = hit_test_viewport_transform_handles(
+        surface,
+        std::slice::from_ref(&target),
+        Point::new(135.0, 85.0),
+    )
+    .expect("resize handle hit");
+    let capture = ViewportTransformDragCapture::from_hit(&hit);
+    let invalid_surface = ViewportSurface {
+        source_size: Size::new(0.0, 50.0),
+        ..surface
+    };
+    let request = ViewportTransformDragRequest::update(
+        invalid_surface,
+        std::slice::from_ref(&target),
+        &capture,
+        Point::new(145.0, 95.0),
+    );
+
+    assert_eq!(request.status, ViewportTransformDragStatus::InvalidScale);
+    assert!(request.is_noop());
+    assert_eq!(
+        request.current_content_rect,
+        Some(Rect::new(10.0, 5.0, 20.0, 10.0))
+    );
+    assert_eq!(request.pointer_current_content, None);
+    assert_vec_close(request.screen_delta, Vec2::new(10.0, 10.0));
+    assert_vec_close(request.content_delta, Vec2::ZERO);
+}
+
+#[test]
+fn transform_drag_update_rejects_invalid_current_target_geometry() {
+    let surface = surface();
+    let target = selection_target(11);
+    let hit = hit_test_viewport_transform_handles(
+        surface,
+        std::slice::from_ref(&target),
+        Point::new(135.0, 85.0),
+    )
+    .expect("resize handle hit");
+    let capture = ViewportTransformDragCapture::from_hit(&hit);
+
+    for content_rect in [
+        Rect::new(f32::NAN, 5.0, 20.0, 10.0),
+        Rect::new(10.0, 5.0, 0.0, 10.0),
+    ] {
+        let mut current_target = selection_target(11);
+        current_target.content_rect = content_rect;
+
+        let request = ViewportTransformDragRequest::update(
+            surface,
+            &[current_target],
+            &capture,
+            Point::new(145.0, 95.0),
+        );
+
+        assert_eq!(
+            request.status,
+            ViewportTransformDragStatus::UnavailableTarget
+        );
+        assert!(request.is_noop());
+        assert_eq!(request.current_content_rect, None);
+        assert_vec_close(request.screen_delta, Vec2::new(10.0, 10.0));
+        assert_vec_close(request.content_delta, Vec2::new(5.0, 5.0));
+    }
+}
+
+#[test]
 fn disabled_read_only_and_unavailable_targets_suppress_transform_requests() {
     let surface = surface();
     let disabled = selection_target(1).enabled(false);

@@ -1266,7 +1266,9 @@ impl ViewportTransformDragRequest {
             match target {
                 None => ViewportTransformDragStatus::StaleTarget,
                 Some(target)
-                    if target.can_request_transform() && target.handles.contains(capture.kind) =>
+                    if current_content_rect.is_some()
+                        && target.can_request_transform()
+                        && target.handles.contains(capture.kind) =>
                 {
                     ViewportTransformDragStatus::Active
                 }
