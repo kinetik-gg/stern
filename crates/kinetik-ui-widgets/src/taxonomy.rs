@@ -101,7 +101,7 @@ impl ComponentMetadata {
 use ComponentCategory::{
     Collection, Control, Display, Docking, Input, Inspector, Overlay, System, TextEditing, Viewport,
 };
-use ComponentConformanceStatus::{Implemented, Partial, Planned};
+use ComponentConformanceStatus::{Implemented, Partial};
 
 /// Data-only registry of Kinetik widget components and editor patterns.
 pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
@@ -176,7 +176,7 @@ pub const COMPONENT_METADATA: &[ComponentMetadata] = &[
     ComponentMetadata::new("Modal", "modal", Overlay, Partial),
     ComponentMetadata::new("Timeline", "timeline", Viewport, Partial),
     ComponentMetadata::new("TransportControls", "transport-controls", Control, Partial),
-    ComponentMetadata::new("ProgressIndicator", "progress-indicator", Display, Planned),
+    ComponentMetadata::new("ProgressIndicator", "progress-indicator", Display, Partial),
 ];
 
 /// Looks up component metadata by exact public name.
