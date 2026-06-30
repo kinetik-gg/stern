@@ -2761,6 +2761,44 @@ mod tests {
     }
 
     #[test]
+    fn showcase_docs_reach_s10_s13_review_matrix() {
+        let matrix = include_str!("../../../docs/catalogue-conformance-matrix.md");
+
+        for slug in [
+            "s10-outliner-tree-selection-semantics",
+            "s10-asset-browser-grid-list-metadata",
+            "s10-inline-edit-rename-lifecycle",
+            "s10-collection-drag-drop-context",
+            "s10-collection-filter-sort-selection-preservation",
+            "s11-timeline-layout-coordinate-selection",
+            "s11-ruler-ticks-timecode",
+            "s11-transport-action-controls",
+            "s11-timeline-snapping",
+            "s11-timeline-preservation",
+            "s12-viewport-surface-overlays",
+            "s12-viewport-tools-transform-handles",
+            "s12-viewport-action-routing",
+            "s12-viewport-guides-rulers-safe-areas-hud",
+            "s13-progress-indicator-metadata",
+            "s13-job-list-progress-cancel",
+            "s13-diagnostic-strip-codes-fields-ordering",
+            "s13-feedback-stack-lifetime-repaint",
+        ] {
+            assert!(matrix.contains(slug), "{slug}");
+        }
+
+        for required in [
+            "`Partial`",
+            "Editor page",
+            "Viewport page",
+            "cargo run -p kinetik-ui-showcase -- --dump-review-artifacts s14-s10-s13-matrix",
+            "Do not commit them as raster baselines",
+        ] {
+            assert!(matrix.contains(required), "{required}");
+        }
+    }
+
+    #[test]
     fn slider_drag_updates_value() {
         let mut app = ShowcaseApp::new();
         app.set_page(ShowcasePage::Components);

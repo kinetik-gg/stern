@@ -4,6 +4,11 @@ The showcase app is the proof surface for Kinetik UI. It should feel like a
 small editor workbench built from the toolkit, not a marketing page and not a
 bag of decorative primitives.
 
+The S10-S13 catalogue evidence review surface lives in
+[`catalogue-conformance-matrix.md`](catalogue-conformance-matrix.md). It maps
+restarted editor-toolkit capabilities to honest partial status, deterministic
+tests, existing showcase fixtures, and non-goals.
+
 ## Goals
 
 - Demonstrate the application-facing facade crate first.
