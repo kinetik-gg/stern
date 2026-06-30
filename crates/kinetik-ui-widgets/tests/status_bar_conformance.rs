@@ -1,14 +1,18 @@
 //! Windowless status bar conformance for reusable editor chrome contracts.
 
+use std::time::Duration;
+
 use kinetik_ui_widgets::{
     DiagnosticField, DiagnosticFieldValue, DiagnosticSource, DiagnosticStrip, DiagnosticStripItem,
-    DiagnosticStripItemId, DiagnosticStripSeverity, JobCancel, JobList, JobPhase, JobProgress,
-    JobRow, JobRowId, StatusBar, StatusItem, StatusItemId, StatusItemKind, StatusProgress,
+    DiagnosticStripItemId, DiagnosticStripSeverity, FeedbackAction, FeedbackDismiss, FeedbackId,
+    FeedbackItem, FeedbackKind, FeedbackLifetime, FeedbackStack, JobCancel, JobList, JobPhase,
+    JobProgress, JobRow, JobRowId, StatusBar, StatusItem, StatusItemId, StatusItemKind,
+    StatusProgress,
 };
 
 use kinetik_ui_core::{
     ActionContext, ActionDescriptor, ActionId, ActionSource, DiagnosticCategory,
-    DiagnosticLocation, DiagnosticSeverity, FrameDiagnostic, WidgetId,
+    DiagnosticLocation, DiagnosticSeverity, FrameDiagnostic, RepaintRequest, WidgetId,
 };
 
 fn status_id(raw: u64) -> StatusItemId {
@@ -21,6 +25,10 @@ fn job_id(raw: u64) -> JobRowId {
 
 fn diagnostic_id(raw: u64) -> DiagnosticStripItemId {
     DiagnosticStripItemId::from_raw(raw)
+}
+
+fn feedback_id(raw: u64) -> FeedbackId {
+    FeedbackId::from_raw(raw)
 }
 
 fn assert_close(actual: f32, expected: f32) {
@@ -111,6 +119,206 @@ fn status_bar_represents_ready_pending_stale_and_error_as_typed_metadata() {
             StatusItemKind::Stale,
             StatusItemKind::Error,
         ]
+    );
+}
+
+#[test]
+fn feedback_timed_items_expire_from_explicit_time_inputs() {
+    let item = FeedbackItem::timed(
+        feedback_id(1),
+        FeedbackKind::Info,
+        "Saved",
+        "Project saved",
+        Duration::from_secs(10),
+        Duration::from_secs(5),
+    );
+
+    assert_eq!(item.expires_at(), Some(Duration::from_secs(15)));
+    assert!(item.is_active(Duration::from_secs(10)));
+    assert!(item.is_active(Duration::from_secs(14)));
+    assert_eq!(
+        item.remaining_lifetime(Duration::from_secs(14)),
+        Some(Duration::from_secs(1))
+    );
+    assert!(!item.is_active(Duration::from_secs(15)));
+    assert_eq!(item.remaining_lifetime(Duration::from_secs(15)), None);
+}
+
+#[test]
+fn feedback_pinned_items_do_not_expire_or_request_repaint() {
+    let stack = FeedbackStack::from_items([FeedbackItem::pinned(
+        feedback_id(1),
+        FeedbackKind::Warning,
+        "Offline",
+        "Connection is offline",
+    )]);
+
+    assert_eq!(
+        stack
+            .active_items(Duration::from_hours(1))
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![feedback_id(1)]
+    );
+    assert_eq!(
+        stack.repaint_request(Duration::from_hours(1)),
+        RepaintRequest::None
+    );
+}
+
+#[test]
+fn feedback_dismiss_and_action_metadata_preserve_feedback_and_action_identity() {
+    let stack = FeedbackStack::from_items([FeedbackItem::pinned(
+        feedback_id(7),
+        FeedbackKind::Success,
+        "Exported",
+        "Movie export complete",
+    )
+    .with_action(FeedbackAction::new(
+        ActionDescriptor::new("feedback.open_export", "Open export"),
+        ActionContext::Editor,
+    ))
+    .with_dismiss(FeedbackDismiss::new(
+        ActionDescriptor::new("feedback.dismiss_export", "Dismiss"),
+        ActionContext::Global,
+    ))]);
+
+    let action = stack
+        .action_request(feedback_id(7), Duration::from_secs(0))
+        .expect("feedback action request");
+    assert_eq!(action.feedback_id, feedback_id(7));
+    assert_eq!(
+        action.invocation.action_id,
+        ActionId::new("feedback.open_export")
+    );
+    assert_eq!(action.invocation.source, ActionSource::Button);
+    assert_eq!(action.invocation.context, ActionContext::Editor);
+
+    let dismiss = stack
+        .dismiss_request(feedback_id(7), Duration::from_secs(0))
+        .expect("dismiss request");
+    assert_eq!(dismiss.feedback_id, feedback_id(7));
+    assert_eq!(
+        dismiss.invocation.action_id,
+        ActionId::new("feedback.dismiss_export")
+    );
+    assert_eq!(dismiss.invocation.source, ActionSource::Button);
+    assert_eq!(dismiss.invocation.context, ActionContext::Global);
+}
+
+#[test]
+fn feedback_stack_preserves_insertion_order_and_filters_inactive_items() {
+    let stack = FeedbackStack::from_items([
+        FeedbackItem::pinned(
+            feedback_id(30),
+            FeedbackKind::Error,
+            "Failed",
+            "Render failed",
+        ),
+        FeedbackItem::new(
+            feedback_id(10),
+            FeedbackKind::Info,
+            "Expired",
+            "This has expired",
+            FeedbackLifetime::timed(Duration::from_secs(0), Duration::from_secs(2)),
+        ),
+        FeedbackItem::pinned(
+            feedback_id(20),
+            FeedbackKind::Success,
+            "Queued",
+            "Queued for export",
+        )
+        .with_dismissed(true),
+        FeedbackItem::pinned(
+            feedback_id(40),
+            FeedbackKind::Warning,
+            "Stale",
+            "Preview is stale",
+        ),
+    ]);
+
+    let active = stack.active_items(Duration::from_secs(3));
+
+    assert_eq!(
+        active.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![feedback_id(30), feedback_id(40)]
+    );
+    assert_eq!(
+        active.iter().map(|item| item.kind).collect::<Vec<_>>(),
+        vec![FeedbackKind::Error, FeedbackKind::Warning]
+    );
+}
+
+#[test]
+fn feedback_repaint_after_is_bounded_to_next_active_timed_expiry() {
+    let stack = FeedbackStack::from_items([
+        FeedbackItem::pinned(
+            feedback_id(1),
+            FeedbackKind::Info,
+            "Pinned",
+            "Pinned feedback",
+        ),
+        FeedbackItem::timed(
+            feedback_id(2),
+            FeedbackKind::Success,
+            "Short",
+            "Short lived",
+            Duration::from_secs(4),
+            Duration::from_secs(3),
+        ),
+        FeedbackItem::timed(
+            feedback_id(3),
+            FeedbackKind::Warning,
+            "Long",
+            "Long lived",
+            Duration::from_secs(4),
+            Duration::from_secs(10),
+        ),
+        FeedbackItem::timed(
+            feedback_id(4),
+            FeedbackKind::Error,
+            "Dismissed",
+            "Dismissed feedback",
+            Duration::from_secs(4),
+            Duration::from_secs(1),
+        )
+        .with_dismissed(true),
+    ]);
+
+    assert_eq!(
+        stack.repaint_request(Duration::from_secs(5)),
+        RepaintRequest::After(Duration::from_secs(2))
+    );
+    assert_eq!(
+        stack.repaint_request(Duration::from_secs(7)),
+        RepaintRequest::After(Duration::from_secs(7))
+    );
+    assert_eq!(
+        stack.repaint_request(Duration::from_secs(14)),
+        RepaintRequest::None
+    );
+}
+
+#[test]
+fn feedback_idle_stack_returns_no_repaint_recommendation() {
+    assert_eq!(
+        FeedbackStack::new().repaint_request(Duration::from_secs(0)),
+        RepaintRequest::None
+    );
+
+    let expired = FeedbackStack::from_items([FeedbackItem::timed(
+        feedback_id(1),
+        FeedbackKind::Info,
+        "Done",
+        "Already expired",
+        Duration::from_secs(0),
+        Duration::from_secs(1),
+    )]);
+
+    assert_eq!(
+        expired.repaint_request(Duration::from_secs(1)),
+        RepaintRequest::None
     );
 }
 
