@@ -1,8 +1,9 @@
 //! Viewport texture surfaces and editor overlay primitives.
 
 use kinetik_ui_core::{
-    Brush, ClipId, Color, LinePrimitive, Point, Primitive, Rect, ScaleFactor, Size, Stroke,
-    TextPrimitive, TextureId, TexturePrimitive, Vec2,
+    Brush, ClipId, Color, LinePrimitive, Point, Primitive, Rect, ScaleFactor, SemanticNode,
+    SemanticRole, SemanticValue, Size, Stroke, TextPrimitive, TextureId, TexturePrimitive, Vec2,
+    WidgetId,
 };
 
 /// How viewport content should fit inside its bounds.
@@ -246,6 +247,25 @@ impl ViewportSurface {
         ))
     }
 
+    /// Converts a UI-space rectangle to content-space.
+    #[must_use]
+    pub fn screen_rect_to_content(self, rect: Rect) -> Option<Rect> {
+        self.screen_rect_to_content_at(rect, ScaleFactor::ONE)
+    }
+
+    /// Converts a UI-space rectangle to content-space for a viewport scale factor.
+    #[must_use]
+    pub fn screen_rect_to_content_at(self, rect: Rect, scale_factor: ScaleFactor) -> Option<Rect> {
+        let scale = finite_positive(self.content_scale_at(scale_factor))?;
+        let origin = self.screen_to_content_at(rect.origin(), scale_factor)?;
+        Some(Rect::new(
+            origin.x,
+            origin.y,
+            finite_non_negative(rect.width) / scale,
+            finite_non_negative(rect.height) / scale,
+        ))
+    }
+
     /// Returns true when a UI-space point is inside the viewport bounds.
     #[must_use]
     pub fn contains_screen_point(self, point: Point) -> bool {
@@ -347,6 +367,506 @@ impl ViewportSurface {
     }
 }
 
+/// Stable identity for a viewport tool declared by the application.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ViewportToolId(u64);
+
+impl ViewportToolId {
+    /// Creates a viewport tool ID from raw bits.
+    #[must_use]
+    pub const fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    /// Returns the raw ID bits.
+    #[must_use]
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
+}
+
+/// Stable identity for a viewport overlay target declared by the application.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ViewportOverlayId(u64);
+
+impl ViewportOverlayId {
+    /// Creates a viewport overlay ID from raw bits.
+    #[must_use]
+    pub const fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    /// Returns the raw ID bits.
+    #[must_use]
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
+}
+
+/// Backend-neutral cursor shape requested by viewport tools or overlay targets.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ViewportCursorShape {
+    /// Default platform cursor.
+    Default,
+    /// Pointer/action cursor.
+    Pointer,
+    /// Crosshair cursor.
+    Crosshair,
+    /// Open-hand grab cursor.
+    Grab,
+    /// Closed-hand grabbing cursor.
+    Grabbing,
+    /// Text edit cursor.
+    Text,
+    /// Move cursor.
+    Move,
+    /// Horizontal resize cursor.
+    ResizeHorizontal,
+    /// Vertical resize cursor.
+    ResizeVertical,
+    /// Application-defined cursor token interpreted outside the toolkit.
+    Custom(String),
+}
+
+/// Data-only cursor request metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ViewportCursorMetadata {
+    /// Requested cursor shape.
+    pub shape: ViewportCursorShape,
+    /// Optional accessible/debug label for the cursor request.
+    pub label: Option<String>,
+}
+
+impl ViewportCursorMetadata {
+    /// Creates cursor metadata with no label.
+    #[must_use]
+    pub fn new(shape: ViewportCursorShape) -> Self {
+        Self { shape, label: None }
+    }
+
+    /// Adds a cursor request label.
+    #[must_use]
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+}
+
+/// Data-only viewport tool descriptor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewportToolDescriptor {
+    /// Stable tool identity.
+    pub id: ViewportToolId,
+    /// Tool label.
+    pub label: String,
+    /// Tool cursor request metadata.
+    pub cursor: Option<ViewportCursorMetadata>,
+    /// Whether this tool is currently active.
+    pub active: bool,
+    /// Whether this tool can currently emit interaction requests.
+    pub enabled: bool,
+    /// Whether this tool is available in the current app context.
+    pub available: bool,
+}
+
+impl ViewportToolDescriptor {
+    /// Creates an available, enabled viewport tool descriptor.
+    #[must_use]
+    pub fn new(id: ViewportToolId, label: impl Into<String>) -> Self {
+        Self {
+            id,
+            label: label.into(),
+            cursor: None,
+            active: false,
+            enabled: true,
+            available: true,
+        }
+    }
+
+    /// Marks the tool as active.
+    #[must_use]
+    pub fn active(mut self, active: bool) -> Self {
+        self.active = active;
+        self
+    }
+
+    /// Marks the tool as enabled or disabled.
+    #[must_use]
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
+    /// Marks the tool as available or unavailable in the current app context.
+    #[must_use]
+    pub fn available(mut self, available: bool) -> Self {
+        self.available = available;
+        self
+    }
+
+    /// Adds cursor request metadata.
+    #[must_use]
+    pub fn with_cursor(mut self, cursor: ViewportCursorMetadata) -> Self {
+        self.cursor = Some(cursor);
+        self
+    }
+
+    /// Returns true when the tool may participate in interaction routing.
+    #[must_use]
+    pub const fn can_interact(&self) -> bool {
+        self.active && self.enabled && self.available
+    }
+
+    /// Returns cursor request metadata when this active tool can interact.
+    #[must_use]
+    pub fn cursor_request(&self) -> Option<&ViewportCursorMetadata> {
+        self.can_interact().then_some(())?;
+        self.cursor.as_ref()
+    }
+}
+
+/// Semantic descriptor for a viewport tool surface.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewportToolSurfaceDescriptor {
+    /// Stable viewport widget identity.
+    pub id: WidgetId,
+    /// Accessible viewport label.
+    pub label: String,
+    /// Optional active tool metadata.
+    pub active_tool: Option<ViewportToolDescriptor>,
+}
+
+impl ViewportToolSurfaceDescriptor {
+    /// Creates a semantic descriptor for a viewport tool surface.
+    #[must_use]
+    pub fn new(id: WidgetId, label: impl Into<String>) -> Self {
+        Self {
+            id,
+            label: label.into(),
+            active_tool: None,
+        }
+    }
+
+    /// Adds active tool metadata without executing tool behavior.
+    #[must_use]
+    pub fn with_active_tool(mut self, tool: ViewportToolDescriptor) -> Self {
+        self.active_tool = Some(tool);
+        self
+    }
+
+    /// Builds backend-neutral semantic metadata for the viewport surface.
+    #[must_use]
+    pub fn semantics(&self, surface: ViewportSurface) -> SemanticNode {
+        let mut node =
+            SemanticNode::new(self.id, SemanticRole::Viewport, surface.effective_bounds())
+                .with_label(self.label.clone())
+                .focusable(true);
+        if let Some(tool) = &self.active_tool {
+            node.children
+                .push(viewport_tool_widget_id(self.id, tool.id));
+            node.state.disabled = !tool.enabled || !tool.available;
+            node.state.value = Some(SemanticValue::Text(format!(
+                "Active tool {}: {}",
+                tool.id.raw(),
+                tool.label
+            )));
+        }
+        node
+    }
+
+    /// Builds backend-neutral semantic metadata for the active tool, when present.
+    #[must_use]
+    pub fn active_tool_semantics(&self, surface: ViewportSurface) -> Option<SemanticNode> {
+        let tool = self.active_tool.as_ref()?;
+        Some(viewport_tool_semantics(self.id, surface, tool))
+    }
+}
+
+/// Returns the stable semantic widget ID for a viewport tool.
+#[must_use]
+pub fn viewport_tool_widget_id(root: WidgetId, tool: ViewportToolId) -> WidgetId {
+    root.child(("viewport-tool", tool.raw()))
+}
+
+/// Returns the stable semantic widget ID for a viewport overlay target.
+#[must_use]
+pub fn viewport_overlay_widget_id(root: WidgetId, overlay: ViewportOverlayId) -> WidgetId {
+    root.child(("viewport-overlay", overlay.raw()))
+}
+
+/// Builds backend-neutral semantic metadata for a viewport tool.
+#[must_use]
+pub fn viewport_tool_semantics(
+    root: WidgetId,
+    surface: ViewportSurface,
+    tool: &ViewportToolDescriptor,
+) -> SemanticNode {
+    let mut node = SemanticNode::new(
+        viewport_tool_widget_id(root, tool.id),
+        SemanticRole::Custom("viewport-tool".to_owned()),
+        surface.effective_bounds(),
+    )
+    .with_label(tool.label.clone())
+    .focusable(tool.enabled && tool.available);
+    node.state.selected = tool.active;
+    node.state.disabled = !tool.enabled || !tool.available;
+    node.state.value = Some(SemanticValue::Text(format!(
+        "Tool {}: {}",
+        tool.id.raw(),
+        tool.label
+    )));
+    node
+}
+
+/// Viewport overlay target category.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ViewportOverlayKind {
+    /// Application-owned texture surface under the UI.
+    TextureSurface,
+    /// Source content bounds transformed by the viewport pan/zoom.
+    ContentBounds,
+    /// Guide-like overlay region.
+    Guide,
+    /// Tool-owned generic overlay region.
+    ToolRegion,
+}
+
+/// Coordinate space used by a viewport overlay target rectangle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ViewportOverlaySpace {
+    /// Rectangle is already in UI logical screen space.
+    Screen,
+    /// Rectangle is local to the viewport bounds.
+    Viewport,
+    /// Rectangle is in content coordinates and must be transformed by the viewport surface.
+    Content,
+}
+
+/// Data-only viewport overlay hit target descriptor.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ViewportOverlayDescriptor {
+    /// Stable overlay identity.
+    pub id: ViewportOverlayId,
+    /// Overlay target category.
+    pub kind: ViewportOverlayKind,
+    /// Overlay target rectangle in `space`.
+    pub rect: Rect,
+    /// Coordinate space used by `rect`.
+    pub space: ViewportOverlaySpace,
+    /// Explicit hit-test priority. Higher priority wins.
+    pub priority: i32,
+    /// Optional owning tool identity.
+    pub tool: Option<ViewportToolId>,
+    /// Optional cursor request metadata.
+    pub cursor: Option<ViewportCursorMetadata>,
+    /// Whether this overlay can emit interaction requests.
+    pub enabled: bool,
+    /// Whether this overlay is available in the current app context.
+    pub available: bool,
+    /// Optional accessible/debug label.
+    pub label: Option<String>,
+}
+
+impl ViewportOverlayDescriptor {
+    /// Creates an enabled, available overlay target descriptor.
+    #[must_use]
+    pub fn new(
+        id: ViewportOverlayId,
+        kind: ViewportOverlayKind,
+        rect: Rect,
+        space: ViewportOverlaySpace,
+    ) -> Self {
+        Self {
+            id,
+            kind,
+            rect,
+            space,
+            priority: default_viewport_overlay_priority(kind),
+            tool: None,
+            cursor: None,
+            enabled: true,
+            available: true,
+            label: None,
+        }
+    }
+
+    /// Creates a texture-surface target from the viewport source bounds.
+    #[must_use]
+    pub fn texture_surface(id: ViewportOverlayId, surface: ViewportSurface) -> Self {
+        Self::content_bounds_with_kind(id, surface, ViewportOverlayKind::TextureSurface)
+    }
+
+    /// Creates a content-bounds target from the viewport source bounds.
+    #[must_use]
+    pub fn content_bounds(id: ViewportOverlayId, surface: ViewportSurface) -> Self {
+        Self::content_bounds_with_kind(id, surface, ViewportOverlayKind::ContentBounds)
+    }
+
+    fn content_bounds_with_kind(
+        id: ViewportOverlayId,
+        surface: ViewportSurface,
+        kind: ViewportOverlayKind,
+    ) -> Self {
+        let rect = surface.effective_source_size().map_or(Rect::ZERO, |size| {
+            Rect::new(0.0, 0.0, size.width, size.height)
+        });
+        Self::new(id, kind, rect, ViewportOverlaySpace::Content)
+    }
+
+    /// Sets explicit hit-test priority. Higher priority wins.
+    #[must_use]
+    pub fn with_priority(mut self, priority: i32) -> Self {
+        self.priority = priority;
+        self
+    }
+
+    /// Attaches an owning tool identity.
+    #[must_use]
+    pub fn with_tool(mut self, tool: ViewportToolId) -> Self {
+        self.tool = Some(tool);
+        self
+    }
+
+    /// Adds cursor request metadata.
+    #[must_use]
+    pub fn with_cursor(mut self, cursor: ViewportCursorMetadata) -> Self {
+        self.cursor = Some(cursor);
+        self
+    }
+
+    /// Adds an accessible/debug label.
+    #[must_use]
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    /// Marks the overlay target as enabled or disabled.
+    #[must_use]
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
+    /// Marks the overlay target as available or unavailable in the current app context.
+    #[must_use]
+    pub fn available(mut self, available: bool) -> Self {
+        self.available = available;
+        self
+    }
+
+    /// Returns true when this overlay can emit interaction requests.
+    #[must_use]
+    pub const fn can_interact(&self) -> bool {
+        self.enabled && self.available
+    }
+
+    /// Returns the transformed UI-space rectangle for hit testing.
+    #[must_use]
+    pub fn screen_rect(&self, surface: ViewportSurface, scale_factor: ScaleFactor) -> Option<Rect> {
+        let rect = finite_positive_rect(self.rect)?;
+        match self.space {
+            ViewportOverlaySpace::Screen => Some(rect),
+            ViewportOverlaySpace::Viewport => {
+                let bounds = surface.effective_bounds();
+                finite_positive_rect(Rect::new(
+                    bounds.x + rect.x,
+                    bounds.y + rect.y,
+                    rect.width,
+                    rect.height,
+                ))
+            }
+            ViewportOverlaySpace::Content => surface.content_rect_to_screen_at(rect, scale_factor),
+        }
+        .and_then(finite_positive_rect)
+    }
+}
+
+/// Data-only result of viewport overlay hit testing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ViewportOverlayHit {
+    /// Stable overlay identity.
+    pub overlay: ViewportOverlayId,
+    /// Overlay target category.
+    pub kind: ViewportOverlayKind,
+    /// Hit rectangle in UI logical screen space.
+    pub rect: Rect,
+    /// Hit point in UI logical screen space.
+    pub point: Point,
+    /// Hit point transformed into content coordinates when possible.
+    pub content_point: Option<Point>,
+    /// Winning explicit hit priority.
+    pub priority: i32,
+    /// Optional owning tool identity.
+    pub tool: Option<ViewportToolId>,
+    /// Cursor request metadata associated with the hit target.
+    pub cursor: Option<ViewportCursorMetadata>,
+    /// Optional accessible/debug label.
+    pub label: Option<String>,
+}
+
+impl ViewportOverlayHit {
+    fn from_descriptor(
+        descriptor: &ViewportOverlayDescriptor,
+        rect: Rect,
+        point: Point,
+        surface: ViewportSurface,
+        scale_factor: ScaleFactor,
+    ) -> Self {
+        Self {
+            overlay: descriptor.id,
+            kind: descriptor.kind,
+            rect,
+            point,
+            content_point: surface.screen_to_content_at(point, scale_factor),
+            priority: descriptor.priority,
+            tool: descriptor.tool,
+            cursor: descriptor.cursor.clone(),
+            label: descriptor.label.clone(),
+        }
+    }
+}
+
+/// Resolves a UI-space point to the highest-priority viewport overlay target.
+///
+/// Disabled or unavailable overlays are skipped. Higher `priority` wins. When
+/// priorities tie, the lower stable `ViewportOverlayId` wins so the result does
+/// not depend on primitive emission order or descriptor ordering.
+#[must_use]
+pub fn hit_test_viewport_overlays(
+    surface: ViewportSurface,
+    overlays: &[ViewportOverlayDescriptor],
+    point: Point,
+) -> Option<ViewportOverlayHit> {
+    hit_test_viewport_overlays_at(surface, overlays, point, ScaleFactor::ONE)
+}
+
+/// Resolves a UI-space point to the highest-priority viewport overlay target
+/// for a viewport scale factor.
+#[must_use]
+pub fn hit_test_viewport_overlays_at(
+    surface: ViewportSurface,
+    overlays: &[ViewportOverlayDescriptor],
+    point: Point,
+    scale_factor: ScaleFactor,
+) -> Option<ViewportOverlayHit> {
+    let point = finite_point(point)?;
+    overlays
+        .iter()
+        .filter(|overlay| overlay.can_interact())
+        .filter_map(|overlay| {
+            let rect = overlay.screen_rect(surface, scale_factor)?;
+            rect.contains_point(point).then(|| {
+                ViewportOverlayHit::from_descriptor(overlay, rect, point, surface, scale_factor)
+            })
+        })
+        .max_by(|left, right| {
+            left.priority
+                .cmp(&right.priority)
+                .then_with(|| right.overlay.cmp(&left.overlay))
+        })
+}
+
 fn fit_scale(source: Size, bounds: Size) -> f32 {
     let Some(source_width) = finite_positive(source.width) else {
         return 0.0;
@@ -400,6 +920,25 @@ fn finite_positive(value: f32) -> Option<f32> {
 
 fn finite_point(point: Point) -> Option<Point> {
     (point.x.is_finite() && point.y.is_finite()).then_some(point)
+}
+
+fn finite_positive_rect(rect: Rect) -> Option<Rect> {
+    (rect.x.is_finite()
+        && rect.y.is_finite()
+        && rect.width.is_finite()
+        && rect.height.is_finite()
+        && rect.width > 0.0
+        && rect.height > 0.0)
+        .then_some(rect)
+}
+
+const fn default_viewport_overlay_priority(kind: ViewportOverlayKind) -> i32 {
+    match kind {
+        ViewportOverlayKind::TextureSurface => 0,
+        ViewportOverlayKind::ContentBounds => 10,
+        ViewportOverlayKind::Guide => 20,
+        ViewportOverlayKind::ToolRegion => 30,
+    }
 }
 
 /// Viewport guide line.
