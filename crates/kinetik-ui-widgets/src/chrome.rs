@@ -6,8 +6,9 @@ use kinetik_ui_core::{
 };
 
 use crate::{
-    FrameTab, Menu, MenuOverlay, OverlayDismissal, OverlayId, OverlayKind, PanelId,
-    PopoverPlacement,
+    DockSnapshotDiagnostic, DockSnapshotDiagnostics, FrameTab, Menu, MenuOverlay, OverlayDismissal,
+    OverlayId, OverlayKind, PanelId, PopoverPlacement, SnapshotDiagnosticSeverity,
+    WorkspaceSnapshotDiagnostic, WorkspaceSnapshotDiagnostics,
 };
 
 /// Direction for keyboard-style tab strip movement.
@@ -1398,11 +1399,24 @@ impl From<CoreDiagnosticSeverity> for DiagnosticStripSeverity {
     }
 }
 
+impl From<SnapshotDiagnosticSeverity> for DiagnosticStripSeverity {
+    fn from(severity: SnapshotDiagnosticSeverity) -> Self {
+        match severity {
+            SnapshotDiagnosticSeverity::Error => Self::Error,
+            SnapshotDiagnosticSeverity::Warning => Self::Warning,
+        }
+    }
+}
+
 /// Structured diagnostic source suitable for later debug presentation.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DiagnosticSource {
     /// Core runtime diagnostics.
     Core,
+    /// Dock snapshot or dock workspace diagnostics.
+    Dock,
+    /// Workspace snapshot shell diagnostics.
+    Workspace,
     /// Renderer diagnostics.
     Renderer,
     /// Platform adapter diagnostics.
@@ -1472,6 +1486,15 @@ impl DiagnosticStripItem {
     /// Creates a diagnostics strip item from a core frame diagnostic.
     #[must_use]
     pub fn from_frame_diagnostic(id: DiagnosticStripItemId, diagnostic: FrameDiagnostic) -> Self {
+        Self::from_frame_diagnostic_ref(id, &diagnostic)
+    }
+
+    /// Creates a diagnostics strip item from a borrowed core frame diagnostic.
+    #[must_use]
+    pub fn from_frame_diagnostic_ref(
+        id: DiagnosticStripItemId,
+        diagnostic: &FrameDiagnostic,
+    ) -> Self {
         Self::new(
             id,
             diagnostic.severity.into(),
@@ -1481,6 +1504,76 @@ impl DiagnosticStripItem {
         .with_source(DiagnosticSource::Core)
         .with_field("category", format!("{:?}", diagnostic.category))
         .with_field("location", format!("{:?}", diagnostic.location))
+    }
+
+    /// Creates a diagnostics strip item from a dock snapshot diagnostic.
+    #[must_use]
+    pub fn from_dock_snapshot_diagnostic(
+        id: DiagnosticStripItemId,
+        diagnostic: &DockSnapshotDiagnostic,
+    ) -> Self {
+        let mut item = Self::new(
+            id,
+            diagnostic.severity.into(),
+            diagnostic.stable_code(),
+            diagnostic.stable_code(),
+        )
+        .with_source(DiagnosticSource::Dock)
+        .with_field("path", format!("{:?}", diagnostic.path.elements()));
+
+        if let Some(frame) = diagnostic.frame {
+            item = item.with_field("frame", frame.raw().to_string());
+        }
+        if let Some(panel) = diagnostic.panel {
+            item = item.with_field("panel", panel.raw().to_string());
+        }
+        if let Some(active_index) = diagnostic.active_index {
+            item = item.with_field("active_index", active_index.to_string());
+        }
+        if let Some(panel_count) = diagnostic.panel_count {
+            item = item.with_field("panel_count", panel_count.to_string());
+        }
+        if let Some(split_value) = diagnostic.split_value {
+            item = item.with_field("split_value", format!("{split_value:?}"));
+        }
+
+        item
+    }
+
+    /// Creates a diagnostics strip item from a workspace snapshot diagnostic.
+    #[must_use]
+    pub fn from_workspace_snapshot_diagnostic(
+        id: DiagnosticStripItemId,
+        diagnostic: &WorkspaceSnapshotDiagnostic,
+    ) -> Self {
+        let mut item = Self::new(
+            id,
+            diagnostic.severity.into(),
+            diagnostic.stable_code(),
+            diagnostic.stable_code(),
+        )
+        .with_source(DiagnosticSource::Workspace);
+
+        if let Some(panel_instance) = diagnostic.panel_instance {
+            item = item.with_field("panel_instance", panel_instance.raw().to_string());
+        }
+        if let Some(panel_type) = diagnostic.panel_type {
+            item = item.with_field("panel_type", panel_type.raw().to_string());
+        }
+        if let Some(frame) = diagnostic.frame {
+            item = item.with_field("frame", frame.raw().to_string());
+        }
+        if let Some(panel) = diagnostic.panel {
+            item = item.with_field("panel", panel.raw().to_string());
+        }
+        if let Some(dock_title) = &diagnostic.dock_title {
+            item = item.with_field("dock_title", dock_title.as_str());
+        }
+        if let Some(instance_title) = &diagnostic.instance_title {
+            item = item.with_field("instance_title", instance_title.as_str());
+        }
+
+        item
     }
 
     /// Sets source metadata.
@@ -1494,6 +1587,13 @@ impl DiagnosticStripItem {
     #[must_use]
     pub fn with_field(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.fields.push(DiagnosticField::new(name, value));
+        self
+    }
+
+    /// Appends typed context fields.
+    #[must_use]
+    pub fn with_fields(mut self, fields: impl IntoIterator<Item = DiagnosticField>) -> Self {
+        self.fields.extend(fields);
         self
     }
 }
@@ -1549,6 +1649,96 @@ impl DiagnosticStrip {
         self.items = items.into_iter().collect();
     }
 
+    /// Appends one diagnostic in aggregation order.
+    pub fn push_item(&mut self, item: DiagnosticStripItem) {
+        self.items.push(item);
+    }
+
+    /// Appends diagnostics in aggregation order.
+    pub fn extend_items(&mut self, items: impl IntoIterator<Item = DiagnosticStripItem>) {
+        self.items.extend(items);
+    }
+
+    /// Appends core frame diagnostics using deterministic IDs from `first_id`.
+    pub fn extend_frame_diagnostics(
+        &mut self,
+        first_id: DiagnosticStripItemId,
+        diagnostics: impl IntoIterator<Item = FrameDiagnostic>,
+    ) {
+        self.items.extend(
+            diagnostics
+                .into_iter()
+                .enumerate()
+                .map(|(index, diagnostic)| {
+                    DiagnosticStripItem::from_frame_diagnostic(
+                        offset_diagnostic_id(first_id, index),
+                        diagnostic,
+                    )
+                }),
+        );
+    }
+
+    /// Appends borrowed core frame diagnostics using deterministic IDs from `first_id`.
+    pub fn extend_frame_diagnostics_ref<'a>(
+        &mut self,
+        first_id: DiagnosticStripItemId,
+        diagnostics: impl IntoIterator<Item = &'a FrameDiagnostic>,
+    ) {
+        self.items.extend(
+            diagnostics
+                .into_iter()
+                .enumerate()
+                .map(|(index, diagnostic)| {
+                    DiagnosticStripItem::from_frame_diagnostic_ref(
+                        offset_diagnostic_id(first_id, index),
+                        diagnostic,
+                    )
+                }),
+        );
+    }
+
+    /// Appends dock snapshot diagnostics in their deterministic validation order.
+    pub fn extend_dock_snapshot_diagnostics(
+        &mut self,
+        first_id: DiagnosticStripItemId,
+        diagnostics: &DockSnapshotDiagnostics,
+    ) {
+        self.items.extend(
+            diagnostics
+                .diagnostics
+                .iter()
+                .enumerate()
+                .map(|(index, diagnostic)| {
+                    DiagnosticStripItem::from_dock_snapshot_diagnostic(
+                        offset_diagnostic_id(first_id, index),
+                        diagnostic,
+                    )
+                }),
+        );
+    }
+
+    /// Appends workspace diagnostics as dock diagnostics followed by workspace-shell diagnostics.
+    pub fn extend_workspace_snapshot_diagnostics(
+        &mut self,
+        first_id: DiagnosticStripItemId,
+        diagnostics: &WorkspaceSnapshotDiagnostics,
+    ) {
+        self.extend_dock_snapshot_diagnostics(first_id, &diagnostics.dock);
+        let workspace_first_id = offset_diagnostic_id(first_id, diagnostics.dock.diagnostics.len());
+        self.items.extend(
+            diagnostics
+                .workspace
+                .iter()
+                .enumerate()
+                .map(|(index, diagnostic)| {
+                    DiagnosticStripItem::from_workspace_snapshot_diagnostic(
+                        offset_diagnostic_id(workspace_first_id, index),
+                        diagnostic,
+                    )
+                }),
+        );
+    }
+
     /// Returns a diagnostic by stable identity.
     #[must_use]
     pub fn item(&self, id: DiagnosticStripItemId) -> Option<&DiagnosticStripItem> {
@@ -1576,4 +1766,9 @@ impl DiagnosticStrip {
         }
         summary
     }
+}
+
+fn offset_diagnostic_id(id: DiagnosticStripItemId, offset: usize) -> DiagnosticStripItemId {
+    let offset = u64::try_from(offset).unwrap_or(u64::MAX);
+    DiagnosticStripItemId::from_raw(id.raw().saturating_add(offset))
 }

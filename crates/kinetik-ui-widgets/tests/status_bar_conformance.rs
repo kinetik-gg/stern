@@ -1,12 +1,15 @@
 //! Windowless status bar conformance for reusable editor chrome contracts.
 
 use kinetik_ui_widgets::{
-    DiagnosticSource, DiagnosticStrip, DiagnosticStripItem, DiagnosticStripItemId,
+    DiagnosticField, DiagnosticSource, DiagnosticStrip, DiagnosticStripItem, DiagnosticStripItemId,
     DiagnosticStripSeverity, JobCancel, JobList, JobPhase, JobProgress, JobRow, JobRowId,
     StatusBar, StatusItem, StatusItemId, StatusItemKind, StatusProgress,
 };
 
-use kinetik_ui_core::{ActionContext, ActionDescriptor, ActionId, ActionSource};
+use kinetik_ui_core::{
+    ActionContext, ActionDescriptor, ActionId, ActionSource, DiagnosticCategory,
+    DiagnosticLocation, DiagnosticSeverity, FrameDiagnostic, WidgetId,
+};
 
 fn status_id(raw: u64) -> StatusItemId {
     StatusItemId::from_raw(raw)
@@ -193,6 +196,64 @@ fn status_bar_diagnostics_strip_summary_counts_are_deterministic_for_empty_and_m
     assert_eq!(summary.warnings, 1);
     assert_eq!(summary.info, 1);
     assert_eq!(summary.total(), 4);
+}
+
+#[test]
+fn status_bar_diagnostics_strip_aggregates_mixed_typed_diagnostics() {
+    let frame_diagnostics = [FrameDiagnostic {
+        code: "core.duplicate_widget_id",
+        severity: DiagnosticSeverity::Warning,
+        category: DiagnosticCategory::Identity,
+        location: DiagnosticLocation::Widget(WidgetId::from_key("timeline")),
+    }];
+    let mut strip = DiagnosticStrip::from_items([DiagnosticStripItem::new(
+        diagnostic_id(1),
+        DiagnosticStripSeverity::Error,
+        "app.project_missing",
+        "Project is missing",
+    )
+    .with_source(DiagnosticSource::Application)
+    .with_fields([
+        DiagnosticField::new("project_id", "shot-010"),
+        DiagnosticField::new("document_state", "unloaded"),
+    ])]);
+
+    strip.extend_frame_diagnostics_ref(diagnostic_id(10), frame_diagnostics.iter());
+    strip.push_item(
+        DiagnosticStripItem::new(
+            diagnostic_id(20),
+            DiagnosticStripSeverity::Info,
+            "renderer.texture_cache_stale",
+            "Texture cache is stale",
+        )
+        .with_source(DiagnosticSource::Renderer)
+        .with_field("texture", "viewport-preview"),
+    );
+
+    assert_eq!(strip.summary().total(), 3);
+    assert_eq!(
+        strip
+            .ordered_items()
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![diagnostic_id(1), diagnostic_id(10), diagnostic_id(20)]
+    );
+
+    let core = strip.item(diagnostic_id(10)).expect("core diagnostic");
+    assert_eq!(core.code, "core.duplicate_widget_id");
+    assert_eq!(core.source, Some(DiagnosticSource::Core));
+    assert_eq!(core.fields[0].name, "category");
+    assert_eq!(core.fields[0].value, "Identity");
+    assert_eq!(core.fields[1].name, "location");
+    assert!(core.fields[1].value.contains("Widget"));
+
+    let renderer = strip.item(diagnostic_id(20)).expect("renderer diagnostic");
+    assert_eq!(renderer.source, Some(DiagnosticSource::Renderer));
+    assert_eq!(
+        renderer.fields[0],
+        DiagnosticField::new("texture", "viewport-preview")
+    );
 }
 
 #[test]
