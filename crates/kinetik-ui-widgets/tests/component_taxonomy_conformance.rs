@@ -10,28 +10,30 @@ use kinetik_ui_core::{
 };
 use kinetik_ui_text::TextEditState;
 use kinetik_ui_widgets::{
-    COMPONENT_EVIDENCE, COMPONENT_METADATA, ColorFieldConfig, ComponentCategory,
-    ComponentConformanceStatus, ComponentEvidenceCategory, ComponentMetadata, DropdownCloseReason,
-    DropdownItem, DropdownItemId, DropdownModel, DropdownOverlay, EdgeDescriptor, GraphRect,
-    JobList, JobPhase, JobProgress, JobRow, JobRowId, NodeDescriptor, NodeGraphDescriptor,
-    NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget, NodeGraphStaticView,
-    NodeGraphViewport, NodeId, NumericScrubInputConfig, OverlayId, OverlayStack, PanZoom, PanelId,
-    PopoverPlacement, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
-    PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow, PropertyGridRowAffordances,
-    PropertyGridRowState, PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice,
-    SliderStep, TabStrip, TimelineDescriptor, TimelineFrameRate, TimelineId,
-    TimelineItemDescriptor, TimelineItemId, TimelineLaneDescriptor, TimelineLaneId, TimelineRange,
-    TimelineRulerTickRequest, TimelineSelection, TimelineSelectionTarget,
-    TimelineSnapCandidateRequest, TimelineSnapSource, TimelineZoom, TransportControlIntent,
-    TransportControls, Ui, VectorComponentLayout, VectorScrubInputConfig, ViewportActionDescriptor,
-    ViewportActionKind, ViewportActionRequest, ViewportActionTarget, ViewportCursorMetadata,
-    ViewportCursorRequest, ViewportCursorRequestSource, ViewportCursorShape, ViewportFit,
-    ViewportGuideDescriptor, ViewportGuideId, ViewportGuideOrientation, ViewportGuidePlacement,
-    ViewportOverlayDescriptor, ViewportOverlayId, ViewportOverlayKind, ViewportOverlaySpace,
-    ViewportPanZoomHudDescriptor, ViewportRulerDescriptor, ViewportRulerEdge, ViewportRulerId,
-    ViewportSafeAreaDescriptor, ViewportSafeAreaId, ViewportSafeAreaSpace, ViewportSurface,
-    ViewportToolDescriptor, ViewportToolId, classify_numeric_input_draft, component_evidence,
-    component_evidence_for, component_metadata, component_status_evidence, components_by_category,
+    COMPONENT_CONFORMANCE_MATRIX, COMPONENT_EVIDENCE, COMPONENT_METADATA, ColorFieldConfig,
+    ComponentCategory, ComponentConformanceStatus, ComponentEvidenceCategory, ComponentMetadata,
+    DropdownCloseReason, DropdownItem, DropdownItemId, DropdownModel, DropdownOverlay,
+    EdgeDescriptor, GraphRect, JobList, JobPhase, JobProgress, JobRow, JobRowId, NodeDescriptor,
+    NodeGraphDescriptor, NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget,
+    NodeGraphStaticView, NodeGraphViewport, NodeId, NumericScrubInputConfig, OverlayId,
+    OverlayStack, PanZoom, PanelId, PopoverPlacement, PortDescriptor, PortDirection, PortEndpoint,
+    PortId, PortTypeId, PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow,
+    PropertyGridRowAffordances, PropertyGridRowState, PropertyGridRowStatus,
+    PropertyGridStatusSeverity, RadioGroupChoice, SliderStep, TabStrip, TimelineDescriptor,
+    TimelineFrameRate, TimelineId, TimelineItemDescriptor, TimelineItemId, TimelineLaneDescriptor,
+    TimelineLaneId, TimelineRange, TimelineRulerTickRequest, TimelineSelection,
+    TimelineSelectionTarget, TimelineSnapCandidateRequest, TimelineSnapSource, TimelineZoom,
+    TransportControlIntent, TransportControls, Ui, VectorComponentLayout, VectorScrubInputConfig,
+    ViewportActionDescriptor, ViewportActionKind, ViewportActionRequest, ViewportActionTarget,
+    ViewportCursorMetadata, ViewportCursorRequest, ViewportCursorRequestSource,
+    ViewportCursorShape, ViewportFit, ViewportGuideDescriptor, ViewportGuideId,
+    ViewportGuideOrientation, ViewportGuidePlacement, ViewportOverlayDescriptor, ViewportOverlayId,
+    ViewportOverlayKind, ViewportOverlaySpace, ViewportPanZoomHudDescriptor,
+    ViewportRulerDescriptor, ViewportRulerEdge, ViewportRulerId, ViewportSafeAreaDescriptor,
+    ViewportSafeAreaId, ViewportSafeAreaSpace, ViewportSurface, ViewportToolDescriptor,
+    ViewportToolId, classify_numeric_input_draft, component_conformance_matrix_by_stage,
+    component_conformance_matrix_row, component_evidence, component_evidence_for,
+    component_metadata, component_status_evidence, components_by_category,
     components_by_evidence_category, hit_test_viewport_overlays, numeric_input,
     numeric_scrub_input, property_grid_row_affordance_controls, property_grid_row_affordance_rects,
     property_grid_row_status_semantics, slider_with_step, timeline_snap_candidates,
@@ -51,6 +53,26 @@ fn assert_entry(name: &str, category: ComponentCategory, status: ComponentConfor
 
 fn evidence_categories(metadata: &ComponentMetadata) -> BTreeSet<ComponentEvidenceCategory> {
     component_evidence_for(metadata)
+        .map(|evidence| evidence.category)
+        .collect()
+}
+
+fn matrix_entry(slug: &str) -> &'static kinetik_ui_widgets::ComponentConformanceMatrixRow {
+    component_conformance_matrix_row(slug)
+        .unwrap_or_else(|| panic!("missing conformance matrix row for {slug}"))
+}
+
+fn metadata_by_slug(slug: &str) -> Option<&'static ComponentMetadata> {
+    COMPONENT_METADATA
+        .iter()
+        .find(|metadata| metadata.slug == slug)
+}
+
+fn matrix_evidence_categories(slug: &str) -> BTreeSet<ComponentEvidenceCategory> {
+    matrix_entry(slug)
+        .evidence_ids
+        .iter()
+        .filter_map(|id| component_evidence(id))
         .map(|evidence| evidence.category)
         .collect()
 }
@@ -198,6 +220,40 @@ fn registry_contains_unique_component_evidence_ids() {
 }
 
 #[test]
+fn registry_contains_unique_conformance_matrix_slugs() {
+    let mut slugs = BTreeSet::new();
+
+    for row in COMPONENT_CONFORMANCE_MATRIX {
+        assert!(slugs.insert(row.slug), "duplicate {}", row.slug);
+        assert!(!row.capability.is_empty(), "{row:?}");
+        assert!(!row.slug.is_empty(), "{row:?}");
+        assert!(
+            row.slug
+                .chars()
+                .all(|character| character.is_ascii_lowercase()
+                    || character.is_ascii_digit()
+                    || character == '-'),
+            "{row:?}"
+        );
+        assert!(!row.public_contracts.is_empty(), "{row:?}");
+        assert!(!row.deterministic_tests.is_empty(), "{row:?}");
+        assert!(!row.evidence_ids.is_empty(), "{row:?}");
+        for evidence_id in row.evidence_ids {
+            assert!(
+                component_evidence(evidence_id).is_some(),
+                "{row:?} references missing evidence {evidence_id}"
+            );
+        }
+        if let Some(component_slug) = row.component_slug {
+            assert!(
+                metadata_by_slug(component_slug).is_some(),
+                "{row:?} references missing component slug {component_slug}"
+            );
+        }
+    }
+}
+
+#[test]
 fn every_metadata_entry_has_stable_non_empty_fields() {
     for metadata in COMPONENT_METADATA {
         assert!(!metadata.name.is_empty(), "{metadata:?}");
@@ -220,6 +276,192 @@ fn every_metadata_entry_has_stable_non_empty_fields() {
                 "{metadata:?} references missing evidence {evidence_id}"
             );
         }
+    }
+}
+
+#[test]
+fn s10_s11_conformance_matrix_rows_report_partial_data_only_coverage() {
+    for (slug, stage, category, component_slug) in [
+        (
+            "s10-outliner-tree-selection-semantics",
+            10,
+            ComponentCategory::Collection,
+            Some("outliner"),
+        ),
+        (
+            "s10-asset-browser-grid-list-metadata",
+            10,
+            ComponentCategory::Collection,
+            Some("asset-browser"),
+        ),
+        (
+            "s10-inline-edit-rename-lifecycle",
+            10,
+            ComponentCategory::TextEditing,
+            None,
+        ),
+        (
+            "s10-collection-drag-drop-context",
+            10,
+            ComponentCategory::Collection,
+            None,
+        ),
+        (
+            "s10-collection-filter-sort-selection-preservation",
+            10,
+            ComponentCategory::Collection,
+            None,
+        ),
+        (
+            "s11-timeline-layout-coordinate-selection",
+            11,
+            ComponentCategory::Viewport,
+            Some("timeline"),
+        ),
+        (
+            "s11-ruler-ticks-timecode",
+            11,
+            ComponentCategory::Viewport,
+            Some("ruler"),
+        ),
+        (
+            "s11-transport-action-controls",
+            11,
+            ComponentCategory::Control,
+            Some("transport-controls"),
+        ),
+        (
+            "s11-timeline-snapping",
+            11,
+            ComponentCategory::Viewport,
+            Some("timeline"),
+        ),
+        (
+            "s11-timeline-preservation",
+            11,
+            ComponentCategory::Viewport,
+            Some("timeline"),
+        ),
+    ] {
+        let row = matrix_entry(slug);
+        assert_eq!(row.stage, stage, "{slug} stage");
+        assert_eq!(row.category, category, "{slug} category");
+        assert_eq!(
+            row.status,
+            ComponentConformanceStatus::Partial,
+            "{slug} must not claim complete widget behavior"
+        );
+        assert_eq!(row.component_slug, component_slug, "{slug} component slug");
+
+        let categories = matrix_evidence_categories(slug);
+        for category in [
+            ComponentEvidenceCategory::Status,
+            ComponentEvidenceCategory::Stage,
+            ComponentEvidenceCategory::Conformance,
+            ComponentEvidenceCategory::Showcase,
+        ] {
+            assert!(
+                categories.contains(&category),
+                "{slug} missing {category:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn s10_s11_matrix_stage_filters_are_exact() {
+    let stage_10 = component_conformance_matrix_by_stage(10)
+        .map(|row| row.slug)
+        .collect::<BTreeSet<_>>();
+    let stage_11 = component_conformance_matrix_by_stage(11)
+        .map(|row| row.slug)
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        stage_10,
+        BTreeSet::from([
+            "s10-asset-browser-grid-list-metadata",
+            "s10-collection-drag-drop-context",
+            "s10-collection-filter-sort-selection-preservation",
+            "s10-inline-edit-rename-lifecycle",
+            "s10-outliner-tree-selection-semantics",
+        ])
+    );
+    assert_eq!(
+        stage_11,
+        BTreeSet::from([
+            "s11-ruler-ticks-timecode",
+            "s11-timeline-layout-coordinate-selection",
+            "s11-timeline-preservation",
+            "s11-timeline-snapping",
+            "s11-transport-action-controls",
+        ])
+    );
+}
+
+#[test]
+fn s10_s11_matrix_evidence_points_to_public_contracts_and_tests() {
+    for (slug, contract, test) in [
+        (
+            "s10-outliner-tree-selection-semantics",
+            "OutlinerModel",
+            "outliner_conformance::tree_visible_row_order_is_deterministic",
+        ),
+        (
+            "s10-asset-browser-grid-list-metadata",
+            "AssetBrowserLayout",
+            "asset_browser_conformance::grid_layout_resolves_deterministic_materialized_items",
+        ),
+        (
+            "s10-inline-edit-rename-lifecycle",
+            "InlineEditSession",
+            "inline_edit_conformance::draft_edit_commit_cancel_and_focus_loss_requests_are_deterministic",
+        ),
+        (
+            "s10-collection-drag-drop-context",
+            "CollectionDragSource",
+            "collection_drag_context_conformance::drag_source_identity_is_stable_and_selection_aware",
+        ),
+        (
+            "s10-collection-filter-sort-selection-preservation",
+            "CollectionProjection",
+            "collection_projection_conformance::selected_ids_survive_filtering_out_and_back_in",
+        ),
+        (
+            "s11-timeline-layout-coordinate-selection",
+            "TimelineLayout",
+            "timeline_conformance::timeline_lane_visible_and_materialized_ranges_are_deterministic",
+        ),
+        (
+            "s11-ruler-ticks-timecode",
+            "TimelineRulerTickRequest",
+            "timeline_conformance::ruler_ticks_are_deterministic_finite_and_ordered",
+        ),
+        (
+            "s11-transport-action-controls",
+            "TransportControls",
+            "timeline_transport_conformance::transport_request_metadata_preserves_action_source_kind_and_timeline_context",
+        ),
+        (
+            "s11-timeline-snapping",
+            "timeline_snap_candidates",
+            "timeline_conformance::snap_candidates_include_grid_markers_keyframes_clip_edges_and_range_boundaries",
+        ),
+        (
+            "s11-timeline-preservation",
+            "TimelineViewportState",
+            "timeline_conformance::scroll_clamping_preserves_playhead_range_and_snap_metadata",
+        ),
+    ] {
+        let row = matrix_entry(slug);
+        assert!(
+            row.public_contracts.contains(&contract),
+            "{slug} missing public contract {contract}"
+        );
+        assert!(
+            row.deterministic_tests.contains(&test),
+            "{slug} missing deterministic test {test}"
+        );
     }
 }
 
