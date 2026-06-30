@@ -12,25 +12,26 @@ use kinetik_ui_text::TextEditState;
 use kinetik_ui_widgets::{
     COMPONENT_METADATA, ColorFieldConfig, ComponentCategory, ComponentConformanceStatus,
     ComponentMetadata, DropdownCloseReason, DropdownItem, DropdownItemId, DropdownModel,
-    DropdownOverlay, EdgeDescriptor, GraphRect, NodeDescriptor, NodeGraphDescriptor,
-    NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget, NodeGraphStaticView,
-    NodeGraphViewport, NodeId, NumericScrubInputConfig, OverlayId, OverlayStack, PanZoom, PanelId,
-    PopoverPlacement, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
-    PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow, PropertyGridRowAffordances,
-    PropertyGridRowState, PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice,
-    SliderStep, TabStrip, TimelineDescriptor, TimelineFrameRate, TimelineId,
-    TimelineItemDescriptor, TimelineItemId, TimelineLaneDescriptor, TimelineLaneId, TimelineRange,
-    TimelineRulerTickRequest, TimelineSelection, TimelineSelectionTarget,
-    TimelineSnapCandidateRequest, TimelineSnapSource, TimelineZoom, TransportControlIntent,
-    TransportControls, Ui, VectorComponentLayout, VectorScrubInputConfig, ViewportActionDescriptor,
-    ViewportActionKind, ViewportActionRequest, ViewportActionTarget, ViewportCursorMetadata,
-    ViewportCursorRequest, ViewportCursorRequestSource, ViewportCursorShape, ViewportFit,
-    ViewportGuideDescriptor, ViewportGuideId, ViewportGuideOrientation, ViewportGuidePlacement,
-    ViewportOverlayDescriptor, ViewportOverlayId, ViewportOverlayKind, ViewportOverlaySpace,
-    ViewportPanZoomHudDescriptor, ViewportRulerDescriptor, ViewportRulerEdge, ViewportRulerId,
-    ViewportSafeAreaDescriptor, ViewportSafeAreaId, ViewportSafeAreaSpace, ViewportSurface,
-    ViewportToolDescriptor, ViewportToolId, classify_numeric_input_draft, component_metadata,
-    components_by_category, hit_test_viewport_overlays, numeric_input, numeric_scrub_input,
+    DropdownOverlay, EdgeDescriptor, GraphRect, JobList, JobPhase, JobProgress, JobRow, JobRowId,
+    NodeDescriptor, NodeGraphDescriptor, NodeGraphPanZoom, NodeGraphSelection,
+    NodeGraphSelectionTarget, NodeGraphStaticView, NodeGraphViewport, NodeId,
+    NumericScrubInputConfig, OverlayId, OverlayStack, PanZoom, PanelId, PopoverPlacement,
+    PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId, PropertyGridAffordanceLayout,
+    PropertyGridLayout, PropertyGridRow, PropertyGridRowAffordances, PropertyGridRowState,
+    PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice, SliderStep, TabStrip,
+    TimelineDescriptor, TimelineFrameRate, TimelineId, TimelineItemDescriptor, TimelineItemId,
+    TimelineLaneDescriptor, TimelineLaneId, TimelineRange, TimelineRulerTickRequest,
+    TimelineSelection, TimelineSelectionTarget, TimelineSnapCandidateRequest, TimelineSnapSource,
+    TimelineZoom, TransportControlIntent, TransportControls, Ui, VectorComponentLayout,
+    VectorScrubInputConfig, ViewportActionDescriptor, ViewportActionKind, ViewportActionRequest,
+    ViewportActionTarget, ViewportCursorMetadata, ViewportCursorRequest,
+    ViewportCursorRequestSource, ViewportCursorShape, ViewportFit, ViewportGuideDescriptor,
+    ViewportGuideId, ViewportGuideOrientation, ViewportGuidePlacement, ViewportOverlayDescriptor,
+    ViewportOverlayId, ViewportOverlayKind, ViewportOverlaySpace, ViewportPanZoomHudDescriptor,
+    ViewportRulerDescriptor, ViewportRulerEdge, ViewportRulerId, ViewportSafeAreaDescriptor,
+    ViewportSafeAreaId, ViewportSafeAreaSpace, ViewportSurface, ViewportToolDescriptor,
+    ViewportToolId, classify_numeric_input_draft, component_metadata, components_by_category,
+    hit_test_viewport_overlays, numeric_input, numeric_scrub_input,
     property_grid_row_affordance_controls, property_grid_row_affordance_rects,
     property_grid_row_status_semantics, slider_with_step, timeline_snap_candidates,
     vector4_component_rects, viewport_action_requests, viewport_cursor_request, viewport_guides,
@@ -589,6 +590,35 @@ fn stage12_viewport_taxonomy_reports_partial_status_backed_by_public_contracts()
             .semantics(WidgetId::from_key("taxonomy-viewport"))
             .role,
         SemanticRole::Custom("viewport-ruler".to_owned())
+    );
+}
+
+#[test]
+fn stage13_job_progress_taxonomy_reports_partial_status_backed_by_public_contracts() {
+    assert_entry(
+        "StatusBar",
+        ComponentCategory::System,
+        ComponentConformanceStatus::Partial,
+    );
+    assert_entry(
+        "ProgressIndicator",
+        ComponentCategory::Display,
+        ComponentConformanceStatus::Partial,
+    );
+
+    let jobs = JobList::from_rows([
+        JobRow::new(JobRowId::from_raw(1), "Render", JobPhase::Running)
+            .with_progress(JobProgress::determinate(0.25)),
+        JobRow::new(JobRowId::from_raw(2), "Export", JobPhase::Queued)
+            .with_progress(JobProgress::determinate(0.75)),
+    ]);
+
+    assert_eq!(jobs.active_count(), 2);
+    assert_close(
+        jobs.active_status_progress()
+            .expect("status progress for determinate jobs")
+            .value,
+        0.5,
     );
 }
 
