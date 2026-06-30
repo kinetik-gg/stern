@@ -405,6 +405,258 @@ impl TimelineScale {
     ) -> TimelineFrame {
         frame_rate.time_to_frame(self.screen_x_to_time(x), rounding)
     }
+
+    /// Returns a new scale whose zoom changes while preserving the timeline time under `anchor_x`.
+    #[must_use]
+    pub fn zoom_around_anchor(self, anchor_x: f32, zoom: TimelineZoom) -> TimelineZoomAnchorResult {
+        zoom_timeline_scale_around_anchor(self, anchor_x, zoom)
+    }
+}
+
+/// Result of changing timeline zoom around a pointer or viewport anchor.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineZoomAnchorResult {
+    /// Scale after zoom and scroll clamping.
+    pub scale: TimelineScale,
+    /// Timeline time that was under the anchor before zooming.
+    pub anchor_time: TimelineTime,
+    /// Sanitized screen-space anchor.
+    pub anchor_x: f32,
+}
+
+/// Stable timeline selection target independent from descriptor order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TimelineSelectionTarget {
+    /// Lane selection target.
+    Lane(TimelineLaneId),
+    /// Clip/item selection target.
+    Item(TimelineItemId),
+    /// Marker selection target.
+    Marker(TimelineMarkerId),
+    /// Keyframe selection target.
+    Keyframe(TimelineKeyframeId),
+}
+
+/// Data-only timeline selection set keyed by stable target IDs.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TimelineSelection {
+    targets: BTreeSet<TimelineSelectionTarget>,
+}
+
+impl TimelineSelection {
+    /// Creates an empty selection.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            targets: BTreeSet::new(),
+        }
+    }
+
+    /// Creates a selection from stable targets.
+    #[must_use]
+    pub fn from_targets(targets: impl IntoIterator<Item = TimelineSelectionTarget>) -> Self {
+        Self {
+            targets: targets.into_iter().collect(),
+        }
+    }
+
+    /// Returns selected targets in deterministic target-ID order.
+    #[must_use]
+    pub fn targets(&self) -> Vec<TimelineSelectionTarget> {
+        self.targets.iter().copied().collect()
+    }
+
+    /// Returns true when the target is selected.
+    #[must_use]
+    pub fn contains(&self, target: TimelineSelectionTarget) -> bool {
+        self.targets.contains(&target)
+    }
+
+    /// Returns true when no targets are selected.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.targets.is_empty()
+    }
+
+    /// Applies a selection operation without relying on descriptor order.
+    pub fn apply(
+        &mut self,
+        target: TimelineSelectionTarget,
+        operation: TimelineSelectionOperation,
+    ) {
+        match operation {
+            TimelineSelectionOperation::Replace => {
+                self.targets.clear();
+                self.targets.insert(target);
+            }
+            TimelineSelectionOperation::Toggle => {
+                if !self.targets.remove(&target) {
+                    self.targets.insert(target);
+                }
+            }
+            TimelineSelectionOperation::Extend => {
+                self.targets.insert(target);
+            }
+        }
+    }
+
+    /// Returns selected targets in the current descriptor presentation order.
+    #[must_use]
+    pub fn targets_in_descriptor_order(
+        &self,
+        descriptor: &TimelineDescriptor,
+    ) -> Vec<TimelineSelectionTarget> {
+        let mut ordered = Vec::new();
+        ordered.extend(
+            descriptor
+                .lanes
+                .iter()
+                .map(|lane| TimelineSelectionTarget::Lane(lane.id))
+                .filter(|target| self.contains(*target)),
+        );
+        ordered.extend(
+            descriptor
+                .items
+                .iter()
+                .map(|item| TimelineSelectionTarget::Item(item.id))
+                .filter(|target| self.contains(*target)),
+        );
+        ordered.extend(
+            descriptor
+                .markers
+                .iter()
+                .map(|marker| TimelineSelectionTarget::Marker(marker.id))
+                .filter(|target| self.contains(*target)),
+        );
+        ordered.extend(
+            descriptor
+                .keyframes
+                .iter()
+                .map(|keyframe| TimelineSelectionTarget::Keyframe(keyframe.id))
+                .filter(|target| self.contains(*target)),
+        );
+        ordered
+    }
+
+    /// Returns a copy with targets that still exist in the supplied descriptor.
+    #[must_use]
+    pub fn retain_existing_targets(&self, descriptor: &TimelineDescriptor) -> Self {
+        Self::from_targets(
+            self.targets_in_descriptor_order(descriptor)
+                .into_iter()
+                .filter(|target| self.contains(*target)),
+        )
+    }
+}
+
+/// Data-only timeline viewport state used by apps to preserve interaction metadata.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimelineViewportState {
+    /// Horizontal timeline scale and scroll.
+    pub scale: TimelineScale,
+    /// Vertical lane scroll offset.
+    pub lane_scroll_offset: f32,
+    /// Current playhead time, when known.
+    pub playhead_time: Option<TimelineTime>,
+    /// Stable selection targets.
+    pub selection: TimelineSelection,
+    /// Current selected time range, when any.
+    pub selection_range: Option<TimelineRange>,
+    /// Last snap metadata associated with an interaction.
+    pub snap: Option<TimelineSnapMetadata>,
+}
+
+impl TimelineViewportState {
+    /// Creates viewport state from a timeline scale.
+    #[must_use]
+    pub fn new(scale: TimelineScale) -> Self {
+        Self {
+            scale: scale.sanitized(),
+            lane_scroll_offset: 0.0,
+            playhead_time: None,
+            selection: TimelineSelection::new(),
+            selection_range: None,
+            snap: None,
+        }
+    }
+
+    /// Assigns playhead time metadata.
+    #[must_use]
+    pub fn with_playhead_time(mut self, playhead_time: TimelineTime) -> Self {
+        self.playhead_time = Some(playhead_time.sanitized());
+        self
+    }
+
+    /// Assigns stable selection metadata.
+    #[must_use]
+    pub fn with_selection(mut self, selection: TimelineSelection) -> Self {
+        self.selection = selection;
+        self
+    }
+
+    /// Assigns range selection metadata.
+    #[must_use]
+    pub fn with_selection_range(mut self, selection_range: TimelineRange) -> Self {
+        self.selection_range = Some(selection_range.sanitized());
+        self
+    }
+
+    /// Assigns snap metadata.
+    #[must_use]
+    pub fn with_snap(mut self, snap: TimelineSnapMetadata) -> Self {
+        self.snap = Some(sanitize_timeline_snap_metadata(snap));
+        self
+    }
+
+    /// Returns a copy with clamped horizontal scroll while preserving interaction metadata.
+    #[must_use]
+    pub fn with_horizontal_scroll_offset(mut self, scroll_offset: f32) -> Self {
+        self.scale.scroll_offset = scroll_offset;
+        self.scale = self.scale.sanitized();
+        self.sanitize_metadata()
+    }
+
+    /// Returns a copy with clamped lane scroll while preserving interaction metadata.
+    #[must_use]
+    pub fn with_lane_scroll_offset(mut self, scroll_offset: f32, max_scroll_offset: f32) -> Self {
+        self.lane_scroll_offset = clamp_timeline_scroll_offset(scroll_offset, max_scroll_offset);
+        self.sanitize_metadata()
+    }
+
+    /// Returns a copy zoomed around `anchor_x` while preserving interaction metadata.
+    #[must_use]
+    pub fn with_zoom_around_anchor(
+        mut self,
+        anchor_x: f32,
+        zoom: TimelineZoom,
+    ) -> TimelineViewportZoomResult {
+        let result = self.scale.zoom_around_anchor(anchor_x, zoom);
+        self.scale = result.scale;
+        self = self.sanitize_metadata();
+        TimelineViewportZoomResult {
+            state: self,
+            anchor_time: result.anchor_time,
+            anchor_x: result.anchor_x,
+        }
+    }
+
+    fn sanitize_metadata(mut self) -> Self {
+        self.playhead_time = self.playhead_time.map(TimelineTime::sanitized);
+        self.selection_range = self.selection_range.map(TimelineRange::sanitized);
+        self.snap = self.snap.map(sanitize_timeline_snap_metadata);
+        self
+    }
+}
+
+/// Result of zooming a viewport state around an anchor.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimelineViewportZoomResult {
+    /// Viewport state after zoom and clamping.
+    pub state: TimelineViewportState,
+    /// Timeline time preserved under the anchor before zooming.
+    pub anchor_time: TimelineTime,
+    /// Sanitized screen-space anchor.
+    pub anchor_x: f32,
 }
 
 /// Shared timeline descriptor state exposed by app-owned lane and item metadata.
@@ -1535,6 +1787,73 @@ impl TimelineSnapCandidate {
     }
 }
 
+/// Data-only request for collecting deterministic snap candidates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineSnapCandidateRequest<'a> {
+    /// Timeline identity used for playhead and range boundary targets.
+    pub timeline: TimelineId,
+    /// Time range in which frame candidates should be generated.
+    pub range: TimelineRange,
+    /// Frame grid used for frame snap candidates.
+    pub frame_rate: TimelineFrameRate,
+    /// App-owned timeline descriptors used for marker, keyframe, and clip edge candidates.
+    pub descriptor: &'a TimelineDescriptor,
+    /// Optional playhead candidate.
+    pub playhead_time: Option<TimelineTime>,
+    /// Optional range boundaries.
+    pub selection_range: Option<TimelineRange>,
+    /// Maximum frame-grid candidates to emit.
+    pub max_frame_candidates: usize,
+}
+
+impl<'a> TimelineSnapCandidateRequest<'a> {
+    /// Creates a snap candidate request with deterministic defaults.
+    #[must_use]
+    pub const fn new(
+        timeline: TimelineId,
+        range: TimelineRange,
+        frame_rate: TimelineFrameRate,
+        descriptor: &'a TimelineDescriptor,
+    ) -> Self {
+        Self {
+            timeline,
+            range,
+            frame_rate,
+            descriptor,
+            playhead_time: None,
+            selection_range: None,
+            max_frame_candidates: DEFAULT_TIMELINE_RULER_MAX_TICKS,
+        }
+    }
+
+    /// Assigns playhead candidate metadata.
+    #[must_use]
+    pub const fn with_playhead_time(mut self, playhead_time: TimelineTime) -> Self {
+        self.playhead_time = Some(playhead_time);
+        self
+    }
+
+    /// Assigns range boundary candidate metadata.
+    #[must_use]
+    pub const fn with_selection_range(mut self, selection_range: TimelineRange) -> Self {
+        self.selection_range = Some(selection_range);
+        self
+    }
+
+    /// Assigns the maximum frame-grid candidates to emit.
+    #[must_use]
+    pub const fn with_max_frame_candidates(mut self, max_frame_candidates: usize) -> Self {
+        self.max_frame_candidates = max_frame_candidates;
+        self
+    }
+
+    /// Collects deterministic snap candidates for the request.
+    #[must_use]
+    pub fn candidates(self) -> Vec<TimelineSnapCandidate> {
+        timeline_snap_candidates(self)
+    }
+}
+
 /// Data-only snap result metadata.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TimelineSnapMetadata {
@@ -2545,6 +2864,153 @@ pub fn timeline_snap_time(
             )
         },
     )
+}
+
+/// Collects deterministic snap candidates without mutating descriptors or app state.
+#[must_use]
+pub fn timeline_snap_candidates(
+    request: TimelineSnapCandidateRequest<'_>,
+) -> Vec<TimelineSnapCandidate> {
+    let mut candidates = Vec::new();
+    append_frame_snap_candidates(&mut candidates, request);
+
+    if let Some(playhead_time) = request.playhead_time {
+        candidates.push(TimelineSnapCandidate::new(
+            playhead_time.sanitized(),
+            TimelineSnapSource::Playhead,
+            Some(TimelineHitTarget::Playhead(request.timeline)),
+        ));
+    }
+
+    if let Some(range) = request.selection_range {
+        let range = range.sanitized();
+        candidates.push(TimelineSnapCandidate::new(
+            range.start,
+            TimelineSnapSource::RangeBoundary,
+            Some(TimelineHitTarget::RangeStartHandle(request.timeline)),
+        ));
+        candidates.push(TimelineSnapCandidate::new(
+            range.end,
+            TimelineSnapSource::RangeBoundary,
+            Some(TimelineHitTarget::RangeEndHandle(request.timeline)),
+        ));
+    }
+
+    for item in &request.descriptor.items {
+        let range = item.time_range.sanitized();
+        candidates.push(TimelineSnapCandidate::new(
+            range.start,
+            TimelineSnapSource::ItemBoundary,
+            Some(TimelineHitTarget::ItemTrimStartHandle(item.id)),
+        ));
+        candidates.push(TimelineSnapCandidate::new(
+            range.end,
+            TimelineSnapSource::ItemBoundary,
+            Some(TimelineHitTarget::ItemTrimEndHandle(item.id)),
+        ));
+    }
+
+    for marker in &request.descriptor.markers {
+        candidates.push(TimelineSnapCandidate::new(
+            marker.time.sanitized(),
+            TimelineSnapSource::Marker,
+            Some(TimelineHitTarget::Marker(marker.id)),
+        ));
+    }
+
+    for keyframe in &request.descriptor.keyframes {
+        candidates.push(TimelineSnapCandidate::new(
+            keyframe.time.sanitized(),
+            TimelineSnapSource::Keyframe,
+            Some(TimelineHitTarget::Keyframe(keyframe.id)),
+        ));
+    }
+
+    candidates.sort_by(|left, right| {
+        left.time
+            .seconds()
+            .total_cmp(&right.time.seconds())
+            .then_with(|| compare_snap_candidates(*left, *right))
+    });
+    candidates
+}
+
+fn zoom_timeline_scale_around_anchor(
+    scale: TimelineScale,
+    anchor_x: f32,
+    zoom: TimelineZoom,
+) -> TimelineZoomAnchorResult {
+    let scale = scale.sanitized();
+    let anchor_x = finite_f32_or_zero(anchor_x);
+    let anchor_time = scale.screen_x_to_time(anchor_x);
+    let zoom = zoom.sanitized();
+    let content_seconds = anchor_time.seconds() - scale.content_range.start.seconds();
+    let anchor_local_x = f64::from(anchor_x - scale.origin_x);
+    let requested_scroll_offset =
+        finite_f64_to_f32(content_seconds * f64::from(zoom.pixels_per_second) - anchor_local_x);
+    let max_scroll_offset =
+        max_timeline_scroll_offset(scale.content_range, zoom, scale.viewport_width);
+    let scale = TimelineScale {
+        zoom,
+        scroll_offset: clamp_timeline_scroll_offset(requested_scroll_offset, max_scroll_offset),
+        ..scale
+    }
+    .sanitized();
+
+    TimelineZoomAnchorResult {
+        scale,
+        anchor_time,
+        anchor_x,
+    }
+}
+
+fn sanitize_timeline_snap_metadata(snap: TimelineSnapMetadata) -> TimelineSnapMetadata {
+    if snap.source == TimelineSnapSource::None {
+        TimelineSnapMetadata::unsnapped(snap.requested_time.sanitized())
+    } else {
+        TimelineSnapMetadata::snapped(
+            snap.requested_time.sanitized(),
+            snap.snapped_time.sanitized(),
+            snap.source,
+            snap.target,
+        )
+    }
+}
+
+fn append_frame_snap_candidates(
+    candidates: &mut Vec<TimelineSnapCandidate>,
+    request: TimelineSnapCandidateRequest<'_>,
+) {
+    let range = request.range.sanitized();
+    if range.is_empty() || request.max_frame_candidates == 0 {
+        return;
+    }
+
+    let frame_rate = request.frame_rate.sanitized();
+    let start = frame_rate
+        .time_to_frame(range.start, TimelineFrameRounding::Ceil)
+        .raw();
+    let end = frame_rate
+        .time_to_frame(range.end, TimelineFrameRounding::Floor)
+        .raw();
+    if end < start {
+        return;
+    }
+
+    let mut frame = start;
+    let mut emitted = 0_usize;
+    while frame <= end && emitted < request.max_frame_candidates {
+        candidates.push(TimelineSnapCandidate::new(
+            frame_rate.frame_to_time(TimelineFrame::from_raw(frame)),
+            TimelineSnapSource::Frame,
+            None,
+        ));
+        emitted = emitted.saturating_add(1);
+        let Some(next) = frame.checked_add(1) else {
+            break;
+        };
+        frame = next;
+    }
 }
 
 fn hit_test_timeline(
