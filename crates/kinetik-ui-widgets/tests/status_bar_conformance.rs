@@ -1,9 +1,9 @@
 //! Windowless status bar conformance for reusable editor chrome contracts.
 
 use kinetik_ui_widgets::{
-    DiagnosticField, DiagnosticSource, DiagnosticStrip, DiagnosticStripItem, DiagnosticStripItemId,
-    DiagnosticStripSeverity, JobCancel, JobList, JobPhase, JobProgress, JobRow, JobRowId,
-    StatusBar, StatusItem, StatusItemId, StatusItemKind, StatusProgress,
+    DiagnosticField, DiagnosticFieldValue, DiagnosticSource, DiagnosticStrip, DiagnosticStripItem,
+    DiagnosticStripItemId, DiagnosticStripSeverity, JobCancel, JobList, JobPhase, JobProgress,
+    JobRow, JobRowId, StatusBar, StatusItem, StatusItemId, StatusItemKind, StatusProgress,
 };
 
 use kinetik_ui_core::{
@@ -158,6 +158,10 @@ fn status_bar_diagnostics_strip_orders_by_severity_and_preserves_insertion_order
     );
     assert_eq!(ordered[0].source, Some(DiagnosticSource::Renderer));
     assert_eq!(ordered[0].fields[0].name, "texture");
+    assert_eq!(
+        ordered[0].fields[0].value,
+        DiagnosticFieldValue::Text("missing".to_owned())
+    );
 }
 
 #[test]
@@ -244,9 +248,17 @@ fn status_bar_diagnostics_strip_aggregates_mixed_typed_diagnostics() {
     assert_eq!(core.code, "core.duplicate_widget_id");
     assert_eq!(core.source, Some(DiagnosticSource::Core));
     assert_eq!(core.fields[0].name, "category");
-    assert_eq!(core.fields[0].value, "Identity");
+    assert_eq!(
+        core.fields[0].value,
+        DiagnosticFieldValue::CoreDiagnosticCategory(DiagnosticCategory::Identity)
+    );
     assert_eq!(core.fields[1].name, "location");
-    assert!(core.fields[1].value.contains("Widget"));
+    assert_eq!(
+        core.fields[1].value,
+        DiagnosticFieldValue::CoreDiagnosticLocation(DiagnosticLocation::Widget(
+            WidgetId::from_key("timeline")
+        ))
+    );
 
     let renderer = strip.item(diagnostic_id(20)).expect("renderer diagnostic");
     assert_eq!(renderer.source, Some(DiagnosticSource::Renderer));

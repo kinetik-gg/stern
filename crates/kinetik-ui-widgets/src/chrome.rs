@@ -1,13 +1,17 @@
 //! Data-only editor chrome contracts.
 
+use std::hash::{Hash, Hasher};
+
 use kinetik_ui_core::{
     ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation, ActionQueue,
-    ActionSource, DiagnosticSeverity as CoreDiagnosticSeverity, FrameDiagnostic, Rect, Size,
+    ActionSource, DiagnosticCategory, DiagnosticLocation,
+    DiagnosticSeverity as CoreDiagnosticSeverity, FrameDiagnostic, Rect, Size,
 };
 
 use crate::{
-    DockSnapshotDiagnostic, DockSnapshotDiagnostics, FrameTab, Menu, MenuOverlay, OverlayDismissal,
-    OverlayId, OverlayKind, PanelId, PopoverPlacement, SnapshotDiagnosticSeverity,
+    DockPathElement, DockSnapshotDiagnostic, DockSnapshotDiagnostics, DockSnapshotSplitValue,
+    FrameId, FrameTab, Menu, MenuOverlay, OverlayDismissal, OverlayId, OverlayKind, PanelId,
+    PanelInstanceId, PanelTypeId, PopoverPlacement, SnapshotDiagnosticSeverity,
     WorkspaceSnapshotDiagnostic, WorkspaceSnapshotDiagnostics,
 };
 
@@ -1427,23 +1431,142 @@ pub enum DiagnosticSource {
     Other(String),
 }
 
+/// Typed diagnostic context value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiagnosticFieldValue {
+    /// Application, renderer, platform, or other free-form text.
+    Text(String),
+    /// Stable unsigned index or count.
+    Usize(usize),
+    /// Core runtime diagnostic category.
+    CoreDiagnosticCategory(DiagnosticCategory),
+    /// Core runtime diagnostic location.
+    CoreDiagnosticLocation(DiagnosticLocation),
+    /// Dock tree path elements.
+    DockPath(Vec<DockPathElement>),
+    /// Split value identified by dock snapshot validation.
+    DockSplitValue(DockSnapshotSplitValue),
+    /// Stable frame identity.
+    FrameId(FrameId),
+    /// Stable panel identity.
+    PanelId(PanelId),
+    /// Stable panel instance identity.
+    PanelInstanceId(PanelInstanceId),
+    /// Stable panel type identity.
+    PanelTypeId(PanelTypeId),
+}
+
+impl Hash for DiagnosticFieldValue {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Text(value) => {
+                0_u8.hash(state);
+                value.hash(state);
+            }
+            Self::Usize(value) => {
+                1_u8.hash(state);
+                value.hash(state);
+            }
+            Self::CoreDiagnosticCategory(category) => {
+                2_u8.hash(state);
+                category.hash(state);
+            }
+            Self::CoreDiagnosticLocation(location) => {
+                3_u8.hash(state);
+                location.hash(state);
+            }
+            Self::DockPath(path) => {
+                4_u8.hash(state);
+                path.hash(state);
+            }
+            Self::DockSplitValue(value) => {
+                5_u8.hash(state);
+                match value {
+                    DockSnapshotSplitValue::Ratio => 0_u8.hash(state),
+                    DockSnapshotSplitValue::MinFirst => 1_u8.hash(state),
+                    DockSnapshotSplitValue::MinSecond => 2_u8.hash(state),
+                }
+            }
+            Self::FrameId(frame) => {
+                6_u8.hash(state);
+                frame.hash(state);
+            }
+            Self::PanelId(panel) => {
+                7_u8.hash(state);
+                panel.hash(state);
+            }
+            Self::PanelInstanceId(panel_instance) => {
+                8_u8.hash(state);
+                panel_instance.hash(state);
+            }
+            Self::PanelTypeId(panel_type) => {
+                9_u8.hash(state);
+                panel_type.hash(state);
+            }
+        }
+    }
+}
+
+impl DiagnosticFieldValue {
+    /// Returns a presentation string without requiring downstream tools to parse it.
+    #[must_use]
+    pub fn display_value(&self) -> String {
+        match self {
+            Self::Text(value) => value.clone(),
+            Self::Usize(value) => value.to_string(),
+            Self::CoreDiagnosticCategory(category) => format!("{category:?}"),
+            Self::CoreDiagnosticLocation(location) => format!("{location:?}"),
+            Self::DockPath(path) => format!("{path:?}"),
+            Self::DockSplitValue(value) => format!("{value:?}"),
+            Self::FrameId(frame) => frame.raw().to_string(),
+            Self::PanelId(panel) => panel.raw().to_string(),
+            Self::PanelInstanceId(panel_instance) => panel_instance.raw().to_string(),
+            Self::PanelTypeId(panel_type) => panel_type.raw().to_string(),
+        }
+    }
+}
+
+impl From<&str> for DiagnosticFieldValue {
+    fn from(value: &str) -> Self {
+        Self::Text(value.to_owned())
+    }
+}
+
+impl From<String> for DiagnosticFieldValue {
+    fn from(value: String) -> Self {
+        Self::Text(value)
+    }
+}
+
+impl From<usize> for DiagnosticFieldValue {
+    fn from(value: usize) -> Self {
+        Self::Usize(value)
+    }
+}
+
 /// Typed diagnostic context field.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DiagnosticField {
     /// Stable field name.
     pub name: String,
-    /// Field value for presentation without parsing the diagnostic message.
-    pub value: String,
+    /// Typed field value for downstream tools and presentation.
+    pub value: DiagnosticFieldValue,
 }
 
 impl DiagnosticField {
     /// Creates a diagnostic context field.
     #[must_use]
-    pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, value: impl Into<DiagnosticFieldValue>) -> Self {
         Self {
             name: name.into(),
             value: value.into(),
         }
+    }
+
+    /// Returns a presentation string for this field value.
+    #[must_use]
+    pub fn display_value(&self) -> String {
+        self.value.display_value()
     }
 }
 
@@ -1502,8 +1625,14 @@ impl DiagnosticStripItem {
             diagnostic.code,
         )
         .with_source(DiagnosticSource::Core)
-        .with_field("category", format!("{:?}", diagnostic.category))
-        .with_field("location", format!("{:?}", diagnostic.location))
+        .with_field(
+            "category",
+            DiagnosticFieldValue::CoreDiagnosticCategory(diagnostic.category),
+        )
+        .with_field(
+            "location",
+            DiagnosticFieldValue::CoreDiagnosticLocation(diagnostic.location),
+        )
     }
 
     /// Creates a diagnostics strip item from a dock snapshot diagnostic.
@@ -1519,22 +1648,28 @@ impl DiagnosticStripItem {
             diagnostic.stable_code(),
         )
         .with_source(DiagnosticSource::Dock)
-        .with_field("path", format!("{:?}", diagnostic.path.elements()));
+        .with_field(
+            "path",
+            DiagnosticFieldValue::DockPath(diagnostic.path.elements().to_vec()),
+        );
 
         if let Some(frame) = diagnostic.frame {
-            item = item.with_field("frame", frame.raw().to_string());
+            item = item.with_field("frame", DiagnosticFieldValue::FrameId(frame));
         }
         if let Some(panel) = diagnostic.panel {
-            item = item.with_field("panel", panel.raw().to_string());
+            item = item.with_field("panel", DiagnosticFieldValue::PanelId(panel));
         }
         if let Some(active_index) = diagnostic.active_index {
-            item = item.with_field("active_index", active_index.to_string());
+            item = item.with_field("active_index", active_index);
         }
         if let Some(panel_count) = diagnostic.panel_count {
-            item = item.with_field("panel_count", panel_count.to_string());
+            item = item.with_field("panel_count", panel_count);
         }
         if let Some(split_value) = diagnostic.split_value {
-            item = item.with_field("split_value", format!("{split_value:?}"));
+            item = item.with_field(
+                "split_value",
+                DiagnosticFieldValue::DockSplitValue(split_value),
+            );
         }
 
         item
@@ -1555,16 +1690,19 @@ impl DiagnosticStripItem {
         .with_source(DiagnosticSource::Workspace);
 
         if let Some(panel_instance) = diagnostic.panel_instance {
-            item = item.with_field("panel_instance", panel_instance.raw().to_string());
+            item = item.with_field(
+                "panel_instance",
+                DiagnosticFieldValue::PanelInstanceId(panel_instance),
+            );
         }
         if let Some(panel_type) = diagnostic.panel_type {
-            item = item.with_field("panel_type", panel_type.raw().to_string());
+            item = item.with_field("panel_type", DiagnosticFieldValue::PanelTypeId(panel_type));
         }
         if let Some(frame) = diagnostic.frame {
-            item = item.with_field("frame", frame.raw().to_string());
+            item = item.with_field("frame", DiagnosticFieldValue::FrameId(frame));
         }
         if let Some(panel) = diagnostic.panel {
-            item = item.with_field("panel", panel.raw().to_string());
+            item = item.with_field("panel", DiagnosticFieldValue::PanelId(panel));
         }
         if let Some(dock_title) = &diagnostic.dock_title {
             item = item.with_field("dock_title", dock_title.as_str());
@@ -1585,7 +1723,11 @@ impl DiagnosticStripItem {
 
     /// Appends a typed context field.
     #[must_use]
-    pub fn with_field(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+    pub fn with_field(
+        mut self,
+        name: impl Into<String>,
+        value: impl Into<DiagnosticFieldValue>,
+    ) -> Self {
         self.fields.push(DiagnosticField::new(name, value));
         self
     }

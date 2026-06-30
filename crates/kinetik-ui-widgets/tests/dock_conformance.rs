@@ -2,26 +2,27 @@
 
 use kinetik_ui_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
 use kinetik_ui_widgets::{
-    DiagnosticSource, DiagnosticStrip, DiagnosticStripItemId, DiagnosticStripSeverity, Dock,
-    DockChromeStyle, DockDropTarget, DockInteractionPolicy, DockNeighborDirection, DockNode,
-    DockPathElement, DockPlacement, DockRestoreError, DockSnapshot, DockSnapshotDiagnosticCode,
-    DockSnapshotNode, DockSnapshotSplitValue, DockSplitInsertion, DockSplitPath,
-    DockSplitterContextAction, DockSplitterContextActionKind, DockSplitterSide, Frame, FrameId,
-    FrameLayout, FrameNeighbors, FrameSplitAffordanceRequest, Panel, PanelAffordances,
-    PanelClosePolicy, PanelDockHint, PanelDuplicatePolicy, PanelFloatPolicy, PanelId,
-    PanelInstanceId, PanelInstanceLocation, PanelInstancePolicy, PanelInstanceSnapshot,
-    PanelOpenActionMetadata, PanelOpenDecision, PanelPolicyContext, PanelPolicyMetadata,
-    PanelPolicyUnavailableReason, PanelRegistry, PanelRegistryError, PanelTypeCategory,
-    PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext, SnapshotDiagnosticSeverity,
-    WorkspaceRepairAction, WorkspaceRepairActionCode, WorkspaceRestoreError, WorkspaceSnapshot,
-    WorkspaceSnapshotDiagnosticCode, frame_neighbor, frame_tabs, resolve_dock_drop_target,
-    resolve_dock_drop_target_with_policy, resolve_dock_join_request,
-    resolve_dock_splitter_context_actions, resolve_dock_splitter_context_actions_with_policy,
-    resolve_dock_swap_request, resolve_frame_drop_zone_with_policy,
-    resolve_frame_split_affordance_request, resolve_frame_split_affordance_request_with_policy,
-    resolve_panel_affordances, resolve_panel_close_request, resolve_panel_duplicate_request,
-    resolve_panel_float_request, resolve_panel_open_decision, resolve_panel_policy_context,
-    solve_dock_layout, solve_dock_neighbors, solve_dock_splitters, solve_dock_splitters_with_style,
+    DiagnosticFieldValue, DiagnosticSource, DiagnosticStrip, DiagnosticStripItemId,
+    DiagnosticStripSeverity, Dock, DockChromeStyle, DockDropTarget, DockInteractionPolicy,
+    DockNeighborDirection, DockNode, DockPathElement, DockPlacement, DockRestoreError,
+    DockSnapshot, DockSnapshotDiagnosticCode, DockSnapshotNode, DockSnapshotSplitValue,
+    DockSplitInsertion, DockSplitPath, DockSplitterContextAction, DockSplitterContextActionKind,
+    DockSplitterSide, Frame, FrameId, FrameLayout, FrameNeighbors, FrameSplitAffordanceRequest,
+    Panel, PanelAffordances, PanelClosePolicy, PanelDockHint, PanelDuplicatePolicy,
+    PanelFloatPolicy, PanelId, PanelInstanceId, PanelInstanceLocation, PanelInstancePolicy,
+    PanelInstanceSnapshot, PanelOpenActionMetadata, PanelOpenDecision, PanelPolicyContext,
+    PanelPolicyMetadata, PanelPolicyUnavailableReason, PanelRegistry, PanelRegistryError,
+    PanelTypeCategory, PanelTypeDescriptor, PanelTypeId, PanelWorkspaceContext,
+    SnapshotDiagnosticSeverity, WorkspaceRepairAction, WorkspaceRepairActionCode,
+    WorkspaceRestoreError, WorkspaceSnapshot, WorkspaceSnapshotDiagnosticCode, frame_neighbor,
+    frame_tabs, resolve_dock_drop_target, resolve_dock_drop_target_with_policy,
+    resolve_dock_join_request, resolve_dock_splitter_context_actions,
+    resolve_dock_splitter_context_actions_with_policy, resolve_dock_swap_request,
+    resolve_frame_drop_zone_with_policy, resolve_frame_split_affordance_request,
+    resolve_frame_split_affordance_request_with_policy, resolve_panel_affordances,
+    resolve_panel_close_request, resolve_panel_duplicate_request, resolve_panel_float_request,
+    resolve_panel_open_decision, resolve_panel_policy_context, solve_dock_layout,
+    solve_dock_neighbors, solve_dock_splitters, solve_dock_splitters_with_style,
     split_ratio_from_drag,
 };
 
@@ -84,11 +85,11 @@ fn panel_ids(frame: &Frame) -> Vec<PanelId> {
 fn field_value<'a>(
     fields: &'a [kinetik_ui_widgets::DiagnosticField],
     name: &str,
-) -> Option<&'a str> {
+) -> Option<&'a DiagnosticFieldValue> {
     fields
         .iter()
         .find(|field| field.name == name)
-        .map(|field| field.value.as_str())
+        .map(|field| &field.value)
 }
 
 fn splitter_context_action(
@@ -1700,10 +1701,15 @@ fn dock_snapshot_diagnostics_adapt_to_strip_with_stable_typed_context() {
     assert_eq!(strip.items()[0].code, "dock.invalid_split_ratio");
     assert_eq!(strip.items()[0].source, Some(DiagnosticSource::Dock));
     assert_eq!(strip.items()[0].severity, DiagnosticStripSeverity::Error);
-    assert_eq!(field_value(&strip.items()[0].fields, "path"), Some("[]"));
+    assert_eq!(
+        field_value(&strip.items()[0].fields, "path"),
+        Some(&DiagnosticFieldValue::DockPath(Vec::new()))
+    );
     assert_eq!(
         field_value(&strip.items()[0].fields, "split_value"),
-        Some("Ratio")
+        Some(&DiagnosticFieldValue::DockSplitValue(
+            DockSnapshotSplitValue::Ratio
+        ))
     );
 
     let duplicate_panel = strip
@@ -1711,8 +1717,14 @@ fn dock_snapshot_diagnostics_adapt_to_strip_with_stable_typed_context() {
         .iter()
         .find(|item| item.code == "dock.duplicate_panel_id")
         .expect("duplicate panel item");
-    assert_eq!(field_value(&duplicate_panel.fields, "frame"), Some("1"));
-    assert_eq!(field_value(&duplicate_panel.fields, "panel"), Some("2"));
+    assert_eq!(
+        field_value(&duplicate_panel.fields, "frame"),
+        Some(&DiagnosticFieldValue::FrameId(FrameId::from_raw(1)))
+    );
+    assert_eq!(
+        field_value(&duplicate_panel.fields, "panel"),
+        Some(&DiagnosticFieldValue::PanelId(PanelId::from_raw(2)))
+    );
 }
 
 #[test]
@@ -1748,21 +1760,34 @@ fn workspace_snapshot_diagnostics_adapt_to_strip_after_dock_diagnostics() {
     assert_eq!(strip.items()[0].source, Some(DiagnosticSource::Workspace));
     assert_eq!(
         field_value(&strip.items()[0].fields, "panel_instance"),
-        Some("99")
+        Some(&DiagnosticFieldValue::PanelInstanceId(
+            PanelInstanceId::from_raw(99)
+        ))
     );
     assert_eq!(
         field_value(&strip.items()[0].fields, "panel_type"),
-        Some("10")
+        Some(&DiagnosticFieldValue::PanelTypeId(PanelTypeId::from_raw(
+            10
+        )))
     );
 
     let drift = &strip.items()[1];
     assert_eq!(drift.severity, DiagnosticStripSeverity::Warning);
-    assert_eq!(field_value(&drift.fields, "frame"), Some("1"));
-    assert_eq!(field_value(&drift.fields, "panel"), Some("1"));
-    assert_eq!(field_value(&drift.fields, "dock_title"), Some("Media"));
+    assert_eq!(
+        field_value(&drift.fields, "frame"),
+        Some(&DiagnosticFieldValue::FrameId(FrameId::from_raw(1)))
+    );
+    assert_eq!(
+        field_value(&drift.fields, "panel"),
+        Some(&DiagnosticFieldValue::PanelId(PanelId::from_raw(1)))
+    );
+    assert_eq!(
+        field_value(&drift.fields, "dock_title"),
+        Some(&DiagnosticFieldValue::Text("Media".to_owned()))
+    );
     assert_eq!(
         field_value(&drift.fields, "instance_title"),
-        Some("Renamed Media")
+        Some(&DiagnosticFieldValue::Text("Renamed Media".to_owned()))
     );
 }
 
