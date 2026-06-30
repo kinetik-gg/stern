@@ -10,29 +10,30 @@ use kinetik_ui_core::{
 };
 use kinetik_ui_text::TextEditState;
 use kinetik_ui_widgets::{
-    COMPONENT_METADATA, ColorFieldConfig, ComponentCategory, ComponentConformanceStatus,
-    ComponentMetadata, DropdownCloseReason, DropdownItem, DropdownItemId, DropdownModel,
-    DropdownOverlay, EdgeDescriptor, GraphRect, JobList, JobPhase, JobProgress, JobRow, JobRowId,
-    NodeDescriptor, NodeGraphDescriptor, NodeGraphPanZoom, NodeGraphSelection,
-    NodeGraphSelectionTarget, NodeGraphStaticView, NodeGraphViewport, NodeId,
-    NumericScrubInputConfig, OverlayId, OverlayStack, PanZoom, PanelId, PopoverPlacement,
-    PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId, PropertyGridAffordanceLayout,
-    PropertyGridLayout, PropertyGridRow, PropertyGridRowAffordances, PropertyGridRowState,
-    PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice, SliderStep, TabStrip,
-    TimelineDescriptor, TimelineFrameRate, TimelineId, TimelineItemDescriptor, TimelineItemId,
-    TimelineLaneDescriptor, TimelineLaneId, TimelineRange, TimelineRulerTickRequest,
-    TimelineSelection, TimelineSelectionTarget, TimelineSnapCandidateRequest, TimelineSnapSource,
-    TimelineZoom, TransportControlIntent, TransportControls, Ui, VectorComponentLayout,
-    VectorScrubInputConfig, ViewportActionDescriptor, ViewportActionKind, ViewportActionRequest,
-    ViewportActionTarget, ViewportCursorMetadata, ViewportCursorRequest,
-    ViewportCursorRequestSource, ViewportCursorShape, ViewportFit, ViewportGuideDescriptor,
-    ViewportGuideId, ViewportGuideOrientation, ViewportGuidePlacement, ViewportOverlayDescriptor,
-    ViewportOverlayId, ViewportOverlayKind, ViewportOverlaySpace, ViewportPanZoomHudDescriptor,
-    ViewportRulerDescriptor, ViewportRulerEdge, ViewportRulerId, ViewportSafeAreaDescriptor,
-    ViewportSafeAreaId, ViewportSafeAreaSpace, ViewportSurface, ViewportToolDescriptor,
-    ViewportToolId, classify_numeric_input_draft, component_metadata, components_by_category,
-    hit_test_viewport_overlays, numeric_input, numeric_scrub_input,
-    property_grid_row_affordance_controls, property_grid_row_affordance_rects,
+    COMPONENT_EVIDENCE, COMPONENT_METADATA, ColorFieldConfig, ComponentCategory,
+    ComponentConformanceStatus, ComponentEvidenceCategory, ComponentMetadata, DropdownCloseReason,
+    DropdownItem, DropdownItemId, DropdownModel, DropdownOverlay, EdgeDescriptor, GraphRect,
+    JobList, JobPhase, JobProgress, JobRow, JobRowId, NodeDescriptor, NodeGraphDescriptor,
+    NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget, NodeGraphStaticView,
+    NodeGraphViewport, NodeId, NumericScrubInputConfig, OverlayId, OverlayStack, PanZoom, PanelId,
+    PopoverPlacement, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
+    PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow, PropertyGridRowAffordances,
+    PropertyGridRowState, PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice,
+    SliderStep, TabStrip, TimelineDescriptor, TimelineFrameRate, TimelineId,
+    TimelineItemDescriptor, TimelineItemId, TimelineLaneDescriptor, TimelineLaneId, TimelineRange,
+    TimelineRulerTickRequest, TimelineSelection, TimelineSelectionTarget,
+    TimelineSnapCandidateRequest, TimelineSnapSource, TimelineZoom, TransportControlIntent,
+    TransportControls, Ui, VectorComponentLayout, VectorScrubInputConfig, ViewportActionDescriptor,
+    ViewportActionKind, ViewportActionRequest, ViewportActionTarget, ViewportCursorMetadata,
+    ViewportCursorRequest, ViewportCursorRequestSource, ViewportCursorShape, ViewportFit,
+    ViewportGuideDescriptor, ViewportGuideId, ViewportGuideOrientation, ViewportGuidePlacement,
+    ViewportOverlayDescriptor, ViewportOverlayId, ViewportOverlayKind, ViewportOverlaySpace,
+    ViewportPanZoomHudDescriptor, ViewportRulerDescriptor, ViewportRulerEdge, ViewportRulerId,
+    ViewportSafeAreaDescriptor, ViewportSafeAreaId, ViewportSafeAreaSpace, ViewportSurface,
+    ViewportToolDescriptor, ViewportToolId, classify_numeric_input_draft, component_evidence,
+    component_evidence_for, component_metadata, component_status_evidence, components_by_category,
+    components_by_evidence_category, hit_test_viewport_overlays, numeric_input,
+    numeric_scrub_input, property_grid_row_affordance_controls, property_grid_row_affordance_rects,
     property_grid_row_status_semantics, slider_with_step, timeline_snap_candidates,
     vector4_component_rects, viewport_action_requests, viewport_cursor_request, viewport_guides,
     viewport_rulers, viewport_safe_areas,
@@ -46,6 +47,43 @@ fn assert_entry(name: &str, category: ComponentCategory, status: ComponentConfor
     let metadata = entry(name);
     assert_eq!(metadata.category, category, "{name} category");
     assert_eq!(metadata.status, status, "{name} status");
+}
+
+fn evidence_categories(metadata: &ComponentMetadata) -> BTreeSet<ComponentEvidenceCategory> {
+    component_evidence_for(metadata)
+        .map(|evidence| evidence.category)
+        .collect()
+}
+
+fn assert_stage_entry(
+    name: &str,
+    stage: u8,
+    category: ComponentCategory,
+    status: ComponentConformanceStatus,
+) {
+    let metadata = entry(name);
+    assert_eq!(metadata.category, category, "{name} category");
+    assert_eq!(metadata.status, status, "{name} status");
+    assert_eq!(metadata.stage, Some(stage), "{name} stage");
+    assert!(
+        !component_status_evidence(metadata)
+            .collect::<Vec<_>>()
+            .is_empty(),
+        "{name} status evidence"
+    );
+
+    let categories = evidence_categories(metadata);
+    for category in [
+        ComponentEvidenceCategory::Status,
+        ComponentEvidenceCategory::Stage,
+        ComponentEvidenceCategory::Conformance,
+        ComponentEvidenceCategory::Showcase,
+    ] {
+        assert!(
+            categories.contains(&category),
+            "{name} missing {category:?}"
+        );
+    }
 }
 
 fn item(raw: u64, label: &str) -> DropdownItem {
@@ -139,6 +177,27 @@ fn registry_contains_unique_component_slugs() {
 }
 
 #[test]
+fn registry_contains_unique_component_evidence_ids() {
+    let mut ids = BTreeSet::new();
+
+    for evidence in COMPONENT_EVIDENCE {
+        assert!(ids.insert(evidence.id), "duplicate {}", evidence.id);
+        assert!(!evidence.id.is_empty(), "{evidence:?}");
+        assert!(!evidence.category.as_str().is_empty(), "{evidence:?}");
+        assert!(!evidence.summary.is_empty(), "{evidence:?}");
+        assert!(
+            evidence.id.chars().all(|character| {
+                character.is_ascii_lowercase()
+                    || character.is_ascii_digit()
+                    || character == '-'
+                    || character == '.'
+            }),
+            "{evidence:?}"
+        );
+    }
+}
+
+#[test]
 fn every_metadata_entry_has_stable_non_empty_fields() {
     for metadata in COMPONENT_METADATA {
         assert!(!metadata.name.is_empty(), "{metadata:?}");
@@ -154,7 +213,51 @@ fn every_metadata_entry_has_stable_non_empty_fields() {
         );
         assert!(!metadata.slug.starts_with('-'), "{metadata:?}");
         assert!(!metadata.slug.ends_with('-'), "{metadata:?}");
+        assert!(!metadata.evidence_ids.is_empty(), "{metadata:?}");
+        for evidence_id in metadata.evidence_ids {
+            assert!(
+                component_evidence(evidence_id).is_some(),
+                "{metadata:?} references missing evidence {evidence_id}"
+            );
+        }
     }
+}
+
+#[test]
+fn evidence_helpers_resolve_lookup_filters_and_status_metadata() {
+    let stage_12 = component_evidence("stage.12-viewport-tools").expect("stage 12 evidence");
+    assert_eq!(stage_12.category, ComponentEvidenceCategory::Stage);
+
+    let viewport = entry("Viewport");
+    let viewport_evidence = component_evidence_for(viewport)
+        .map(|evidence| evidence.id)
+        .collect::<BTreeSet<_>>();
+    assert!(viewport_evidence.contains("status.partial-public-contract"));
+    assert!(viewport_evidence.contains("stage.12-viewport-tools"));
+    assert!(viewport_evidence.contains("conformance.component-taxonomy"));
+    assert!(viewport_evidence.contains("showcase.metadata-only"));
+
+    let status_evidence = component_status_evidence(viewport).collect::<Vec<_>>();
+    assert_eq!(status_evidence.len(), 1);
+    assert_eq!(
+        status_evidence[0].category,
+        ComponentEvidenceCategory::Status
+    );
+
+    let staged = components_by_evidence_category(ComponentEvidenceCategory::Stage)
+        .map(|metadata| metadata.name)
+        .collect::<BTreeSet<_>>();
+    assert!(staged.contains("Outliner"));
+    assert!(staged.contains("Timeline"));
+    assert!(staged.contains("Viewport"));
+    assert!(staged.contains("JobList"));
+
+    let showcase =
+        components_by_evidence_category(ComponentEvidenceCategory::Showcase).collect::<Vec<_>>();
+    assert_eq!(showcase.len(), COMPONENT_METADATA.len());
+    assert!(showcase.iter().all(|metadata| {
+        evidence_categories(metadata).contains(&ComponentEvidenceCategory::Showcase)
+    }));
 }
 
 #[test]
@@ -434,6 +537,27 @@ fn stage9_node_graph_taxonomy_reports_partial_status_backed_by_public_contracts(
             && node.label.as_deref() == Some("Source")
             && node.state.selected
     }));
+}
+
+#[test]
+fn stage10_to_stage13_entries_report_partial_status_with_evidence_categories() {
+    for (name, stage, category) in [
+        ("Outliner", 10, ComponentCategory::Collection),
+        ("AssetBrowser", 10, ComponentCategory::Collection),
+        ("Timeline", 11, ComponentCategory::Viewport),
+        ("Ruler", 11, ComponentCategory::Viewport),
+        ("TransportControls", 11, ComponentCategory::Control),
+        ("Viewport", 12, ComponentCategory::Viewport),
+        ("ViewportTools", 12, ComponentCategory::Viewport),
+        ("ViewportActionRouting", 12, ComponentCategory::Viewport),
+        ("StatusBar", 13, ComponentCategory::System),
+        ("ProgressIndicator", 13, ComponentCategory::Display),
+        ("JobList", 13, ComponentCategory::System),
+        ("DiagnosticStrip", 13, ComponentCategory::System),
+        ("FeedbackStack", 13, ComponentCategory::System),
+    ] {
+        assert_stage_entry(name, stage, category, ComponentConformanceStatus::Partial);
+    }
 }
 
 #[test]
