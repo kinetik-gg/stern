@@ -390,6 +390,17 @@ impl<'a> Ui<'a> {
     pub fn label(&mut self, rect: Rect, text: impl Into<String>) {
         let text = text.into();
         let id = self.id(format!("label:{}:{}", rect_key("", rect), text));
+        self.label_with_id(id, rect, text);
+    }
+
+    /// Emits a text label with caller-provided stable identity.
+    pub fn label_keyed(&mut self, key: impl Hash, rect: Rect, text: impl Into<String>) {
+        let id = self.id(key);
+        self.label_with_id(id, rect, text);
+    }
+
+    fn label_with_id(&mut self, id: WidgetId, rect: Rect, text: impl Into<String>) {
+        let text = text.into();
         let output = label_widget(rect, text.clone(), self.theme);
         self.push_widget_output(&output);
         self.runtime
@@ -399,6 +410,16 @@ impl<'a> Ui<'a> {
     /// Emits a passive panel surface.
     pub fn panel(&mut self, rect: Rect) {
         let id = self.id(rect_key("panel", rect));
+        self.panel_with_id(id, rect);
+    }
+
+    /// Emits a passive panel surface with caller-provided stable identity.
+    pub fn panel_keyed(&mut self, key: impl Hash, rect: Rect) {
+        let id = self.id(key);
+        self.panel_with_id(id, rect);
+    }
+
+    fn panel_with_id(&mut self, id: WidgetId, rect: Rect) {
         let output = panel_widget(rect, self.theme);
         self.push_widget_output(&output);
         self.runtime
@@ -448,6 +469,16 @@ impl<'a> Ui<'a> {
     /// Emits a static image.
     pub fn image(&mut self, rect: Rect, image: ImageId) {
         let id = self.id(format!("image:{}:{}", rect_key("", rect), image.raw()));
+        self.image_with_id(id, rect, image);
+    }
+
+    /// Emits a static image with caller-provided stable identity.
+    pub fn image_keyed(&mut self, key: impl Hash, rect: Rect, image: ImageId) {
+        let id = self.id(key);
+        self.image_with_id(id, rect, image);
+    }
+
+    fn image_with_id(&mut self, id: WidgetId, rect: Rect, image: ImageId) {
         let output = image_widget(rect, image);
         self.push_widget_output(&output);
         self.runtime.push_semantic_node(image_semantics(
