@@ -17,11 +17,15 @@ use kinetik_ui_widgets::{
     PopoverPlacement, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
     PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow, PropertyGridRowAffordances,
     PropertyGridRowState, PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice,
-    SliderStep, TabStrip, TimelineFrameRate, TimelineRange, TimelineRulerTickRequest, TimelineZoom,
-    Ui, VectorComponentLayout, VectorScrubInputConfig, classify_numeric_input_draft,
-    component_metadata, components_by_category, numeric_input, numeric_scrub_input,
-    property_grid_row_affordance_controls, property_grid_row_affordance_rects,
-    property_grid_row_status_semantics, slider_with_step, vector4_component_rects,
+    SliderStep, TabStrip, TimelineDescriptor, TimelineFrameRate, TimelineId,
+    TimelineItemDescriptor, TimelineItemId, TimelineLaneDescriptor, TimelineLaneId, TimelineRange,
+    TimelineRulerTickRequest, TimelineSelection, TimelineSelectionTarget,
+    TimelineSnapCandidateRequest, TimelineSnapSource, TimelineZoom, TransportControlIntent,
+    TransportControls, Ui, VectorComponentLayout, VectorScrubInputConfig,
+    classify_numeric_input_draft, component_metadata, components_by_category, numeric_input,
+    numeric_scrub_input, property_grid_row_affordance_controls, property_grid_row_affordance_rects,
+    property_grid_row_status_semantics, slider_with_step, timeline_snap_candidates,
+    vector4_component_rects,
 };
 
 fn entry(name: &str) -> &'static ComponentMetadata {
@@ -403,6 +407,42 @@ fn stage11_timeline_taxonomy_reports_partial_status_backed_by_public_contracts()
 
     assert!(!ticks.is_empty());
     assert!(ticks.iter().any(|tick| !tick.label.is_empty()));
+
+    let descriptor = TimelineDescriptor::new(
+        [TimelineLaneDescriptor::new(
+            TimelineLaneId::from_raw(1),
+            "Video",
+        )],
+        [TimelineItemDescriptor::new(
+            TimelineItemId::from_raw(10),
+            TimelineLaneId::from_raw(1),
+            TimelineRange::seconds(0.0, 1.0),
+            "Clip",
+        )],
+        [],
+        [],
+    );
+    let candidates = timeline_snap_candidates(TimelineSnapCandidateRequest::new(
+        TimelineId::from_raw(1),
+        TimelineRange::seconds(0.0, 1.0),
+        TimelineFrameRate::integer(24),
+        &descriptor,
+    ));
+    let selection = TimelineSelection::from_targets([TimelineSelectionTarget::Item(
+        TimelineItemId::from_raw(10),
+    )]);
+    let transport = TransportControls::from_intents([
+        TransportControlIntent::PlayPause,
+        TransportControlIntent::Stop,
+    ]);
+
+    assert!(
+        candidates
+            .iter()
+            .any(|candidate| candidate.source == TimelineSnapSource::ItemBoundary)
+    );
+    assert!(selection.contains(TimelineSelectionTarget::Item(TimelineItemId::from_raw(10))));
+    assert_eq!(transport.visible_controls().len(), 2);
 }
 
 #[test]

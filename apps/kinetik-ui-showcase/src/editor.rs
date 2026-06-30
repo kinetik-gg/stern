@@ -3406,17 +3406,17 @@ fn run_toolbar_buttons(
 #[allow(clippy::float_cmp, clippy::items_after_test_module)]
 mod tests {
     use super::{
-        ACTION_GRID, ACTION_PLAY, ACTION_SAVE, EditorChromeMetrics, EditorMenuKind, EditorShowcase,
-        EditorStatusItemKind, EditorTool, EditorToolbarGroupKind, FRAME_BOTTOM, FRAME_INSPECTOR,
-        FRAME_VIEWPORT, PANEL_TIMELINE, TOOLBAR_Y, VIEWPORT_SIZE, frame_tab_rects, frame_tab_strip,
-        icon_atlas_image, inspector_label_width, item_id, phosphor_icons, register_resources, rgb,
-        rgba,
+        ACTION_GRID, ACTION_PLAY, ACTION_SAVE, ACTION_STOP, EditorChromeMetrics, EditorMenuKind,
+        EditorShowcase, EditorStatusItemKind, EditorTool, EditorToolbarGroupKind, FRAME_BOTTOM,
+        FRAME_INSPECTOR, FRAME_VIEWPORT, PANEL_TIMELINE, TOOLBAR_Y, VIEWPORT_SIZE, frame_tab_rects,
+        frame_tab_strip, icon_atlas_image, inspector_label_width, item_id, phosphor_icons,
+        register_resources, rgb, rgba,
     };
     use kinetik_ui::core::{
-        ActionContext, ActionId, ActionSource, Brush, CursorShape, FrameContext, PhysicalSize,
-        PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest,
-        ScaleFactor, SemanticActionKind, SemanticRole, Size, TimeInfo, UiInput, UiMemory, Vec2,
-        ViewportInfo, WidgetId, default_dark_theme,
+        ActionContext, ActionDescriptor, ActionId, ActionSource, Brush, CursorShape, FrameContext,
+        PhysicalSize, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect,
+        RepaintRequest, ScaleFactor, SemanticActionKind, SemanticRole, Size, TimeInfo, UiInput,
+        UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
     };
     use kinetik_ui::render::RenderResources;
     use kinetik_ui::widgets::{
@@ -3424,9 +3424,125 @@ mod tests {
         NodeGraphContextActionKind, NodeGraphContextTarget, NodeGraphHitTarget,
         NodeGraphLinkEditRequest, NodeGraphSelection, NodeGraphSelectionTarget, NodeId,
         OverlayDismissal, OverlayKind, PanelOpenDecision, PanelTypeCategory, PortEndpoint, PortId,
-        StatusItemKind, Ui, ViewportSurface, resolve_dock_splitter_context_actions_with_policy,
-        solve_dock_layout, solve_dock_splitters_with_style,
+        StatusItemKind, TimelineDescriptor, TimelineFrameRate, TimelineId, TimelineItemDescriptor,
+        TimelineItemId, TimelineKeyframeDescriptor, TimelineKeyframeId, TimelineLaneDescriptor,
+        TimelineLaneId, TimelineLayout, TimelineMarkerDescriptor, TimelineMarkerId, TimelineRange,
+        TimelineScale, TimelineSelection, TimelineSelectionTarget, TimelineSnapCandidate,
+        TimelineSnapCandidateRequest, TimelineSnapSource, TimelineTime, TimelineTransportContext,
+        TimelineViewportState, TimelineZoom, TransportActionRequest, TransportControlDescriptor,
+        TransportControlId, TransportControlIntent, TransportControls, Ui, ViewportSurface,
+        resolve_dock_splitter_context_actions_with_policy, solve_dock_layout,
+        solve_dock_splitters_with_style, timeline_semantics, timeline_snap_candidates,
     };
+
+    struct EditorTimelineFixture {
+        descriptor: TimelineDescriptor,
+        candidates: Vec<TimelineSnapCandidate>,
+        transport_request: TransportActionRequest,
+        state: TimelineViewportState,
+        semantic_roles: Vec<SemanticRole>,
+    }
+
+    fn editor_timeline_fixture() -> EditorTimelineFixture {
+        let timeline = TimelineId::from_raw(9_000);
+        let descriptor = TimelineDescriptor::new(
+            [
+                TimelineLaneDescriptor::new(TimelineLaneId::from_raw(1), "Video"),
+                TimelineLaneDescriptor::new(TimelineLaneId::from_raw(2), "Animation"),
+            ],
+            [
+                TimelineItemDescriptor::new(
+                    TimelineItemId::from_raw(10),
+                    TimelineLaneId::from_raw(1),
+                    TimelineRange::seconds(0.0, 2.5),
+                    "Intro clip",
+                ),
+                TimelineItemDescriptor::new(
+                    TimelineItemId::from_raw(11),
+                    TimelineLaneId::from_raw(2),
+                    TimelineRange::seconds(1.0, 3.0),
+                    "Camera move",
+                ),
+            ],
+            [TimelineMarkerDescriptor::new(
+                TimelineMarkerId::from_raw(30),
+                TimelineTime::from_seconds(1.5),
+                "Beat",
+            )],
+            [TimelineKeyframeDescriptor::new(
+                TimelineKeyframeId::from_raw(40),
+                TimelineItemId::from_raw(11),
+                TimelineTime::from_seconds(2.0),
+            )],
+        );
+        let scale = TimelineScale::new(
+            0.0,
+            240.0,
+            TimelineRange::seconds(0.0, 4.0),
+            TimelineZoom::new(60.0),
+            0.0,
+        );
+        let layout = TimelineLayout::new(24.0)
+            .resolve(Rect::new(0.0, 0.0, 240.0, 48.0), scale, &descriptor, 0.0)
+            .expect("editor timeline fixture resolves");
+        let semantic_roles = timeline_semantics(
+            WidgetId::from_key("editor.timeline.fixture"),
+            layout.bounds,
+            &layout,
+            "Editor timeline",
+        )
+        .into_iter()
+        .map(|node| node.role)
+        .collect::<Vec<_>>();
+        let candidates = timeline_snap_candidates(
+            TimelineSnapCandidateRequest::new(
+                timeline,
+                scale.visible_range(),
+                TimelineFrameRate::integer(24),
+                &descriptor,
+            )
+            .with_selection_range(TimelineRange::seconds(0.5, 2.5))
+            .with_playhead_time(TimelineTime::from_seconds(1.25)),
+        );
+        let selection = TimelineSelection::from_targets([TimelineSelectionTarget::Item(
+            TimelineItemId::from_raw(11),
+        )]);
+        let state = TimelineViewportState::new(scale)
+            .with_playhead_time(TimelineTime::from_seconds(1.25))
+            .with_selection(selection)
+            .with_selection_range(TimelineRange::seconds(0.5, 2.5));
+        let transport = TransportControls::from_controls([
+            TransportControlDescriptor::new(
+                TransportControlId::from_raw(1),
+                TransportControlIntent::PlayPause,
+                ActionDescriptor::new(ACTION_PLAY, "Play"),
+            ),
+            TransportControlDescriptor::new(
+                TransportControlId::from_raw(2),
+                TransportControlIntent::Stop,
+                ActionDescriptor::new(ACTION_STOP, "Stop"),
+            ),
+        ]);
+        let transport_request = transport
+            .request_for_visible(
+                0,
+                ActionSource::Button,
+                Some(
+                    TimelineTransportContext::new(timeline)
+                        .with_playhead_time(TimelineTime::from_seconds(1.25))
+                        .with_selection_range(TimelineRange::seconds(0.5, 2.5)),
+                ),
+            )
+            .expect("editor transport fixture emits metadata");
+
+        EditorTimelineFixture {
+            descriptor,
+            candidates,
+            transport_request,
+            state,
+            semantic_roles,
+        }
+    }
 
     #[test]
     fn inspector_label_width_preserves_value_space_at_narrow_widths() {
@@ -3611,6 +3727,65 @@ mod tests {
                 .expect("timeline drag target")
                 .index,
             1
+        );
+    }
+
+    #[test]
+    fn editor_timeline_fixture_exposes_data_only_semantics_snap_and_transport_requests() {
+        let fixture = editor_timeline_fixture();
+
+        fixture
+            .descriptor
+            .validate()
+            .expect("editor-owned timeline descriptors validate");
+        assert!(
+            fixture
+                .semantic_roles
+                .iter()
+                .any(|role| *role == SemanticRole::Custom("timeline".to_owned()))
+        );
+        assert!(
+            fixture
+                .semantic_roles
+                .iter()
+                .any(|role| *role == SemanticRole::Custom("timeline-item".to_owned()))
+        );
+        assert!(
+            fixture
+                .candidates
+                .iter()
+                .any(|candidate| candidate.source == TimelineSnapSource::Frame)
+        );
+        assert!(
+            fixture
+                .candidates
+                .iter()
+                .any(|candidate| candidate.source == TimelineSnapSource::Marker)
+        );
+        assert!(
+            fixture
+                .candidates
+                .iter()
+                .any(|candidate| candidate.source == TimelineSnapSource::Keyframe)
+        );
+        assert_eq!(
+            fixture.transport_request.action_id,
+            ActionId::new(ACTION_PLAY)
+        );
+        assert_eq!(fixture.transport_request.source, ActionSource::Button);
+        assert_eq!(
+            fixture
+                .transport_request
+                .timeline_context
+                .expect("transport context")
+                .timeline,
+            TimelineId::from_raw(9_000)
+        );
+        assert!(
+            fixture
+                .state
+                .selection
+                .contains(TimelineSelectionTarget::Item(TimelineItemId::from_raw(11)))
         );
     }
 
