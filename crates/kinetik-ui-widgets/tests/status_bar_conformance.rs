@@ -155,14 +155,14 @@ fn feedback_pinned_items_do_not_expire_or_request_repaint() {
 
     assert_eq!(
         stack
-            .active_items(Duration::from_secs(60 * 60))
+            .active_items(Duration::from_hours(1))
             .iter()
             .map(|item| item.id)
             .collect::<Vec<_>>(),
         vec![feedback_id(1)]
     );
     assert_eq!(
-        stack.repaint_request(Duration::from_secs(60 * 60)),
+        stack.repaint_request(Duration::from_hours(1)),
         RepaintRequest::None
     );
 }
