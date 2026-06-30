@@ -6,7 +6,8 @@ use std::{
 };
 
 use kinetik_ui_core::{
-    Rect, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, SemanticValue, WidgetId,
+    Point, Rect, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, SemanticValue,
+    WidgetId,
 };
 
 /// Default timeline ruler scale in logical pixels per second.
@@ -833,6 +834,807 @@ impl TimelineLayoutResult<'_> {
     pub fn materialized_lane_ids(&self) -> Vec<TimelineLaneId> {
         self.lanes.iter().map(|lane| lane.descriptor.id).collect()
     }
+
+    /// Resolves one UI logical point to deterministic timeline hit metadata.
+    #[must_use]
+    pub fn hit_test(
+        &self,
+        point: Point,
+        config: TimelineHitTestConfig,
+    ) -> Option<TimelineHitMetadata> {
+        hit_test_timeline(self, point, config)
+    }
+
+    /// Creates a playhead seek request from a pointer x coordinate.
+    #[must_use]
+    pub fn playhead_seek_request(
+        &self,
+        pointer_x: f32,
+        frame_rate: TimelineFrameRate,
+        config: TimelineHitTestConfig,
+        snap: TimelineSnapMetadata,
+    ) -> TimelinePlayheadSeekRequest {
+        let requested_time = config.scale.screen_x_to_time(pointer_x);
+        TimelinePlayheadSeekRequest::new(requested_time, frame_rate, snap)
+    }
+}
+
+/// Stable backend-independent timeline hit target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TimelineHitTarget {
+    /// Timeline background inside the content surface.
+    Background(TimelineId),
+    /// Timeline ruler surface.
+    Ruler(TimelineRulerId),
+    /// Playhead handle or line.
+    Playhead(TimelineId),
+    /// Start range-selection handle.
+    RangeStartHandle(TimelineId),
+    /// End range-selection handle.
+    RangeEndHandle(TimelineId),
+    /// Lane header row.
+    LaneHeader(TimelineLaneId),
+    /// Clip/item body.
+    Item(TimelineItemId),
+    /// Clip/item start trim handle.
+    ItemTrimStartHandle(TimelineItemId),
+    /// Clip/item end trim handle.
+    ItemTrimEndHandle(TimelineItemId),
+    /// Timeline marker.
+    Marker(TimelineMarkerId),
+    /// Timeline keyframe.
+    Keyframe(TimelineKeyframeId),
+}
+
+/// Deterministic metadata for one timeline hit test result.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineHitMetadata {
+    /// Stable target identity.
+    pub target: TimelineHitTarget,
+    /// Hit rectangle that accepted the point.
+    pub rect: Rect,
+    /// Timeline time represented by the hit point's x coordinate.
+    pub time: TimelineTime,
+    /// Descriptor state for descriptor-backed targets.
+    pub state: TimelineDescriptorState,
+}
+
+impl TimelineHitMetadata {
+    /// Returns true when the hit target cannot emit interaction requests.
+    #[must_use]
+    pub const fn disabled(self) -> bool {
+        self.state.disabled
+    }
+
+    /// Returns true when the hit target is visible but not editable.
+    #[must_use]
+    pub const fn read_only(self) -> bool {
+        self.state.read_only
+    }
+}
+
+/// Timeline hit-test geometry and identity context.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineHitTestConfig {
+    /// Timeline surface identity used by background, playhead, and range handles.
+    pub timeline: TimelineId,
+    /// Ruler identity.
+    pub ruler: TimelineRulerId,
+    /// Timeline scale used for pointer x to time conversion.
+    pub scale: TimelineScale,
+    /// Optional ruler rectangle.
+    pub ruler_rect: Option<Rect>,
+    /// Optional playhead time.
+    pub playhead_time: Option<TimelineTime>,
+    /// Optional selected time range with editable handles.
+    pub selection_range: Option<TimelineRange>,
+    /// Width of the lane-header hit strip from the left edge of timeline bounds.
+    pub lane_header_width: f32,
+    /// Logical hit width for the playhead line.
+    pub playhead_hit_width: f32,
+    /// Logical hit width for range handles.
+    pub range_handle_hit_width: f32,
+    /// Logical width reserved for clip trim handles.
+    pub item_trim_handle_width: f32,
+}
+
+impl TimelineHitTestConfig {
+    /// Creates timeline hit-test configuration with deterministic defaults.
+    #[must_use]
+    pub const fn new(timeline: TimelineId, ruler: TimelineRulerId, scale: TimelineScale) -> Self {
+        Self {
+            timeline,
+            ruler,
+            scale,
+            ruler_rect: None,
+            playhead_time: None,
+            selection_range: None,
+            lane_header_width: 0.0,
+            playhead_hit_width: 7.0,
+            range_handle_hit_width: 7.0,
+            item_trim_handle_width: 6.0,
+        }
+    }
+
+    /// Assigns the ruler hit rectangle.
+    #[must_use]
+    pub const fn with_ruler_rect(mut self, ruler_rect: Rect) -> Self {
+        self.ruler_rect = Some(ruler_rect);
+        self
+    }
+
+    /// Assigns the playhead time used for hit testing.
+    #[must_use]
+    pub const fn with_playhead_time(mut self, playhead_time: TimelineTime) -> Self {
+        self.playhead_time = Some(playhead_time);
+        self
+    }
+
+    /// Assigns the selected range used for range-handle hit testing.
+    #[must_use]
+    pub const fn with_selection_range(mut self, selection_range: TimelineRange) -> Self {
+        self.selection_range = Some(selection_range);
+        self
+    }
+
+    /// Assigns the lane header strip width.
+    #[must_use]
+    pub const fn with_lane_header_width(mut self, lane_header_width: f32) -> Self {
+        self.lane_header_width = lane_header_width;
+        self
+    }
+
+    /// Assigns playhead hit width.
+    #[must_use]
+    pub const fn with_playhead_hit_width(mut self, playhead_hit_width: f32) -> Self {
+        self.playhead_hit_width = playhead_hit_width;
+        self
+    }
+
+    /// Assigns range handle hit width.
+    #[must_use]
+    pub const fn with_range_handle_hit_width(mut self, range_handle_hit_width: f32) -> Self {
+        self.range_handle_hit_width = range_handle_hit_width;
+        self
+    }
+
+    /// Assigns clip trim handle hit width.
+    #[must_use]
+    pub const fn with_item_trim_handle_width(mut self, item_trim_handle_width: f32) -> Self {
+        self.item_trim_handle_width = item_trim_handle_width;
+        self
+    }
+
+    fn sanitized(self) -> Self {
+        Self {
+            timeline: self.timeline,
+            ruler: self.ruler,
+            scale: self.scale.sanitized(),
+            ruler_rect: self.ruler_rect.map(finite_rect),
+            playhead_time: self.playhead_time.map(TimelineTime::sanitized),
+            selection_range: self.selection_range.map(TimelineRange::sanitized),
+            lane_header_width: finite_f32_non_negative(self.lane_header_width),
+            playhead_hit_width: finite_f32_non_negative(self.playhead_hit_width),
+            range_handle_hit_width: finite_f32_non_negative(self.range_handle_hit_width),
+            item_trim_handle_width: finite_f32_non_negative(self.item_trim_handle_width),
+        }
+    }
+}
+
+/// Source that produced a snapped timeline time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelineSnapSource {
+    /// No snap was applied.
+    None,
+    /// Snapped to a frame boundary.
+    Frame,
+    /// Snapped to the playhead.
+    Playhead,
+    /// Snapped to a range boundary.
+    RangeBoundary,
+    /// Snapped to a clip/item boundary.
+    ItemBoundary,
+    /// Snapped to a marker.
+    Marker,
+    /// Snapped to a keyframe.
+    Keyframe,
+}
+
+/// Data-only snap candidate supplied by the application or descriptor projection.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineSnapCandidate {
+    /// Candidate time.
+    pub time: TimelineTime,
+    /// Snap source kind.
+    pub source: TimelineSnapSource,
+    /// Stable target identity for the snap source.
+    pub target: Option<TimelineHitTarget>,
+}
+
+impl TimelineSnapCandidate {
+    /// Creates snap candidate metadata.
+    #[must_use]
+    pub const fn new(
+        time: TimelineTime,
+        source: TimelineSnapSource,
+        target: Option<TimelineHitTarget>,
+    ) -> Self {
+        Self {
+            time,
+            source,
+            target,
+        }
+    }
+}
+
+/// Data-only snap result metadata.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineSnapMetadata {
+    /// Time originally requested by interaction.
+    pub requested_time: TimelineTime,
+    /// Time after snap evaluation.
+    pub snapped_time: TimelineTime,
+    /// Snap source that produced `snapped_time`.
+    pub source: TimelineSnapSource,
+    /// Stable target identity for the snap source.
+    pub target: Option<TimelineHitTarget>,
+}
+
+impl TimelineSnapMetadata {
+    /// Creates unsnapped metadata.
+    #[must_use]
+    pub const fn unsnapped(requested_time: TimelineTime) -> Self {
+        Self {
+            requested_time,
+            snapped_time: requested_time,
+            source: TimelineSnapSource::None,
+            target: None,
+        }
+    }
+
+    /// Creates snapped metadata.
+    #[must_use]
+    pub const fn snapped(
+        requested_time: TimelineTime,
+        snapped_time: TimelineTime,
+        source: TimelineSnapSource,
+        target: Option<TimelineHitTarget>,
+    ) -> Self {
+        Self {
+            requested_time,
+            snapped_time,
+            source,
+            target,
+        }
+    }
+
+    /// Returns true when the requested and snapped times are identical.
+    #[must_use]
+    pub fn is_noop(self) -> bool {
+        self.source == TimelineSnapSource::None
+            || self.requested_time.sanitized() == self.snapped_time.sanitized()
+    }
+}
+
+/// Select operation requested by timeline interaction metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelineSelectionOperation {
+    /// Replace the current selection.
+    Replace,
+    /// Toggle the target in the current selection.
+    Toggle,
+    /// Extend the current selection.
+    Extend,
+}
+
+/// Clip trim edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelineTrimEdge {
+    /// Trim the clip/item start.
+    Start,
+    /// Trim the clip/item end.
+    End,
+}
+
+/// Data-only request metadata for a playhead seek.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelinePlayheadSeekRequest {
+    /// Requested time before snap.
+    pub requested_time: TimelineTime,
+    /// Requested frame after snap.
+    pub frame: TimelineFrame,
+    /// Snap metadata used by the request.
+    pub snap: TimelineSnapMetadata,
+}
+
+impl TimelinePlayheadSeekRequest {
+    /// Creates playhead seek metadata.
+    #[must_use]
+    pub fn new(
+        requested_time: TimelineTime,
+        frame_rate: TimelineFrameRate,
+        snap: TimelineSnapMetadata,
+    ) -> Self {
+        Self {
+            requested_time: requested_time.sanitized(),
+            frame: frame_rate
+                .sanitized()
+                .time_to_frame(snap.snapped_time, TimelineFrameRounding::Nearest),
+            snap,
+        }
+    }
+}
+
+/// Data-only metadata for beginning a timeline scrub.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineScrubBeginRequest {
+    /// Hit target that initiated the scrub.
+    pub source: TimelineHitTarget,
+    /// Time before the scrub begins.
+    pub previous_time: TimelineTime,
+    /// Requested current time.
+    pub current_time: TimelineTime,
+    /// Snap metadata used by the request.
+    pub snap: TimelineSnapMetadata,
+    /// Whether the UI should preserve pointer-capture intent for this drag.
+    pub pointer_capture_requested: bool,
+}
+
+/// Data-only metadata for updating a timeline scrub.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineScrubUpdateRequest {
+    /// Hit target that initiated the scrub.
+    pub source: TimelineHitTarget,
+    /// Time before this update.
+    pub previous_time: TimelineTime,
+    /// Requested current time.
+    pub current_time: TimelineTime,
+    /// Snap metadata used by the request.
+    pub snap: TimelineSnapMetadata,
+    /// Whether the UI should preserve pointer-capture intent for this drag.
+    pub pointer_capture_requested: bool,
+}
+
+/// Data-only metadata for ending a timeline scrub.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineScrubEndRequest {
+    /// Hit target that initiated the scrub.
+    pub source: TimelineHitTarget,
+    /// Time before the scrub began.
+    pub start_time: TimelineTime,
+    /// Time before the end request.
+    pub previous_time: TimelineTime,
+    /// Requested final time.
+    pub current_time: TimelineTime,
+    /// Snap metadata used by the request.
+    pub snap: TimelineSnapMetadata,
+    /// Whether pointer capture should still be held after this request.
+    pub pointer_capture_requested: bool,
+}
+
+impl TimelineScrubBeginRequest {
+    /// Creates scrub-begin metadata.
+    #[must_use]
+    pub const fn new(
+        source: TimelineHitTarget,
+        previous_time: TimelineTime,
+        current_time: TimelineTime,
+        snap: TimelineSnapMetadata,
+    ) -> Self {
+        Self {
+            source,
+            previous_time,
+            current_time,
+            snap,
+            pointer_capture_requested: true,
+        }
+    }
+}
+
+impl TimelineScrubUpdateRequest {
+    /// Creates scrub-update metadata.
+    #[must_use]
+    pub const fn new(
+        source: TimelineHitTarget,
+        previous_time: TimelineTime,
+        current_time: TimelineTime,
+        snap: TimelineSnapMetadata,
+    ) -> Self {
+        Self {
+            source,
+            previous_time,
+            current_time,
+            snap,
+            pointer_capture_requested: true,
+        }
+    }
+}
+
+impl TimelineScrubEndRequest {
+    /// Creates scrub-end metadata.
+    #[must_use]
+    pub const fn new(
+        source: TimelineHitTarget,
+        start_time: TimelineTime,
+        previous_time: TimelineTime,
+        current_time: TimelineTime,
+        snap: TimelineSnapMetadata,
+    ) -> Self {
+        Self {
+            source,
+            start_time,
+            previous_time,
+            current_time,
+            snap,
+            pointer_capture_requested: false,
+        }
+    }
+}
+
+/// Data-only metadata for beginning range selection.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineRangeSelectionBeginRequest {
+    /// Hit target that initiated range selection.
+    pub source: TimelineHitTarget,
+    /// Anchor time.
+    pub anchor_time: TimelineTime,
+    /// Current pointer time.
+    pub current_time: TimelineTime,
+    /// Normalized clamped range.
+    pub range: TimelineRange,
+    /// Snap metadata used by the current time.
+    pub snap: TimelineSnapMetadata,
+    /// Whether the UI should preserve pointer-capture intent for this drag.
+    pub pointer_capture_requested: bool,
+}
+
+/// Data-only metadata for updating range selection.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineRangeSelectionUpdateRequest {
+    /// Hit target that initiated range selection.
+    pub source: TimelineHitTarget,
+    /// Anchor time.
+    pub anchor_time: TimelineTime,
+    /// Current pointer time.
+    pub current_time: TimelineTime,
+    /// Normalized clamped range.
+    pub range: TimelineRange,
+    /// Snap metadata used by the current time.
+    pub snap: TimelineSnapMetadata,
+    /// Whether the UI should preserve pointer-capture intent for this drag.
+    pub pointer_capture_requested: bool,
+}
+
+/// Data-only metadata for ending range selection.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineRangeSelectionEndRequest {
+    /// Hit target that initiated range selection.
+    pub source: TimelineHitTarget,
+    /// Anchor time.
+    pub anchor_time: TimelineTime,
+    /// Final pointer time.
+    pub current_time: TimelineTime,
+    /// Normalized clamped range.
+    pub range: TimelineRange,
+    /// Snap metadata used by the current time.
+    pub snap: TimelineSnapMetadata,
+    /// Whether pointer capture should still be held after this request.
+    pub pointer_capture_requested: bool,
+}
+
+impl TimelineRangeSelectionBeginRequest {
+    /// Creates range-selection begin metadata.
+    #[must_use]
+    pub fn new(
+        source: TimelineHitTarget,
+        anchor_time: TimelineTime,
+        current_time: TimelineTime,
+        bounds: TimelineRange,
+        snap: TimelineSnapMetadata,
+    ) -> Self {
+        let range = clamped_timeline_drag_range(anchor_time, snap.snapped_time, bounds);
+        Self {
+            source,
+            anchor_time: clamp_timeline_time(anchor_time, bounds),
+            current_time,
+            range,
+            snap,
+            pointer_capture_requested: true,
+        }
+    }
+}
+
+impl TimelineRangeSelectionUpdateRequest {
+    /// Creates range-selection update metadata.
+    #[must_use]
+    pub fn new(
+        source: TimelineHitTarget,
+        anchor_time: TimelineTime,
+        current_time: TimelineTime,
+        bounds: TimelineRange,
+        snap: TimelineSnapMetadata,
+    ) -> Self {
+        let range = clamped_timeline_drag_range(anchor_time, snap.snapped_time, bounds);
+        Self {
+            source,
+            anchor_time: clamp_timeline_time(anchor_time, bounds),
+            current_time,
+            range,
+            snap,
+            pointer_capture_requested: true,
+        }
+    }
+}
+
+impl TimelineRangeSelectionEndRequest {
+    /// Creates range-selection end metadata.
+    #[must_use]
+    pub fn new(
+        source: TimelineHitTarget,
+        anchor_time: TimelineTime,
+        current_time: TimelineTime,
+        bounds: TimelineRange,
+        snap: TimelineSnapMetadata,
+    ) -> Self {
+        let range = clamped_timeline_drag_range(anchor_time, snap.snapped_time, bounds);
+        Self {
+            source,
+            anchor_time: clamp_timeline_time(anchor_time, bounds),
+            current_time,
+            range,
+            snap,
+            pointer_capture_requested: false,
+        }
+    }
+}
+
+/// Data-only marker selection metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimelineMarkerSelectionRequest {
+    /// Target marker.
+    pub target: TimelineMarkerId,
+    /// Requested selection operation.
+    pub operation: TimelineSelectionOperation,
+}
+
+/// Data-only marker context metadata.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineMarkerContextRequest {
+    /// Target marker.
+    pub target: TimelineMarkerId,
+    /// Marker time.
+    pub time: TimelineTime,
+    /// Descriptor state at request time.
+    pub state: TimelineDescriptorState,
+}
+
+/// Data-only clip/item selection metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimelineClipSelectionRequest {
+    /// Target clip/item.
+    pub target: TimelineItemId,
+    /// Requested selection operation.
+    pub operation: TimelineSelectionOperation,
+}
+
+/// Data-only keyframe selection metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimelineKeyframeSelectionRequest {
+    /// Target keyframe.
+    pub target: TimelineKeyframeId,
+    /// Containing clip/item.
+    pub item: TimelineItemId,
+    /// Requested selection operation.
+    pub operation: TimelineSelectionOperation,
+}
+
+/// Data-only clip/item move metadata.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineClipMoveRequest {
+    /// Target clip/item.
+    pub target: TimelineItemId,
+    /// Containing lane.
+    pub lane: TimelineLaneId,
+    /// Source range before movement.
+    pub original_range: TimelineRange,
+    /// Requested movement delta in timeline seconds.
+    pub requested_delta: TimelineTime,
+    /// Movement delta after snap.
+    pub snapped_delta: TimelineTime,
+    /// Range requested before snap.
+    pub requested_range: TimelineRange,
+    /// Range requested after snap.
+    pub snapped_range: TimelineRange,
+    /// Snap metadata used by the request.
+    pub snap: TimelineSnapMetadata,
+    /// Whether the UI should preserve pointer-capture intent for this drag.
+    pub pointer_capture_requested: bool,
+}
+
+impl TimelineClipMoveRequest {
+    /// Returns true when this request would not move the clip/item.
+    #[must_use]
+    pub fn is_noop(self) -> bool {
+        self.snapped_delta.sanitized() == TimelineTime::ZERO
+    }
+}
+
+/// Data-only clip/item trim metadata.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineClipTrimRequest {
+    /// Target clip/item.
+    pub target: TimelineItemId,
+    /// Trimmed edge.
+    pub edge: TimelineTrimEdge,
+    /// Source range before trim.
+    pub original_range: TimelineRange,
+    /// Requested trim time before snap or clamping.
+    pub requested_time: TimelineTime,
+    /// Requested trim time after snap and clamping.
+    pub clamped_time: TimelineTime,
+    /// Range requested after snap and clamping.
+    pub clamped_range: TimelineRange,
+    /// Snap metadata used by the request.
+    pub snap: TimelineSnapMetadata,
+    /// Whether the UI should preserve pointer-capture intent for this drag.
+    pub pointer_capture_requested: bool,
+}
+
+impl TimelineClipTrimRequest {
+    /// Returns true when this request would not change the clip/item range.
+    #[must_use]
+    pub fn is_noop(self) -> bool {
+        self.clamped_range == self.original_range
+    }
+}
+
+impl ResolvedTimelineItem<'_> {
+    /// Creates clip/item selection metadata when the descriptor is enabled.
+    #[must_use]
+    pub const fn selection_request(
+        &self,
+        operation: TimelineSelectionOperation,
+    ) -> Option<TimelineClipSelectionRequest> {
+        if self.descriptor.state.disabled {
+            None
+        } else {
+            Some(TimelineClipSelectionRequest {
+                target: self.descriptor.id,
+                operation,
+            })
+        }
+    }
+
+    /// Creates clip/item move metadata without mutating the descriptor.
+    #[must_use]
+    pub fn move_request(
+        &self,
+        requested_delta: TimelineTime,
+        snap: TimelineSnapMetadata,
+    ) -> Option<TimelineClipMoveRequest> {
+        if self.descriptor.state.disabled || self.descriptor.state.read_only {
+            return None;
+        }
+
+        let original_range = self.time_range.sanitized();
+        let requested_delta = requested_delta.sanitized();
+        let requested_range = offset_timeline_range(original_range, requested_delta);
+        let snapped_delta = TimelineTime::from_seconds(
+            snap.snapped_time.sanitized().seconds() - original_range.start.seconds(),
+        )
+        .sanitized();
+        let snapped_range = offset_timeline_range(original_range, snapped_delta);
+
+        Some(TimelineClipMoveRequest {
+            target: self.descriptor.id,
+            lane: self.descriptor.lane,
+            original_range,
+            requested_delta,
+            snapped_delta,
+            requested_range,
+            snapped_range,
+            snap,
+            pointer_capture_requested: true,
+        })
+    }
+
+    /// Creates clip/item trim metadata without mutating the descriptor.
+    #[must_use]
+    pub fn trim_request(
+        &self,
+        edge: TimelineTrimEdge,
+        requested_time: TimelineTime,
+        bounds: TimelineRange,
+        snap: TimelineSnapMetadata,
+    ) -> Option<TimelineClipTrimRequest> {
+        if self.descriptor.state.disabled || self.descriptor.state.read_only {
+            return None;
+        }
+
+        let original_range = self.time_range.sanitized();
+        let bounds = bounds.sanitized();
+        let snapped_time = clamp_timeline_time(snap.snapped_time, bounds);
+        let clamped_time = match edge {
+            TimelineTrimEdge::Start => TimelineTime::from_seconds(
+                snapped_time
+                    .seconds()
+                    .clamp(bounds.start.seconds(), original_range.end.seconds()),
+            ),
+            TimelineTrimEdge::End => TimelineTime::from_seconds(
+                snapped_time
+                    .seconds()
+                    .clamp(original_range.start.seconds(), bounds.end.seconds()),
+            ),
+        }
+        .sanitized();
+        let clamped_range = match edge {
+            TimelineTrimEdge::Start => TimelineRange::new(clamped_time, original_range.end),
+            TimelineTrimEdge::End => TimelineRange::new(original_range.start, clamped_time),
+        }
+        .sanitized();
+
+        Some(TimelineClipTrimRequest {
+            target: self.descriptor.id,
+            edge,
+            original_range,
+            requested_time: requested_time.sanitized(),
+            clamped_time,
+            clamped_range,
+            snap,
+            pointer_capture_requested: true,
+        })
+    }
+}
+
+impl ResolvedTimelineMarker<'_> {
+    /// Creates marker selection metadata when the descriptor is enabled.
+    #[must_use]
+    pub const fn selection_request(
+        &self,
+        operation: TimelineSelectionOperation,
+    ) -> Option<TimelineMarkerSelectionRequest> {
+        if self.descriptor.state.disabled {
+            None
+        } else {
+            Some(TimelineMarkerSelectionRequest {
+                target: self.descriptor.id,
+                operation,
+            })
+        }
+    }
+
+    /// Creates marker context metadata when the descriptor is enabled.
+    #[must_use]
+    pub const fn context_request(&self) -> Option<TimelineMarkerContextRequest> {
+        if self.descriptor.state.disabled {
+            None
+        } else {
+            Some(TimelineMarkerContextRequest {
+                target: self.descriptor.id,
+                time: self.time,
+                state: self.descriptor.state,
+            })
+        }
+    }
+}
+
+impl ResolvedTimelineKeyframe<'_> {
+    /// Creates keyframe selection metadata when the descriptor is enabled.
+    #[must_use]
+    pub const fn selection_request(
+        &self,
+        operation: TimelineSelectionOperation,
+    ) -> Option<TimelineKeyframeSelectionRequest> {
+        if self.descriptor.state.disabled {
+            None
+        } else {
+            Some(TimelineKeyframeSelectionRequest {
+                target: self.descriptor.id,
+                item: self.item,
+                operation,
+            })
+        }
+    }
 }
 
 /// Builds backend-neutral semantic nodes for a resolved timeline layout.
@@ -1229,6 +2031,342 @@ pub fn timeline_timecode_label(frame: TimelineFrame, frame_rate: TimelineFrameRa
     let frame = frames % display_fps;
 
     format!("{sign}{hours:02}:{minutes:02}:{seconds:02}:{frame:02}")
+}
+
+/// Resolves one timeline time against snap candidates without mutating descriptors.
+#[must_use]
+pub fn timeline_snap_time(
+    requested_time: TimelineTime,
+    candidates: &[TimelineSnapCandidate],
+    tolerance_seconds: f64,
+) -> TimelineSnapMetadata {
+    let requested_time = requested_time.sanitized();
+    let tolerance_seconds = finite_f64_or_zero(tolerance_seconds).max(0.0);
+    let mut best: Option<(f64, TimelineSnapCandidate)> = None;
+
+    for candidate in candidates {
+        let candidate = TimelineSnapCandidate {
+            time: candidate.time.sanitized(),
+            source: candidate.source,
+            target: candidate.target,
+        };
+        let distance = (candidate.time.seconds() - requested_time.seconds()).abs();
+        if distance > tolerance_seconds {
+            continue;
+        }
+
+        let replace = best.is_none_or(|(best_distance, best_candidate)| {
+            let distance_order = distance.total_cmp(&best_distance);
+            distance_order.is_lt()
+                || (distance_order.is_eq()
+                    && compare_snap_candidates(candidate, best_candidate).is_lt())
+        });
+        if replace {
+            best = Some((distance, candidate));
+        }
+    }
+
+    best.map_or_else(
+        || TimelineSnapMetadata::unsnapped(requested_time),
+        |(_, candidate)| {
+            TimelineSnapMetadata::snapped(
+                requested_time,
+                candidate.time,
+                candidate.source,
+                candidate.target,
+            )
+        },
+    )
+}
+
+fn hit_test_timeline(
+    result: &TimelineLayoutResult<'_>,
+    point: Point,
+    config: TimelineHitTestConfig,
+) -> Option<TimelineHitMetadata> {
+    let bounds = finite_rect(result.bounds);
+    let point = sanitize_point(point);
+    if !bounds.contains_point(point) {
+        return None;
+    }
+
+    let config = config.sanitized();
+    let time = config.scale.screen_x_to_time(point.x);
+
+    if let Some(hit) = hit_test_timeline_keyframes(result, point, time) {
+        return Some(hit);
+    }
+
+    if let Some(hit) = hit_test_timeline_items(result, point, time, config.item_trim_handle_width) {
+        return Some(hit);
+    }
+
+    if let Some(hit) = hit_test_timeline_markers(result, point, time) {
+        return Some(hit);
+    }
+
+    if let Some(hit) = hit_test_timeline_playhead(bounds, point, time, config) {
+        return Some(hit);
+    }
+
+    if let Some(hit) = hit_test_timeline_range_handles(bounds, point, time, config) {
+        return Some(hit);
+    }
+
+    if let Some(hit) = hit_test_timeline_lane_headers(result, bounds, point, time, config) {
+        return Some(hit);
+    }
+
+    if let Some(hit) = hit_test_timeline_ruler(point, time, config) {
+        return Some(hit);
+    }
+
+    Some(TimelineHitMetadata {
+        target: TimelineHitTarget::Background(config.timeline),
+        rect: bounds,
+        time,
+        state: TimelineDescriptorState::default(),
+    })
+}
+
+fn hit_test_timeline_playhead(
+    bounds: Rect,
+    point: Point,
+    time: TimelineTime,
+    config: TimelineHitTestConfig,
+) -> Option<TimelineHitMetadata> {
+    let playhead_time = config.playhead_time?;
+    let x = config.scale.time_to_screen_x(playhead_time);
+    let rect = centered_rect(
+        x,
+        bounds.y + bounds.height * 0.5,
+        config.playhead_hit_width,
+        bounds.height,
+    );
+    rect.contains_point(point).then_some(TimelineHitMetadata {
+        target: TimelineHitTarget::Playhead(config.timeline),
+        rect,
+        time,
+        state: TimelineDescriptorState::default(),
+    })
+}
+
+fn hit_test_timeline_range_handles(
+    bounds: Rect,
+    point: Point,
+    time: TimelineTime,
+    config: TimelineHitTestConfig,
+) -> Option<TimelineHitMetadata> {
+    let range = config.selection_range?;
+    let start_x = config.scale.time_to_screen_x(range.start);
+    let end_x = config.scale.time_to_screen_x(range.end);
+    [
+        (
+            TimelineHitTarget::RangeStartHandle(config.timeline),
+            start_x,
+        ),
+        (TimelineHitTarget::RangeEndHandle(config.timeline), end_x),
+    ]
+    .into_iter()
+    .find_map(|(target, x)| {
+        let rect = centered_rect(
+            x,
+            bounds.y + bounds.height * 0.5,
+            config.range_handle_hit_width,
+            bounds.height,
+        );
+        rect.contains_point(point).then_some(TimelineHitMetadata {
+            target,
+            rect,
+            time,
+            state: TimelineDescriptorState::default(),
+        })
+    })
+}
+
+fn hit_test_timeline_lane_headers(
+    result: &TimelineLayoutResult<'_>,
+    bounds: Rect,
+    point: Point,
+    time: TimelineTime,
+    config: TimelineHitTestConfig,
+) -> Option<TimelineHitMetadata> {
+    if config.lane_header_width <= 0.0 {
+        return None;
+    }
+
+    let header_rect = Rect::new(
+        bounds.x,
+        bounds.y,
+        config.lane_header_width.min(bounds.width),
+        bounds.height,
+    );
+    if !header_rect.contains_point(point) {
+        return None;
+    }
+
+    result
+        .lanes
+        .iter()
+        .find(|lane| lane.rect.contains_point(point))
+        .map(|lane| TimelineHitMetadata {
+            target: TimelineHitTarget::LaneHeader(lane.descriptor.id),
+            rect: lane.rect,
+            time,
+            state: lane.descriptor.state,
+        })
+}
+
+fn hit_test_timeline_ruler(
+    point: Point,
+    time: TimelineTime,
+    config: TimelineHitTestConfig,
+) -> Option<TimelineHitMetadata> {
+    config
+        .ruler_rect
+        .filter(|ruler_rect| ruler_rect.contains_point(point))
+        .map(|ruler_rect| TimelineHitMetadata {
+            target: TimelineHitTarget::Ruler(config.ruler),
+            rect: ruler_rect,
+            time,
+            state: TimelineDescriptorState::default(),
+        })
+}
+
+fn hit_test_timeline_keyframes(
+    result: &TimelineLayoutResult<'_>,
+    point: Point,
+    time: TimelineTime,
+) -> Option<TimelineHitMetadata> {
+    result
+        .keyframes
+        .iter()
+        .rev()
+        .find(|keyframe| keyframe.hit_rect.contains_point(point))
+        .map(|keyframe| TimelineHitMetadata {
+            target: TimelineHitTarget::Keyframe(keyframe.descriptor.id),
+            rect: keyframe.hit_rect,
+            time,
+            state: keyframe.descriptor.state,
+        })
+}
+
+fn hit_test_timeline_items(
+    result: &TimelineLayoutResult<'_>,
+    point: Point,
+    time: TimelineTime,
+    trim_handle_width: f32,
+) -> Option<TimelineHitMetadata> {
+    let trim_handle_width = finite_f32_non_negative(trim_handle_width);
+    result.items.iter().rev().find_map(|item| {
+        if !item.rect.contains_point(point) {
+            return None;
+        }
+
+        let start_rect = item_start_trim_rect(item.rect, trim_handle_width);
+        if start_rect.contains_point(point) {
+            return Some(TimelineHitMetadata {
+                target: TimelineHitTarget::ItemTrimStartHandle(item.descriptor.id),
+                rect: start_rect,
+                time,
+                state: item.descriptor.state,
+            });
+        }
+
+        let end_rect = item_end_trim_rect(item.rect, trim_handle_width);
+        if end_rect.contains_point(point) {
+            return Some(TimelineHitMetadata {
+                target: TimelineHitTarget::ItemTrimEndHandle(item.descriptor.id),
+                rect: end_rect,
+                time,
+                state: item.descriptor.state,
+            });
+        }
+
+        Some(TimelineHitMetadata {
+            target: TimelineHitTarget::Item(item.descriptor.id),
+            rect: item.rect,
+            time,
+            state: item.descriptor.state,
+        })
+    })
+}
+
+fn hit_test_timeline_markers(
+    result: &TimelineLayoutResult<'_>,
+    point: Point,
+    time: TimelineTime,
+) -> Option<TimelineHitMetadata> {
+    result
+        .markers
+        .iter()
+        .rev()
+        .find(|marker| marker.hit_rect.contains_point(point))
+        .map(|marker| TimelineHitMetadata {
+            target: TimelineHitTarget::Marker(marker.descriptor.id),
+            rect: marker.hit_rect,
+            time,
+            state: marker.descriptor.state,
+        })
+}
+
+fn compare_snap_candidates(
+    left: TimelineSnapCandidate,
+    right: TimelineSnapCandidate,
+) -> std::cmp::Ordering {
+    snap_source_rank(left.source)
+        .cmp(&snap_source_rank(right.source))
+        .then_with(|| left.time.seconds().total_cmp(&right.time.seconds()))
+        .then_with(|| left.target.cmp(&right.target))
+}
+
+fn snap_source_rank(source: TimelineSnapSource) -> u8 {
+    match source {
+        TimelineSnapSource::Frame => 0,
+        TimelineSnapSource::Playhead => 1,
+        TimelineSnapSource::RangeBoundary => 2,
+        TimelineSnapSource::ItemBoundary => 3,
+        TimelineSnapSource::Marker => 4,
+        TimelineSnapSource::Keyframe => 5,
+        TimelineSnapSource::None => 6,
+    }
+}
+
+fn clamped_timeline_drag_range(
+    anchor_time: TimelineTime,
+    current_time: TimelineTime,
+    bounds: TimelineRange,
+) -> TimelineRange {
+    TimelineRange::new(
+        clamp_timeline_time(anchor_time, bounds),
+        clamp_timeline_time(current_time, bounds),
+    )
+    .sanitized()
+}
+
+fn clamp_timeline_time(time: TimelineTime, bounds: TimelineRange) -> TimelineTime {
+    let bounds = bounds.sanitized();
+    TimelineTime::from_seconds(
+        time.sanitized()
+            .seconds()
+            .clamp(bounds.start.seconds(), bounds.end.seconds()),
+    )
+}
+
+fn offset_timeline_range(range: TimelineRange, delta: TimelineTime) -> TimelineRange {
+    let range = range.sanitized();
+    let delta = delta.sanitized().seconds();
+    TimelineRange::seconds(range.start.seconds() + delta, range.end.seconds() + delta)
+}
+
+fn item_start_trim_rect(rect: Rect, trim_handle_width: f32) -> Rect {
+    let width = trim_handle_width.min(rect.width).max(0.0);
+    Rect::new(rect.x, rect.y, width, rect.height)
+}
+
+fn item_end_trim_rect(rect: Rect, trim_handle_width: f32) -> Rect {
+    let width = trim_handle_width.min(rect.width).max(0.0);
+    Rect::new(rect_max_x(rect) - width, rect.y, width, rect.height)
 }
 
 fn validate_timeline_descriptor(
@@ -1654,6 +2792,10 @@ fn finite_rect(rect: Rect) -> Rect {
         finite_f32_non_negative(rect.width),
         finite_f32_non_negative(rect.height),
     )
+}
+
+fn sanitize_point(point: Point) -> Point {
+    Point::new(finite_f32_or_zero(point.x), finite_f32_or_zero(point.y))
 }
 
 fn finite_positive(value: f32) -> Option<f32> {
