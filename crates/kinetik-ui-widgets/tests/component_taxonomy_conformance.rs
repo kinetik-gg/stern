@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 
 use kinetik_ui_core::{
     Color, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, Point, PointerButtonState,
-    PointerInput, Rect, SemanticActionKind, SemanticRole, SemanticValue, Size, UiInput, UiMemory,
-    Vec2, WidgetId, default_dark_theme,
+    PointerInput, Rect, SemanticActionKind, SemanticRole, SemanticValue, Size, TextureId, UiInput,
+    UiMemory, Vec2, WidgetId, default_dark_theme,
 };
 use kinetik_ui_text::TextEditState;
 use kinetik_ui_widgets::{
@@ -13,7 +13,7 @@ use kinetik_ui_widgets::{
     ComponentMetadata, DropdownCloseReason, DropdownItem, DropdownItemId, DropdownModel,
     DropdownOverlay, EdgeDescriptor, GraphRect, NodeDescriptor, NodeGraphDescriptor,
     NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget, NodeGraphStaticView,
-    NodeGraphViewport, NodeId, NumericScrubInputConfig, OverlayId, OverlayStack, PanelId,
+    NodeGraphViewport, NodeId, NumericScrubInputConfig, OverlayId, OverlayStack, PanZoom, PanelId,
     PopoverPlacement, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
     PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow, PropertyGridRowAffordances,
     PropertyGridRowState, PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice,
@@ -21,11 +21,14 @@ use kinetik_ui_widgets::{
     TimelineItemDescriptor, TimelineItemId, TimelineLaneDescriptor, TimelineLaneId, TimelineRange,
     TimelineRulerTickRequest, TimelineSelection, TimelineSelectionTarget,
     TimelineSnapCandidateRequest, TimelineSnapSource, TimelineZoom, TransportControlIntent,
-    TransportControls, Ui, VectorComponentLayout, VectorScrubInputConfig,
+    TransportControls, Ui, VectorComponentLayout, VectorScrubInputConfig, ViewportFit,
+    ViewportGuideDescriptor, ViewportGuideId, ViewportGuideOrientation, ViewportGuidePlacement,
+    ViewportPanZoomHudDescriptor, ViewportRulerDescriptor, ViewportRulerEdge, ViewportRulerId,
+    ViewportSafeAreaDescriptor, ViewportSafeAreaId, ViewportSafeAreaSpace, ViewportSurface,
     classify_numeric_input_draft, component_metadata, components_by_category, numeric_input,
     numeric_scrub_input, property_grid_row_affordance_controls, property_grid_row_affordance_rects,
     property_grid_row_status_semantics, slider_with_step, timeline_snap_candidates,
-    vector4_component_rects,
+    vector4_component_rects, viewport_guides, viewport_rulers, viewport_safe_areas,
 };
 
 fn entry(name: &str) -> &'static ComponentMetadata {
@@ -443,6 +446,74 @@ fn stage11_timeline_taxonomy_reports_partial_status_backed_by_public_contracts()
     );
     assert!(selection.contains(TimelineSelectionTarget::Item(TimelineItemId::from_raw(10))));
     assert_eq!(transport.visible_controls().len(), 2);
+}
+
+#[test]
+fn stage12_viewport_taxonomy_reports_partial_status_backed_by_public_contracts() {
+    assert_entry(
+        "Viewport",
+        ComponentCategory::Viewport,
+        ComponentConformanceStatus::Partial,
+    );
+    assert_entry(
+        "Ruler",
+        ComponentCategory::Viewport,
+        ComponentConformanceStatus::Partial,
+    );
+
+    let mut pan_zoom = PanZoom::default();
+    pan_zoom.set_zoom(1.5);
+    pan_zoom.pan_by(Vec2::new(8.0, -4.0));
+    let surface = ViewportSurface {
+        texture: TextureId::from_raw(12),
+        source_size: Size::new(640.0, 360.0),
+        bounds: Rect::new(10.0, 20.0, 320.0, 180.0),
+        pan_zoom,
+    };
+    let guides = viewport_guides(
+        surface,
+        &[ViewportGuideDescriptor::new(
+            ViewportGuideId::from_raw(1),
+            ViewportGuideOrientation::Vertical,
+            ViewportGuidePlacement::Content(320.0),
+        )],
+    );
+    let safe_areas = viewport_safe_areas(
+        surface,
+        &[ViewportSafeAreaDescriptor::new(
+            ViewportSafeAreaId::from_raw(1),
+            Rect::new(64.0, 36.0, 512.0, 288.0),
+            ViewportSafeAreaSpace::Content,
+        )],
+    );
+    let rulers = viewport_rulers(
+        surface,
+        &[
+            ViewportRulerDescriptor::new(ViewportRulerId::from_raw(1), ViewportRulerEdge::Top)
+                .with_max_ticks(12),
+        ],
+    );
+    let hud = ViewportPanZoomHudDescriptor::new(WidgetId::from_key("taxonomy-viewport-hud"), "HUD")
+        .resolve(surface);
+
+    assert_eq!(guides.len(), 1);
+    assert_eq!(safe_areas.len(), 1);
+    assert_eq!(rulers.len(), 1);
+    assert!(!rulers[0].ticks.is_empty());
+    assert_eq!(hud.fit, ViewportFit::Zoom);
+    assert!(hud.value_text().contains("content 640.000x360.000"));
+    assert_eq!(
+        guides[0]
+            .semantics(WidgetId::from_key("taxonomy-viewport"))
+            .role,
+        SemanticRole::Custom("viewport-guide".to_owned())
+    );
+    assert_eq!(
+        rulers[0]
+            .semantics(WidgetId::from_key("taxonomy-viewport"))
+            .role,
+        SemanticRole::Custom("viewport-ruler".to_owned())
+    );
 }
 
 #[test]
