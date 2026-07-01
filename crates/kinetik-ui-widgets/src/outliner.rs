@@ -1,6 +1,7 @@
 //! Data-only outliner contracts for hierarchy navigation.
 
 use std::collections::BTreeSet;
+use std::ops::Range;
 
 use kinetik_ui_core::{
     IconId, Point, Rect, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
@@ -234,7 +235,35 @@ impl OutlinerModel {
     /// caller needs diagnostics.
     #[must_use]
     pub fn visible_rows(&self, expansion: &TreeExpansion) -> Vec<OutlinerRow> {
-        let rows = self.tree_model().visible_rows(expansion);
+        self.outliner_rows_from_tree_rows(self.tree_model().visible_rows(expansion))
+    }
+
+    /// Counts visible rows from expansion state without materializing row metadata.
+    ///
+    /// Invalid models return zero visible rows. Use [`Self::validate`] when the
+    /// caller needs diagnostics.
+    #[must_use]
+    pub fn visible_row_count(&self, expansion: &TreeExpansion) -> usize {
+        self.tree_model().visible_row_count(expansion)
+    }
+
+    /// Resolves visible rows inside a global visible row range.
+    ///
+    /// Returned rows preserve their global visible row indices instead of
+    /// rebasing [`OutlinerRow::row`] to zero.
+    ///
+    /// Invalid models return no visible rows. Use [`Self::validate`] when the
+    /// caller needs diagnostics.
+    #[must_use]
+    pub fn visible_rows_in_range(
+        &self,
+        expansion: &TreeExpansion,
+        range: Range<usize>,
+    ) -> Vec<OutlinerRow> {
+        self.outliner_rows_from_tree_rows(self.tree_model().visible_rows_in_range(expansion, range))
+    }
+
+    fn outliner_rows_from_tree_rows(&self, rows: Vec<crate::TreeRow>) -> Vec<OutlinerRow> {
         rows.into_iter()
             .filter_map(|row| {
                 self.items
@@ -603,6 +632,42 @@ impl OutlinerLayout {
             .visible_row_rects(bounds, &tree_rows, scroll_offset, overscan)
             .into_iter()
             .filter_map(|rect| rows.get(rect.row.row).cloned().map(|row| (rect, row)))
+            .map(|(rect, row)| self.row_zones(row, rect.rect, rect.content_rect))
+            .collect()
+    }
+
+    /// Computes visible row zones directly from a model and expansion state.
+    ///
+    /// This path computes the virtual row window first, then materializes only
+    /// the row range needed for layout while preserving global visible row
+    /// indices.
+    #[must_use]
+    pub fn visible_model_row_zones(
+        self,
+        bounds: Rect,
+        model: &OutlinerModel,
+        expansion: &TreeExpansion,
+        scroll_offset: f32,
+        overscan: usize,
+    ) -> Vec<OutlinerRowZones> {
+        let tree = model.tree_model();
+        let total_rows = tree.visible_row_count(expansion);
+        let visible_range =
+            self.tree
+                .visible_range(total_rows, scroll_offset, bounds.height, overscan);
+        let tree_rows = tree.visible_rows_in_range(expansion, visible_range);
+        let rects = self.tree.visible_row_rects_in_range(
+            bounds,
+            total_rows,
+            &tree_rows,
+            scroll_offset,
+            overscan,
+        );
+        let rows = model.outliner_rows_from_tree_rows(tree_rows);
+
+        rects
+            .into_iter()
+            .zip(rows)
             .map(|(rect, row)| self.row_zones(row, rect.rect, rect.content_rect))
             .collect()
     }
