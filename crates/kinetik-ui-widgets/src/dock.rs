@@ -2488,31 +2488,75 @@ fn first_valid_frame_id(node: &DockNode) -> Option<FrameId> {
 }
 
 fn prune_empty_frames(node: &mut DockNode) -> bool {
-    match node {
-        DockNode::Frame(frame) => !frame.panels.is_empty(),
-        DockNode::Split { first, second, .. } => {
-            let first_has_panels = prune_empty_frames(first);
-            let second_has_panels = prune_empty_frames(second);
+    let original = core::mem::replace(node, empty_dock_node());
+    match original {
+        DockNode::Frame(frame) => {
+            let has_panels = !frame.panels.is_empty();
+            *node = DockNode::Frame(frame);
+            has_panels
+        }
+        DockNode::Split {
+            axis,
+            ratio,
+            min_first,
+            min_second,
+            mut first,
+            mut second,
+        } => {
+            let first_has_panels = prune_empty_frames(&mut first);
+            let second_has_panels = prune_empty_frames(&mut second);
             match (first_has_panels, second_has_panels) {
-                (true, true) => true,
+                (true, true) => {
+                    *node = DockNode::Split {
+                        axis,
+                        ratio,
+                        min_first,
+                        min_second,
+                        first,
+                        second,
+                    };
+                    true
+                }
                 (true, false) => {
-                    *node = (**first).clone();
+                    *node = *first;
                     true
                 }
                 (false, true) => {
-                    *node = (**second).clone();
+                    *node = *second;
                     true
                 }
-                (false, false) => false,
+                (false, false) => {
+                    *node = DockNode::Split {
+                        axis,
+                        ratio,
+                        min_first,
+                        min_second,
+                        first,
+                        second,
+                    };
+                    false
+                }
             }
         }
     }
 }
 
 fn insert_frame_split(node: &mut DockNode, insertion: DockSplitInsertion, inserted: Frame) -> bool {
+    let mut inserted = Some(inserted);
+    insert_frame_split_inner(node, insertion, &mut inserted)
+}
+
+fn insert_frame_split_inner(
+    node: &mut DockNode,
+    insertion: DockSplitInsertion,
+    inserted: &mut Option<Frame>,
+) -> bool {
     match node {
         DockNode::Frame(frame) if frame.id == insertion.target_frame => {
-            let target = DockNode::Frame(frame.clone());
+            let Some(inserted) = inserted.take() else {
+                return false;
+            };
+            let target = core::mem::replace(node, empty_dock_node());
             let inserted = DockNode::Frame(inserted);
             let (first, second) = if insertion.placement.insert_before_target() {
                 (inserted, target)
@@ -2531,8 +2575,8 @@ fn insert_frame_split(node: &mut DockNode, insertion: DockSplitInsertion, insert
         }
         DockNode::Frame(_) => false,
         DockNode::Split { first, second, .. } => {
-            insert_frame_split(first, insertion, inserted.clone())
-                || insert_frame_split(second, insertion, inserted)
+            insert_frame_split_inner(first, insertion, inserted)
+                || insert_frame_split_inner(second, insertion, inserted)
         }
     }
 }
@@ -2552,23 +2596,7 @@ fn swap_frame_leaves(root: &mut DockNode, first: FrameId, second: FrameId) -> bo
         return false;
     }
 
-    let Some(first_frame) = frame_at_path(root, &first_path).cloned() else {
-        return false;
-    };
-    let Some(second_frame) = frame_at_path(root, &second_path).cloned() else {
-        return false;
-    };
-
-    let Some(target) = frame_at_path_mut(root, &first_path) else {
-        return false;
-    };
-    *target = second_frame;
-
-    let Some(target) = frame_at_path_mut(root, &second_path) else {
-        return false;
-    };
-    *target = first_frame;
-    true
+    swap_frames_at_paths(root, &first_path, &second_path)
 }
 
 fn find_frame_path(root: &DockNode, frame: FrameId) -> Option<Vec<DockPathElement>> {
@@ -2596,19 +2624,6 @@ fn find_frame_path_inner(node: &DockNode, frame: FrameId, path: &mut Vec<DockPat
     }
 }
 
-fn frame_at_path<'a>(node: &'a DockNode, path: &[DockPathElement]) -> Option<&'a Frame> {
-    match (node, path) {
-        (DockNode::Frame(frame), []) => Some(frame),
-        (DockNode::Split { first, .. }, [DockPathElement::First, rest @ ..]) => {
-            frame_at_path(first, rest)
-        }
-        (DockNode::Split { second, .. }, [DockPathElement::Second, rest @ ..]) => {
-            frame_at_path(second, rest)
-        }
-        _ => None,
-    }
-}
-
 fn frame_at_path_mut<'a>(
     node: &'a mut DockNode,
     path: &[DockPathElement],
@@ -2623,6 +2638,67 @@ fn frame_at_path_mut<'a>(
         }
         _ => None,
     }
+}
+
+fn swap_frames_at_paths(
+    node: &mut DockNode,
+    first_path: &[DockPathElement],
+    second_path: &[DockPathElement],
+) -> bool {
+    match (first_path, second_path) {
+        ([DockPathElement::First, first_rest @ ..], [DockPathElement::First, second_rest @ ..]) => {
+            let DockNode::Split { first, .. } = node else {
+                return false;
+            };
+            swap_frames_at_paths(first, first_rest, second_rest)
+        }
+        (
+            [DockPathElement::Second, first_rest @ ..],
+            [DockPathElement::Second, second_rest @ ..],
+        ) => {
+            let DockNode::Split { second, .. } = node else {
+                return false;
+            };
+            swap_frames_at_paths(second, first_rest, second_rest)
+        }
+        (
+            [DockPathElement::First, first_rest @ ..],
+            [DockPathElement::Second, second_rest @ ..],
+        ) => {
+            let DockNode::Split { first, second, .. } = node else {
+                return false;
+            };
+            let Some(first_frame) = frame_at_path_mut(first, first_rest) else {
+                return false;
+            };
+            let Some(second_frame) = frame_at_path_mut(second, second_rest) else {
+                return false;
+            };
+            core::mem::swap(first_frame, second_frame);
+            true
+        }
+        (
+            [DockPathElement::Second, first_rest @ ..],
+            [DockPathElement::First, second_rest @ ..],
+        ) => {
+            let DockNode::Split { first, second, .. } = node else {
+                return false;
+            };
+            let Some(first_frame) = frame_at_path_mut(second, first_rest) else {
+                return false;
+            };
+            let Some(second_frame) = frame_at_path_mut(first, second_rest) else {
+                return false;
+            };
+            core::mem::swap(first_frame, second_frame);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn empty_dock_node() -> DockNode {
+    DockNode::Frame(Frame::new(FrameId::from_raw(0), Vec::new()))
 }
 
 fn resize_split_at_path(
