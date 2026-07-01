@@ -132,6 +132,74 @@ mod outliner_conformance {
     }
 
     #[test]
+    fn outliner_range_virtualization_matches_full_row_layout_window() {
+        let model = model();
+        let mut expansion = TreeExpansion::new();
+        expansion.expand(id(10));
+        expansion.expand(id(20));
+        let rows = model.visible_rows(&expansion);
+        let layout = OutlinerLayout::new(20.0, 12.0);
+        let bounds = Rect::new(10.0, 30.0, 220.0, 40.0);
+
+        let full = layout.visible_row_zones(bounds, &rows, 24.0, 0);
+        let range = layout.visible_model_row_zones(bounds, &model, &expansion, 24.0, 0);
+
+        assert_eq!(range, full);
+        assert_eq!(
+            range.iter().map(|zones| zones.row.id).collect::<Vec<_>>(),
+            vec![id(30), id(20), id(40)]
+        );
+    }
+
+    #[test]
+    fn outliner_range_virtualization_preserves_global_indices_and_stable_ids() {
+        let model = model();
+        let mut expansion = TreeExpansion::new();
+        expansion.expand(id(10));
+        expansion.expand(id(20));
+
+        let rows = model.visible_rows_in_range(&expansion, 2..5);
+
+        assert_eq!(
+            rows.iter()
+                .map(|row| (row.row, row.id, row.item_index, row.label.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (2, id(20), 2, "Light"),
+                (3, id(40), 3, "Shadow"),
+                (4, id(50), 4, "Materials")
+            ]
+        );
+    }
+
+    #[test]
+    fn outliner_range_virtualization_invalid_models_return_empty_zones() {
+        let duplicate = OutlinerModel::new(vec![item(1, None, "A"), item(1, None, "B")]);
+        let layout = OutlinerLayout::new(20.0, 12.0);
+
+        assert!(
+            duplicate
+                .visible_rows_in_range(&TreeExpansion::new(), 0..2)
+                .is_empty()
+        );
+        assert!(
+            layout
+                .visible_model_row_zones(
+                    Rect::new(0.0, 0.0, 240.0, 80.0),
+                    &duplicate,
+                    &TreeExpansion::new(),
+                    0.0,
+                    0,
+                )
+                .is_empty()
+        );
+        assert_eq!(
+            duplicate.validate(),
+            Err(TreeModelError::DuplicateItemId { id: id(1) })
+        );
+    }
+
+    #[test]
     fn toggle_requests_preserve_target_ids() {
         let mut flags = OutlinerRowFlags::new();
         flags.visible = false;

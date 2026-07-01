@@ -1120,6 +1120,57 @@ impl TreeModel {
         rows
     }
 
+    /// Counts visible tree rows from the current expansion state without
+    /// materializing row metadata.
+    ///
+    /// Invalid models return zero visible rows for the same reason as
+    /// [`Self::visible_rows`].
+    #[must_use]
+    pub fn visible_row_count(&self, expansion: &TreeExpansion) -> usize {
+        if self.validate().is_err() {
+            return 0;
+        }
+
+        let children_by_parent = self.children_by_parent();
+        let mut visited = BTreeSet::new();
+        self.count_visible_children(None, expansion, &children_by_parent, &mut visited)
+    }
+
+    /// Collects visible tree rows inside a global visible row range.
+    ///
+    /// Returned rows preserve their global visible row indices, so a request
+    /// for `10..20` returns rows whose [`TreeRow::row`] values remain in that
+    /// same global range instead of being rebased to zero.
+    ///
+    /// Invalid models return no visible rows; call [`Self::validate`] when the
+    /// caller needs diagnostics.
+    #[must_use]
+    pub fn visible_rows_in_range(
+        &self,
+        expansion: &TreeExpansion,
+        range: Range<usize>,
+    ) -> Vec<TreeRow> {
+        if range.start >= range.end || self.validate().is_err() {
+            return Vec::new();
+        }
+
+        let children_by_parent = self.children_by_parent();
+        let mut rows = Vec::with_capacity(range.end.saturating_sub(range.start).min(self.len()));
+        let mut visited = BTreeSet::new();
+        let mut next_row = 0;
+        self.push_visible_children_in_range(
+            None,
+            0,
+            expansion,
+            &children_by_parent,
+            &mut visited,
+            &range,
+            &mut next_row,
+            &mut rows,
+        );
+        rows
+    }
+
     /// Computes visible item IDs from the current expansion state.
     ///
     /// Invalid models return no visible item IDs for the same reason as
@@ -1172,6 +1223,27 @@ impl TreeModel {
             .collect()
     }
 
+    fn visible_row_for_item(
+        &self,
+        item_index: usize,
+        row: usize,
+        depth: usize,
+        expansion: &TreeExpansion,
+        children_by_parent: &BTreeMap<Option<ItemId>, Vec<usize>>,
+    ) -> TreeRow {
+        let item = self.items[item_index];
+        let (has_children, expanded) = visible_item_state(item, expansion, children_by_parent);
+        TreeRow {
+            row,
+            item_index,
+            id: item.id,
+            parent: item.parent,
+            depth,
+            has_children,
+            expanded,
+        }
+    }
+
     fn index_by_id(&self) -> BTreeMap<ItemId, usize> {
         self.items
             .iter()
@@ -1207,20 +1279,11 @@ impl TreeModel {
                 continue;
             }
 
-            let has_loaded_children = children_by_parent.contains_key(&Some(item.id));
-            let has_children = item.has_children || has_loaded_children;
-            let expanded = has_children && expansion.is_expanded(item.id);
-            rows.push(TreeRow {
-                row: rows.len(),
-                item_index: *index,
-                id: item.id,
-                parent: item.parent,
-                depth,
-                has_children,
-                expanded,
-            });
+            let row =
+                self.visible_row_for_item(*index, rows.len(), depth, expansion, children_by_parent);
+            rows.push(row);
 
-            if expanded {
+            if row.expanded {
                 self.push_visible_children(
                     Some(item.id),
                     depth.saturating_add(1),
@@ -1232,6 +1295,97 @@ impl TreeModel {
             }
         }
     }
+
+    fn count_visible_children(
+        &self,
+        parent: Option<ItemId>,
+        expansion: &TreeExpansion,
+        children_by_parent: &BTreeMap<Option<ItemId>, Vec<usize>>,
+        visited: &mut BTreeSet<ItemId>,
+    ) -> usize {
+        let Some(children) = children_by_parent.get(&parent) else {
+            return 0;
+        };
+
+        let mut count = 0usize;
+        for index in children {
+            let item = self.items[*index];
+            if !visited.insert(item.id) {
+                continue;
+            }
+
+            let (_, expanded) = visible_item_state(item, expansion, children_by_parent);
+            count = count.saturating_add(1);
+            if expanded {
+                count = count.saturating_add(self.count_visible_children(
+                    Some(item.id),
+                    expansion,
+                    children_by_parent,
+                    visited,
+                ));
+            }
+        }
+        count
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn push_visible_children_in_range(
+        &self,
+        parent: Option<ItemId>,
+        depth: usize,
+        expansion: &TreeExpansion,
+        children_by_parent: &BTreeMap<Option<ItemId>, Vec<usize>>,
+        visited: &mut BTreeSet<ItemId>,
+        range: &Range<usize>,
+        next_row: &mut usize,
+        rows: &mut Vec<TreeRow>,
+    ) {
+        let Some(children) = children_by_parent.get(&parent) else {
+            return;
+        };
+
+        for index in children {
+            if *next_row >= range.end {
+                return;
+            }
+
+            let item = self.items[*index];
+            if !visited.insert(item.id) {
+                continue;
+            }
+
+            let row =
+                self.visible_row_for_item(*index, *next_row, depth, expansion, children_by_parent);
+            if range.contains(&row.row) {
+                rows.push(row);
+            }
+            *next_row = next_row.saturating_add(1);
+
+            if row.expanded {
+                self.push_visible_children_in_range(
+                    Some(item.id),
+                    depth.saturating_add(1),
+                    expansion,
+                    children_by_parent,
+                    visited,
+                    range,
+                    next_row,
+                    rows,
+                );
+            }
+        }
+    }
+}
+
+fn visible_item_state(
+    item: TreeItem,
+    expansion: &TreeExpansion,
+    children_by_parent: &BTreeMap<Option<ItemId>, Vec<usize>>,
+) -> (bool, bool) {
+    let has_loaded_children = children_by_parent.contains_key(&Some(item.id));
+    let has_children = item.has_children || has_loaded_children;
+    let expanded = has_children && expansion.is_expanded(item.id);
+    (has_children, expanded)
 }
 
 /// Retained tree expansion state.
@@ -1499,6 +1653,55 @@ impl TreeLayout {
             }
         })
         .collect()
+    }
+
+    /// Computes visible row rectangles from rows collected for a global range.
+    ///
+    /// Unlike [`Self::visible_row_rects`], `rows` may be a materialized subset
+    /// whose [`TreeRow::row`] values refer to global visible row indices.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn visible_row_rects_in_range(
+        self,
+        bounds: Rect,
+        total_rows: usize,
+        rows: &[TreeRow],
+        scroll_offset: f32,
+        overscan: usize,
+    ) -> Vec<TreeRowRect> {
+        let Some(row_height) = self.effective_row_height() else {
+            return Vec::new();
+        };
+        let indent_width = self.effective_indent_width();
+        let clamped_scroll =
+            clamp_virtual_scroll_offset(scroll_offset, total_rows, row_height, bounds.height);
+        let row_bounds = Rect::new(
+            finite_coordinate(bounds.x),
+            finite_sum(finite_coordinate(bounds.y), -clamped_scroll),
+            finite_non_negative(bounds.width),
+            finite_non_negative(bounds.height),
+        );
+        let visible_range = self.visible_range(total_rows, clamped_scroll, bounds.height, overscan);
+        let list = ListLayout::new(row_height);
+
+        rows.iter()
+            .copied()
+            .filter(|row| row.row < total_rows && visible_range.contains(&row.row))
+            .filter_map(|row| {
+                let rect = list.row_rect(row_bounds, row.row)?;
+                let indent = finite_index_extent(row.depth, indent_width);
+                Some(TreeRowRect {
+                    row,
+                    rect,
+                    content_rect: Rect::new(
+                        finite_sum(rect.x, indent),
+                        rect.y,
+                        (rect.width - indent).max(0.0),
+                        rect.height,
+                    ),
+                })
+            })
+            .collect()
     }
 }
 
@@ -2249,6 +2452,12 @@ mod tests {
         }]);
 
         assert!(invalid.visible_rows(&TreeExpansion::new()).is_empty());
+        assert_eq!(invalid.visible_row_count(&TreeExpansion::new()), 0);
+        assert!(
+            invalid
+                .visible_rows_in_range(&TreeExpansion::new(), 0..1)
+                .is_empty()
+        );
     }
 
     #[test]
@@ -2290,6 +2499,24 @@ mod tests {
                 (ItemId::from_raw(3), 2),
                 (ItemId::from_raw(4), 0),
             ]
+        );
+    }
+
+    #[test]
+    fn tree_model_collects_visible_rows_in_range_with_global_indices() {
+        let tree = tree_model();
+        let mut expansion = TreeExpansion::new();
+        expansion.expand(ItemId::from_raw(1));
+        expansion.expand(ItemId::from_raw(2));
+
+        assert_eq!(tree.visible_row_count(&expansion), 4);
+        let rows = tree.visible_rows_in_range(&expansion, 1..3);
+
+        assert_eq!(
+            rows.iter()
+                .map(|row| (row.row, row.id, row.depth))
+                .collect::<Vec<_>>(),
+            vec![(1, ItemId::from_raw(2), 1), (2, ItemId::from_raw(3), 2)]
         );
     }
 
@@ -2414,6 +2641,31 @@ mod tests {
             assert_rect_finite(rect.rect);
             assert_rect_finite(rect.content_rect);
         }
+    }
+
+    #[test]
+    fn tree_layout_positions_range_rows_by_global_row_index() {
+        let tree = tree_model();
+        let mut expansion = TreeExpansion::new();
+        expansion.expand(ItemId::from_raw(1));
+        expansion.expand(ItemId::from_raw(2));
+        let total_rows = tree.visible_row_count(&expansion);
+        let rows = tree.visible_rows_in_range(&expansion, 1..3);
+        let layout = TreeLayout::new(20.0, 12.0);
+
+        let rects = layout.visible_row_rects_in_range(
+            Rect::new(10.0, 100.0, 200.0, 40.0),
+            total_rows,
+            &rows,
+            20.0,
+            0,
+        );
+
+        assert_eq!(rects.len(), 2);
+        assert_eq!(rects[0].row.row, 1);
+        assert_approx(rects[0].rect.y, 100.0);
+        assert_approx(rects[1].rect.y, 120.0);
+        assert_approx(rects[1].content_rect.x, 34.0);
     }
 
     #[test]
