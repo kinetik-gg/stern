@@ -269,7 +269,7 @@ impl MenuBarMenu {
     /// Returns true when this menu has at least one visible item.
     #[must_use]
     pub fn has_visible_items(&self) -> bool {
-        !self.menu.visible_items().is_empty()
+        self.menu.visible_items_iter().next().is_some()
     }
 }
 
@@ -466,33 +466,32 @@ impl MenuBar {
     }
 
     fn previous_visible_index(&self) -> Option<usize> {
-        let visible = self.visible_indices().collect::<Vec<_>>();
-        if visible.is_empty() {
-            return None;
-        }
         let Some(active) = self.active_index() else {
-            return visible.last().copied();
+            return self.visible_indices().last();
         };
-        visible
-            .iter()
-            .rfind(|index| **index < active)
-            .copied()
-            .or_else(|| visible.last().copied())
+        let mut last_visible = None;
+        let mut previous = None;
+        for index in self.visible_indices() {
+            last_visible = Some(index);
+            if index < active {
+                previous = Some(index);
+            }
+        }
+        previous.or(last_visible)
     }
 
     fn next_visible_index(&self) -> Option<usize> {
-        let visible = self.visible_indices().collect::<Vec<_>>();
-        if visible.is_empty() {
-            return None;
-        }
         let Some(active) = self.active_index() else {
-            return visible.first().copied();
+            return self.visible_indices().next();
         };
-        visible
-            .iter()
-            .find(|index| **index > active)
-            .copied()
-            .or_else(|| visible.first().copied())
+        let mut first_visible = None;
+        for index in self.visible_indices() {
+            first_visible.get_or_insert(index);
+            if index > active {
+                return Some(index);
+            }
+        }
+        first_visible
     }
 }
 
@@ -658,13 +657,18 @@ impl ToolbarGroup {
     /// Returns visible toolbar items in presentation order.
     #[must_use]
     pub fn visible_items(&self) -> Vec<&ToolbarItem> {
-        self.items.iter().filter(|item| item.visible()).collect()
+        self.visible_items_iter().collect()
+    }
+
+    /// Returns visible toolbar items as a borrowed iterator.
+    pub fn visible_items_iter(&self) -> impl Iterator<Item = &ToolbarItem> + '_ {
+        self.items.iter().filter(|item| item.visible())
     }
 
     /// Returns true when this group has at least one visible item.
     #[must_use]
     pub fn has_visible_items(&self) -> bool {
-        !self.visible_items().is_empty()
+        self.visible_items_iter().next().is_some()
     }
 
     /// Creates an invocation for an enabled visible toolbar item by visible index.
@@ -674,8 +678,8 @@ impl ToolbarGroup {
         visible_index: usize,
         context: ActionContext,
     ) -> Option<ActionInvocation> {
-        self.visible_items()
-            .get(visible_index)
+        self.visible_items_iter()
+            .nth(visible_index)
             .and_then(|item| item.invocation(context))
     }
 
@@ -735,10 +739,12 @@ impl Toolbar {
     /// Returns visible groups, skipping groups with no visible items.
     #[must_use]
     pub fn visible_groups(&self) -> Vec<&ToolbarGroup> {
-        self.groups
-            .iter()
-            .filter(|group| group.has_visible_items())
-            .collect()
+        self.visible_groups_iter().collect()
+    }
+
+    /// Returns visible groups as a borrowed iterator.
+    pub fn visible_groups_iter(&self) -> impl Iterator<Item = &ToolbarGroup> + '_ {
+        self.groups.iter().filter(|group| group.has_visible_items())
     }
 
     /// Creates an invocation by visible group index and visible item index.
@@ -749,8 +755,8 @@ impl Toolbar {
         visible_item_index: usize,
         context: ActionContext,
     ) -> Option<ActionInvocation> {
-        self.visible_groups()
-            .get(visible_group_index)
+        self.visible_groups_iter()
+            .nth(visible_group_index)
             .and_then(|group| group.invocation_for_visible(visible_item_index, context))
     }
 
@@ -981,7 +987,12 @@ impl StatusBar {
     /// Returns visible status items in presentation order.
     #[must_use]
     pub fn visible_items(&self) -> Vec<&StatusItem> {
-        self.items.iter().filter(|item| item.visible).collect()
+        self.visible_items_iter().collect()
+    }
+
+    /// Returns visible status items as a borrowed iterator.
+    pub fn visible_items_iter(&self) -> impl Iterator<Item = &StatusItem> + '_ {
+        self.items.iter().filter(|item| item.visible)
     }
 }
 
@@ -1382,10 +1393,12 @@ impl FeedbackStack {
     /// Returns active feedback items in deterministic insertion order.
     #[must_use]
     pub fn active_items(&self, now: Duration) -> Vec<&FeedbackItem> {
-        self.items
-            .iter()
-            .filter(|item| item.is_active(now))
-            .collect()
+        self.active_items_iter(now).collect()
+    }
+
+    /// Returns active feedback items as a borrowed iterator.
+    pub fn active_items_iter(&self, now: Duration) -> impl Iterator<Item = &FeedbackItem> + '_ {
+        self.items.iter().filter(move |item| item.is_active(now))
     }
 
     /// Creates primary action request metadata for one active feedback item.

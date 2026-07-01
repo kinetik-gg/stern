@@ -541,17 +541,18 @@ impl ModalDialog {
     /// Returns visible modal actions in presentation order.
     #[must_use]
     pub fn visible_actions(&self) -> Vec<&ModalAction> {
-        self.actions
-            .iter()
-            .filter(|action| action.visible())
-            .collect()
+        self.visible_actions_iter().collect()
+    }
+
+    /// Returns visible modal actions as a borrowed iterator.
+    pub fn visible_actions_iter(&self) -> impl Iterator<Item = &ModalAction> + '_ {
+        self.actions.iter().filter(|action| action.visible())
     }
 
     /// Returns the first visible modal action with the requested role.
     #[must_use]
     pub fn visible_action_by_role(&self, role: ModalActionRole) -> Option<&ModalAction> {
-        self.visible_actions()
-            .into_iter()
+        self.visible_actions_iter()
             .find(|action| action.role == role)
     }
 
@@ -574,8 +575,8 @@ impl ModalDialog {
         visible_index: usize,
         context: ActionContext,
     ) -> Option<ActionInvocation> {
-        self.visible_actions()
-            .get(visible_index)
+        self.visible_actions_iter()
+            .nth(visible_index)
             .and_then(|action| action.invocation(context))
     }
 
@@ -750,6 +751,11 @@ impl ModalDialogOverlay {
         self.dialog.visible_actions()
     }
 
+    /// Returns visible modal actions as a borrowed iterator.
+    pub fn visible_actions_iter(&self) -> impl Iterator<Item = &ModalAction> + '_ {
+        self.dialog.visible_actions_iter()
+    }
+
     /// Returns the first visible modal action with the requested role.
     #[must_use]
     pub fn visible_action_by_role(&self, role: ModalActionRole) -> Option<&ModalAction> {
@@ -838,13 +844,15 @@ impl Menu {
     /// Returns visible menu items.
     #[must_use]
     pub fn visible_items(&self) -> Vec<&MenuItem> {
-        self.items
-            .iter()
-            .filter(|item| match item {
-                MenuItem::Action(action) => action.state.visible,
-                MenuItem::Label(_) | MenuItem::Separator => true,
-            })
-            .collect()
+        self.visible_items_iter().collect()
+    }
+
+    /// Returns visible menu items as a borrowed iterator.
+    pub fn visible_items_iter(&self) -> impl Iterator<Item = &MenuItem> + '_ {
+        self.items.iter().filter(|item| match item {
+            MenuItem::Action(action) => action.state.visible,
+            MenuItem::Label(_) | MenuItem::Separator => true,
+        })
     }
 
     /// Invokes an enabled visible action item by visible index.
@@ -880,8 +888,7 @@ impl Menu {
         source: ActionSource,
         context: ActionContext,
     ) -> Option<ActionInvocation> {
-        let Some(MenuItem::Action(action)) = self.visible_items().get(visible_index).copied()
-        else {
+        let Some(MenuItem::Action(action)) = self.visible_items_iter().nth(visible_index) else {
             return None;
         };
         if !action.can_invoke() {
@@ -1506,6 +1513,11 @@ impl MenuOverlay {
         self.menu.visible_items()
     }
 
+    /// Returns visible menu items as a borrowed iterator.
+    pub fn visible_items_iter(&self) -> impl Iterator<Item = &MenuItem> + '_ {
+        self.menu.visible_items_iter()
+    }
+
     /// Creates an invocation for an enabled visible action item.
     #[must_use]
     pub fn invocation_for_visible(&self, visible_index: usize) -> Option<ActionInvocation> {
@@ -1784,32 +1796,55 @@ impl CommandPalette {
     /// Returns entries matching the current query.
     #[must_use]
     pub fn matches(&self) -> Vec<&CommandPaletteEntry> {
+        self.matches_iter().collect()
+    }
+
+    /// Returns entries matching the current query as a borrowed iterator.
+    pub fn matches_iter(&self) -> impl Iterator<Item = &CommandPaletteEntry> + '_ {
         let query = self.query.trim().to_lowercase();
-        if query.is_empty() {
-            return self.entries.iter().collect();
+        self.entries.iter().filter(move |entry| {
+            query.is_empty()
+                || entry.label.to_lowercase().contains(&query)
+                || entry
+                    .keywords
+                    .iter()
+                    .any(|keyword| keyword.to_lowercase().contains(&query))
+        })
+    }
+
+    /// Returns the number of entries matching the current query.
+    #[must_use]
+    pub fn match_count(&self) -> usize {
+        self.matches_iter().count()
+    }
+
+    /// Returns a matching entry by visible match index.
+    #[must_use]
+    pub fn match_at(&self, visible_index: usize) -> Option<&CommandPaletteEntry> {
+        self.matches_iter().nth(visible_index)
+    }
+
+    fn selected_match(&self) -> Option<&CommandPaletteEntry> {
+        let mut last_match = None;
+        for (index, entry) in self.matches_iter().enumerate() {
+            if index == self.selected {
+                return Some(entry);
+            }
+            last_match = Some(entry);
         }
-        self.entries
-            .iter()
-            .filter(|entry| {
-                entry.label.to_lowercase().contains(&query)
-                    || entry
-                        .keywords
-                        .iter()
-                        .any(|keyword| keyword.to_lowercase().contains(&query))
-            })
-            .collect()
+        last_match
     }
 
     /// Clamps the selected index to the current match set.
     ///
     /// Empty result sets deterministically reset selection to zero.
     pub fn clamp_selection(&mut self) {
-        self.selected = clamped_selection(self.selected, self.matches().len());
+        self.selected = clamped_selection(self.selected, self.match_count());
     }
 
     /// Moves selection by a signed amount.
     pub fn move_selection(&mut self, delta: isize) {
-        let count = self.matches().len();
+        let count = self.match_count();
         if count == 0 {
             self.selected = 0;
             return;
@@ -1832,8 +1867,7 @@ impl CommandPalette {
     /// Creates an invocation for the selected command palette entry.
     #[must_use]
     pub fn invocation_for_selected(&self, context: ActionContext) -> Option<ActionInvocation> {
-        let matches = self.matches();
-        let entry = matches.get(clamped_selection(self.selected, matches.len()))?;
+        let entry = self.selected_match()?;
         if !entry.enabled {
             return None;
         }
@@ -1921,6 +1955,11 @@ impl CommandPaletteOverlay {
     #[must_use]
     pub fn matches(&self) -> Vec<&CommandPaletteEntry> {
         self.palette.matches()
+    }
+
+    /// Returns entries matching the current query as a borrowed iterator.
+    pub fn matches_iter(&self) -> impl Iterator<Item = &CommandPaletteEntry> + '_ {
+        self.palette.matches_iter()
     }
 
     /// Creates an invocation for the selected command palette entry.
