@@ -557,12 +557,14 @@ where
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResources) -> Translation {
-    let mut commands = Vec::new();
-    let mut diagnostics = Vec::new();
-    let mut layers = vec![LayerId::from_raw(0)];
-    let mut clips = Vec::<(ClipId, RenderClip)>::new();
-    let mut transforms = Vec::<Transform>::new();
+    let primitive_count = primitives.len();
+    let mut commands = Vec::with_capacity(primitive_count);
+    let mut diagnostics = Vec::with_capacity(primitive_count);
+    let mut layers = Vec::with_capacity(primitive_count.saturating_add(1));
+    let mut clips = Vec::<(ClipId, RenderClip)>::with_capacity(primitive_count);
+    let mut transforms = Vec::<Transform>::with_capacity(primitive_count);
     let mut transform = Transform::IDENTITY;
+    layers.push(LayerId::from_raw(0));
 
     for primitive in primitives {
         match primitive {
@@ -1128,12 +1130,15 @@ fn render_command(
     transform: Transform,
     kind: RenderCommandKind,
 ) -> RenderCommand {
+    let mut command_clips = Vec::with_capacity(clips.len());
+    command_clips.extend(clips.iter().map(|(_, clip)| *clip));
+
     RenderCommand {
         layer: layers
             .last()
             .copied()
             .unwrap_or_else(|| LayerId::from_raw(0)),
-        clips: clips.iter().map(|(_, clip)| *clip).collect(),
+        clips: command_clips,
         transform,
         kind,
     }
