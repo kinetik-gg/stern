@@ -1,0 +1,1031 @@
+use super::{
+    Axis, BTreeSet, DEFAULT_SPLIT_MINIMUM, DEFAULT_SPLIT_RATIO, DockInteractionPolicy,
+    DockJoinRequest, DockNeighborDirection, DockPathElement, DockPlacement, DockRestoreError,
+    DockSnapshot, DockSplitPath, DockSwapRequest, FrameId, PanelId, PanelInstanceId,
+    PanelInstanceSnapshot, PanelTypeDescriptor, Rect, Vec2, WorkspaceRestoreError,
+    WorkspaceSnapshot, frame_neighbor, join_request_matches_layout, restore_node, snapshot_node,
+    solve_dock_layout, split_child_rects, split_ratio_from_drag, swap_request_matches_layout,
+    validate_dock_snapshot,
+};
+
+/// Resolved dock drop zone inside a frame rectangle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DockDropZone {
+    /// Merge the dragged tab into the target frame.
+    Center,
+    /// Split to the target frame's left.
+    Left,
+    /// Split to the target frame's right.
+    Right,
+    /// Split above the target frame.
+    Top,
+    /// Split below the target frame.
+    Bottom,
+}
+
+impl DockDropZone {
+    pub(crate) const fn placement(self) -> Option<DockPlacement> {
+        match self {
+            Self::Center => None,
+            Self::Left => Some(DockPlacement::Left),
+            Self::Right => Some(DockPlacement::Right),
+            Self::Top => Some(DockPlacement::Top),
+            Self::Bottom => Some(DockPlacement::Bottom),
+        }
+    }
+}
+
+/// Tab drag state emitted by frame chrome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DockTabDrag {
+    /// Source frame that owns the dragged tab.
+    pub source_frame: FrameId,
+    /// Dragged panel tab.
+    pub panel: PanelId,
+}
+
+/// Explicit target for dropping a dragged frame tab.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DockDropTarget {
+    /// Merge the panel into an existing frame tab group.
+    Tab {
+        /// Target frame.
+        frame: FrameId,
+    },
+    /// Insert the panel as a new frame split adjacent to an existing frame.
+    Split {
+        /// Existing frame to split around.
+        frame: FrameId,
+        /// Placement of the new frame relative to the target frame.
+        placement: DockPlacement,
+        /// Frame ID for the newly inserted frame.
+        new_frame: FrameId,
+        /// Initial split ratio.
+        ratio: f32,
+        /// Minimum first child size.
+        min_first: f32,
+        /// Minimum second child size.
+        min_second: f32,
+    },
+}
+
+impl DockDropTarget {
+    /// Creates a tab merge target.
+    #[must_use]
+    pub const fn tab(frame: FrameId) -> Self {
+        Self::Tab { frame }
+    }
+
+    /// Creates a split insertion target with editor-friendly defaults.
+    #[must_use]
+    pub const fn split(frame: FrameId, placement: DockPlacement, new_frame: FrameId) -> Self {
+        Self::Split {
+            frame,
+            placement,
+            new_frame,
+            ratio: DEFAULT_SPLIT_RATIO,
+            min_first: DEFAULT_SPLIT_MINIMUM,
+            min_second: DEFAULT_SPLIT_MINIMUM,
+        }
+    }
+}
+
+/// Resolved splitter hit target.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DockSplitter {
+    /// Split path addressed by this splitter.
+    pub path: DockSplitPath,
+    /// Split axis.
+    pub axis: Axis,
+    /// Splitter interaction rectangle.
+    pub rect: Rect,
+    /// Current split ratio.
+    pub ratio: f32,
+    /// Minimum first child size.
+    pub min_first: f32,
+    /// Minimum second child size.
+    pub min_second: f32,
+}
+
+/// Passive panel metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Panel {
+    /// Panel identity.
+    pub id: PanelId,
+    /// Display title used by frame tabs.
+    pub title: String,
+}
+
+impl Panel {
+    /// Creates a panel.
+    #[must_use]
+    pub fn new(id: PanelId, title: impl Into<String>) -> Self {
+        Self {
+            id,
+            title: title.into(),
+        }
+    }
+
+    /// Creates a panel from the panel instance vocabulary.
+    #[must_use]
+    pub fn from_instance_id(id: PanelInstanceId, title: impl Into<String>) -> Self {
+        Self::new(PanelId::from_instance_id(id), title)
+    }
+
+    /// Returns this panel identity as a panel instance ID.
+    #[must_use]
+    pub const fn instance_id(&self) -> PanelInstanceId {
+        self.id.instance_id()
+    }
+}
+
+/// Docked frame containing tabbed panels.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Frame {
+    /// Frame identity.
+    pub id: FrameId,
+    /// Panels in tab order.
+    pub panels: Vec<Panel>,
+    /// Active panel index.
+    pub active: usize,
+    /// Panels whose frame tabs expose close/dismiss affordances.
+    pub(crate) dismissible_panels: BTreeSet<PanelId>,
+}
+
+impl Frame {
+    /// Creates a frame with panels.
+    #[must_use]
+    pub fn new(id: FrameId, panels: Vec<Panel>) -> Self {
+        let dismissible_panels = panels.iter().map(|panel| panel.id).collect();
+        Self {
+            id,
+            panels,
+            active: 0,
+            dismissible_panels,
+        }
+    }
+
+    /// Returns the active panel.
+    #[must_use]
+    pub fn active_panel(&self) -> Option<&Panel> {
+        self.panels.get(self.active)
+    }
+
+    /// Selects a panel by ID.
+    pub fn select_panel(&mut self, panel: PanelId) -> bool {
+        let Some(index) = self.panels.iter().position(|item| item.id == panel) else {
+            return false;
+        };
+        self.active = index;
+        true
+    }
+
+    /// Removes a panel by ID.
+    pub fn remove_panel(&mut self, panel: PanelId) -> Option<Panel> {
+        let (removed, _) = self.remove_panel_with_policy(panel)?;
+        Some(removed)
+    }
+
+    fn remove_panel_with_policy(&mut self, panel: PanelId) -> Option<(Panel, bool)> {
+        let index = self.panels.iter().position(|item| item.id == panel)?;
+        let dismissible = self.dismissible_panels.remove(&panel);
+        let removed = self.panels.remove(index);
+        self.active = self.active.min(self.panels.len().saturating_sub(1));
+        Some((removed, dismissible))
+    }
+
+    /// Adds a panel at the end.
+    pub fn push_panel(&mut self, panel: Panel) {
+        self.push_panel_with_policy(panel, true);
+    }
+
+    fn push_panel_with_policy(&mut self, panel: Panel, dismissible: bool) {
+        let id = panel.id;
+        self.panels.push(panel);
+        self.set_panel_dismissible(id, dismissible);
+    }
+
+    /// Sets whether a frame tab can expose close/dismiss affordances.
+    ///
+    /// Returns `false` when the panel is not in this frame.
+    pub fn set_panel_dismissible(&mut self, panel: PanelId, dismissible: bool) -> bool {
+        if !self.panels.iter().any(|item| item.id == panel) {
+            return false;
+        }
+        if dismissible {
+            self.dismissible_panels.insert(panel);
+        } else {
+            self.dismissible_panels.remove(&panel);
+        }
+        true
+    }
+
+    /// Returns true when a frame tab can expose close/dismiss affordances.
+    #[must_use]
+    pub fn panel_dismissible(&self, panel: PanelId) -> bool {
+        self.dismissible_panels.contains(&panel)
+    }
+}
+
+/// Dock tree node.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DockNode {
+    /// Leaf frame.
+    Frame(Frame),
+    /// Split between two nodes.
+    Split {
+        /// Split axis.
+        axis: Axis,
+        /// First child ratio.
+        ratio: f32,
+        /// Minimum first child size.
+        min_first: f32,
+        /// Minimum second child size.
+        min_second: f32,
+        /// First child.
+        first: Box<DockNode>,
+        /// Second child.
+        second: Box<DockNode>,
+    },
+}
+
+/// Root dock.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Dock {
+    /// Root dock node.
+    pub root: DockNode,
+    /// Root-owned active frame identity.
+    active_frame: Option<FrameId>,
+}
+
+impl Dock {
+    /// Creates a dock.
+    #[must_use]
+    pub fn new(root: DockNode) -> Self {
+        let active_frame = first_valid_frame_id(&root);
+        Self { root, active_frame }
+    }
+
+    /// Returns the root-owned active frame identity.
+    #[must_use]
+    pub fn active_frame(&self) -> Option<FrameId> {
+        self.active_frame
+            .filter(|frame| self.frame(*frame).is_some_and(frame_is_valid))
+    }
+
+    /// Sets the root-owned active frame when the frame exists.
+    pub fn set_active_frame(&mut self, frame: FrameId) -> bool {
+        if !self.frame(frame).is_some_and(frame_is_valid) {
+            return false;
+        }
+        self.active_frame = Some(frame);
+        true
+    }
+
+    /// Visits all frames in deterministic tree order.
+    #[must_use]
+    pub fn frames(&self) -> Vec<&Frame> {
+        let mut frames = Vec::new();
+        collect_frames(&self.root, &mut frames);
+        frames
+    }
+
+    /// Finds an immutable frame.
+    #[must_use]
+    pub fn frame(&self, frame: FrameId) -> Option<&Frame> {
+        find_frame(&self.root, frame)
+    }
+
+    /// Finds a mutable frame.
+    pub fn frame_mut(&mut self, frame: FrameId) -> Option<&mut Frame> {
+        find_frame_mut(&mut self.root, frame)
+    }
+
+    /// Selects a panel in a frame.
+    pub fn select_panel(&mut self, frame: FrameId, panel: PanelId) -> bool {
+        let selected = self
+            .frame_mut(frame)
+            .is_some_and(|frame| frame.select_panel(panel));
+        if selected {
+            self.active_frame = Some(frame);
+        }
+        selected
+    }
+
+    /// Moves a panel between frames.
+    pub fn move_panel(&mut self, from: FrameId, to: FrameId, panel: PanelId) -> bool {
+        if from == to || self.frame(to).is_none() {
+            return false;
+        }
+        let Some((panel, dismissible)) = self
+            .frame_mut(from)
+            .and_then(|frame| frame.remove_panel_with_policy(panel))
+        else {
+            return false;
+        };
+        let Some(target) = self.frame_mut(to) else {
+            return false;
+        };
+        target.push_panel_with_policy(panel, dismissible);
+        target.active = target.panels.len().saturating_sub(1);
+        prune_empty_frames(&mut self.root);
+        self.active_frame = Some(to);
+        self.refresh_active_frame();
+        true
+    }
+
+    /// Merges all source frame panels into target frame.
+    pub fn merge_frames(&mut self, source: FrameId, target: FrameId) -> bool {
+        if source == target || self.frame(source).is_none() || self.frame(target).is_none() {
+            return false;
+        }
+        let Some((source_panels, dismissible_panels)) = self.frame_mut(source).map(|frame| {
+            frame.active = 0;
+            (
+                core::mem::take(&mut frame.panels),
+                core::mem::take(&mut frame.dismissible_panels),
+            )
+        }) else {
+            return false;
+        };
+        let Some(target_frame) = self.frame_mut(target) else {
+            return false;
+        };
+        target_frame.panels.extend(source_panels);
+        target_frame.dismissible_panels.extend(dismissible_panels);
+        target_frame.active = target_frame.panels.len().saturating_sub(1);
+        prune_empty_frames(&mut self.root);
+        self.active_frame = Some(target);
+        self.refresh_active_frame();
+        true
+    }
+
+    /// Applies a resolved neighbor join request against the current dock layout.
+    pub fn apply_join_request(&mut self, bounds: Rect, request: DockJoinRequest) -> bool {
+        self.apply_join_request_with_policy(bounds, request, DockInteractionPolicy::default())
+    }
+
+    /// Applies a resolved neighbor join request when policy allows join actions.
+    pub fn apply_join_request_with_policy(
+        &mut self,
+        bounds: Rect,
+        request: DockJoinRequest,
+        policy: DockInteractionPolicy,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_join {
+            return false;
+        }
+
+        let layout = solve_dock_layout(self, bounds);
+        if !join_request_matches_layout(&layout, request) {
+            return false;
+        }
+
+        self.merge_frames(request.source_frame(), request.target_frame())
+    }
+
+    /// Resolves and applies a neighbor join against the current dock layout.
+    pub fn join_neighbor(
+        &mut self,
+        bounds: Rect,
+        source_frame: FrameId,
+        direction: DockNeighborDirection,
+    ) -> bool {
+        self.join_neighbor_with_policy(
+            bounds,
+            source_frame,
+            direction,
+            DockInteractionPolicy::default(),
+        )
+    }
+
+    /// Resolves and applies a neighbor join when policy allows join actions.
+    pub fn join_neighbor_with_policy(
+        &mut self,
+        bounds: Rect,
+        source_frame: FrameId,
+        direction: DockNeighborDirection,
+        policy: DockInteractionPolicy,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_join {
+            return false;
+        }
+
+        let layout = solve_dock_layout(self, bounds);
+        let Some(target_frame) = frame_neighbor(&layout, source_frame, direction) else {
+            return false;
+        };
+        let request = DockJoinRequest {
+            source_frame,
+            direction,
+            target_frame,
+        };
+
+        if !join_request_matches_layout(&layout, request) {
+            return false;
+        }
+
+        self.merge_frames(source_frame, target_frame)
+    }
+
+    /// Applies a resolved neighbor swap request against the current dock layout.
+    pub fn apply_swap_request(&mut self, bounds: Rect, request: DockSwapRequest) -> bool {
+        self.apply_swap_request_with_policy(bounds, request, DockInteractionPolicy::default())
+    }
+
+    /// Applies a resolved neighbor swap request when policy allows swap actions.
+    pub fn apply_swap_request_with_policy(
+        &mut self,
+        bounds: Rect,
+        request: DockSwapRequest,
+        policy: DockInteractionPolicy,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_swap {
+            return false;
+        }
+
+        let layout = solve_dock_layout(self, bounds);
+        if !swap_request_matches_layout(&layout, request) {
+            return false;
+        }
+
+        swap_frame_leaves(
+            &mut self.root,
+            request.source_frame(),
+            request.target_frame(),
+        )
+    }
+
+    /// Resolves and applies a neighbor swap against the current dock layout.
+    pub fn swap_neighbor(
+        &mut self,
+        bounds: Rect,
+        source_frame: FrameId,
+        direction: DockNeighborDirection,
+    ) -> bool {
+        self.swap_neighbor_with_policy(
+            bounds,
+            source_frame,
+            direction,
+            DockInteractionPolicy::default(),
+        )
+    }
+
+    /// Resolves and applies a neighbor swap when policy allows swap actions.
+    pub fn swap_neighbor_with_policy(
+        &mut self,
+        bounds: Rect,
+        source_frame: FrameId,
+        direction: DockNeighborDirection,
+        policy: DockInteractionPolicy,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_swap {
+            return false;
+        }
+
+        let layout = solve_dock_layout(self, bounds);
+        let Some(target_frame) = frame_neighbor(&layout, source_frame, direction) else {
+            return false;
+        };
+        let request = DockSwapRequest {
+            source_frame,
+            direction,
+            target_frame,
+        };
+
+        if !swap_request_matches_layout(&layout, request) {
+            return false;
+        }
+
+        swap_frame_leaves(&mut self.root, source_frame, target_frame)
+    }
+
+    /// Starts a tab drag when the frame owns the panel.
+    #[must_use]
+    pub fn begin_tab_drag(&self, source_frame: FrameId, panel: PanelId) -> Option<DockTabDrag> {
+        self.frame(source_frame)
+            .filter(|frame| frame.panels.iter().any(|item| item.id == panel))
+            .map(|_| DockTabDrag {
+                source_frame,
+                panel,
+            })
+    }
+
+    /// Applies a dragged tab to an explicit dock target.
+    pub fn drop_tab(&mut self, drag: DockTabDrag, target: DockDropTarget) -> bool {
+        match target {
+            DockDropTarget::Tab { frame } => {
+                if drag.source_frame == frame {
+                    return self.select_panel(frame, drag.panel);
+                }
+                self.move_panel(drag.source_frame, frame, drag.panel)
+            }
+            DockDropTarget::Split {
+                frame,
+                placement,
+                new_frame,
+                ratio,
+                min_first,
+                min_second,
+            } => self.split_panel(
+                drag.source_frame,
+                drag.panel,
+                DockSplitInsertion {
+                    target_frame: frame,
+                    placement,
+                    new_frame,
+                    ratio,
+                    min_first,
+                    min_second,
+                },
+            ),
+        }
+    }
+
+    /// Inserts one panel as a new frame split adjacent to an existing frame.
+    pub fn split_panel(
+        &mut self,
+        source_frame: FrameId,
+        panel: PanelId,
+        insertion: DockSplitInsertion,
+    ) -> bool {
+        if self.frame(insertion.target_frame).is_none()
+            || self.frame(insertion.new_frame).is_some()
+            || !insertion.ratio.is_finite()
+            || !(0.0..=1.0).contains(&insertion.ratio)
+            || !insertion.min_first.is_finite()
+            || insertion.min_first < 0.0
+            || !insertion.min_second.is_finite()
+            || insertion.min_second < 0.0
+        {
+            return false;
+        }
+
+        if source_frame == insertion.target_frame
+            && self
+                .frame(source_frame)
+                .is_none_or(|frame| frame.panels.len() <= 1)
+        {
+            return false;
+        }
+
+        let Some((panel, dismissible)) = self
+            .frame_mut(source_frame)
+            .and_then(|frame| frame.remove_panel_with_policy(panel))
+        else {
+            return false;
+        };
+
+        let mut inserted = Frame::new(insertion.new_frame, vec![panel]);
+        inserted.set_panel_dismissible(inserted.panels[0].id, dismissible);
+        prune_empty_frames(&mut self.root);
+
+        let inserted = insert_frame_split(&mut self.root, insertion, inserted);
+        if inserted {
+            self.active_frame = Some(insertion.new_frame);
+        } else {
+            self.refresh_active_frame();
+        }
+        inserted
+    }
+
+    /// Resizes a split addressed by path using a drag delta in logical units.
+    pub fn resize_split(&mut self, path: &DockSplitPath, bounds: Rect, delta: Vec2) -> bool {
+        self.resize_split_with_policy(path, bounds, delta, DockInteractionPolicy::default())
+    }
+
+    /// Resizes a split when policy allows splitter drag resize.
+    pub fn resize_split_with_policy(
+        &mut self,
+        path: &DockSplitPath,
+        bounds: Rect,
+        delta: Vec2,
+        policy: DockInteractionPolicy,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_resize {
+            return false;
+        }
+
+        resize_split_at_path(&mut self.root, path.elements(), bounds, delta)
+    }
+
+    /// Creates a snapshot for persistence.
+    #[must_use]
+    pub fn snapshot(&self) -> DockSnapshot {
+        DockSnapshot {
+            active_frame: self.active_frame(),
+            root: snapshot_node(&self.root),
+        }
+    }
+
+    /// Creates an additive workspace snapshot shell around the dock snapshot.
+    ///
+    /// Panel instance records are supplied by the application because the UI
+    /// toolkit does not own panel type registration or panel state storage.
+    #[must_use]
+    pub fn workspace_snapshot(
+        &self,
+        panel_instances: Vec<PanelInstanceSnapshot>,
+    ) -> WorkspaceSnapshot {
+        WorkspaceSnapshot {
+            dock: self.snapshot(),
+            panel_instances,
+        }
+    }
+
+    /// Restores a snapshot after validation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DockRestoreError`] when persisted dock data is structurally
+    /// invalid, contains duplicate identities, or stores invalid split values.
+    pub fn restore(snapshot: DockSnapshot) -> Result<Self, DockRestoreError> {
+        validate_dock_snapshot(&snapshot)?;
+        let root = restore_node(snapshot.root);
+        let active_frame = snapshot
+            .active_frame
+            .or_else(|| first_valid_frame_id(&root));
+        Ok(Self { root, active_frame })
+    }
+
+    /// Restores a workspace snapshot after validating its panel instance shell.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceRestoreError`] when the dock snapshot is invalid, an
+    /// instance record is missing or stale, or the supplied panel type
+    /// descriptors are not a deterministic set.
+    pub fn restore_workspace(
+        snapshot: WorkspaceSnapshot,
+        descriptors: &[PanelTypeDescriptor],
+    ) -> Result<Self, WorkspaceRestoreError> {
+        snapshot.restore_dock(descriptors)
+    }
+
+    fn refresh_active_frame(&mut self) {
+        if self.active_frame().is_none() {
+            self.active_frame = first_valid_frame_id(&self.root);
+        }
+    }
+}
+
+/// Request for splitting a dragged panel into a new frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DockSplitInsertion {
+    /// Existing frame to split around.
+    pub target_frame: FrameId,
+    /// Placement of the new frame relative to the target frame.
+    pub placement: DockPlacement,
+    /// Frame ID for the newly inserted frame.
+    pub new_frame: FrameId,
+    /// Initial split ratio.
+    pub ratio: f32,
+    /// Minimum first child size.
+    pub min_first: f32,
+    /// Minimum second child size.
+    pub min_second: f32,
+}
+
+impl DockSplitInsertion {
+    /// Creates a split insertion request with editor-friendly defaults.
+    #[must_use]
+    pub const fn new(target_frame: FrameId, placement: DockPlacement, new_frame: FrameId) -> Self {
+        Self {
+            target_frame,
+            placement,
+            new_frame,
+            ratio: DEFAULT_SPLIT_RATIO,
+            min_first: DEFAULT_SPLIT_MINIMUM,
+            min_second: DEFAULT_SPLIT_MINIMUM,
+        }
+    }
+}
+
+fn collect_frames<'a>(node: &'a DockNode, frames: &mut Vec<&'a Frame>) {
+    match node {
+        DockNode::Frame(frame) => frames.push(frame),
+        DockNode::Split { first, second, .. } => {
+            collect_frames(first, frames);
+            collect_frames(second, frames);
+        }
+    }
+}
+
+pub(crate) fn collect_frame_ids(node: &DockNode) -> Vec<FrameId> {
+    let mut frames = Vec::new();
+    collect_frame_ids_inner(node, &mut frames);
+    frames
+}
+
+fn collect_frame_ids_inner(node: &DockNode, frames: &mut Vec<FrameId>) {
+    match node {
+        DockNode::Frame(frame) => frames.push(frame.id),
+        DockNode::Split { first, second, .. } => {
+            collect_frame_ids_inner(first, frames);
+            collect_frame_ids_inner(second, frames);
+        }
+    }
+}
+
+pub(crate) fn split_children_at_path<'a>(
+    node: &'a DockNode,
+    path: &[DockPathElement],
+) -> Option<(Axis, &'a DockNode, &'a DockNode)> {
+    match (node, path) {
+        (
+            DockNode::Split {
+                axis,
+                first,
+                second,
+                ..
+            },
+            [],
+        ) => Some((*axis, first, second)),
+        (DockNode::Split { first, .. }, [DockPathElement::First, rest @ ..]) => {
+            split_children_at_path(first, rest)
+        }
+        (DockNode::Split { second, .. }, [DockPathElement::Second, rest @ ..]) => {
+            split_children_at_path(second, rest)
+        }
+        _ => None,
+    }
+}
+
+fn find_frame_mut(node: &mut DockNode, id: FrameId) -> Option<&mut Frame> {
+    match node {
+        DockNode::Frame(frame) if frame.id == id => Some(frame),
+        DockNode::Frame(_) => None,
+        DockNode::Split { first, second, .. } => {
+            find_frame_mut(first, id).or_else(|| find_frame_mut(second, id))
+        }
+    }
+}
+
+fn find_frame(node: &DockNode, id: FrameId) -> Option<&Frame> {
+    match node {
+        DockNode::Frame(frame) if frame.id == id => Some(frame),
+        DockNode::Frame(_) => None,
+        DockNode::Split { first, second, .. } => {
+            find_frame(first, id).or_else(|| find_frame(second, id))
+        }
+    }
+}
+
+pub(crate) fn frame_is_valid(frame: &Frame) -> bool {
+    !frame.panels.is_empty()
+}
+
+fn first_valid_frame_id(node: &DockNode) -> Option<FrameId> {
+    match node {
+        DockNode::Frame(frame) if frame_is_valid(frame) => Some(frame.id),
+        DockNode::Frame(_) => None,
+        DockNode::Split { first, second, .. } => {
+            first_valid_frame_id(first).or_else(|| first_valid_frame_id(second))
+        }
+    }
+}
+
+fn prune_empty_frames(node: &mut DockNode) -> bool {
+    let original = core::mem::replace(node, empty_dock_node());
+    match original {
+        DockNode::Frame(frame) => {
+            let has_panels = !frame.panels.is_empty();
+            *node = DockNode::Frame(frame);
+            has_panels
+        }
+        DockNode::Split {
+            axis,
+            ratio,
+            min_first,
+            min_second,
+            mut first,
+            mut second,
+        } => {
+            let first_has_panels = prune_empty_frames(&mut first);
+            let second_has_panels = prune_empty_frames(&mut second);
+            match (first_has_panels, second_has_panels) {
+                (true, true) => {
+                    *node = DockNode::Split {
+                        axis,
+                        ratio,
+                        min_first,
+                        min_second,
+                        first,
+                        second,
+                    };
+                    true
+                }
+                (true, false) => {
+                    *node = *first;
+                    true
+                }
+                (false, true) => {
+                    *node = *second;
+                    true
+                }
+                (false, false) => {
+                    *node = DockNode::Split {
+                        axis,
+                        ratio,
+                        min_first,
+                        min_second,
+                        first,
+                        second,
+                    };
+                    false
+                }
+            }
+        }
+    }
+}
+
+fn insert_frame_split(node: &mut DockNode, insertion: DockSplitInsertion, inserted: Frame) -> bool {
+    let mut inserted = Some(inserted);
+    insert_frame_split_inner(node, insertion, &mut inserted)
+}
+
+fn insert_frame_split_inner(
+    node: &mut DockNode,
+    insertion: DockSplitInsertion,
+    inserted: &mut Option<Frame>,
+) -> bool {
+    match node {
+        DockNode::Frame(frame) if frame.id == insertion.target_frame => {
+            let Some(inserted) = inserted.take() else {
+                return false;
+            };
+            let target = core::mem::replace(node, empty_dock_node());
+            let inserted = DockNode::Frame(inserted);
+            let (first, second) = if insertion.placement.insert_before_target() {
+                (inserted, target)
+            } else {
+                (target, inserted)
+            };
+            *node = DockNode::Split {
+                axis: insertion.placement.axis(),
+                ratio: insertion.ratio,
+                min_first: insertion.min_first,
+                min_second: insertion.min_second,
+                first: Box::new(first),
+                second: Box::new(second),
+            };
+            true
+        }
+        DockNode::Frame(_) => false,
+        DockNode::Split { first, second, .. } => {
+            insert_frame_split_inner(first, insertion, inserted)
+                || insert_frame_split_inner(second, insertion, inserted)
+        }
+    }
+}
+
+fn swap_frame_leaves(root: &mut DockNode, first: FrameId, second: FrameId) -> bool {
+    if first == second {
+        return false;
+    }
+
+    let Some(first_path) = find_frame_path(root, first) else {
+        return false;
+    };
+    let Some(second_path) = find_frame_path(root, second) else {
+        return false;
+    };
+    if first_path == second_path {
+        return false;
+    }
+
+    swap_frames_at_paths(root, &first_path, &second_path)
+}
+
+fn find_frame_path(root: &DockNode, frame: FrameId) -> Option<Vec<DockPathElement>> {
+    let mut path = Vec::new();
+    find_frame_path_inner(root, frame, &mut path).then_some(path)
+}
+
+fn find_frame_path_inner(node: &DockNode, frame: FrameId, path: &mut Vec<DockPathElement>) -> bool {
+    match node {
+        DockNode::Frame(candidate) => candidate.id == frame,
+        DockNode::Split { first, second, .. } => {
+            path.push(DockPathElement::First);
+            if find_frame_path_inner(first, frame, path) {
+                return true;
+            }
+            path.pop();
+
+            path.push(DockPathElement::Second);
+            if find_frame_path_inner(second, frame, path) {
+                return true;
+            }
+            path.pop();
+            false
+        }
+    }
+}
+
+fn frame_at_path_mut<'a>(
+    node: &'a mut DockNode,
+    path: &[DockPathElement],
+) -> Option<&'a mut Frame> {
+    match (node, path) {
+        (DockNode::Frame(frame), []) => Some(frame),
+        (DockNode::Split { first, .. }, [DockPathElement::First, rest @ ..]) => {
+            frame_at_path_mut(first, rest)
+        }
+        (DockNode::Split { second, .. }, [DockPathElement::Second, rest @ ..]) => {
+            frame_at_path_mut(second, rest)
+        }
+        _ => None,
+    }
+}
+
+fn swap_frames_at_paths(
+    node: &mut DockNode,
+    first_path: &[DockPathElement],
+    second_path: &[DockPathElement],
+) -> bool {
+    match (first_path, second_path) {
+        ([DockPathElement::First, first_rest @ ..], [DockPathElement::First, second_rest @ ..]) => {
+            let DockNode::Split { first, .. } = node else {
+                return false;
+            };
+            swap_frames_at_paths(first, first_rest, second_rest)
+        }
+        (
+            [DockPathElement::Second, first_rest @ ..],
+            [DockPathElement::Second, second_rest @ ..],
+        ) => {
+            let DockNode::Split { second, .. } = node else {
+                return false;
+            };
+            swap_frames_at_paths(second, first_rest, second_rest)
+        }
+        (
+            [DockPathElement::First, first_rest @ ..],
+            [DockPathElement::Second, second_rest @ ..],
+        ) => {
+            let DockNode::Split { first, second, .. } = node else {
+                return false;
+            };
+            let Some(first_frame) = frame_at_path_mut(first, first_rest) else {
+                return false;
+            };
+            let Some(second_frame) = frame_at_path_mut(second, second_rest) else {
+                return false;
+            };
+            core::mem::swap(first_frame, second_frame);
+            true
+        }
+        (
+            [DockPathElement::Second, first_rest @ ..],
+            [DockPathElement::First, second_rest @ ..],
+        ) => {
+            let DockNode::Split { first, second, .. } = node else {
+                return false;
+            };
+            let Some(first_frame) = frame_at_path_mut(second, first_rest) else {
+                return false;
+            };
+            let Some(second_frame) = frame_at_path_mut(first, second_rest) else {
+                return false;
+            };
+            core::mem::swap(first_frame, second_frame);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn empty_dock_node() -> DockNode {
+    DockNode::Frame(Frame::new(FrameId::from_raw(0), Vec::new()))
+}
+
+fn resize_split_at_path(
+    node: &mut DockNode,
+    path: &[DockPathElement],
+    bounds: Rect,
+    delta: Vec2,
+) -> bool {
+    let DockNode::Split {
+        axis,
+        ratio,
+        min_first,
+        min_second,
+        first,
+        second,
+    } = node
+    else {
+        return false;
+    };
+
+    if path.is_empty() {
+        *ratio = split_ratio_from_drag(*axis, bounds, *ratio, *min_first, *min_second, delta);
+        return true;
+    }
+
+    let (first_rect, second_rect) =
+        split_child_rects(*axis, bounds, *ratio, *min_first, *min_second);
+    match path[0] {
+        DockPathElement::First => resize_split_at_path(first, &path[1..], first_rect, delta),
+        DockPathElement::Second => resize_split_at_path(second, &path[1..], second_rect, delta),
+    }
+}
