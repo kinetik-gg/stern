@@ -232,6 +232,15 @@ mod tests {
         assert!(icons.has_icon(icon));
     }
 
+    #[test]
+    fn facade_widgets_module_exposes_widget_prelude() {
+        let theme = prelude::default_dark_theme();
+        let output =
+            widgets::prelude::label(prelude::Rect::new(0.0, 0.0, 80.0, 18.0), "Hello", &theme);
+
+        assert_eq!(output.primitives.len(), 1);
+    }
+
     #[cfg(feature = "render-vello")]
     #[test]
     fn facade_prelude_drives_vello_through_renderer_contract() {

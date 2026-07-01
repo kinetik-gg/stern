@@ -145,6 +145,26 @@ pub struct VelloRenderer {
     image_cache: ImageDataCache,
 }
 
+/// Fatal error returned by [`VelloRenderer`] frame submission.
+///
+/// The current Vello backend translates primitives and encodes a CPU-side
+/// [`Scene`], so it has no fatal submission failures today. Recoverable
+/// primitive, geometry, and resource issues are still reported as
+/// [`RenderDiagnostic`] values in [`RenderFrameOutput::diagnostics`]. This
+/// non-exhaustive type reserves the backend contract for future GPU/device
+/// submission failures without changing `RendererBackend::Error`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum VelloRendererError {}
+
+impl std::fmt::Display for VelloRendererError {
+    fn fmt(&self, _formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {}
+    }
+}
+
+impl std::error::Error for VelloRendererError {}
+
 impl VelloRenderer {
     /// Creates a renderer boundary with an empty Vello scene.
     #[must_use]
@@ -409,7 +429,7 @@ impl Default for VelloRenderer {
 }
 
 impl RendererBackend for VelloRenderer {
-    type Error = core::convert::Infallible;
+    type Error = VelloRendererError;
 
     fn render_frame(
         &mut self,
@@ -2757,8 +2777,8 @@ mod tests {
         ImageAtlasRegion, ImageDataCache, ImageResource, RenderCommand, RenderCommandKind,
         RenderDiagnostic, RenderFrameInput, RenderImage, RenderImageSampling, RenderResources,
         RendererBackend, ShapedTextCache, TextLayoutResource, TextureResource, VelloRenderer,
-        crisp_rect_border_segments, image_quality, image_region_transform, physical_text_layout,
-        physical_text_layout_for_key, quantize_physical_text_extent,
+        VelloRendererError, crisp_rect_border_segments, image_quality, image_region_transform,
+        physical_text_layout, physical_text_layout_for_key, quantize_physical_text_extent,
         quantize_stroke_width_to_device, render_translation_snapshot, root_transform,
         snap_axis_aligned_translation, snap_filled_path_elements_to_device,
         snap_image_rect_to_device, snap_point_to_device, snap_radius_to_device,
@@ -3750,11 +3770,20 @@ mod tests {
                 resources: &resources,
             },
         )
-        .expect("Vello frame submission is infallible before GPU presentation");
+        .expect("Vello CPU scene encoding should not return fatal submission errors");
 
         assert_eq!(output.primitive_count, 0);
         assert!(output.diagnostics.is_empty());
         assert!(renderer.scene().encoding().is_empty());
+    }
+
+    #[test]
+    fn renderer_backend_uses_concrete_vello_error_type() {
+        fn assert_error_type<T: RendererBackend<Error = VelloRendererError>>(_: &T) {}
+
+        let renderer = VelloRenderer::new();
+
+        assert_error_type(&renderer);
     }
 
     #[test]

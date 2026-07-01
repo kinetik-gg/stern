@@ -120,6 +120,88 @@ fn overlay_conformance_children_require_present_parent_and_close_with_parent() {
 }
 
 #[test]
+fn overlay_conformance_overlay_stack_open_child_rejects_parent_cycles_without_mutation() {
+    let mut stack = OverlayStack::new();
+
+    stack.open(entry(
+        1,
+        OverlayKind::Menu,
+        Rect::new(0.0, 0.0, 100.0, 100.0),
+    ));
+    assert!(stack.open_child(
+        id(1),
+        entry(2, OverlayKind::Menu, Rect::new(100.0, 0.0, 80.0, 80.0),),
+    ));
+    assert!(stack.open_child(
+        id(2),
+        entry(3, OverlayKind::Menu, Rect::new(180.0, 0.0, 80.0, 80.0),),
+    ));
+
+    let before_self_parent = stack.entries().to_vec();
+    assert!(!stack.open_child(
+        id(2),
+        entry(2, OverlayKind::Popover, Rect::new(200.0, 0.0, 80.0, 60.0),),
+    ));
+    assert_eq!(stack.entries(), before_self_parent.as_slice());
+
+    let before_ancestor_replacement = stack.entries().to_vec();
+    assert!(!stack.open_child(
+        id(3),
+        entry(
+            1,
+            OverlayKind::ContextMenu,
+            Rect::new(260.0, 0.0, 80.0, 80.0),
+        ),
+    ));
+    assert_eq!(stack.entries(), before_ancestor_replacement.as_slice());
+}
+
+#[test]
+fn overlay_conformance_overlay_stack_open_child_allows_non_ancestor_replacement() {
+    let mut stack = OverlayStack::new();
+
+    stack.open(entry(
+        1,
+        OverlayKind::Menu,
+        Rect::new(0.0, 0.0, 100.0, 100.0),
+    ));
+    assert!(stack.open_child(
+        id(1),
+        entry(2, OverlayKind::Menu, Rect::new(100.0, 0.0, 80.0, 80.0),),
+    ));
+    assert!(stack.open_child(
+        id(2),
+        entry(4, OverlayKind::Tooltip, Rect::new(120.0, 20.0, 40.0, 20.0),),
+    ));
+    assert!(stack.open_child(
+        id(1),
+        entry(3, OverlayKind::Menu, Rect::new(180.0, 0.0, 80.0, 80.0),),
+    ));
+
+    assert!(stack.open_child(
+        id(3),
+        entry(
+            2,
+            OverlayKind::ContextMenu,
+            Rect::new(260.0, 0.0, 80.0, 80.0),
+        ),
+    ));
+
+    assert_eq!(
+        stack
+            .entries()
+            .iter()
+            .map(|overlay| (overlay.id, overlay.parent, overlay.kind))
+            .collect::<Vec<_>>(),
+        vec![
+            (id(1), None, OverlayKind::Menu),
+            (id(3), Some(id(1)), OverlayKind::Menu),
+            (id(2), Some(id(3)), OverlayKind::ContextMenu),
+        ]
+    );
+}
+
+#[test]
 fn overlay_conformance_modal_blocks_lower_layers_but_not_higher_hits() {
     let mut stack = OverlayStack::new();
 

@@ -1109,7 +1109,8 @@ fn repair_plan_drops_stale_panel_instances_only_in_repair_mode_and_reports_actio
     let plan = snapshot.repair_plan(&descriptors);
 
     assert!(plan.is_repairable());
-    assert_eq!(plan.hard_error, None);
+    assert_eq!(plan.hard_error(), None);
+    assert!(plan.repaired_snapshot().is_some());
     assert_eq!(snapshot, original_snapshot);
     assert_eq!(plan.actions.len(), 1);
     assert_eq!(
@@ -1157,7 +1158,8 @@ fn repair_plan_adds_missing_panel_instance_placeholder_from_dock_title_and_repor
     let plan = snapshot.repair_plan(&descriptors);
 
     assert!(plan.is_repairable());
-    assert_eq!(plan.hard_error, None);
+    assert_eq!(plan.hard_error(), None);
+    assert!(plan.repaired_snapshot().is_some());
     assert_eq!(snapshot, original_snapshot);
     assert_eq!(plan.actions.len(), 1);
     assert_eq!(
@@ -1209,7 +1211,8 @@ fn repair_plan_keeps_unknown_panel_type_visible_without_descriptor() {
     let plan = snapshot.repair_plan(&descriptors);
 
     assert!(plan.is_repairable());
-    assert_eq!(plan.hard_error, None);
+    assert_eq!(plan.hard_error(), None);
+    assert!(plan.repaired_snapshot().is_some());
     assert_eq!(snapshot, original_snapshot);
     assert_eq!(
         plan.diagnostics.workspace[0].code,
@@ -1266,7 +1269,8 @@ fn repair_plan_drops_stale_unknown_panel_instances_without_keep_action() {
     let plan = snapshot.repair_plan(&descriptors);
 
     assert!(plan.is_repairable());
-    assert_eq!(plan.hard_error, None);
+    assert_eq!(plan.hard_error(), None);
+    assert!(plan.repaired_snapshot().is_some());
     assert_eq!(snapshot, original_snapshot);
     let diagnostic_codes = plan
         .diagnostics
@@ -1318,12 +1322,12 @@ fn repair_plan_rejects_duplicate_panel_instance_ids_as_hard_error() {
 
     assert!(plan.has_hard_error());
     assert_eq!(
-        plan.hard_error,
-        Some(WorkspaceRestoreError::DuplicatePanelInstanceId {
+        plan.hard_error(),
+        Some(&WorkspaceRestoreError::DuplicatePanelInstanceId {
             panel_instance: PanelInstanceId::from_raw(2),
         })
     );
-    assert_eq!(plan.repaired_snapshot, None);
+    assert_eq!(plan.repaired_snapshot(), None);
     assert!(plan.actions.is_empty());
 }
 
@@ -1340,12 +1344,12 @@ fn repair_plan_rejects_duplicate_panel_type_descriptors_as_hard_error() {
 
     assert!(plan.has_hard_error());
     assert_eq!(
-        plan.hard_error,
-        Some(WorkspaceRestoreError::DuplicatePanelTypeDescriptor {
+        plan.hard_error(),
+        Some(&WorkspaceRestoreError::DuplicatePanelTypeDescriptor {
             panel_type: PanelTypeId::from_raw(20),
         })
     );
-    assert_eq!(plan.repaired_snapshot, None);
+    assert_eq!(plan.repaired_snapshot(), None);
     assert!(plan.actions.is_empty());
 }
 
@@ -1361,13 +1365,46 @@ fn repair_plan_rejects_invalid_dock_snapshots_as_hard_error() {
 
     assert!(plan.has_hard_error());
     assert_eq!(
-        plan.hard_error,
-        Some(WorkspaceRestoreError::Dock(
+        plan.hard_error(),
+        Some(&WorkspaceRestoreError::Dock(
             DockRestoreError::InvalidSplitRatio,
         ))
     );
-    assert_eq!(plan.repaired_snapshot, None);
+    assert_eq!(plan.repaired_snapshot(), None);
     assert!(plan.actions.is_empty());
+}
+
+#[test]
+fn repair_plan_outcome_accessors_preserve_invariants_for_public_callers() {
+    let descriptors = workspace_panel_descriptors();
+    let mut repairable_snapshot = nested_dock().workspace_snapshot(workspace_panel_instances());
+    repairable_snapshot
+        .panel_instances
+        .push(PanelInstanceSnapshot::new(
+            PanelInstanceId::from_raw(99),
+            PanelTypeId::from_raw(10),
+            "Stale Media",
+        ));
+
+    let repairable_plan = repairable_snapshot.repair_plan(&descriptors);
+    assert!(repairable_plan.is_repairable());
+    assert!(!repairable_plan.has_hard_error());
+    assert!(repairable_plan.repaired_snapshot().is_some());
+    assert_eq!(repairable_plan.hard_error(), None);
+
+    let mut hard_error_snapshot = nested_dock().workspace_snapshot(workspace_panel_instances());
+    hard_error_snapshot.panel_instances[2].id = PanelInstanceId::from_raw(2);
+
+    let hard_error_plan = hard_error_snapshot.repair_plan(&descriptors);
+    assert!(!hard_error_plan.is_repairable());
+    assert!(hard_error_plan.has_hard_error());
+    assert_eq!(hard_error_plan.repaired_snapshot(), None);
+    assert_eq!(
+        hard_error_plan.hard_error(),
+        Some(&WorkspaceRestoreError::DuplicatePanelInstanceId {
+            panel_instance: PanelInstanceId::from_raw(2),
+        })
+    );
 }
 
 #[test]

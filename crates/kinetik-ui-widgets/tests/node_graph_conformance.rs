@@ -5,9 +5,10 @@ mod node_graph_conformance {
         Brush, ClipId, Point, Primitive, Rect, RectPrimitive, SemanticRole, SemanticValue, WidgetId,
     };
     use kinetik_ui_widgets::{
-        EdgeDescriptor, EdgeEndpointRole, EdgeId, EdgeResolutionError, GraphPoint, GraphRect,
-        GraphVector, NodeDescriptor, NodeFrameDescriptor, NodeFrameId,
-        NodeGraphAddNodeDescriptorId, NodeGraphAddNodeSearchEntry, NodeGraphAddNodeSearchHighlight,
+        DEFAULT_NODE_GRAPH_CONTEXT_ACTION_KINDS, EdgeDescriptor, EdgeEndpointRole, EdgeId,
+        EdgeResolutionError, GraphPoint, GraphRect, GraphVector, NodeDescriptor,
+        NodeFrameDescriptor, NodeFrameId, NodeGraphAddNodeDescriptorId,
+        NodeGraphAddNodeSearchEntry, NodeGraphAddNodeSearchHighlight,
         NodeGraphAddNodeSearchSelection, NodeGraphAnnotationField, NodeGraphBoxSelectionMode,
         NodeGraphBoxSelectionRequest, NodeGraphCanvasPanRequest, NodeGraphCollapseLinkMetadata,
         NodeGraphCollapseTarget, NodeGraphContextAction, NodeGraphContextActionKind,
@@ -2058,6 +2059,117 @@ mod node_graph_conformance {
     }
 
     #[test]
+    fn node_graph_context_default_catalog_keeps_compatibility_order() {
+        let graph = link_edit_graph();
+        let actions = graph.context_actions(
+            NodeGraphContextTarget::Canvas,
+            &NodeGraphSelection::new().replace(NodeGraphSelectionTarget::Node(NodeId::from_raw(1))),
+        );
+
+        assert_eq!(
+            actions.iter().map(|action| action.kind).collect::<Vec<_>>(),
+            DEFAULT_NODE_GRAPH_CONTEXT_ACTION_KINDS
+        );
+
+        let paste = context_action(&actions, NodeGraphContextActionKind::Paste);
+        assert!(!paste.enabled);
+        assert_eq!(paste.request, None);
+        assert_eq!(
+            paste.unavailable_reason,
+            Some(NodeGraphContextActionUnavailableReason::RequiresApplicationState)
+        );
+    }
+
+    #[test]
+    fn node_graph_context_request_builders_do_not_require_default_catalog() {
+        let graph = link_edit_graph();
+        let selection = NodeGraphSelection::from_targets([
+            NodeGraphSelectionTarget::Node(NodeId::from_raw(1)),
+            NodeGraphSelectionTarget::Edge(EdgeId::from_raw(50)),
+        ]);
+        let node_target = NodeGraphContextTarget::Node(NodeId::from_raw(1));
+        let edge_target = NodeGraphContextTarget::Edge(EdgeId::from_raw(50));
+        let source = PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1));
+
+        let delete = graph
+            .delete_context_request(node_target, &selection)
+            .expect("delete request");
+        let duplicate = graph
+            .duplicate_context_request(node_target, &selection)
+            .expect("duplicate request");
+        assert_eq!(delete.target, node_target);
+        assert_eq!(delete.selected_targets, selection.selected());
+        assert_eq!(duplicate.target, node_target);
+        assert_eq!(duplicate.selected_targets, selection.selected());
+
+        let disconnect = graph
+            .disconnect_context_request(NodeGraphContextTarget::Port(source))
+            .expect("disconnect request");
+        match disconnect.disconnect {
+            NodeGraphContextDisconnectTarget::Endpoint {
+                endpoint,
+                connected_edges,
+            } => {
+                assert_eq!(endpoint, source);
+                assert_eq!(connected_edges, vec![EdgeId::from_raw(50)]);
+            }
+            request @ NodeGraphContextDisconnectTarget::Edge(_) => {
+                panic!("expected endpoint disconnect request, got {request:?}")
+            }
+        }
+
+        let detach = graph
+            .detach_context_request(edge_target, EdgeEndpointRole::Target)
+            .expect("detach request");
+        assert_eq!(detach.target, edge_target);
+        assert_eq!(detach.request.detached, EdgeEndpointRole::Target);
+
+        let organization = graph
+            .organization_context_request(
+                node_target,
+                &selection,
+                NodeGraphContextOrganizationOperation::FrameSelection,
+            )
+            .expect("organization request");
+        assert_eq!(
+            organization.operation,
+            NodeGraphContextOrganizationOperation::FrameSelection
+        );
+        assert_eq!(organization.selected_targets, selection.selected());
+
+        let select_all = graph
+            .select_all_context_request(NodeGraphContextTarget::Canvas, &selection)
+            .expect("select all request");
+        assert_eq!(
+            select_all.operation,
+            NodeGraphContextCanvasOperation::SelectAll
+        );
+        assert!(
+            select_all
+                .selectable_targets
+                .contains(&NodeGraphSelectionTarget::Node(NodeId::from_raw(1)))
+        );
+
+        let paste = graph
+            .paste_context_request(NodeGraphContextTarget::Canvas, &selection)
+            .expect("paste request");
+        assert_eq!(paste.operation, NodeGraphContextCanvasOperation::Paste);
+        assert_eq!(paste.selection, selection);
+        assert!(paste.selectable_targets.is_empty());
+
+        let custom_paste = graph.context_action(
+            NodeGraphContextActionKind::Paste,
+            NodeGraphContextTarget::Canvas,
+            &selection,
+        );
+        assert!(custom_paste.enabled);
+        assert!(matches!(
+            custom_paste.request,
+            Some(NodeGraphContextActionRequest::Canvas(_))
+        ));
+    }
+
+    #[test]
     fn context_disconnect_and_detach_requests_preserve_link_identity() {
         let graph = link_edit_graph();
         let edge = EdgeId::from_raw(50);
@@ -2325,6 +2437,65 @@ mod node_graph_conformance {
         assert_eq!(
             context_action(&empty_canvas, NodeGraphContextActionKind::Paste).unavailable_reason,
             Some(NodeGraphContextActionUnavailableReason::RequiresApplicationState)
+        );
+    }
+
+    #[test]
+    fn node_graph_context_request_builders_return_deterministic_unavailable_reasons() {
+        let graph = NodeGraphDescriptor {
+            nodes: vec![
+                NodeDescriptor::new(NodeId::from_raw(1), "Disabled", GraphRect::ZERO)
+                    .with_enabled(false),
+            ],
+            edges: Vec::new(),
+            reroutes: Vec::new(),
+            frames: Vec::new(),
+            groups: Vec::new(),
+        };
+        let selection =
+            NodeGraphSelection::new().replace(NodeGraphSelectionTarget::Node(NodeId::from_raw(1)));
+
+        assert_eq!(
+            graph
+                .delete_context_request(
+                    NodeGraphContextTarget::Node(NodeId::from_raw(99)),
+                    &selection
+                )
+                .unwrap_err(),
+            NodeGraphContextActionUnavailableReason::MissingTarget
+        );
+        assert_eq!(
+            graph
+                .duplicate_context_request(
+                    NodeGraphContextTarget::Node(NodeId::from_raw(1)),
+                    &selection
+                )
+                .unwrap_err(),
+            NodeGraphContextActionUnavailableReason::DisabledTarget
+        );
+        assert_eq!(
+            graph
+                .detach_context_request(
+                    NodeGraphContextTarget::Node(NodeId::from_raw(1)),
+                    EdgeEndpointRole::Source,
+                )
+                .unwrap_err(),
+            NodeGraphContextActionUnavailableReason::UnsupportedTarget
+        );
+        assert_eq!(
+            graph
+                .select_all_context_request(NodeGraphContextTarget::Canvas, &selection)
+                .unwrap_err(),
+            NodeGraphContextActionUnavailableReason::EmptySelection
+        );
+        assert_eq!(
+            graph
+                .paste_context_request(
+                    NodeGraphContextTarget::Node(NodeId::from_raw(1)),
+                    &selection
+                )
+                .unwrap_err(),
+            NodeGraphContextActionUnavailableReason::UnsupportedTarget
         );
     }
 
