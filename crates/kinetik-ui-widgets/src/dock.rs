@@ -3847,23 +3847,69 @@ pub struct WorkspaceRepairPlan {
     pub diagnostics: WorkspaceSnapshotDiagnostics,
     /// Metadata-only repair actions the plan would apply.
     pub actions: Vec<WorkspaceRepairAction>,
-    /// Repaired workspace snapshot when no hard repair error was found.
-    pub repaired_snapshot: Option<WorkspaceSnapshot>,
-    /// Hard repair error that prevents producing a repaired snapshot.
-    pub hard_error: Option<WorkspaceRestoreError>,
+    outcome: WorkspaceRepairPlanOutcome,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum WorkspaceRepairPlanOutcome {
+    Repaired(WorkspaceSnapshot),
+    HardError(WorkspaceRestoreError),
 }
 
 impl WorkspaceRepairPlan {
+    fn repaired(
+        diagnostics: WorkspaceSnapshotDiagnostics,
+        actions: Vec<WorkspaceRepairAction>,
+        snapshot: WorkspaceSnapshot,
+    ) -> Self {
+        Self {
+            diagnostics,
+            actions,
+            outcome: WorkspaceRepairPlanOutcome::Repaired(snapshot),
+        }
+    }
+
+    fn with_hard_error(
+        diagnostics: WorkspaceSnapshotDiagnostics,
+        error: WorkspaceRestoreError,
+    ) -> Self {
+        Self {
+            diagnostics,
+            actions: Vec::new(),
+            outcome: WorkspaceRepairPlanOutcome::HardError(error),
+        }
+    }
+
     /// Returns true when this plan can produce a repaired snapshot.
     #[must_use]
     pub const fn is_repairable(&self) -> bool {
-        self.hard_error.is_none()
+        matches!(self.outcome, WorkspaceRepairPlanOutcome::Repaired(_))
     }
 
     /// Returns true when repair planning found a hard error.
     #[must_use]
     pub const fn has_hard_error(&self) -> bool {
-        self.hard_error.is_some()
+        matches!(self.outcome, WorkspaceRepairPlanOutcome::HardError(_))
+    }
+
+    /// Returns the repaired workspace snapshot when planning found no hard
+    /// repair error.
+    #[must_use]
+    pub const fn repaired_snapshot(&self) -> Option<&WorkspaceSnapshot> {
+        match &self.outcome {
+            WorkspaceRepairPlanOutcome::Repaired(snapshot) => Some(snapshot),
+            WorkspaceRepairPlanOutcome::HardError(_) => None,
+        }
+    }
+
+    /// Returns the hard repair error when planning could not safely produce a
+    /// repaired snapshot.
+    #[must_use]
+    pub const fn hard_error(&self) -> Option<&WorkspaceRestoreError> {
+        match &self.outcome {
+            WorkspaceRepairPlanOutcome::Repaired(_) => None,
+            WorkspaceRepairPlanOutcome::HardError(error) => Some(error),
+        }
     }
 
     /// Consumes the plan and returns the repaired snapshot.
@@ -3873,10 +3919,9 @@ impl WorkspaceRepairPlan {
     /// Returns the hard repair error when planning could not safely produce a
     /// repaired snapshot.
     pub fn into_repaired_snapshot(self) -> Result<WorkspaceSnapshot, WorkspaceRestoreError> {
-        match (self.repaired_snapshot, self.hard_error) {
-            (Some(snapshot), None) => Ok(snapshot),
-            (_, Some(error)) => Err(error),
-            (None, None) => unreachable!("repairable plans always carry a repaired snapshot"),
+        match self.outcome {
+            WorkspaceRepairPlanOutcome::Repaired(snapshot) => Ok(snapshot),
+            WorkspaceRepairPlanOutcome::HardError(error) => Err(error),
         }
     }
 }
@@ -4002,76 +4047,68 @@ fn plan_workspace_snapshot_repair(
     descriptors: &[PanelTypeDescriptor],
 ) -> WorkspaceRepairPlan {
     let diagnostics = validate_workspace_snapshot_diagnostics(snapshot, descriptors);
-    let hard_error = workspace_repair_hard_error(snapshot, descriptors, &diagnostics);
-    let (actions, repaired_snapshot) = if hard_error.is_some() {
-        (Vec::new(), None)
-    } else {
-        let mut actions = Vec::new();
-        let stale_panel_instances = collect_stale_panel_instances(&diagnostics);
-        let mut repaired = WorkspaceSnapshot::new(
-            snapshot.dock.clone(),
-            snapshot
-                .panel_instances
-                .iter()
-                .filter(|instance| !stale_panel_instances.contains(&instance.id))
-                .cloned()
-                .collect(),
-        );
-
-        for diagnostic in &diagnostics.workspace {
-            match diagnostic.code {
-                WorkspaceSnapshotDiagnosticCode::MissingPanelInstance => {
-                    if let Some(placeholder) =
-                        placeholder_panel_instance_from_diagnostic(diagnostic, descriptors)
-                    {
-                        let mut action = WorkspaceRepairAction::new(
-                            WorkspaceRepairActionCode::AddMissingPanelInstancePlaceholder,
-                        );
-                        action.panel_instance = Some(placeholder.id);
-                        action.panel_type = Some(placeholder.panel_type);
-                        action.frame = diagnostic.frame;
-                        action.panel = diagnostic.panel;
-                        action.dock_title.clone_from(&diagnostic.dock_title);
-                        repaired.panel_instances.push(placeholder);
-                        actions.push(action);
-                    }
-                }
-                WorkspaceSnapshotDiagnosticCode::StalePanelInstance => {
-                    let mut action = WorkspaceRepairAction::new(
-                        WorkspaceRepairActionCode::DropStalePanelInstance,
-                    );
-                    action.panel_instance = diagnostic.panel_instance;
-                    action.panel_type = diagnostic.panel_type;
-                    action.instance_title.clone_from(&diagnostic.instance_title);
-                    actions.push(action);
-                }
-                WorkspaceSnapshotDiagnosticCode::UnknownPanelType => {
-                    if diagnostic.panel_instance.is_some_and(|panel_instance| {
-                        stale_panel_instances.contains(&panel_instance)
-                    }) {
-                        continue;
-                    }
-                    let mut action =
-                        WorkspaceRepairAction::new(WorkspaceRepairActionCode::KeepUnknownPanelType);
-                    action.panel_instance = diagnostic.panel_instance;
-                    action.panel_type = diagnostic.panel_type;
-                    actions.push(action);
-                }
-                WorkspaceSnapshotDiagnosticCode::DuplicatePanelInstanceId
-                | WorkspaceSnapshotDiagnosticCode::DuplicatePanelTypeDescriptor
-                | WorkspaceSnapshotDiagnosticCode::PanelTitleDrift => {}
-            }
-        }
-
-        (actions, Some(repaired))
-    };
-
-    WorkspaceRepairPlan {
-        diagnostics,
-        actions,
-        repaired_snapshot,
-        hard_error,
+    if let Some(error) = workspace_repair_hard_error(snapshot, descriptors, &diagnostics) {
+        return WorkspaceRepairPlan::with_hard_error(diagnostics, error);
     }
+
+    let mut actions = Vec::new();
+    let stale_panel_instances = collect_stale_panel_instances(&diagnostics);
+    let mut repaired = WorkspaceSnapshot::new(
+        snapshot.dock.clone(),
+        snapshot
+            .panel_instances
+            .iter()
+            .filter(|instance| !stale_panel_instances.contains(&instance.id))
+            .cloned()
+            .collect(),
+    );
+
+    for diagnostic in &diagnostics.workspace {
+        match diagnostic.code {
+            WorkspaceSnapshotDiagnosticCode::MissingPanelInstance => {
+                if let Some(placeholder) =
+                    placeholder_panel_instance_from_diagnostic(diagnostic, descriptors)
+                {
+                    let mut action = WorkspaceRepairAction::new(
+                        WorkspaceRepairActionCode::AddMissingPanelInstancePlaceholder,
+                    );
+                    action.panel_instance = Some(placeholder.id);
+                    action.panel_type = Some(placeholder.panel_type);
+                    action.frame = diagnostic.frame;
+                    action.panel = diagnostic.panel;
+                    action.dock_title.clone_from(&diagnostic.dock_title);
+                    repaired.panel_instances.push(placeholder);
+                    actions.push(action);
+                }
+            }
+            WorkspaceSnapshotDiagnosticCode::StalePanelInstance => {
+                let mut action =
+                    WorkspaceRepairAction::new(WorkspaceRepairActionCode::DropStalePanelInstance);
+                action.panel_instance = diagnostic.panel_instance;
+                action.panel_type = diagnostic.panel_type;
+                action.instance_title.clone_from(&diagnostic.instance_title);
+                actions.push(action);
+            }
+            WorkspaceSnapshotDiagnosticCode::UnknownPanelType => {
+                if diagnostic
+                    .panel_instance
+                    .is_some_and(|panel_instance| stale_panel_instances.contains(&panel_instance))
+                {
+                    continue;
+                }
+                let mut action =
+                    WorkspaceRepairAction::new(WorkspaceRepairActionCode::KeepUnknownPanelType);
+                action.panel_instance = diagnostic.panel_instance;
+                action.panel_type = diagnostic.panel_type;
+                actions.push(action);
+            }
+            WorkspaceSnapshotDiagnosticCode::DuplicatePanelInstanceId
+            | WorkspaceSnapshotDiagnosticCode::DuplicatePanelTypeDescriptor
+            | WorkspaceSnapshotDiagnosticCode::PanelTitleDrift => {}
+        }
+    }
+
+    WorkspaceRepairPlan::repaired(diagnostics, actions, repaired)
 }
 
 fn workspace_repair_hard_error(

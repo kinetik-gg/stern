@@ -559,7 +559,9 @@ pub struct RenderFrameOutput {
 ///
 /// Fatal submission failures are returned as `Self::Error`; recoverable issues
 /// such as missing optional resources should be reported through
-/// [`RenderFrameOutput::diagnostics`].
+/// [`RenderFrameOutput::diagnostics`]. Backend crates should choose a stable,
+/// concrete error type for `Self::Error` so future device, resource upload, or
+/// presentation failures can be added without changing the backend trait shape.
 pub trait RendererBackend {
     /// Fatal renderer submission error.
     type Error;

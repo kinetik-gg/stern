@@ -10,8 +10,8 @@ use kinetik_ui_core::{
 };
 use kinetik_ui_vello::{
     ImageAtlasRegion, ImageResource, RenderDiagnostic, RenderFrameInput, RenderImage,
-    RenderImageSampling, RenderResources, TextureResource, VelloRenderer,
-    render_translation_snapshot, translate_primitives,
+    RenderImageSampling, RenderResources, RendererBackend, TextureResource, VelloRenderer,
+    VelloRendererError, render_translation_snapshot, translate_primitives,
 };
 use support::command_snapshots::{
     assert_command_snapshot, command_snapshot_artifact_paths, command_snapshot_root,
@@ -511,6 +511,15 @@ fn render_translation_conformance_submit_frame_encodes_recoverable_missing_resou
     assert!(!encoding.resources.glyph_runs.is_empty());
     assert!(!encoding.resources.glyphs.is_empty());
     assert!(encoding.n_paths >= 2);
+}
+
+#[test]
+fn render_translation_conformance_vello_backend_uses_concrete_error_type() {
+    fn assert_error_type<T: RendererBackend<Error = VelloRendererError>>(_: &T) {}
+
+    let renderer = VelloRenderer::new();
+
+    assert_error_type(&renderer);
 }
 
 #[test]

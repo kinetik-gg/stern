@@ -780,6 +780,155 @@ impl NodeGraphDescriptor {
         resolve_node_graph_context_actions(self, target, selection)
     }
 
+    /// Resolves one context action by kind without materializing the default catalog.
+    ///
+    /// This path is intended for applications that present a subset or custom
+    /// ordering of node graph context actions while still reusing Kinetik's
+    /// typed request metadata.
+    #[must_use]
+    pub fn context_action(
+        &self,
+        kind: NodeGraphContextActionKind,
+        target: NodeGraphContextTarget,
+        selection: &NodeGraphSelection,
+    ) -> NodeGraphContextAction {
+        node_graph_context_action(self, kind, target, selection)
+    }
+
+    /// Resolves one context action from a raw hit-test target.
+    #[must_use]
+    pub fn context_action_from_hit(
+        &self,
+        kind: NodeGraphContextActionKind,
+        hit: NodeGraphHitTarget,
+        selection: &NodeGraphSelection,
+    ) -> NodeGraphContextAction {
+        self.context_action(
+            kind,
+            NodeGraphContextTarget::from_hit_target(hit),
+            selection,
+        )
+    }
+
+    /// Creates delete request metadata for a context target.
+    ///
+    /// # Errors
+    ///
+    /// Returns a deterministic unavailable reason when the target or selection
+    /// cannot produce delete request metadata.
+    pub fn delete_context_request(
+        &self,
+        target: NodeGraphContextTarget,
+        selection: &NodeGraphSelection,
+    ) -> Result<NodeGraphContextSelectionRequest, NodeGraphContextActionUnavailableReason> {
+        node_graph_context_selection_request(self, target, selection)
+    }
+
+    /// Creates duplicate request metadata for a context target.
+    ///
+    /// # Errors
+    ///
+    /// Returns a deterministic unavailable reason when the target or selection
+    /// cannot produce duplicate request metadata.
+    pub fn duplicate_context_request(
+        &self,
+        target: NodeGraphContextTarget,
+        selection: &NodeGraphSelection,
+    ) -> Result<NodeGraphContextSelectionRequest, NodeGraphContextActionUnavailableReason> {
+        node_graph_context_selection_request(self, target, selection)
+    }
+
+    /// Creates disconnect request metadata for an edge or port context target.
+    ///
+    /// # Errors
+    ///
+    /// Returns a deterministic unavailable reason when the context target is
+    /// unsupported, missing, disabled, or has no connected edges.
+    pub fn disconnect_context_request(
+        &self,
+        target: NodeGraphContextTarget,
+    ) -> Result<NodeGraphContextDisconnectRequest, NodeGraphContextActionUnavailableReason> {
+        node_graph_disconnect_context_request(self, target)
+    }
+
+    /// Creates detach-endpoint request metadata for an edge context target.
+    ///
+    /// # Errors
+    ///
+    /// Returns a deterministic unavailable reason when the context target is
+    /// unsupported, missing, or disabled.
+    pub fn detach_context_request(
+        &self,
+        target: NodeGraphContextTarget,
+        endpoint: EdgeEndpointRole,
+    ) -> Result<NodeGraphContextDetachEndpointRequest, NodeGraphContextActionUnavailableReason>
+    {
+        node_graph_detach_context_request(self, target, endpoint)
+    }
+
+    /// Creates organization request metadata for a context target.
+    ///
+    /// # Errors
+    ///
+    /// Returns a deterministic unavailable reason when the operation is not
+    /// valid for the current target or selection.
+    pub fn organization_context_request(
+        &self,
+        target: NodeGraphContextTarget,
+        selection: &NodeGraphSelection,
+        operation: NodeGraphContextOrganizationOperation,
+    ) -> Result<NodeGraphContextOrganizationRequest, NodeGraphContextActionUnavailableReason> {
+        node_graph_organization_context_request(self, target, selection, operation)
+    }
+
+    /// Creates select-all request metadata for the canvas context target.
+    ///
+    /// # Errors
+    ///
+    /// Returns a deterministic unavailable reason when the target is not the
+    /// canvas or the graph has no selectable targets.
+    pub fn select_all_context_request(
+        &self,
+        target: NodeGraphContextTarget,
+        selection: &NodeGraphSelection,
+    ) -> Result<NodeGraphContextCanvasRequest, NodeGraphContextActionUnavailableReason> {
+        node_graph_select_all_context_request(self, target, selection)
+    }
+
+    /// Creates paste request metadata for the canvas context target.
+    ///
+    /// The default compatibility catalog keeps paste disabled until the
+    /// application provides clipboard state. Applications with that state can
+    /// use this builder to present a custom enabled paste action without
+    /// duplicating target and selection metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns a deterministic unavailable reason when the target is not the
+    /// canvas.
+    pub fn paste_context_request(
+        &self,
+        target: NodeGraphContextTarget,
+        selection: &NodeGraphSelection,
+    ) -> Result<NodeGraphContextCanvasRequest, NodeGraphContextActionUnavailableReason> {
+        node_graph_paste_context_request(target, selection)
+    }
+
+    /// Creates application-owned request metadata for a context action kind.
+    ///
+    /// # Errors
+    ///
+    /// Returns a deterministic unavailable reason when the requested action
+    /// kind does not apply to the current target or selection.
+    pub fn context_action_request(
+        &self,
+        kind: NodeGraphContextActionKind,
+        target: NodeGraphContextTarget,
+        selection: &NodeGraphSelection,
+    ) -> Result<NodeGraphContextActionRequest, NodeGraphContextActionUnavailableReason> {
+        node_graph_context_action_request(self, kind, target, selection)
+    }
+
     /// Returns frame member node IDs in deterministic order.
     ///
     /// # Errors
@@ -2649,6 +2798,23 @@ pub enum NodeGraphContextActionKind {
     Paste,
 }
 
+/// Compatibility order for the built-in node graph context action catalog.
+///
+/// Applications may use this catalog directly, filter it, reorder it, or bypass
+/// it and call the typed request builders on [`NodeGraphDescriptor`].
+pub const DEFAULT_NODE_GRAPH_CONTEXT_ACTION_KINDS: [NodeGraphContextActionKind; 10] = [
+    NodeGraphContextActionKind::Delete,
+    NodeGraphContextActionKind::Duplicate,
+    NodeGraphContextActionKind::Disconnect,
+    NodeGraphContextActionKind::DetachSource,
+    NodeGraphContextActionKind::DetachTarget,
+    NodeGraphContextActionKind::FrameSelection,
+    NodeGraphContextActionKind::GroupSelection,
+    NodeGraphContextActionKind::Ungroup,
+    NodeGraphContextActionKind::SelectAll,
+    NodeGraphContextActionKind::Paste,
+];
+
 /// Deterministic reason a node graph context action is unavailable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeGraphContextActionUnavailableReason {
@@ -2824,68 +2990,91 @@ fn resolve_node_graph_context_actions(
     target: NodeGraphContextTarget,
     selection: &NodeGraphSelection,
 ) -> Vec<NodeGraphContextAction> {
-    vec![
-        node_graph_delete_context_action(graph, target, selection),
-        node_graph_duplicate_context_action(graph, target, selection),
-        node_graph_disconnect_context_action(graph, target),
-        node_graph_detach_context_action(graph, target, EdgeEndpointRole::Source),
-        node_graph_detach_context_action(graph, target, EdgeEndpointRole::Target),
-        node_graph_organization_context_action(
+    DEFAULT_NODE_GRAPH_CONTEXT_ACTION_KINDS
+        .into_iter()
+        .map(|kind| node_graph_default_context_action(graph, kind, target, selection))
+        .collect()
+}
+
+fn node_graph_default_context_action(
+    graph: &NodeGraphDescriptor,
+    kind: NodeGraphContextActionKind,
+    target: NodeGraphContextTarget,
+    selection: &NodeGraphSelection,
+) -> NodeGraphContextAction {
+    if kind == NodeGraphContextActionKind::Paste {
+        return node_graph_default_paste_context_action(target);
+    }
+
+    node_graph_context_action(graph, kind, target, selection)
+}
+
+fn node_graph_context_action(
+    graph: &NodeGraphDescriptor,
+    kind: NodeGraphContextActionKind,
+    target: NodeGraphContextTarget,
+    selection: &NodeGraphSelection,
+) -> NodeGraphContextAction {
+    match node_graph_context_action_request(graph, kind, target, selection) {
+        Ok(request) => NodeGraphContextAction::available(kind, target, request),
+        Err(reason) => NodeGraphContextAction::unavailable(kind, target, reason),
+    }
+}
+
+fn node_graph_context_action_request(
+    graph: &NodeGraphDescriptor,
+    kind: NodeGraphContextActionKind,
+    target: NodeGraphContextTarget,
+    selection: &NodeGraphSelection,
+) -> Result<NodeGraphContextActionRequest, NodeGraphContextActionUnavailableReason> {
+    match kind {
+        NodeGraphContextActionKind::Delete => {
+            node_graph_context_selection_request(graph, target, selection)
+                .map(NodeGraphContextActionRequest::Delete)
+        }
+        NodeGraphContextActionKind::Duplicate => {
+            node_graph_context_selection_request(graph, target, selection)
+                .map(NodeGraphContextActionRequest::Duplicate)
+        }
+        NodeGraphContextActionKind::Disconnect => {
+            node_graph_disconnect_context_request(graph, target)
+                .map(NodeGraphContextActionRequest::Disconnect)
+        }
+        NodeGraphContextActionKind::DetachSource => {
+            node_graph_detach_context_request(graph, target, EdgeEndpointRole::Source)
+                .map(NodeGraphContextActionRequest::DetachEndpoint)
+        }
+        NodeGraphContextActionKind::DetachTarget => {
+            node_graph_detach_context_request(graph, target, EdgeEndpointRole::Target)
+                .map(NodeGraphContextActionRequest::DetachEndpoint)
+        }
+        NodeGraphContextActionKind::FrameSelection => node_graph_organization_context_request(
             graph,
             target,
             selection,
             NodeGraphContextOrganizationOperation::FrameSelection,
-        ),
-        node_graph_organization_context_action(
+        )
+        .map(NodeGraphContextActionRequest::Organization),
+        NodeGraphContextActionKind::GroupSelection => node_graph_organization_context_request(
             graph,
             target,
             selection,
             NodeGraphContextOrganizationOperation::GroupSelection,
-        ),
-        node_graph_organization_context_action(
+        )
+        .map(NodeGraphContextActionRequest::Organization),
+        NodeGraphContextActionKind::Ungroup => node_graph_organization_context_request(
             graph,
             target,
             selection,
             NodeGraphContextOrganizationOperation::Ungroup,
-        ),
-        node_graph_select_all_context_action(graph, target, selection),
-        node_graph_paste_context_action(target),
-    ]
-}
-
-fn node_graph_delete_context_action(
-    graph: &NodeGraphDescriptor,
-    target: NodeGraphContextTarget,
-    selection: &NodeGraphSelection,
-) -> NodeGraphContextAction {
-    match node_graph_context_selection_request(graph, target, selection) {
-        Ok(request) => NodeGraphContextAction::available(
-            NodeGraphContextActionKind::Delete,
-            target,
-            NodeGraphContextActionRequest::Delete(request),
-        ),
-        Err(reason) => {
-            NodeGraphContextAction::unavailable(NodeGraphContextActionKind::Delete, target, reason)
+        )
+        .map(NodeGraphContextActionRequest::Organization),
+        NodeGraphContextActionKind::SelectAll => {
+            node_graph_select_all_context_request(graph, target, selection)
+                .map(NodeGraphContextActionRequest::Canvas)
         }
-    }
-}
-
-fn node_graph_duplicate_context_action(
-    graph: &NodeGraphDescriptor,
-    target: NodeGraphContextTarget,
-    selection: &NodeGraphSelection,
-) -> NodeGraphContextAction {
-    match node_graph_context_selection_request(graph, target, selection) {
-        Ok(request) => NodeGraphContextAction::available(
-            NodeGraphContextActionKind::Duplicate,
-            target,
-            NodeGraphContextActionRequest::Duplicate(request),
-        ),
-        Err(reason) => NodeGraphContextAction::unavailable(
-            NodeGraphContextActionKind::Duplicate,
-            target,
-            reason,
-        ),
+        NodeGraphContextActionKind::Paste => node_graph_paste_context_request(target, selection)
+            .map(NodeGraphContextActionRequest::Canvas),
     }
 }
 
@@ -2913,11 +3102,11 @@ fn node_graph_context_selection_request(
     })
 }
 
-fn node_graph_disconnect_context_action(
+fn node_graph_disconnect_context_request(
     graph: &NodeGraphDescriptor,
     target: NodeGraphContextTarget,
-) -> NodeGraphContextAction {
-    let request = match target {
+) -> Result<NodeGraphContextDisconnectRequest, NodeGraphContextActionUnavailableReason> {
+    match target {
         NodeGraphContextTarget::Edge(edge) => {
             node_graph_edge_disconnect_request(graph, target, edge)
         }
@@ -2929,25 +3118,8 @@ fn node_graph_disconnect_context_action(
         | NodeGraphContextTarget::Frame(_)
         | NodeGraphContextTarget::Group(_)
         | NodeGraphContextTarget::Canvas => {
-            return NodeGraphContextAction::unavailable(
-                NodeGraphContextActionKind::Disconnect,
-                target,
-                NodeGraphContextActionUnavailableReason::UnsupportedTarget,
-            );
+            Err(NodeGraphContextActionUnavailableReason::UnsupportedTarget)
         }
-    };
-
-    match request {
-        Ok(request) => NodeGraphContextAction::available(
-            NodeGraphContextActionKind::Disconnect,
-            target,
-            NodeGraphContextActionRequest::Disconnect(request),
-        ),
-        Err(reason) => NodeGraphContextAction::unavailable(
-            NodeGraphContextActionKind::Disconnect,
-            target,
-            reason,
-        ),
     }
 }
 
@@ -2992,24 +3164,16 @@ fn node_graph_endpoint_disconnect_request(
     })
 }
 
-fn node_graph_detach_context_action(
+fn node_graph_detach_context_request(
     graph: &NodeGraphDescriptor,
     target: NodeGraphContextTarget,
     endpoint: EdgeEndpointRole,
-) -> NodeGraphContextAction {
-    let kind = match endpoint {
-        EdgeEndpointRole::Source => NodeGraphContextActionKind::DetachSource,
-        EdgeEndpointRole::Target => NodeGraphContextActionKind::DetachTarget,
-    };
+) -> Result<NodeGraphContextDetachEndpointRequest, NodeGraphContextActionUnavailableReason> {
     let NodeGraphContextTarget::Edge(edge) = target else {
-        return NodeGraphContextAction::unavailable(
-            kind,
-            target,
-            NodeGraphContextActionUnavailableReason::UnsupportedTarget,
-        );
+        return Err(NodeGraphContextActionUnavailableReason::UnsupportedTarget);
     };
 
-    let request = NodeGraphLinkEditRequest::detach_edge(graph, edge, endpoint)
+    NodeGraphLinkEditRequest::detach_edge(graph, edge, endpoint)
         .map_err(NodeGraphContextActionUnavailableReason::LinkEdit)
         .and_then(|request| {
             let NodeGraphLinkEditRequest::DetachEdge(request) = request else {
@@ -3020,38 +3184,17 @@ fn node_graph_detach_context_action(
                 .enabled
                 .then_some(request)
                 .ok_or(NodeGraphContextActionUnavailableReason::DisabledTarget)
-        });
-
-    match request {
-        Ok(request) => NodeGraphContextAction::available(
-            kind,
-            target,
-            NodeGraphContextActionRequest::DetachEndpoint(NodeGraphContextDetachEndpointRequest {
-                target,
-                request,
-            }),
-        ),
-        Err(reason) => NodeGraphContextAction::unavailable(kind, target, reason),
-    }
+        })
+        .map(|request| NodeGraphContextDetachEndpointRequest { target, request })
 }
 
-fn node_graph_organization_context_action(
+fn node_graph_organization_context_request(
     graph: &NodeGraphDescriptor,
     target: NodeGraphContextTarget,
     selection: &NodeGraphSelection,
     operation: NodeGraphContextOrganizationOperation,
-) -> NodeGraphContextAction {
-    let kind = match operation {
-        NodeGraphContextOrganizationOperation::FrameSelection => {
-            NodeGraphContextActionKind::FrameSelection
-        }
-        NodeGraphContextOrganizationOperation::GroupSelection => {
-            NodeGraphContextActionKind::GroupSelection
-        }
-        NodeGraphContextOrganizationOperation::Ungroup => NodeGraphContextActionKind::Ungroup,
-    };
-
-    let request = match operation {
+) -> Result<NodeGraphContextOrganizationRequest, NodeGraphContextActionUnavailableReason> {
+    match operation {
         NodeGraphContextOrganizationOperation::FrameSelection
         | NodeGraphContextOrganizationOperation::GroupSelection => {
             node_graph_selection_organization_request(graph, target, selection, operation)
@@ -3059,15 +3202,6 @@ fn node_graph_organization_context_action(
         NodeGraphContextOrganizationOperation::Ungroup => {
             node_graph_ungroup_context_request(graph, target)
         }
-    };
-
-    match request {
-        Ok(request) => NodeGraphContextAction::available(
-            kind,
-            target,
-            NodeGraphContextActionRequest::Organization(request),
-        ),
-        Err(reason) => NodeGraphContextAction::unavailable(kind, target, reason),
     }
 }
 
@@ -3111,41 +3245,31 @@ fn node_graph_ungroup_context_request(
     })
 }
 
-fn node_graph_select_all_context_action(
+fn node_graph_select_all_context_request(
     graph: &NodeGraphDescriptor,
     target: NodeGraphContextTarget,
     selection: &NodeGraphSelection,
-) -> NodeGraphContextAction {
+) -> Result<NodeGraphContextCanvasRequest, NodeGraphContextActionUnavailableReason> {
     if target != NodeGraphContextTarget::Canvas {
-        return NodeGraphContextAction::unavailable(
-            NodeGraphContextActionKind::SelectAll,
-            target,
-            NodeGraphContextActionUnavailableReason::UnsupportedTarget,
-        );
+        return Err(NodeGraphContextActionUnavailableReason::UnsupportedTarget);
     }
 
     let selectable_targets = context_selectable_targets(graph);
     if selectable_targets.is_empty() {
-        return NodeGraphContextAction::unavailable(
-            NodeGraphContextActionKind::SelectAll,
-            target,
-            NodeGraphContextActionUnavailableReason::EmptySelection,
-        );
+        return Err(NodeGraphContextActionUnavailableReason::EmptySelection);
     }
 
-    NodeGraphContextAction::available(
-        NodeGraphContextActionKind::SelectAll,
+    Ok(NodeGraphContextCanvasRequest {
         target,
-        NodeGraphContextActionRequest::Canvas(NodeGraphContextCanvasRequest {
-            target,
-            operation: NodeGraphContextCanvasOperation::SelectAll,
-            selection: selection.clone(),
-            selectable_targets,
-        }),
-    )
+        operation: NodeGraphContextCanvasOperation::SelectAll,
+        selection: selection.clone(),
+        selectable_targets,
+    })
 }
 
-fn node_graph_paste_context_action(target: NodeGraphContextTarget) -> NodeGraphContextAction {
+fn node_graph_default_paste_context_action(
+    target: NodeGraphContextTarget,
+) -> NodeGraphContextAction {
     if target != NodeGraphContextTarget::Canvas {
         return NodeGraphContextAction::unavailable(
             NodeGraphContextActionKind::Paste,
@@ -3159,6 +3283,22 @@ fn node_graph_paste_context_action(target: NodeGraphContextTarget) -> NodeGraphC
         target,
         NodeGraphContextActionUnavailableReason::RequiresApplicationState,
     )
+}
+
+fn node_graph_paste_context_request(
+    target: NodeGraphContextTarget,
+    selection: &NodeGraphSelection,
+) -> Result<NodeGraphContextCanvasRequest, NodeGraphContextActionUnavailableReason> {
+    if target != NodeGraphContextTarget::Canvas {
+        return Err(NodeGraphContextActionUnavailableReason::UnsupportedTarget);
+    }
+
+    Ok(NodeGraphContextCanvasRequest {
+        target,
+        operation: NodeGraphContextCanvasOperation::Paste,
+        selection: selection.clone(),
+        selectable_targets: Vec::new(),
+    })
 }
 
 fn context_selected_targets(

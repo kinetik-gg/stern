@@ -163,6 +163,9 @@ impl OverlayStack {
         if !self.entries.iter().any(|candidate| candidate.id == parent) {
             return false;
         }
+        if self.would_parent_cycle(parent, entry.id) {
+            return false;
+        }
         self.open(entry.with_parent(parent));
         true
     }
@@ -301,6 +304,23 @@ impl OverlayStack {
             }
         }
         ids
+    }
+
+    fn would_parent_cycle(&self, parent: OverlayId, child: OverlayId) -> bool {
+        let mut current = Some(parent);
+        let mut visited = Vec::new();
+        while let Some(id) = current {
+            if id == child || visited.contains(&id) {
+                return true;
+            }
+            visited.push(id);
+            current = self
+                .entries
+                .iter()
+                .find(|entry| entry.id == id)
+                .and_then(|entry| entry.parent);
+        }
+        false
     }
 }
 

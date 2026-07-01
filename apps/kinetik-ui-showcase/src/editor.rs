@@ -12,8 +12,8 @@ use kinetik_ui::core::{
     ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation, ActionQueue,
     ActionSource, Axis, Brush, ClipId, Color, CornerRadius, CursorShape, ImagePrimitive, Key,
     KeyState, LinePrimitive, Modifiers, PlatformRequest, Point, Primitive, Rect, RectPrimitive,
-    RepaintRequest, SemanticNode, SemanticRole, Shortcut, Size, Stroke, TextPrimitive, TextureId,
-    Theme, Vec2, WidgetId,
+    RepaintRequest, Response, SemanticNode, SemanticRole, Shortcut, Size, Stroke, TextPrimitive,
+    TextureId, Theme, Vec2, WidgetId,
 };
 use kinetik_ui::render::{
     ImageAtlasRegion, ImageResource, RenderImage, RenderImageSampling, RenderResources,
@@ -623,9 +623,8 @@ impl EditorShowcase {
         let mut invocations = Vec::new();
         Self::background(ui, viewport);
         self.dismiss_menu_for_input(ui, viewport);
-        self.tool_bar_run_interactions(ui, viewport, &mut invocations);
-        self.menu_bar(ui, viewport);
         self.tool_bar(ui, viewport, &mut invocations);
+        self.menu_bar(ui, viewport);
         self.workspace(ui, viewport);
         self.menu_overlay(ui, viewport, &mut invocations);
         let _modal_metadata = self.about_modal_overlay_model(viewport);
@@ -1394,7 +1393,6 @@ impl EditorShowcase {
         viewport: Rect,
         invocations: &mut Vec<EditorInvocation>,
     ) {
-        self.tool_bar_tool_interactions(ui, invocations);
         let toolbar = self.toolbar_model();
         let chrome = EditorChromeMetrics::from_theme(ui.theme());
         let mut x = 10.0;
@@ -1402,18 +1400,49 @@ impl EditorShowcase {
             .group(EditorToolbarGroupKind::Tools.id())
             .expect("editor toolbar declares tool group")
             .visible_items();
-        for ((_, icon, _label, action), item) in EDITOR_TOOL_BUTTONS.into_iter().zip(tool_items) {
+        let mut tool_responses = Vec::new();
+        for (visible_index, ((_, icon, _label, action), item)) in
+            EDITOR_TOOL_BUTTONS.into_iter().zip(tool_items).enumerate()
+        {
             let button = Rect::new(x, TOOLBAR_Y, chrome.toolbar_button, chrome.toolbar_button);
-            toolbar_icon_button(
-                ui,
-                ("editor.tool", action),
+            let id = ui.id(("editor.tool", action));
+            let disabled = !item.enabled();
+            let response = ui.pressable_with_id(id, button, disabled);
+            if response.clicked {
+                ui.request_repaint(RepaintRequest::NextFrame);
+                let mut queue = ActionQueue::new();
+                if toolbar.invoke_group_visible(
+                    EditorToolbarGroupKind::Tools.id(),
+                    visible_index,
+                    &mut queue,
+                    ActionContext::Editor,
+                ) {
+                    self.handle_action_queue(invocations, &mut queue);
+                }
+            }
+            tool_responses.push((
+                id,
+                response,
                 button,
+                EDITOR_TOOL_BUTTONS[visible_index].0,
                 icon,
                 item.label(),
-                item.selected(),
-                !item.enabled(),
-            );
+                disabled,
+            ));
             x += chrome.toolbar_stride;
+        }
+        for (id, response, button, tool, icon, label, disabled) in tool_responses {
+            paint_toolbar_icon_button_sized(
+                ui,
+                id,
+                response,
+                button,
+                icon,
+                label,
+                self.selected_tool == tool,
+                disabled,
+                chrome.toolbar_icon,
+            );
         }
 
         rect(
@@ -1517,7 +1546,7 @@ impl EditorShowcase {
             .into_iter()
             .zip(run_items)
         {
-            toolbar_icon_button(
+            let response = toolbar_icon_button(
                 ui,
                 ("editor.run", action, index),
                 rect,
@@ -1526,6 +1555,17 @@ impl EditorShowcase {
                 false,
                 !item.enabled(),
             );
+            if response.clicked {
+                let mut queue = ActionQueue::new();
+                if toolbar.invoke_group_visible(
+                    EditorToolbarGroupKind::Run.id(),
+                    index,
+                    &mut queue,
+                    ActionContext::Editor,
+                ) {
+                    self.handle_action_queue(invocations, &mut queue);
+                }
+            }
         }
     }
 
@@ -1607,59 +1647,6 @@ impl EditorShowcase {
                     false
                 }
             }
-        }
-    }
-
-    fn tool_bar_run_interactions(
-        &mut self,
-        ui: &mut Ui<'_>,
-        viewport: Rect,
-        invocations: &mut Vec<EditorInvocation>,
-    ) {
-        let chrome = EditorChromeMetrics::from_theme(ui.theme());
-        let toolbar = self.toolbar_model();
-        for (index, _icon, _label, action, rect) in run_toolbar_buttons(viewport, chrome) {
-            let response = ui.pressable(("editor.run.prepass", action, index), rect, false);
-            if response.clicked {
-                let mut queue = ActionQueue::new();
-                if toolbar.invoke_group_visible(
-                    EditorToolbarGroupKind::Run.id(),
-                    index,
-                    &mut queue,
-                    ActionContext::Editor,
-                ) {
-                    self.handle_action_queue(invocations, &mut queue);
-                }
-            }
-        }
-    }
-
-    fn tool_bar_tool_interactions(
-        &mut self,
-        ui: &mut Ui<'_>,
-        invocations: &mut Vec<EditorInvocation>,
-    ) {
-        let chrome = EditorChromeMetrics::from_theme(ui.theme());
-        let toolbar = self.toolbar_model();
-        let mut x = 10.0;
-        for (visible_index, (_tool, _icon, _label, action)) in
-            EDITOR_TOOL_BUTTONS.into_iter().enumerate()
-        {
-            let button = Rect::new(x, TOOLBAR_Y, chrome.toolbar_button, chrome.toolbar_button);
-            let response = ui.pressable(("editor.tool.prepass", action), button, false);
-            if response.clicked {
-                ui.request_repaint(RepaintRequest::NextFrame);
-                let mut queue = ActionQueue::new();
-                if toolbar.invoke_group_visible(
-                    EditorToolbarGroupKind::Tools.id(),
-                    visible_index,
-                    &mut queue,
-                    ActionContext::Editor,
-                ) {
-                    self.handle_action_queue(invocations, &mut queue);
-                }
-            }
-            x += chrome.toolbar_stride;
         }
     }
 
@@ -4831,6 +4818,10 @@ mod tests {
         );
         editor.render(&mut ui, 0);
         let _ = ui.finish_output();
+        let visible_tool_id =
+            WidgetId::from_key("root").child(("editor.tool", super::ACTION_TOOL_SELECT));
+
+        assert_eq!(memory.pressed(), Some(visible_tool_id));
 
         let mut ui = Ui::begin_frame(
             editor_test_context(pointer_input_at(14.0, 40.0, false, false, true)),
@@ -4843,6 +4834,44 @@ mod tests {
         assert_eq!(editor.selected_tool, EditorTool::Select);
         assert!(output.primitives.iter().any(|primitive| {
             matches!(primitive, Primitive::Text(text) if text.text == "Select tool active")
+        }));
+    }
+
+    #[test]
+    fn toolbar_run_click_invokes_through_visible_identity() {
+        let mut editor = EditorShowcase::new();
+        let mut memory = UiMemory::new();
+        let theme = default_dark_theme();
+        let chrome = EditorChromeMetrics::from_theme(&theme);
+        let viewport = Rect::new(0.0, 0.0, 1440.0, 900.0);
+        let (index, _icon, _label, action, rect) = super::run_toolbar_buttons(viewport, chrome)[0];
+        let point = rect.center();
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(point.x, point.y, true, true, false)),
+            &mut memory,
+            &theme,
+        );
+        let invocations = editor.render(&mut ui, 0);
+        let _ = ui.finish_output();
+        let visible_run_id = WidgetId::from_key("root").child(("editor.run", action, index));
+
+        assert!(invocations.is_empty());
+        assert_eq!(memory.pressed(), Some(visible_run_id));
+
+        let mut ui = Ui::begin_frame(
+            editor_test_context(pointer_input_at(point.x, point.y, false, false, true)),
+            &mut memory,
+            &theme,
+        );
+        let invocations = editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+
+        assert_eq!(invocations.len(), 1);
+        assert_eq!(invocations[0].action_id, ActionId::new(ACTION_PLAY));
+        assert!(editor.running);
+        assert!(output.primitives.iter().any(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == "Play mode running")
         }));
     }
 
@@ -6103,6 +6132,25 @@ fn toolbar_icon_button_sized(
 ) -> kinetik_ui::core::Response {
     let id = ui.id(key);
     let response = ui.pressable_with_id(id, rect, disabled);
+    paint_toolbar_icon_button_sized(
+        ui, id, response, rect, icon, label, selected, disabled, icon_size,
+    );
+
+    response
+}
+
+#[allow(clippy::too_many_arguments)]
+fn paint_toolbar_icon_button_sized(
+    ui: &mut Ui<'_>,
+    id: WidgetId,
+    response: Response,
+    rect: Rect,
+    icon: ToolbarIcon,
+    label: &str,
+    selected: bool,
+    disabled: bool,
+    icon_size: f32,
+) {
     let visual_selected = selected || response.clicked;
     let fill = if disabled {
         rgb(24, 25, 28)
@@ -6140,8 +6188,6 @@ fn toolbar_icon_button_sized(
     if response.state.hovered && !disabled {
         ui.push_platform_request(PlatformRequest::SetCursor(CursorShape::PointingHand));
     }
-
-    response
 }
 
 fn draw_icon(ui: &mut Ui<'_>, bounds: Rect, icon: ToolbarIcon, size: f32) {

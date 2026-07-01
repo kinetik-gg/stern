@@ -549,15 +549,37 @@ impl TextLayoutStore {
 
     /// Returns a stable layout ID for a text layout key, shaping on cache miss.
     pub fn layout_id(&mut self, key: TextLayoutKey) -> TextLayoutId {
+        let preferred_id = text_layout_id(&key);
+        self.layout_id_with_preferred_id(key, preferred_id)
+    }
+
+    fn layout_id_with_preferred_id(
+        &mut self,
+        key: TextLayoutKey,
+        preferred_id: TextLayoutId,
+    ) -> TextLayoutId {
         if let Some(id) = self.keys.get(&key) {
             return *id;
         }
 
-        let id = text_layout_id(&key);
+        let id = self.available_layout_id(preferred_id);
         let layout = self.engine.shape_text(&key);
         self.keys.insert(key, id);
         self.layouts.insert(id, Arc::new(layout));
         id
+    }
+
+    fn available_layout_id(&self, preferred_id: TextLayoutId) -> TextLayoutId {
+        let mut raw = preferred_id.raw().max(1);
+
+        loop {
+            let id = TextLayoutId::from_raw(raw);
+            if !self.layouts.contains_key(&id) {
+                return id;
+            }
+
+            raw = raw.wrapping_add(1).max(1);
+        }
     }
 
     /// Returns a shaped layout by ID.
@@ -1418,8 +1440,8 @@ fn clamp_text_range(text: &str, range: TextRange) -> TextRange {
 mod tests {
     use super::{
         CosmicTextEngine, DEFAULT_FONT_FAMILY, DEFAULT_MONOSPACE_FONT_FAMILY, INTER_FONTDB_FAMILY,
-        ShapedTextLayout, TextComposition, TextEditState, TextLayoutCache, TextLayoutKey,
-        TextLayoutStore, TextSelection, TextStyle, fontdb, fonts,
+        ShapedTextLayout, TextComposition, TextEditState, TextLayoutCache, TextLayoutId,
+        TextLayoutKey, TextLayoutStore, TextSelection, TextStyle, fontdb, fonts,
     };
     use kinetik_ui_core::{Key, KeyEvent, KeyState, Modifiers, TextInputEvent, TextRange};
 
@@ -1674,6 +1696,49 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(store.len(), 1);
         assert!(!store.layout(first).expect("layout is cached").is_empty());
+    }
+
+    #[test]
+    fn text_layout_store_assigns_distinct_ids_for_preferred_id_collision() {
+        let mut store = TextLayoutStore::new();
+        let style = TextStyle::new("sans-serif", 12.0, 16.0);
+        let first_key = TextLayoutKey::new("First", style.clone(), 100.0, false);
+        let second_key = TextLayoutKey::new("Second", style, 100.0, false);
+        let colliding_id = TextLayoutId::from_raw(42);
+
+        let first = store.layout_id_with_preferred_id(first_key.clone(), colliding_id);
+        let second = store.layout_id_with_preferred_id(second_key, colliding_id);
+        let repeated_first = store.layout_id_with_preferred_id(first_key, colliding_id);
+
+        assert_eq!(first, colliding_id);
+        assert_eq!(repeated_first, first);
+        assert_ne!(first, second);
+        assert_eq!(store.len(), 2);
+        assert!(store.layout(first).is_some());
+        assert!(store.layout(second).is_some());
+    }
+
+    #[test]
+    fn text_layout_store_exports_all_entries_after_preferred_id_collision() {
+        let mut store = TextLayoutStore::new();
+        let style = TextStyle::new("sans-serif", 12.0, 16.0);
+        let first_key = TextLayoutKey::new("First", style.clone(), 100.0, false);
+        let second_key = TextLayoutKey::new("Second", style, 80.0, false);
+        let colliding_id = TextLayoutId::from_raw(7);
+
+        let first = store.layout_id_with_preferred_id(first_key.clone(), colliding_id);
+        let second = store.layout_id_with_preferred_id(second_key.clone(), colliding_id);
+        let mut entries = store.layouts().collect::<Vec<_>>();
+        entries.sort_by_key(|entry| entry.id);
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(
+            entries.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+            vec![first, second]
+        );
+        assert!(entries.iter().any(|entry| entry.key == &first_key));
+        assert!(entries.iter().any(|entry| entry.key == &second_key));
+        assert!(entries.iter().all(|entry| store.layout(entry.id).is_some()));
     }
 
     #[test]

@@ -291,9 +291,9 @@ impl ShowcaseApp {
                 editor_invocations = self.editor.render(&mut ui, self.action_count);
             } else {
                 Self::app_background(&mut ui);
-                self.nav_interactions(&mut ui);
+                self.chrome_nav(&mut ui);
                 self.page_content(&mut ui);
-                self.chrome(&mut ui);
+                self.chrome_status(&mut ui);
             }
 
             ui.finish_output()
@@ -465,7 +465,7 @@ impl ShowcaseApp {
         height.max(viewport.height)
     }
 
-    fn chrome(&mut self, ui: &mut Ui<'_>) {
+    fn chrome_nav(&mut self, ui: &mut Ui<'_>) {
         let viewport = rect_from_size(ui.viewport().logical_size);
         rect(
             ui,
@@ -494,9 +494,13 @@ impl ShowcaseApp {
             );
             if response.clicked {
                 self.status = format!("Page: {}", page.label());
+                ui.request_repaint(RepaintRequest::NextFrame);
             }
         }
+    }
 
+    fn chrome_status(&self, ui: &mut Ui<'_>) {
+        let viewport = rect_from_size(ui.viewport().logical_size);
         if viewport.width >= 1200.0 {
             Self::status_badge(
                 ui,
@@ -520,18 +524,6 @@ impl ShowcaseApp {
                 10.0,
                 rgb(178, 182, 188),
             );
-        }
-    }
-
-    fn nav_interactions(&mut self, ui: &mut Ui<'_>) {
-        let viewport = rect_from_size(ui.viewport().logical_size);
-        for (page, item) in nav_items(viewport.width) {
-            let response = ui.pressable(("nav.prepass", page as u8), item, false);
-            if response.clicked {
-                self.page = page;
-                self.status = format!("Page: {}", page.label());
-                ui.request_repaint(RepaintRequest::NextFrame);
-            }
         }
     }
 
@@ -2118,7 +2110,7 @@ mod tests {
             ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize,
             PlatformRequest, Point, Primitive, Rect, RepaintRequest, ScaleFactor,
             SemanticActionKind, SemanticRole, SemanticValue, Size, TextureId, UiInput,
-            ViewportInfo,
+            ViewportInfo, WidgetId,
         },
         render::{RenderFrameInput, RenderImageSampling},
         render_vello::VelloRenderer,
@@ -2714,8 +2706,23 @@ mod tests {
     fn clicking_navigation_changes_page() {
         let mut app = ShowcaseApp::new();
         app.set_page(ShowcasePage::Components);
+        let point = Point::new(620.0, 20.0);
+        let visible_nav_id =
+            WidgetId::from_key("root").child(("nav", ShowcasePage::Viewport as u8));
 
-        click(&mut app, Point::new(620.0, 20.0));
+        app.update(&ShowcaseInput {
+            mouse: Some(point),
+            mouse_down: true,
+            ..ShowcaseInput::default()
+        });
+
+        assert_eq!(app.memory.pressed(), Some(visible_nav_id));
+
+        app.update(&ShowcaseInput {
+            mouse: Some(point),
+            mouse_down: false,
+            ..ShowcaseInput::default()
+        });
 
         assert_eq!(app.page(), ShowcasePage::Viewport);
         assert!(has_text(&app, "Viewport, Texture, and Overlay Surface"));
