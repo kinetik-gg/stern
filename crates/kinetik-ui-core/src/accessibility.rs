@@ -242,6 +242,116 @@ pub struct SemanticTree {
     root: Option<WidgetId>,
 }
 
+#[derive(Debug, Default)]
+struct SemanticTreeIndex {
+    node_by_id: BTreeMap<WidgetId, usize>,
+    parent_by_child: BTreeMap<WidgetId, WidgetId>,
+    children_by_parent: BTreeMap<WidgetId, Vec<WidgetId>>,
+}
+
+impl SemanticTreeIndex {
+    fn from_tree(tree: &SemanticTree) -> Self {
+        let mut index = Self::default();
+        for (node_index, node) in tree.nodes.iter().enumerate() {
+            index.node_by_id.entry(node.id).or_insert(node_index);
+            for child in &node.children {
+                index.parent_by_child.entry(*child).or_insert(node.id);
+            }
+            index
+                .children_by_parent
+                .entry(node.id)
+                .or_insert_with(|| node.children.clone());
+        }
+        index
+    }
+
+    fn validate(tree: &SemanticTree) -> Result<Self, SemanticTreeError> {
+        if tree.nodes.is_empty() {
+            return Ok(Self::default());
+        }
+
+        let mut ids = BTreeSet::new();
+        let mut node_by_id = BTreeMap::new();
+        for (node_index, node) in tree.nodes.iter().enumerate() {
+            if !ids.insert(node.id) {
+                return Err(SemanticTreeError::DuplicateNodeId { id: node.id });
+            }
+            node_by_id.insert(node.id, node_index);
+        }
+
+        let Some(root) = tree.root else {
+            return Err(SemanticTreeError::MissingRoot);
+        };
+        if !ids.contains(&root) {
+            return Err(SemanticTreeError::UnknownRoot { id: root });
+        }
+
+        let mut parent_by_child = BTreeMap::new();
+        let mut children_by_parent = BTreeMap::new();
+        for node in &tree.nodes {
+            let mut child_ids = BTreeSet::new();
+            for child in &node.children {
+                if *child == node.id {
+                    return Err(SemanticTreeError::SelfChild { id: node.id });
+                }
+                if !ids.contains(child) {
+                    return Err(SemanticTreeError::UnknownChild {
+                        parent: node.id,
+                        child: *child,
+                    });
+                }
+                if !child_ids.insert(*child) {
+                    return Err(SemanticTreeError::DuplicateChild {
+                        parent: node.id,
+                        child: *child,
+                    });
+                }
+                if let Some(first_parent) = parent_by_child.insert(*child, node.id) {
+                    return Err(SemanticTreeError::MultipleParents {
+                        child: *child,
+                        first_parent,
+                        second_parent: node.id,
+                    });
+                }
+            }
+            children_by_parent.insert(node.id, node.children.clone());
+        }
+
+        let index = Self {
+            node_by_id,
+            parent_by_child,
+            children_by_parent,
+        };
+        let mut visited = BTreeSet::new();
+        let mut visiting = BTreeSet::new();
+        validate_semantic_cycles(root, &index.children_by_parent, &mut visiting, &mut visited)?;
+        for node in &tree.nodes {
+            validate_semantic_cycles(
+                node.id,
+                &index.children_by_parent,
+                &mut visiting,
+                &mut visited,
+            )?;
+        }
+
+        Ok(index)
+    }
+
+    fn contains(&self, id: WidgetId) -> bool {
+        self.node_by_id.contains_key(&id)
+    }
+
+    fn node<'a>(&self, tree: &'a SemanticTree, id: WidgetId) -> Option<&'a SemanticNode> {
+        self.node_by_id
+            .get(&id)
+            .and_then(|index| tree.nodes.get(*index))
+    }
+
+    fn parent_of(&self, child: WidgetId) -> Option<WidgetId> {
+        self.parent_by_child.get(&child).copied()
+    }
+}
+
 impl SemanticTree {
     /// Creates an empty semantic tree.
     #[must_use]
@@ -304,13 +414,18 @@ impl SemanticTree {
     /// Returns node IDs in semantic child order, appending unparented nodes in insertion order.
     #[must_use]
     pub fn traversal_order(&self) -> Vec<WidgetId> {
+        let index = SemanticTreeIndex::from_tree(self);
+        self.traversal_order_with_index(&index)
+    }
+
+    fn traversal_order_with_index(&self, index: &SemanticTreeIndex) -> Vec<WidgetId> {
         let mut order = Vec::new();
         let mut visited = BTreeSet::new();
-        if let Some(root) = self.root.filter(|root| self.get(*root).is_some()) {
-            self.push_traversal(root, &mut visited, &mut order);
+        if let Some(root) = self.root.filter(|root| index.contains(*root)) {
+            self.push_traversal(root, index, &mut visited, &mut order);
         }
         for node in &self.nodes {
-            self.push_traversal(node.id, &mut visited, &mut order);
+            self.push_traversal(node.id, index, &mut visited, &mut order);
         }
         order
     }
@@ -318,13 +433,18 @@ impl SemanticTree {
     /// Returns focusable node IDs in traversal order.
     #[must_use]
     pub fn focus_order(&self) -> Vec<WidgetId> {
+        let index = SemanticTreeIndex::from_tree(self);
+        self.focus_order_with_index(&index)
+    }
+
+    fn focus_order_with_index(&self, index: &SemanticTreeIndex) -> Vec<WidgetId> {
         let mut order = Vec::new();
         let mut visited = BTreeSet::new();
-        if let Some(root) = self.root.filter(|root| self.get(*root).is_some()) {
-            self.push_focus_order(root, false, &mut visited, &mut order);
+        if let Some(root) = self.root.filter(|root| index.contains(*root)) {
+            self.push_focus_order(root, index, false, &mut visited, &mut order);
         }
         for node in &self.nodes {
-            self.push_focus_order(node.id, false, &mut visited, &mut order);
+            self.push_focus_order(node.id, index, false, &mut visited, &mut order);
         }
         order
     }
@@ -352,86 +472,32 @@ impl SemanticTree {
     ///
     /// Returns [`SemanticTreeError`] for the first structural violation found.
     pub fn validate(&self) -> Result<(), SemanticTreeError> {
-        if self.nodes.is_empty() {
-            return Ok(());
-        }
-
-        let mut ids = BTreeSet::new();
-        for node in &self.nodes {
-            if !ids.insert(node.id) {
-                return Err(SemanticTreeError::DuplicateNodeId { id: node.id });
-            }
-        }
-
-        let Some(root) = self.root else {
-            return Err(SemanticTreeError::MissingRoot);
-        };
-        if !ids.contains(&root) {
-            return Err(SemanticTreeError::UnknownRoot { id: root });
-        }
-
-        let mut parent_by_child = BTreeMap::new();
-        let mut children_by_parent = BTreeMap::new();
-        for node in &self.nodes {
-            let mut child_ids = BTreeSet::new();
-            for child in &node.children {
-                if *child == node.id {
-                    return Err(SemanticTreeError::SelfChild { id: node.id });
-                }
-                if !ids.contains(child) {
-                    return Err(SemanticTreeError::UnknownChild {
-                        parent: node.id,
-                        child: *child,
-                    });
-                }
-                if !child_ids.insert(*child) {
-                    return Err(SemanticTreeError::DuplicateChild {
-                        parent: node.id,
-                        child: *child,
-                    });
-                }
-                if let Some(first_parent) = parent_by_child.insert(*child, node.id) {
-                    return Err(SemanticTreeError::MultipleParents {
-                        child: *child,
-                        first_parent,
-                        second_parent: node.id,
-                    });
-                }
-            }
-            children_by_parent.insert(node.id, node.children.clone());
-        }
-
-        let mut visited = BTreeSet::new();
-        let mut visiting = BTreeSet::new();
-        validate_semantic_cycles(root, &children_by_parent, &mut visiting, &mut visited)?;
-        for node in &self.nodes {
-            validate_semantic_cycles(node.id, &children_by_parent, &mut visiting, &mut visited)?;
-        }
-
-        Ok(())
+        SemanticTreeIndex::validate(self).map(|_| ())
     }
 
     fn push_traversal(
         &self,
         id: WidgetId,
+        index: &SemanticTreeIndex,
         visited: &mut BTreeSet<WidgetId>,
         order: &mut Vec<WidgetId>,
     ) {
         if !visited.insert(id) {
             return;
         }
-        let Some(node) = self.get(id) else {
+        let Some(node) = index.node(self, id) else {
             return;
         };
         order.push(id);
         for child in &node.children {
-            self.push_traversal(*child, visited, order);
+            self.push_traversal(*child, index, visited, order);
         }
     }
 
     fn push_focus_order(
         &self,
         id: WidgetId,
+        index: &SemanticTreeIndex,
         disabled_ancestor: bool,
         visited: &mut BTreeSet<WidgetId>,
         order: &mut Vec<WidgetId>,
@@ -439,7 +505,7 @@ impl SemanticTree {
         if !visited.insert(id) {
             return;
         }
-        let Some(node) = self.get(id) else {
+        let Some(node) = index.node(self, id) else {
             return;
         };
         let disabled = disabled_ancestor || node.state.disabled;
@@ -447,7 +513,7 @@ impl SemanticTree {
             order.push(id);
         }
         for child in &node.children {
-            self.push_focus_order(*child, disabled, visited, order);
+            self.push_focus_order(*child, index, disabled, visited, order);
         }
     }
 }
@@ -572,15 +638,16 @@ impl AccessibilitySnapshot {
         tree: &SemanticTree,
         focused: Option<WidgetId>,
     ) -> Result<Self, SemanticTreeError> {
-        tree.validate()?;
+        let index = SemanticTreeIndex::validate(tree)?;
 
-        let focus = FocusTraversal::from_tree(tree, focused);
+        let focus = FocusTraversal::from_index(tree, &index, focused);
         let nodes = tree
-            .traversal_order()
+            .traversal_order_with_index(&index)
             .into_iter()
             .filter_map(|id| {
-                tree.get(id)
-                    .map(|node| AccessibilityNode::from_semantic(node, tree.parent_of(id)))
+                index
+                    .node(tree, id)
+                    .map(|node| AccessibilityNode::from_semantic(node, index.parent_of(id)))
             })
             .collect();
 
@@ -751,7 +818,16 @@ impl FocusTraversal {
     /// Creates traversal from a semantic tree.
     #[must_use]
     pub fn from_tree(tree: &SemanticTree, focused: Option<WidgetId>) -> Self {
-        let order = tree.focus_order();
+        let index = SemanticTreeIndex::from_tree(tree);
+        Self::from_index(tree, &index, focused)
+    }
+
+    fn from_index(
+        tree: &SemanticTree,
+        index: &SemanticTreeIndex,
+        focused: Option<WidgetId>,
+    ) -> Self {
+        let order = tree.focus_order_with_index(index);
         let focused = focused.filter(|id| order.contains(id));
         Self { order, focused }
     }

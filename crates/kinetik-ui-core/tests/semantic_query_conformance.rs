@@ -310,6 +310,45 @@ fn semantic_query_preserves_traversal_and_filters_focus_order() {
 }
 
 #[test]
+fn semantic_query_indexed_snapshot_roots_subtree_before_remaining_inserted_nodes() {
+    let before_root = WidgetId::from_key("before-root");
+    let root = WidgetId::from_key("root");
+    let child = WidgetId::from_key("child");
+    let after_root = WidgetId::from_key("after-root");
+    let mut tree = SemanticTree::new();
+    tree.push(SemanticNode::new(
+        before_root,
+        SemanticRole::Label,
+        Rect::ZERO,
+    ));
+    tree.push(SemanticNode::new(root, SemanticRole::Root, Rect::ZERO).with_children([child]));
+    tree.push(SemanticNode::new(
+        after_root,
+        SemanticRole::Label,
+        Rect::ZERO,
+    ));
+    tree.push(SemanticNode::new(child, SemanticRole::Button, Rect::ZERO).focusable(true));
+    tree.set_root(root);
+
+    let snapshot = tree
+        .accessibility_snapshot(Some(child))
+        .expect("valid snapshot");
+
+    assert_eq!(
+        snapshot
+            .nodes
+            .iter()
+            .map(|node| node.id)
+            .collect::<Vec<_>>(),
+        vec![root, child, before_root, after_root]
+    );
+    assert_eq!(snapshot.node(child).expect("child").parent, Some(root));
+    assert_eq!(snapshot.node(before_root).expect("before").parent, None);
+    assert_eq!(snapshot.focus_order, vec![child]);
+    assert_eq!(snapshot.focused, Some(child));
+}
+
+#[test]
 fn semantic_query_preserves_disabled_subtree_queries_while_filtering_focus_participation() {
     let root = WidgetId::from_key("root");
     let before = WidgetId::from_key("before");
