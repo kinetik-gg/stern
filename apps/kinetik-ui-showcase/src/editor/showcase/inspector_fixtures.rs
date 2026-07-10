@@ -32,7 +32,7 @@ impl EditorShowcase {
             DENSE_ICON_SIZE,
         );
 
-        let rows = inspector_rows();
+        let rows = inspector_rows(&self.mass.text);
         let grid = Rect::new(
             body.x + 8.0,
             body.y + 52.0,

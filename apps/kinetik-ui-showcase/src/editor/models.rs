@@ -331,7 +331,21 @@ fn scene_model() -> TreeModel {
     ])
 }
 
-fn inspector_rows() -> Vec<PropertyGridRow> {
+const MASS_VALIDATION_ERROR: &str = "Mass must be positive";
+
+fn mass_status(mass_text: &str) -> PropertyGridRowStatus {
+    let is_positive_finite = classify_numeric_input_draft(mass_text)
+        .value()
+        .is_some_and(|mass| mass.is_finite() && mass > 0.0);
+
+    if is_positive_finite {
+        PropertyGridRowStatus::default()
+    } else {
+        PropertyGridRowStatus::error(MASS_VALIDATION_ERROR)
+    }
+}
+
+fn inspector_rows(mass_text: &str) -> Vec<PropertyGridRow> {
     vec![
         PropertyGridRow::section(item_id(1), "Transform"),
         PropertyGridRow::property(item_id(2), "Position", 0)
@@ -355,7 +369,7 @@ fn inspector_rows() -> Vec<PropertyGridRow> {
         PropertyGridRow::property(item_id(11), "Snap", 0).with_resettable(true, false),
         PropertyGridRow::section(item_id(12), "Physics"),
         PropertyGridRow::property(item_id(13), "Mass", 0)
-            .with_status(PropertyGridRowStatus::error("Mass must be positive"))
+            .with_status(mass_status(mass_text))
             .with_resettable(true, false)
             .with_keyframeable(true, false),
         PropertyGridRow::property(item_id(14), "Collider", 0)

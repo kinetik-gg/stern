@@ -6,6 +6,92 @@ fn inspector_label_width_preserves_value_space_at_narrow_widths() {
     assert_eq!(inspector_label_width(f32::NAN), 72.0);
 }
 
+fn mass_fixture_row(mass_text: &str) -> kinetik_ui::widgets::PropertyGridRow {
+    super::inspector_rows(mass_text)
+        .into_iter()
+        .find(|row| row.id == item_id(13))
+        .expect("mass fixture row")
+}
+
+fn mass_fixture_rendered_label_brush(mass_text: &str) -> Brush {
+    let theme = default_dark_theme();
+    let mut memory = UiMemory::new();
+    let context = editor_test_context(UiInput::default());
+    let mut ui = Ui::begin_frame(context, &mut memory, &theme);
+    let mut editor = EditorShowcase::new();
+    mass_text.clone_into(&mut editor.mass.text);
+
+    editor.inspector(&mut ui, Rect::new(0.0, 0.0, 400.0, 500.0));
+
+    ui.finish_output()
+        .primitives
+        .into_iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == "Mass" => Some(text.brush),
+            _ => None,
+        })
+        .expect("rendered mass label")
+}
+
+#[test]
+fn mass_fixture_positive_finite_values_have_no_error() {
+    let editor = EditorShowcase::new();
+    assert_eq!(editor.mass.text, "84.0");
+
+    for mass_text in ["84.0", "0.001", " 12.5 ", "3.4028235e38"] {
+        let status = mass_fixture_row(mass_text).state.status;
+        assert_eq!(
+            status.severity,
+            kinetik_ui::widgets::PropertyGridStatusSeverity::None,
+            "unexpected status for {mass_text:?}"
+        );
+        assert_eq!(status.message, None, "unexpected message for {mass_text:?}");
+    }
+}
+
+#[test]
+fn mass_fixture_non_positive_or_non_finite_values_have_exact_error() {
+    for mass_text in [
+        "0",
+        "-0.0",
+        "-3.5",
+        "NaN",
+        "nan",
+        "inf",
+        "+inf",
+        "-inf",
+        "Infinity",
+        "-Infinity",
+        "",
+        "   ",
+        "heavy",
+    ] {
+        let status = mass_fixture_row(mass_text).state.status;
+        assert_eq!(
+            status.severity,
+            kinetik_ui::widgets::PropertyGridStatusSeverity::Error,
+            "unexpected status for {mass_text:?}"
+        );
+        assert_eq!(
+            status.message.as_deref(),
+            Some(super::MASS_VALIDATION_ERROR),
+            "unexpected message for {mass_text:?}"
+        );
+    }
+}
+
+#[test]
+fn mass_fixture_render_uses_state_derived_status() {
+    assert_eq!(
+        mass_fixture_rendered_label_brush("84.0"),
+        Brush::Solid(rgb(154, 160, 168))
+    );
+    assert_eq!(
+        mass_fixture_rendered_label_brush("0"),
+        Brush::Solid(rgb(236, 96, 96))
+    );
+}
+
 #[test]
 fn editor_chrome_metrics_follow_theme_controls() {
     let theme = default_dark_theme();
