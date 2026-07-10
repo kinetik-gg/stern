@@ -1,6 +1,8 @@
 pub(super) use super::super::{
-    ACTION_EDITOR_DOCK_JOIN, ACTION_SYSTEMS_DISPATCH, ShowcaseApp, ShowcaseInput, ShowcasePage,
-    frame_context, static_render_resources,
+    ACTION_COMMAND_PALETTE, ACTION_COMPONENTS_RUN, ACTION_EDITOR_DOCK_JOIN,
+    ACTION_SYSTEMS_DISPATCH, ACTION_VIEWPORT_GRID, ACTION_WORKSPACE_SAVE, ShowcaseApp,
+    ShowcaseInput, ShowcasePage, frame_context, showcase_action_router, showcase_actions,
+    static_render_resources,
 };
 pub(super) use crate::editor::phosphor_icons;
 pub(super) use kinetik_ui::{

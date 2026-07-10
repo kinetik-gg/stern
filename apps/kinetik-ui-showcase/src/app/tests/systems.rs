@@ -11,6 +11,7 @@ fn systems_palette_invokes_actions() {
     click(&mut app, Point::new(930.0, 160.0));
 
     assert_eq!(app.action_count(), 1);
+    assert!(app.workspace_snapshot.is_some());
 }
 
 #[test]
@@ -52,7 +53,11 @@ fn systems_page_structural_smoke_emits_actions_overlays_palette_and_stress() {
         ]
     ));
 
-    assert!(semantic_node(&app, &SemanticRole::Button, "Dispatch"));
+    assert!(semantic_node(
+        &app,
+        &SemanticRole::Button,
+        "Record Dispatch"
+    ));
     assert!(semantic_node(&app, &SemanticRole::Button, "Menu Save"));
     assert!(semantic_node(&app, &SemanticRole::Menu, "Menu"));
     assert!(semantic_node(
@@ -77,7 +82,8 @@ fn systems_page_structural_smoke_emits_actions_overlays_palette_and_stress() {
     click(&mut app, Point::new(100.0, 210.0));
 
     assert_eq!(app.action_count(), 1);
-    assert!(has_text(&app, "workspace.save via Menu (1)"));
+    assert!(app.workspace_snapshot.is_some());
+    assert!(has_text(&app, "Workspace snapshot captured in memory"));
 
     let mut app = ShowcaseApp::new();
     app.set_page(ShowcasePage::Systems);
@@ -85,5 +91,17 @@ fn systems_page_structural_smoke_emits_actions_overlays_palette_and_stress() {
     click(&mut app, Point::new(930.0, 160.0));
 
     assert_eq!(app.action_count(), 1);
-    assert!(has_text(&app, "workspace.save via CommandPalette (1)"));
+    assert!(app.workspace_snapshot.is_some());
+    assert!(has_text(&app, "Workspace snapshot captured in memory"));
+}
+
+#[test]
+fn showcase_action_truth_disabled_palette_row_cannot_invoke() {
+    let mut app = ShowcaseApp::new();
+    app.set_page(ShowcasePage::Systems);
+
+    click(&mut app, Point::new(930.0, 192.0));
+
+    assert_eq!(app.action_count(), 0);
+    assert_eq!(app.workspace_snapshot, None);
 }

@@ -144,12 +144,14 @@ fn editor_chrome_menu_bar_converts_active_menu_to_overlay_contract() {
         item,
         MenuItem::Action(action)
             if action.id.as_str() == ACTION_SAVE
-                && action.label == "Save Scene"
-                && action.can_invoke()
+                && action.label == "Save Scene (Experimental)"
+                && !action.can_invoke()
+                && action.shortcut.is_none()
     )));
     assert!(overlay.visible_items().iter().any(|item| matches!(
         item,
-        MenuItem::Action(action) if action.label == "Quit" && !action.can_invoke()
+        MenuItem::Action(action)
+            if action.label == "Quit (Experimental)" && !action.can_invoke()
     )));
 }
 
@@ -181,6 +183,18 @@ fn editor_chrome_toolbar_contract_tracks_checked_action_state() {
     assert_eq!(viewport_tools[0].action_id().as_str(), ACTION_GRID);
     assert_eq!(viewport_tools[0].checked(), Some(true));
 
+    let run_items = toolbar
+        .group(EditorToolbarGroupKind::Run.id())
+        .expect("run group")
+        .visible_items();
+    let invocation = toolbar
+        .invocation_for_group_visible(EditorToolbarGroupKind::Run.id(), 0, ActionContext::Editor)
+        .expect("run invocation");
+    assert_eq!(invocation.action_id, ActionId::new(ACTION_PLAY));
+    assert_eq!(invocation.source, ActionSource::Button);
+    assert_eq!(invocation.context, ActionContext::Editor);
+    assert!(run_items[0].can_invoke());
+
     assert!(editor.apply_action(ACTION_PLAY));
     let toolbar = editor.toolbar_model();
     let run_items = toolbar
@@ -189,15 +203,157 @@ fn editor_chrome_toolbar_contract_tracks_checked_action_state() {
         .visible_items();
     assert_eq!(run_items[0].label(), "Play");
     assert_eq!(run_items[0].checked(), Some(true));
-    assert_eq!(run_items[1].label(), "Pause");
-    assert_eq!(run_items[1].checked(), Some(false));
+    assert!(!run_items[0].can_invoke());
+    assert_eq!(run_items[1].label(), "Pause (Experimental)");
+    assert_eq!(run_items[1].checked(), None);
+    assert!(!run_items[1].can_invoke());
+}
 
-    let invocation = toolbar
-        .invocation_for_group_visible(EditorToolbarGroupKind::Run.id(), 0, ActionContext::Editor)
-        .expect("run invocation");
-    assert_eq!(invocation.action_id, ActionId::new(ACTION_PLAY));
-    assert_eq!(invocation.source, ActionSource::Button);
-    assert_eq!(invocation.context, ActionContext::Editor);
+#[test]
+fn showcase_action_truth_editor_menu_descriptors_are_unique_and_invocable_only_when_implemented() {
+    let editor = EditorShowcase::new();
+    let mut ids = HashSet::new();
+
+    for kind in [
+        EditorMenuKind::File,
+        EditorMenuKind::Edit,
+        EditorMenuKind::View,
+        EditorMenuKind::Project,
+        EditorMenuKind::Build,
+        EditorMenuKind::Window,
+        EditorMenuKind::Help,
+    ] {
+        let menu = editor.menu_model(kind);
+        for item in menu.visible_items() {
+            let MenuItem::Action(action) = item else {
+                continue;
+            };
+            assert!(
+                ids.insert(action.id.as_str().to_owned()),
+                "duplicate action ID {}",
+                action.id.as_str()
+            );
+            if action.can_invoke() {
+                assert!(!action.label.ends_with(" (Experimental)"));
+                assert!(
+                    EditorShowcase::new().apply_action(action.id.as_str()),
+                    "enabled action {} has no outcome",
+                    action.id.as_str()
+                );
+            } else {
+                assert!(
+                    action.label.ends_with(" (Experimental)"),
+                    "disabled action {} lacks truth label",
+                    action.id.as_str()
+                );
+                assert_eq!(action.shortcut, None);
+            }
+        }
+    }
+}
+
+#[test]
+fn showcase_action_truth_toolbar_ids_and_disabled_contract_are_distinct() {
+    let toolbar = EditorShowcase::new().toolbar_model();
+    let mut ids = HashSet::new();
+
+    for item in toolbar
+        .groups()
+        .iter()
+        .flat_map(kinetik_ui::widgets::ToolbarGroup::items)
+    {
+        assert!(
+            ids.insert(item.action_id().as_str().to_owned()),
+            "duplicate toolbar action ID {}",
+            item.action_id().as_str()
+        );
+        if item.can_invoke() {
+            assert!(!item.label().ends_with(" (Experimental)"));
+        } else {
+            assert!(item.label().ends_with(" (Experimental)"));
+            assert_eq!(item.action.shortcut, None);
+        }
+    }
+
+    let run = toolbar
+        .group(EditorToolbarGroupKind::Run.id())
+        .expect("run group")
+        .items();
+    assert_eq!(run[0].action_id().as_str(), ACTION_PLAY);
+    assert_eq!(run[1].action_id().as_str(), ACTION_PAUSE);
+    assert_eq!(run[3].action_id().as_str(), ACTION_BUILD);
+    assert_eq!(run[4].action_id().as_str(), ACTION_EXPORT);
+
+    let chrome = EditorChromeMetrics::from_theme(&default_dark_theme());
+    for ((_, _, _, painted_action, _), item) in
+        super::run_toolbar_buttons(Rect::new(0.0, 0.0, 1440.0, 900.0), chrome)
+            .into_iter()
+            .zip(run)
+    {
+        assert_eq!(painted_action, item.action_id().as_str());
+    }
+}
+
+#[test]
+fn showcase_action_truth_apply_action_rejects_every_unfinished_outcome() {
+    for action_id in [
+        super::ACTION_NEW_SCENE,
+        super::ACTION_OPEN_PROJECT,
+        ACTION_SAVE,
+        super::ACTION_IMPORT_ASSET,
+        ACTION_EXPORT,
+        super::ACTION_QUIT,
+        super::ACTION_UNDO,
+        super::ACTION_REDO,
+        super::ACTION_DUPLICATE,
+        super::ACTION_DELETE,
+        super::ACTION_PREFERENCES,
+        super::ACTION_VIEW_PERSPECTIVE,
+        super::ACTION_SHOW_OVERLAYS,
+        ACTION_VIEWPORT_FOCUS_SELECTED,
+        ACTION_VIEWPORT_FIT_CONTENT,
+        ACTION_VIEWPORT_FIT_SELECTION,
+        ACTION_VIEWPORT_ACTUAL_SIZE,
+        ACTION_VIEWPORT_ZOOM_IN,
+        ACTION_VIEWPORT_ZOOM_OUT,
+        ACTION_VIEWPORT_PAN,
+        ACTION_PAUSE,
+        super::ACTION_PROJECT_SETTINGS,
+        ACTION_BUILD,
+        super::ACTION_PACKAGE_WINDOWS,
+        super::ACTION_RUN_PROFILER,
+        ACTION_PALETTE,
+        super::ACTION_DOCS,
+        super::ACTION_KEYBOARD_SHORTCUTS,
+        super::ACTION_ABOUT,
+        super::ACTION_ABOUT_CLOSE,
+    ] {
+        let mut editor = EditorShowcase::new();
+        let before = editor.status.clone();
+        assert!(!editor.apply_action(action_id), "{action_id}");
+        assert_eq!(editor.status, before, "{action_id}");
+    }
+}
+
+#[test]
+fn showcase_action_truth_enabled_editor_actions_mutate_dedicated_state() {
+    let mut editor = EditorShowcase::new();
+
+    assert!(editor.apply_action(ACTION_PLAY));
+    assert!(editor.running);
+    assert_eq!(editor.status, "Play mode running");
+
+    assert!(editor.apply_action(ACTION_STOP));
+    assert!(!editor.running);
+    assert_eq!(editor.timeline, 0.0);
+    assert_eq!(editor.status, "Play mode stopped");
+
+    let grid_before = editor.grid_visible;
+    assert!(editor.apply_action(ACTION_GRID));
+    assert_ne!(editor.grid_visible, grid_before);
+
+    assert!(editor.apply_action(super::ACTION_TOOL_SELECT));
+    assert_eq!(editor.selected_tool, EditorTool::Select);
 }
 
 #[test]
@@ -561,14 +717,25 @@ fn editor_chrome_modal_contract_exposes_data_only_action_metadata() {
             .expect("cancel action")
             .action
             .label,
-        "Close"
+        "Close (Experimental)"
     );
 
-    let invocation = overlay
-        .invocation_for_role(ModalActionRole::Primary)
-        .expect("primary modal action invocation");
-    assert_eq!(invocation.action_id, ActionId::new(super::ACTION_PALETTE));
-    assert_eq!(invocation.source, ActionSource::Button);
-    assert_eq!(invocation.context, ActionContext::Editor);
+    assert!(
+        overlay
+            .visible_actions()
+            .iter()
+            .all(|action| !action.action.can_invoke()
+                && action.action.label.ends_with(" (Experimental)")
+                && action.action.shortcut.is_none())
+    );
+    assert!(
+        overlay
+            .invocation_for_role(ModalActionRole::Primary)
+            .is_none()
+    );
+    assert_ne!(
+        overlay.visible_actions()[0].action.id,
+        overlay.visible_actions()[1].action.id
+    );
     assert_eq!(editor.status, before);
 }

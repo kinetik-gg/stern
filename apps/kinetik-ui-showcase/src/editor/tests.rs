@@ -1,15 +1,16 @@
 #![allow(clippy::float_cmp)]
 
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use super::{
-    ACTION_GRID, ACTION_PLAY, ACTION_SAVE, ACTION_STOP, ACTION_VIEWPORT_ACTUAL_SIZE,
-    ACTION_VIEWPORT_FIT_CONTENT, ACTION_VIEWPORT_FIT_SELECTION, ACTION_VIEWPORT_FOCUS_SELECTED,
-    ACTION_VIEWPORT_PAN, ACTION_VIEWPORT_ZOOM_IN, ACTION_VIEWPORT_ZOOM_OUT, EditorChromeMetrics,
-    EditorMenuKind, EditorShowcase, EditorStatusItemKind, EditorTool, EditorToolbarGroupKind,
-    FRAME_BOTTOM, FRAME_INSPECTOR, FRAME_VIEWPORT, PANEL_TIMELINE, TOOLBAR_Y, VIEWPORT_SIZE,
-    frame_tab_rects, frame_tab_strip, icon_atlas_image, inspector_label_width, item_id,
-    phosphor_icons, register_resources, rgb, rgba,
+    ACTION_BUILD, ACTION_EXPORT, ACTION_GRID, ACTION_PALETTE, ACTION_PAUSE, ACTION_PLAY,
+    ACTION_SAVE, ACTION_STOP, ACTION_VIEWPORT_ACTUAL_SIZE, ACTION_VIEWPORT_FIT_CONTENT,
+    ACTION_VIEWPORT_FIT_SELECTION, ACTION_VIEWPORT_FOCUS_SELECTED, ACTION_VIEWPORT_PAN,
+    ACTION_VIEWPORT_ZOOM_IN, ACTION_VIEWPORT_ZOOM_OUT, EditorChromeMetrics, EditorMenuKind,
+    EditorShowcase, EditorStatusItemKind, EditorTool, EditorToolbarGroupKind, FRAME_BOTTOM,
+    FRAME_INSPECTOR, FRAME_VIEWPORT, PANEL_TIMELINE, TOOLBAR_Y, VIEWPORT_SIZE, frame_tab_rects,
+    frame_tab_strip, icon_atlas_image, inspector_label_width, item_id, phosphor_icons,
+    register_resources, rgb, rgba,
 };
 use kinetik_ui::core::{
     ActionContext, ActionDescriptor, ActionId, ActionSource, Brush, CursorShape, FrameContext,

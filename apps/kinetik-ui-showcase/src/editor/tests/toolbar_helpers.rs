@@ -9,26 +9,27 @@ fn editor_toolbar_atlas_icons_preserve_icon_button_semantics() {
     editor.render(&mut ui, 0);
     let output = ui.finish_output();
     let toolbar_labels = [
-        "Select",
-        "Move",
-        "Rotate",
-        "Scale",
-        "Toggle grid",
-        "Frame selected",
-        "Reset view",
-        "Play",
-        "Pause",
-        "Stop",
-        "Build",
-        "Export",
+        ("Select", false),
+        ("Move", false),
+        ("Rotate", false),
+        ("Scale", false),
+        ("Toggle grid", false),
+        ("Frame selected (Experimental)", true),
+        ("Reset view (Experimental)", true),
+        ("Play", false),
+        ("Pause (Experimental)", true),
+        ("Stop", false),
+        ("Build (Experimental)", true),
+        ("Export (Experimental)", true),
     ];
 
-    for label in toolbar_labels {
+    for (label, disabled) in toolbar_labels {
         assert!(
             output.semantics.nodes().iter().any(|node| {
                 node.role == SemanticRole::IconButton
                     && node.label.as_deref() == Some(label)
-                    && node.focusable
+                    && node.state.disabled == disabled
+                    && node.focusable != disabled
             }),
             "missing toolbar icon semantics for {label}"
         );
