@@ -5,6 +5,21 @@ use super::super::{
     column_layout, frame_tabs, page_rect, panel_title, panel_title_body, rect, rect_from_size, rgb,
     row_layout, section_title, solve_dock_layout, solve_dock_splitters, text,
 };
+use kinetik_ui::widgets::FrameLayout;
+
+const DOCK_PREVIEW_TAB_MAX_WIDTH: f32 = 74.0;
+const DOCK_PREVIEW_TAB_HEIGHT: f32 = 22.0;
+const DOCK_PREVIEW_TAB_GAP: f32 = 4.0;
+const DOCK_PREVIEW_TAB_INSET: f32 = 8.0;
+
+#[derive(Debug, Clone, PartialEq)]
+pub(in crate::app) struct DockPreviewTabLayout {
+    pub(in crate::app) frame: FrameId,
+    pub(in crate::app) panel: PanelId,
+    pub(in crate::app) rect: Rect,
+    title: String,
+    active: bool,
+}
 
 impl ShowcaseApp {
     pub(in crate::app) fn layout_page(&mut self, ui: &mut Ui<'_>) {
@@ -209,7 +224,8 @@ impl ShowcaseApp {
             (panel.width - 60.0).max(0.0),
             (panel.height - 116.0).max(0.0),
         );
-        for frame in solve_dock_layout(area, dock_bounds) {
+        let frame_layouts = solve_dock_layout(area, dock_bounds);
+        for frame in &frame_layouts {
             rect(ui, frame.rect, rgb(22, 22, 25), Some(rgb(70, 70, 76)));
             text(
                 ui,
@@ -228,25 +244,25 @@ impl ShowcaseApp {
                 Some(rgb(116, 132, 160)),
             );
         }
-        for frame in area.frames() {
-            let tabs = frame_tabs(frame);
-            let mut x = panel.x + 32.0;
-            let y = panel.max_y() - 30.0 + frame.id.raw() as f32 * 0.0;
-            for tab in tabs {
-                let width = 74.0;
-                rect(
-                    ui,
-                    Rect::new(x, y, width, 22.0),
-                    if tab.active {
-                        rgb(42, 96, 224)
-                    } else {
-                        rgb(30, 30, 33)
-                    },
-                    Some(rgb(72, 72, 76)),
-                );
-                text(ui, x + 8.0, y + 15.0, &tab.title, 9.0, rgb(236, 236, 238));
-                x += width + 4.0;
-            }
+        for tab in Self::dock_preview_tab_layouts(area, &frame_layouts) {
+            rect(
+                ui,
+                tab.rect,
+                if tab.active {
+                    rgb(42, 96, 224)
+                } else {
+                    rgb(30, 30, 33)
+                },
+                Some(rgb(72, 72, 76)),
+            );
+            text(
+                ui,
+                tab.rect.x + 8.0,
+                tab.rect.y + 15.0,
+                &tab.title,
+                9.0,
+                rgb(236, 236, 238),
+            );
         }
         text(
             ui,
@@ -256,6 +272,33 @@ impl ShowcaseApp {
             10.0,
             rgb(160, 160, 164),
         );
+    }
+
+    pub(in crate::app) fn dock_preview_tab_layouts(
+        area: &Dock,
+        frame_layouts: &[FrameLayout],
+    ) -> Vec<DockPreviewTabLayout> {
+        let frames = area.frames();
+        let mut tab_layouts = Vec::new();
+
+        for frame_layout in frame_layouts {
+            let Some(frame) = frames.iter().find(|frame| frame.id == frame_layout.frame) else {
+                continue;
+            };
+            let tabs = frame_tabs(frame);
+            let tab_count = tabs.len();
+            for (index, tab) in tabs.into_iter().enumerate() {
+                tab_layouts.push(DockPreviewTabLayout {
+                    frame: frame_layout.frame,
+                    panel: tab.panel,
+                    rect: dock_preview_tab_rect(frame_layout.rect, index, tab_count),
+                    title: tab.title,
+                    active: tab.active,
+                });
+            }
+        }
+
+        tab_layouts
     }
 
     pub(in crate::app) fn table_preview(ui: &mut Ui<'_>, panel: Rect) {
@@ -352,4 +395,32 @@ impl ShowcaseApp {
             rgb(190, 190, 194),
         );
     }
+}
+
+fn dock_preview_tab_rect(frame: Rect, index: usize, tab_count: usize) -> Rect {
+    if tab_count == 0 {
+        return Rect::new(frame.x, frame.y, 0.0, 0.0);
+    }
+
+    let frame_width = frame.width.max(0.0);
+    let frame_height = frame.height.max(0.0);
+    let horizontal_inset = DOCK_PREVIEW_TAB_INSET.min(frame_width * 0.5);
+    let vertical_inset = DOCK_PREVIEW_TAB_INSET.min(frame_height * 0.5);
+    let inner_width = (frame_width - horizontal_inset * 2.0).max(0.0);
+    let gap_count = tab_count.saturating_sub(1);
+    let gap = if gap_count == 0 {
+        0.0
+    } else {
+        DOCK_PREVIEW_TAB_GAP.min(inner_width / gap_count as f32)
+    };
+    let available_width = (inner_width - gap * gap_count as f32).max(0.0);
+    let tab_width = (available_width / tab_count as f32).min(DOCK_PREVIEW_TAB_MAX_WIDTH);
+    let tab_height = (frame_height - vertical_inset * 2.0).clamp(0.0, DOCK_PREVIEW_TAB_HEIGHT);
+
+    Rect::new(
+        frame.x + horizontal_inset + index as f32 * (tab_width + gap),
+        frame.y + frame_height - vertical_inset - tab_height,
+        tab_width,
+        tab_height,
+    )
 }
