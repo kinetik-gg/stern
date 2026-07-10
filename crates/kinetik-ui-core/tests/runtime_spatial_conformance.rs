@@ -302,6 +302,7 @@ fn singular_and_non_finite_scopes_are_inert_but_release_capture_and_restore_root
     harness.set_pointer_position(Point::new(5.0, 5.0));
     harness.pointer_press(MouseButton::Primary);
     let (pressed, _) = harness.run_frame(|ui| {
+        ui.register_id(owner);
         let (input, memory) = ui.input_and_memory_mut();
         draggable(owner, rect, input, memory, false)
     });
@@ -370,6 +371,7 @@ fn captured_owner_cannot_publish_cursor_outside_effective_clip() {
     harness.set_pointer_position(Point::new(50.0, 50.0));
 
     let (published, output) = harness.run_frame(|ui| {
+        ui.register_id(owner);
         ui.push_primitive(Primitive::ClipBegin {
             id: clip,
             rect: Rect::new(0.0, 0.0, 10.0, 10.0),
@@ -395,6 +397,7 @@ fn invisible_secondary_release_only_cleans_up_existing_owner() {
     harness.input_mut().pointer.secondary = PointerButtonState::new(false, false, true);
 
     let (response, output) = harness.run_frame(|ui| {
+        ui.register_id(owner);
         ui.push_primitive(Primitive::ClipBegin { id: clip, rect });
         assert_eq!(ui.input().pointer.primary, PointerButtonState::default());
         assert_eq!(

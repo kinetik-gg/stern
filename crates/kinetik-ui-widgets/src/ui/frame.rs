@@ -172,6 +172,11 @@ impl<'a> Ui<'a> {
         self.runtime.id(key)
     }
 
+    /// Registers an externally derived widget ID as present and checks duplicates.
+    pub fn register_id(&mut self, id: WidgetId) -> WidgetId {
+        self.runtime.register_id(id)
+    }
+
     /// Derives a widget ID without registering it before a pointer-plan prepass.
     #[must_use]
     pub fn make_id(&self, key: impl Hash) -> WidgetId {

@@ -154,7 +154,7 @@ impl<'a> Ui<'a> {
         Ok(resolved.routes)
     }
 
-    /// Registers an externally derived widget ID for duplicate detection.
+    /// Registers an externally derived widget ID as present and checks duplicates.
     pub fn register_id(&mut self, id: WidgetId) -> WidgetId {
         self.ids.register(id);
         id
@@ -205,6 +205,7 @@ impl<'a> Ui<'a> {
 
     /// Appends one semantic node in traversal order.
     pub fn push_semantic_node(&mut self, mut node: SemanticNode) {
+        self.ids.mark_seen(node.id);
         if let Some(bounds) = self.spatial.project_semantic_rect(node.bounds) {
             node.bounds = bounds;
         } else {
@@ -288,6 +289,7 @@ impl<'a> Ui<'a> {
     /// adapters. Unfocused or spatially invisible widgets cannot acquire text
     /// input ownership through this helper.
     pub fn start_text_input(&mut self, owner: WidgetId, rect: Option<Rect>) -> bool {
+        self.ids.mark_seen(owner);
         if !self.memory.is_focused(owner) {
             return false;
         }
@@ -366,6 +368,13 @@ impl<'a> Ui<'a> {
         }
         if semantic_tree_valid
             && apply_keyboard_focus_traversal(&self.root_input, self.memory, &self.output.semantics)
+        {
+            self.output.request_repaint(RepaintRequest::NextFrame);
+        }
+        let ids = &self.ids;
+        if self
+            .memory
+            .reconcile_widget_owners(|owner| ids.was_seen(owner))
         {
             self.output.request_repaint(RepaintRequest::NextFrame);
         }

@@ -256,6 +256,22 @@ Frame lifecycle:
 15. Redraw scheduling decides whether another frame is needed.
 ```
 
+Normal widget ID registration proves that an immediate-mode widget instance was
+present during the frame and independently participates in duplicate-ID
+diagnostics. Custom semantic nodes and evaluated text-input helpers provide
+non-duplicating presence evidence for their owner. Deriving an ID with
+`make_id` or declaring it in a pointer plan does not prove presence; custom or
+intentionally hidden-but-retained widgets register their externally derived ID
+explicitly.
+
+At `end_frame`, persistent capture, active, pressed, secondary-pressed, drag,
+focus, and text/IME ownership is reconciled against that frame-local presence
+set. A missing pointer owner cancels the whole pointer transaction. Missing
+focus and text owners are cleared, and text removal queues exactly one platform
+stop intent. This cleanup requests a follow-up repaint but never rewrites a
+current-frame response. Disabled, clipped, collapsed, or hidden-but-registered
+widgets are present even when another contract makes them ineligible for input.
+
 Interaction resolution should happen during widget calls, not in a hidden post-pass, unless a specific subsystem requires deferred resolution.
 
 An immediate response cannot discover a visually later overlapping target.
@@ -506,3 +522,8 @@ struct UiMemory {
 ```
 
 Widgets should access memory through controlled runtime APIs rather than directly mutating global structures.
+
+Owner reconciliation clears only runtime ownership handles. It must not prune
+application documents, values, selections, domain drag state, scroll offsets,
+popover state, caches, or async incarnation/liveness state. Reusing a removed
+widget ID later does not restore ownership that cleanup already cleared.

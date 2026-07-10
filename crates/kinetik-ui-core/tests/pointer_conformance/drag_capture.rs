@@ -233,6 +233,7 @@ fn pointer_interaction_focus_loss_cancels_capture_without_synthesizing_drop() {
     harness.set_pointer_position(Point::new(10.0, 10.0));
     harness.pointer_press(MouseButton::Primary);
     let _ = harness.run_frame(|ui| {
+        ui.register_id(retained_focus);
         let source = source_id(ui);
         let (input, memory) = ui.input_and_memory_mut();
         draggable(source, source_rect(), input, memory, false)
@@ -240,6 +241,7 @@ fn pointer_interaction_focus_loss_cancels_capture_without_synthesizing_drop() {
 
     harness.set_pointer_position(Point::new(90.0, 10.0));
     let _ = harness.run_frame(|ui| {
+        ui.register_id(retained_focus);
         let source = source_id(ui);
         let (input, memory) = ui.input_and_memory_mut();
         draggable(source, source_rect(), input, memory, false)
@@ -282,6 +284,7 @@ fn pointer_interaction_focus_loss_clears_capture_without_participating_primitive
     harness.set_pointer_position(Point::new(10.0, 10.0));
     harness.pointer_press(MouseButton::Primary);
     let _ = harness.run_frame(|ui| {
+        ui.register_id(retained_focus);
         let source = source_id(ui);
         let (input, memory) = ui.input_and_memory_mut();
         draggable(source, source_rect(), input, memory, false)
@@ -289,6 +292,7 @@ fn pointer_interaction_focus_loss_clears_capture_without_participating_primitive
 
     harness.set_pointer_position(Point::new(90.0, 10.0));
     let _ = harness.run_frame(|ui| {
+        ui.register_id(retained_focus);
         let source = source_id(ui);
         let (input, memory) = ui.input_and_memory_mut();
         draggable(source, source_rect(), input, memory, false)
@@ -329,6 +333,7 @@ fn pointer_interaction_release_all_clears_capture_without_participating_primitiv
     harness.set_pointer_position(Point::new(10.0, 10.0));
     harness.pointer_press(MouseButton::Primary);
     let _ = harness.run_frame(|ui| {
+        ui.register_id(retained_focus);
         let source = source_id(ui);
         let (input, memory) = ui.input_and_memory_mut();
         draggable(source, source_rect(), input, memory, false)
@@ -336,6 +341,7 @@ fn pointer_interaction_release_all_clears_capture_without_participating_primitiv
 
     harness.set_pointer_position(Point::new(90.0, 10.0));
     let _ = harness.run_frame(|ui| {
+        ui.register_id(retained_focus);
         let source = source_id(ui);
         let (input, memory) = ui.input_and_memory_mut();
         draggable(source, source_rect(), input, memory, false)
@@ -344,6 +350,7 @@ fn pointer_interaction_release_all_clears_capture_without_participating_primitiv
     harness.input_mut().release_pointer_buttons();
     let frame_start_memory = harness
         .run_frame(|ui| {
+            ui.register_id(retained_focus);
             (
                 ui.input().window_focused,
                 ui.memory().pointer_capture(),

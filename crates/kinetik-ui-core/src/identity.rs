@@ -57,7 +57,10 @@ pub struct DuplicateWidgetId {
 #[derive(Debug, Clone)]
 pub struct IdStack {
     stack: Vec<WidgetId>,
+    /// Widget identities proven present during this frame.
     seen: HashSet<WidgetId>,
+    /// Normal registrations used for duplicate diagnostics.
+    registrations: HashSet<WidgetId>,
     duplicates: Vec<DuplicateWidgetId>,
 }
 
@@ -74,6 +77,7 @@ impl IdStack {
         Self {
             stack: vec![WidgetId::from_key("root")],
             seen: HashSet::new(),
+            registrations: HashSet::new(),
             duplicates: Vec::new(),
         }
     }
@@ -120,11 +124,22 @@ impl IdStack {
         result
     }
 
-    /// Registers an ID for duplicate detection.
+    /// Registers an ID as present and tracks duplicate normal registrations.
     pub fn register(&mut self, id: WidgetId) {
-        if !self.seen.insert(id) {
+        self.mark_seen(id);
+        if !self.registrations.insert(id) {
             self.duplicates.push(DuplicateWidgetId { id });
         }
+    }
+
+    /// Marks an ID present without creating a duplicate-registration diagnostic.
+    pub(crate) fn mark_seen(&mut self, id: WidgetId) {
+        self.seen.insert(id);
+    }
+
+    /// Returns whether an ID was proven present during this frame.
+    pub(crate) fn was_seen(&self, id: WidgetId) -> bool {
+        self.seen.contains(&id)
     }
 
     /// Derives and registers an ID from the current scope.
@@ -143,6 +158,7 @@ impl IdStack {
     /// Clears per-frame duplicate tracking while preserving the scope stack.
     pub fn clear_frame_tracking(&mut self) {
         self.seen.clear();
+        self.registrations.clear();
         self.duplicates.clear();
     }
 }
@@ -192,6 +208,21 @@ mod tests {
 
         assert_eq!(stack.duplicates().len(), 1);
         assert_eq!(stack.duplicates()[0].id, id);
+    }
+
+    #[test]
+    fn presence_evidence_is_distinct_from_duplicate_registration() {
+        let mut stack = IdStack::new();
+        let id = stack.make_id("custom");
+
+        stack.mark_seen(id);
+        stack.mark_seen(id);
+
+        assert!(stack.was_seen(id));
+        assert!(stack.duplicates().is_empty());
+        stack.register(id);
+        stack.register(id);
+        assert_eq!(stack.duplicates().len(), 1);
     }
 
     #[test]

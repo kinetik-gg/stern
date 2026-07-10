@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Authorized / Queued |
+| Status | Complete / Accepted; Stage 3 is Authorized / Current |
 | Scope | Shared coordinate, arbitration, and interaction-ownership invariants |
 | Impact / confidence | Critical / High |
 | Campaign prerequisite | Stage 1 gate; campaign authorization recorded |
@@ -29,6 +29,12 @@ All three packets own Z1 and may not run concurrently. `RT-01` must inventory ma
 Go only when deterministic nested-transform/scroll tests show identical geometry for paint, hit, semantics, focus, debug, and IME; clipped children are inert; topmost overlays block underlying interaction; removed widgets retain no interaction/platform ownership; and collection/inspector consumers no longer double-apply offsets.
 
 Each packet receives its own bounded task and checks. An unresolved invariant or public-contract gap is a stop condition; otherwise, record the gate and advance to the already Authorized / Queued Stage 3 without new approval.
+
+`RT-03` uses frame-local widget presence, kept distinct from eligibility and
+duplicate registration, to cancel removed interaction owners at `end_frame`.
+Its independent critic and the integrated Stage 2 gate passed after one
+fixture-only depth-one remedy. Stage 3 is Authorized / Current under the
+continuous campaign authorization.
 
 ## Deferrals
 

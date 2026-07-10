@@ -49,6 +49,8 @@ fn explicit_paint_order_beats_behavior_evaluation_for_hover_press_click_and_curs
 
     harness.pointer_release(MouseButton::Primary);
     let ((base_release, overlay_release), _) = harness.run_frame(|ui| {
+        ui.register_id(base);
+        ui.register_id(overlay);
         ui.resolve_pointer_targets(|plan| {
             plan.target(PointerTarget::new(base, FULL, PointerOrder::new(10)));
             plan.target(PointerTarget::new(overlay, FULL, PointerOrder::new(20)));
@@ -77,6 +79,8 @@ fn overlay_blocker_routes_submenu_and_blocks_viewport_wheel() {
     harness.wheel(Vec2::new(0.0, -30.0));
 
     let ((viewport_response, scroll, submenu_response), _) = harness.run_frame(|ui| {
+        ui.register_id(viewport);
+        ui.register_id(submenu);
         ui.resolve_pointer_targets(|plan| {
             plan.target(
                 PointerTarget::new(viewport, FULL, PointerOrder::new(10)).wheel_owner(viewport),
@@ -174,6 +178,8 @@ fn closed_plan_cancels_non_captured_or_ineligible_owners_before_transition() {
     harness.input_mut().pointer.secondary.released = true;
 
     let ((routes, response), _) = harness.run_frame(|ui| {
+        ui.register_id(lower);
+        ui.register_id(overlay);
         let routes = ui
             .resolve_pointer_targets(|plan| {
                 plan.target(PointerTarget::new(lower, FULL, PointerOrder::new(10)));
@@ -198,6 +204,8 @@ fn closed_plan_cancels_non_captured_or_ineligible_owners_before_transition() {
     harness.memory_mut().capture_pointer(lower);
     harness.memory_mut().activate(lower);
     let (response, _) = harness.run_frame(|ui| {
+        ui.register_id(lower);
+        ui.register_id(overlay);
         ui.resolve_pointer_targets(|plan| {
             plan.target(PointerTarget::new(lower, FULL, PointerOrder::new(10)).enabled(false));
             plan.target(PointerTarget::new(overlay, FULL, PointerOrder::new(20)));
@@ -216,6 +224,7 @@ fn closed_plan_cancels_non_captured_or_ineligible_owners_before_transition() {
     harness.input_mut().pointer.primary.released = true;
     harness.input_mut().pointer.secondary.released = true;
     let (response, _) = harness.run_frame(|ui| {
+        ui.register_id(overlay);
         ui.resolve_pointer_targets(|plan| {
             plan.target(PointerTarget::new(overlay, FULL, PointerOrder::new(20)));
         })
@@ -243,6 +252,7 @@ fn modal_barrier_cancels_lower_owners_and_blocks_click_through() {
     harness.set_pointer_position(Point::new(10.0, 10.0));
     harness.pointer_press(MouseButton::Primary);
     let _ = harness.run_frame(|ui| {
+        ui.register_id(lower);
         let (input, memory) = ui.input_and_memory_mut();
         pressable(lower, FULL, input, memory, false)
     });
@@ -251,6 +261,9 @@ fn modal_barrier_cancels_lower_owners_and_blocks_click_through() {
 
     harness.set_pointer_position(Point::new(50.0, 50.0));
     let ((routes, lower_response, child_response), _) = harness.run_frame(|ui| {
+        ui.register_id(lower);
+        ui.register_id(modal);
+        ui.register_id(child);
         let routes = ui
             .resolve_pointer_targets(|plan| {
                 plan.target(PointerTarget::new(lower, FULL, PointerOrder::new(10)));
@@ -281,6 +294,8 @@ fn modal_barrier_cancels_lower_owners_and_blocks_click_through() {
     harness.pointer_release(MouseButton::Primary);
     harness.set_pointer_position(Point::new(10.0, 10.0));
     let (lower_release, _) = harness.run_frame(|ui| {
+        ui.register_id(lower);
+        ui.register_id(modal);
         ui.resolve_pointer_targets(|plan| {
             plan.target(PointerTarget::new(lower, FULL, PointerOrder::new(10)));
             plan.capture_lower_layers(PointerOrder::new(100));
@@ -314,6 +329,11 @@ fn ordinary_press_wheel_viewport_and_drop_destination_have_independent_routes() 
     harness.wheel(Vec2::new(0.0, -25.0));
 
     let ((routes, outer_scroll, inner_scroll, lower, upper), _) = harness.run_frame(|ui| {
+        ui.register_id(source);
+        ui.register_id(outer);
+        ui.register_id(inner);
+        ui.register_id(lower_drop);
+        ui.register_id(upper_drop);
         let routes = ui
             .resolve_pointer_targets(|plan| {
                 plan.target(PointerTarget::new(
@@ -370,6 +390,8 @@ fn cursor_equivalence_is_non_activating_and_plan_validation_fails_closed() {
     harness.pointer_press(MouseButton::Primary);
 
     let ((behavior_response, alias_response, alias_cursor), _) = harness.run_frame(|ui| {
+        ui.register_id(behavior);
+        ui.register_id(cursor_alias);
         ui.resolve_pointer_targets(|plan| {
             plan.target(
                 PointerTarget::new(behavior, FULL, PointerOrder::new(10))
@@ -424,6 +446,7 @@ fn cursor_equivalence_is_non_activating_and_plan_validation_fails_closed() {
     assert_eq!(harness.memory().pointer_route(), PointerRoute::Blocked);
 
     let (unplanned_response, _) = harness.run_frame(|ui| {
+        ui.register_id(unrelated);
         assert_eq!(ui.memory().pointer_route(), PointerRoute::Unplanned);
         let (input, memory) = ui.input_and_memory_mut();
         pressable(unrelated, FULL, input, memory, false)

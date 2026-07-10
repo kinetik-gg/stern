@@ -18,6 +18,7 @@ fn pointer_interaction_drop_target_reports_active_drag_source_over_target() {
 
     let drop = harness
         .run_frame(|ui| {
+            ui.register_id(source);
             let target = target_id(ui);
             let (input, memory) = ui.input_and_memory_mut();
             drop_target(target, target_rect(), input, memory, false)
@@ -76,6 +77,7 @@ fn pointer_interaction_transformed_drop_target_reports_active_and_released_sourc
 
     let active = harness
         .run_frame(|ui| {
+            ui.register_id(source);
             let target = target_id(ui);
             let (input, memory) = ui.input_and_memory_mut();
             drop_target_transformed(

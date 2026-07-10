@@ -30,6 +30,7 @@ fn harness_runs_two_frames_with_stable_memory() {
     assert_eq!(harness.last_warnings(), None);
 
     let (first_time, first_output) = harness.run_frame(|ui| {
+        ui.register_id(focused);
         ui.memory_mut().focus(focused);
         ui.memory_mut().set_hovered(hovered);
         ui.memory_mut()
@@ -46,6 +47,7 @@ fn harness_runs_two_frames_with_stable_memory() {
 
     harness.advance_frame(Duration::from_millis(16));
     let (second, _) = harness.run_frame(|ui| {
+        ui.register_id(focused);
         (
             ui.context().time,
             ui.memory().focused(),

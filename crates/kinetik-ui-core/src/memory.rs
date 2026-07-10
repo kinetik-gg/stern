@@ -369,6 +369,41 @@ impl UiMemory {
         cancelled
     }
 
+    /// Reconciles persistent interaction ownership against widgets present this frame.
+    pub(crate) fn reconcile_widget_owners(
+        &mut self,
+        is_present: impl Fn(WidgetId) -> bool,
+    ) -> bool {
+        let pointer_owner_missing = [
+            self.pointer_capture,
+            self.active,
+            self.pressed,
+            self.secondary_pressed,
+            self.drag_source,
+        ]
+        .into_iter()
+        .flatten()
+        .any(|owner| !is_present(owner));
+        let focused_owner_missing = self.focused.is_some_and(|owner| !is_present(owner));
+        let text_owner_invalid = self
+            .text_input_owner
+            .is_some_and(|owner| !is_present(owner) || self.focused != Some(owner));
+
+        let mut changed = false;
+        if pointer_owner_missing {
+            changed |= self.cancel_pointer_interaction();
+        }
+        if focused_owner_missing {
+            self.clear_focus();
+            changed = true;
+        }
+        if text_owner_invalid && self.text_input_owner.is_some() {
+            self.clear_text_input_owner();
+            changed = true;
+        }
+        changed
+    }
+
     /// Releases pointer capture when it is held by the provided widget.
     pub fn release_pointer_capture(&mut self, id: WidgetId) {
         if self.pointer_capture == Some(id) {

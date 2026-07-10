@@ -2,7 +2,7 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Stages 0-1 are Complete. Stage 2 is Current / Authorized. Stages 3-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-2 are Complete. Stage 3 is Current / Authorized. Stages 4-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
@@ -314,10 +314,9 @@ than final output including diagnostics emitted afterward.
 
 ## Stage 2: Runtime Foundation
 
-Status: In progress. `RT-01` passed its task gate and independent depth-two
-remedy review. `RT-02` passed its depth-one independent critic and complete
-local gate. `RT-03` and the integrated Stage 2 gate remain pending, so the
-stage is not complete.
+Status: Complete / Accepted. `RT-01`, `RT-02`, and `RT-03` passed their bounded
+critics and complete gates. The integrated Stage 2 gate passed, and Stage 3 is
+Current / Authorized.
 
 ### `RT-01`: scoped coordinates and clipping
 
@@ -423,8 +422,67 @@ compatibility; audited layered components must install a complete pointer plan.
 Unique paint ordinals are a caller contract, although duplicate ordinals or
 conflicting target IDs fail closed. Keyboard modal focus trapping remains an
 overlay/accessibility packet. Owner disappearance in a frame with no installed
-plan remains `RT-03`. Planned scrolling exposes its new offset on the next
-frame and therefore depends on the existing repaint contract.
+plan was deliberately assigned to and completed by `RT-03`. Planned scrolling
+exposes its new offset on the next frame and therefore depends on the existing
+repaint contract.
+
+### `RT-03`: removed-widget ownership reconciliation
+
+#### Changed files
+
+- `crates/kinetik-ui-core/src/{identity,memory}.rs`
+- `crates/kinetik-ui-core/src/runtime/ui.rs`
+- `crates/kinetik-ui-core/tests/harness.rs`
+- `crates/kinetik-ui-core/tests/ownership_reconciliation_conformance.rs`
+- `crates/kinetik-ui-core/tests/focus_keyboard_conformance/support.rs`
+- `crates/kinetik-ui-core/tests/pointer_arbitration_conformance.rs`
+- `crates/kinetik-ui-core/tests/pointer_conformance/{drop_target,drag_capture}.rs`
+- `crates/kinetik-ui-core/tests/runtime_spatial_conformance.rs`
+- `crates/kinetik-ui-widgets/src/ui/frame.rs`
+- `crates/kinetik-ui-widgets/tests/ownership_reconciliation_conformance.rs`
+- `docs/specs/01-foundations.md`
+- `docs/alpha-readiness/{02-runtime-foundation,progress}.md`
+
+#### Reasoning and contract decisions
+
+Separated frame-local widget presence from duplicate-registration accounting.
+Normal IDs and scopes prove both presence and uniqueness, while semantic nodes
+and evaluated text-input helpers can prove presence without manufacturing a
+duplicate warning. Derived IDs and RT-02 pointer plans remain planning-only.
+At frame finalization, one missing capture, active, pressed, secondary-pressed,
+or drag owner cancels the complete pointer transaction. Missing focus and
+text/IME owners clear through the existing pending-stop path, which emits one
+stop for removal and no repeated stop next frame. Cleanup requests repaint and
+does not rewrite immediate responses or prune unrelated retained/application
+state. Disabled, clipped, collapsed, and explicitly registered hidden widgets
+remain present; their eligibility stays governed by RT-01/RT-02 behavior.
+
+#### Tests run and results
+
+- Core ownership reconciliation: 7/7 passed; widget-facade ownership
+  reconciliation: 1/1 passed.
+- Core pointer arbitration: 8/8 passed; core runtime spatial: 9/9 passed; core
+  focus/keyboard: 36/36 passed.
+- Widget pointer arbitration: 1/1 passed; widget runtime spatial: 5/5 passed;
+  widget text-field conformance: 46/46 passed.
+- Core library tests: 154/154 passed. `cargo fmt --all -- --check` and
+  `git diff --check` passed; warning-denied all-target/all-feature Clippy passed
+  for the touched core and widget crates.
+- The depth-one fixture-only remedy made intended cross-frame presence explicit;
+  harness tests passed 13/13 and pointer conformance passed 28/28 without
+  production or expectation changes.
+- The independent critic passed after that depth-one remedy. Full formatting
+  and diff checks, warning-denied workspace Clippy, all-feature workspace tests,
+  build, example checks, and warning-denied documentation for all eight crates
+  passed.
+
+#### Remaining risks and deferred findings
+
+Standalone behavior functions used outside a `Ui` frame cannot participate in
+end-frame reconciliation; framed custom widgets must register their identity.
+Presence deliberately does not define async incarnation, cancellation-token,
+or tombstone policy; those remain `ASYNC-01`. Ordered platform input and shell
+execution remain Stage 3 work under the now-current authorization.
 
 ## Packet Completion Template
 

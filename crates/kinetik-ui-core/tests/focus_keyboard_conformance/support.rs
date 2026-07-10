@@ -177,12 +177,22 @@ pub(crate) fn click_focusable(
     ));
     harness.pointer_press(MouseButton::Primary);
     let _ = harness.run_frame(|ui| {
+        let focused = ui.memory().focused();
+        ui.register_id(id);
+        if let Some(focused) = focused.filter(|focused| *focused != id) {
+            ui.register_id(focused);
+        }
         let (input, memory) = ui.input_and_memory_mut();
         focusable(id, rect, input, memory, disabled)
     });
     harness.pointer_release(MouseButton::Primary);
     harness
         .run_frame(|ui| {
+            let focused = ui.memory().focused();
+            ui.register_id(id);
+            if let Some(focused) = focused.filter(|focused| *focused != id) {
+                ui.register_id(focused);
+            }
             let (input, memory) = ui.input_and_memory_mut();
             focusable(id, rect, input, memory, disabled)
         })
