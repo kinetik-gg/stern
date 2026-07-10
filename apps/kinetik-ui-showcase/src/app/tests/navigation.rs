@@ -95,7 +95,9 @@ fn showcase_docs_reach_s10_s13_review_matrix() {
     }
 
     for required in [
-        "`Partial`",
+        "`Experimental`",
+        "`M/P/I/A11y/PF/LW`",
+        "currently proves only `M`",
         "Editor page",
         "Viewport page",
         "cargo run -p kinetik-ui-showcase -- --dump-review-artifacts s14-s10-s13-matrix",

@@ -6,8 +6,9 @@ bag of decorative primitives.
 
 The S10-S13 catalogue evidence review surface lives in
 [`catalogue-conformance-matrix.md`](catalogue-conformance-matrix.md). It maps
-restarted editor-toolkit capabilities to honest partial status, deterministic
-tests, existing showcase fixtures, and non-goals.
+restarted editor-toolkit capabilities to honest `Experimental` status,
+Model-evidenced deterministic contracts, existing showcase fixtures, and
+explicit non-goals. Fixture reachability alone remains metadata-only evidence.
 
 ## Goals
 

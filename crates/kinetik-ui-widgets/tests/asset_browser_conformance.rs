@@ -61,12 +61,12 @@ mod asset_browser_conformance {
     }
 
     #[test]
-    fn taxonomy_reports_asset_browser_as_partial_collection_contract() {
+    fn taxonomy_reports_asset_browser_as_experimental_collection_contract() {
         let metadata = component_metadata("AssetBrowser").expect("asset browser metadata");
 
         assert_eq!(metadata.slug, "asset-browser");
         assert_eq!(metadata.category, ComponentCategory::Collection);
-        assert_eq!(metadata.status, ComponentConformanceStatus::Partial);
+        assert_eq!(metadata.status, ComponentConformanceStatus::Experimental);
     }
 
     #[test]

@@ -6,7 +6,7 @@ use super::{
 };
 
 #[test]
-fn s10_s11_conformance_matrix_rows_report_partial_data_only_coverage() {
+fn s10_s11_conformance_matrix_rows_report_experimental_data_only_coverage() {
     for (slug, stage, category, component_slug) in [
         (
             "s10-outliner-tree-selection-semantics",
@@ -74,7 +74,7 @@ fn s10_s11_conformance_matrix_rows_report_partial_data_only_coverage() {
         assert_eq!(row.category, category, "{slug} category");
         assert_eq!(
             row.status,
-            ComponentConformanceStatus::Partial,
+            ComponentConformanceStatus::Experimental,
             "{slug} must not claim complete widget behavior"
         );
         assert_eq!(row.component_slug, component_slug, "{slug} component slug");
@@ -93,7 +93,6 @@ fn s10_s11_conformance_matrix_rows_report_partial_data_only_coverage() {
         }
     }
 }
-
 #[test]
 fn s10_s11_matrix_stage_filters_are_exact() {
     let stage_10 = component_conformance_matrix_by_stage(10)
@@ -192,7 +191,7 @@ fn s10_s11_matrix_evidence_points_to_public_contracts_and_tests() {
 }
 
 #[test]
-fn s12_s13_conformance_matrix_rows_report_partial_data_only_coverage() {
+fn s12_s13_conformance_matrix_rows_report_experimental_data_only_coverage() {
     for (slug, stage, category, component_slug) in [
         (
             "s12-viewport-surface-overlays",
@@ -248,7 +247,7 @@ fn s12_s13_conformance_matrix_rows_report_partial_data_only_coverage() {
         assert_eq!(row.category, category, "{slug} category");
         assert_eq!(
             row.status,
-            ComponentConformanceStatus::Partial,
+            ComponentConformanceStatus::Experimental,
             "{slug} must stay honest about incomplete component behavior"
         );
         assert_eq!(row.component_slug, component_slug, "{slug} component slug");
@@ -394,7 +393,7 @@ fn evidence_helpers_resolve_lookup_filters_and_status_metadata() {
     let viewport_evidence = component_evidence_for(viewport)
         .map(|evidence| evidence.id)
         .collect::<BTreeSet<_>>();
-    assert!(viewport_evidence.contains("status.partial-public-contract"));
+    assert!(viewport_evidence.contains("status.experimental-public-surface"));
     assert!(viewport_evidence.contains("stage.12-viewport-tools"));
     assert!(viewport_evidence.contains("conformance.viewport-surface-contracts"));
     assert!(viewport_evidence.contains("showcase.metadata-only"));

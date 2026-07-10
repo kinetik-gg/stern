@@ -6,9 +6,107 @@ use super::evidence::{
     S12_VIEWPORT_OVERLAY_EVIDENCE, S12_VIEWPORT_TOOLS_EVIDENCE, S13_DIAGNOSTIC_STRIP_EVIDENCE,
     S13_FEEDBACK_STACK_EVIDENCE, S13_JOB_LIST_EVIDENCE, S13_PROGRESS_EVIDENCE,
 };
-use super::types::{ComponentCategory, ComponentConformanceMatrixRow};
+use super::types::{
+    ComponentCapabilityAxis, ComponentCapabilityEvidence, ComponentCategory,
+    ComponentConformanceMatrixRow,
+};
 
+use ComponentCapabilityAxis::{Accessibility, Input, LiveWorkflow, Model, Paint, Platform};
 use ComponentCategory::{Collection, Control, Display, System, TextEditing, Viewport};
+
+const WORKFLOW_AXES: &[ComponentCapabilityAxis] =
+    &[Model, Paint, Input, Accessibility, Platform, LiveWorkflow];
+
+const S10_OUTLINER_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.outliner-contracts",
+    )];
+const S10_ASSET_BROWSER_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.asset-browser-contracts",
+    )];
+const S10_INLINE_EDIT_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.inline-edit-contracts",
+    )];
+const S10_COLLECTION_DRAG_CONTEXT_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.collection-drag-context-contracts",
+    )];
+const S10_COLLECTION_PROJECTION_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.collection-projection-contracts",
+    )];
+const S11_TIMELINE_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.timeline-contracts",
+    )];
+const S11_RULER_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.timeline-ruler-contracts",
+    )];
+const S11_TRANSPORT_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.timeline-transport-contracts",
+    )];
+const S11_SNAPPING_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.timeline-snapping-contracts",
+    )];
+const S11_PRESERVATION_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.timeline-preservation-contracts",
+    )];
+const S12_VIEWPORT_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.viewport-surface-contracts",
+    )];
+const S12_VIEWPORT_TOOLS_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.viewport-tool-contracts",
+    )];
+const S12_VIEWPORT_ACTION_ROUTING_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.viewport-action-routing-contracts",
+    )];
+const S12_VIEWPORT_OVERLAY_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.viewport-overlay-contracts",
+    )];
+const S13_PROGRESS_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.progress-indicator-contracts",
+    )];
+const S13_JOB_LIST_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.job-list-contracts",
+    )];
+const S13_DIAGNOSTIC_STRIP_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.diagnostic-strip-contracts",
+    )];
+const S13_FEEDBACK_STACK_CAPABILITY_EVIDENCE: &[ComponentCapabilityEvidence] =
+    &[ComponentCapabilityEvidence::new(
+        Model,
+        "conformance.feedback-stack-contracts",
+    )];
 
 const S10_OUTLINER_CONTRACTS: &[&str] = &[
     "OutlinerModel",
@@ -241,7 +339,7 @@ const S13_FEEDBACK_STACK_TESTS: &[&str] = &[
 
 /// Data-only conformance matrix for restarted editor-toolkit S10-S13 capabilities.
 pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Outliner tree, zones, selection, and semantics",
         "s10-outliner-tree-selection-semantics",
         Collection,
@@ -250,8 +348,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S10_OUTLINER_TESTS,
         S10_OUTLINER_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S10_OUTLINER_CAPABILITY_EVIDENCE)
     .with_component_slug("outliner"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Asset browser grid/list layout and metadata",
         "s10-asset-browser-grid-list-metadata",
         Collection,
@@ -260,8 +360,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S10_ASSET_BROWSER_TESTS,
         S10_ASSET_BROWSER_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S10_ASSET_BROWSER_CAPABILITY_EVIDENCE)
     .with_component_slug("asset-browser"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Inline edit rename lifecycle",
         "s10-inline-edit-rename-lifecycle",
         TextEditing,
@@ -269,8 +371,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S10_INLINE_EDIT_CONTRACTS,
         S10_INLINE_EDIT_TESTS,
         S10_INLINE_EDIT_EVIDENCE,
-    ),
-    ComponentConformanceMatrixRow::partial(
+    )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S10_INLINE_EDIT_CAPABILITY_EVIDENCE),
+    ComponentConformanceMatrixRow::experimental(
         "Collection drag, drop, and context routing",
         "s10-collection-drag-drop-context",
         Collection,
@@ -278,8 +382,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S10_COLLECTION_DRAG_CONTEXT_CONTRACTS,
         S10_COLLECTION_DRAG_CONTEXT_TESTS,
         S10_COLLECTION_DRAG_CONTEXT_EVIDENCE,
-    ),
-    ComponentConformanceMatrixRow::partial(
+    )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S10_COLLECTION_DRAG_CONTEXT_CAPABILITY_EVIDENCE),
+    ComponentConformanceMatrixRow::experimental(
         "Collection filter, sort, and selection preservation",
         "s10-collection-filter-sort-selection-preservation",
         Collection,
@@ -287,8 +393,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S10_COLLECTION_PROJECTION_CONTRACTS,
         S10_COLLECTION_PROJECTION_TESTS,
         S10_COLLECTION_PROJECTION_EVIDENCE,
-    ),
-    ComponentConformanceMatrixRow::partial(
+    )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S10_COLLECTION_PROJECTION_CAPABILITY_EVIDENCE),
+    ComponentConformanceMatrixRow::experimental(
         "Timeline layout, coordinates, selection, and semantics",
         "s11-timeline-layout-coordinate-selection",
         Viewport,
@@ -297,8 +405,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S11_TIMELINE_TESTS,
         S11_TIMELINE_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S11_TIMELINE_CAPABILITY_EVIDENCE)
     .with_component_slug("timeline"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Timeline ruler ticks and timecode labels",
         "s11-ruler-ticks-timecode",
         Viewport,
@@ -307,8 +417,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S11_RULER_TESTS,
         S11_RULER_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S11_RULER_CAPABILITY_EVIDENCE)
     .with_component_slug("ruler"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Timeline transport action controls",
         "s11-transport-action-controls",
         Control,
@@ -317,8 +429,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S11_TRANSPORT_TESTS,
         S11_TRANSPORT_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S11_TRANSPORT_CAPABILITY_EVIDENCE)
     .with_component_slug("transport-controls"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Timeline snapping candidates and resolution",
         "s11-timeline-snapping",
         Viewport,
@@ -327,8 +441,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S11_SNAPPING_TESTS,
         S11_SNAPPING_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S11_SNAPPING_CAPABILITY_EVIDENCE)
     .with_component_slug("timeline"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Timeline interaction state preservation",
         "s11-timeline-preservation",
         Viewport,
@@ -337,8 +453,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S11_PRESERVATION_TESTS,
         S11_PRESERVATION_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S11_PRESERVATION_CAPABILITY_EVIDENCE)
     .with_component_slug("timeline"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Viewport surface, pan/zoom, and overlay hit testing",
         "s12-viewport-surface-overlays",
         Viewport,
@@ -347,8 +465,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S12_VIEWPORT_TESTS,
         S12_VIEWPORT_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S12_VIEWPORT_CAPABILITY_EVIDENCE)
     .with_component_slug("viewport"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Viewport tools and transform manipulators",
         "s12-viewport-tools-transform-handles",
         Viewport,
@@ -357,8 +477,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S12_VIEWPORT_TOOLS_TESTS,
         S12_VIEWPORT_TOOLS_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S12_VIEWPORT_TOOLS_CAPABILITY_EVIDENCE)
     .with_component_slug("viewport-tools"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Viewport action request and cursor routing",
         "s12-viewport-action-routing",
         Viewport,
@@ -367,8 +489,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S12_VIEWPORT_ACTION_ROUTING_TESTS,
         S12_VIEWPORT_ACTION_ROUTING_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S12_VIEWPORT_ACTION_ROUTING_CAPABILITY_EVIDENCE)
     .with_component_slug("viewport-action-routing"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Viewport guides, rulers, safe areas, and HUD metadata",
         "s12-viewport-guides-rulers-safe-areas-hud",
         Viewport,
@@ -377,8 +501,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S12_VIEWPORT_OVERLAY_TESTS,
         S12_VIEWPORT_OVERLAY_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S12_VIEWPORT_OVERLAY_CAPABILITY_EVIDENCE)
     .with_component_slug("viewport"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Progress indicator metadata and active job progress",
         "s13-progress-indicator-metadata",
         Display,
@@ -387,8 +513,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S13_PROGRESS_TESTS,
         S13_PROGRESS_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S13_PROGRESS_CAPABILITY_EVIDENCE)
     .with_component_slug("progress-indicator"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Job list summary, progress, and cancellation metadata",
         "s13-job-list-progress-cancel",
         System,
@@ -397,8 +525,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S13_JOB_LIST_TESTS,
         S13_JOB_LIST_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S13_JOB_LIST_CAPABILITY_EVIDENCE)
     .with_component_slug("job-list"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Diagnostic strip codes, fields, and ordering",
         "s13-diagnostic-strip-codes-fields-ordering",
         System,
@@ -407,8 +537,10 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S13_DIAGNOSTIC_STRIP_TESTS,
         S13_DIAGNOSTIC_STRIP_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S13_DIAGNOSTIC_STRIP_CAPABILITY_EVIDENCE)
     .with_component_slug("diagnostic-strip"),
-    ComponentConformanceMatrixRow::partial(
+    ComponentConformanceMatrixRow::experimental(
         "Feedback stack lifetime, action, and repaint metadata",
         "s13-feedback-stack-lifetime-repaint",
         System,
@@ -417,5 +549,7 @@ pub const COMPONENT_CONFORMANCE_MATRIX: &[ComponentConformanceMatrixRow] = &[
         S13_FEEDBACK_STACK_TESTS,
         S13_FEEDBACK_STACK_EVIDENCE,
     )
+    .with_required_axes(WORKFLOW_AXES)
+    .with_capability_evidence(S13_FEEDBACK_STACK_CAPABILITY_EVIDENCE)
     .with_component_slug("feedback-stack"),
 ];

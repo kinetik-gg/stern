@@ -8,7 +8,7 @@ use super::{
 };
 
 #[test]
-fn stage2_dropdown_partial_status_is_backed_by_public_model_and_lifecycle() {
+fn stage2_dropdown_experimental_status_is_backed_by_public_model_and_lifecycle() {
     let mut model = DropdownModel::from_items([
         item(1, "Source"),
         item(2, "Composite").with_enabled(false),
@@ -70,7 +70,6 @@ fn stage2_dropdown_partial_status_is_backed_by_public_model_and_lifecycle() {
         Some(DropdownItemId::from_raw(2))
     );
 }
-
 #[test]
 fn stage2_slider_and_numeric_input_statuses_are_backed_by_public_contracts() {
     let theme = default_dark_theme();
@@ -175,7 +174,7 @@ fn stage2_radio_button_status_is_backed_by_label_target_group_contract() {
     assert_entry(
         "RadioButton",
         ComponentCategory::Input,
-        ComponentConformanceStatus::Implemented,
+        ComponentConformanceStatus::Experimental,
     );
 
     let theme = default_dark_theme();

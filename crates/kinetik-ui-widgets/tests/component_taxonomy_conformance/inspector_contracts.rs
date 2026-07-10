@@ -10,11 +10,11 @@ use super::{
 };
 
 #[test]
-fn stage2_property_grid_partial_status_is_backed_by_layout_and_row_state_metadata() {
+fn stage2_property_grid_experimental_status_is_backed_by_layout_and_row_state_metadata() {
     assert_entry(
         "PropertyGrid",
         ComponentCategory::Inspector,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 
     let rows = [
@@ -46,13 +46,12 @@ fn stage2_property_grid_partial_status_is_backed_by_layout_and_row_state_metadat
     );
     assert!(!rows[2].is_editable());
 }
-
 #[test]
-fn property_grid_partial_status_includes_affordance_request_contracts() {
+fn property_grid_experimental_status_includes_affordance_request_contracts() {
     assert_entry(
         "PropertyGrid",
         ComponentCategory::Inspector,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 
     let theme = default_dark_theme();
@@ -106,7 +105,7 @@ fn property_grid_status_semantics_include_warning_error_and_info_metadata() {
     assert_entry(
         "PropertyGrid",
         ComponentCategory::Inspector,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 
     let rows = [
