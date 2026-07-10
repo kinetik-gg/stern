@@ -11,24 +11,25 @@ use kinetik_ui_core::{
 use kinetik_ui_text::TextEditState;
 use kinetik_ui_widgets::{
     COMPONENT_CONFORMANCE_MATRIX, COMPONENT_EVIDENCE, COMPONENT_METADATA, ColorFieldConfig,
-    ComponentCategory, ComponentConformanceStatus, ComponentEvidenceCategory, ComponentMetadata,
-    DropdownCloseReason, DropdownItem, DropdownItemId, DropdownModel, DropdownOverlay,
-    EdgeDescriptor, GraphRect, JobList, JobPhase, JobProgress, JobRow, JobRowId, NodeDescriptor,
-    NodeGraphDescriptor, NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget,
-    NodeGraphStaticView, NodeGraphViewport, NodeId, NumericScrubInputConfig, OverlayId,
-    OverlayStack, PanZoom, PanelId, PopoverPlacement, PortDescriptor, PortDirection, PortEndpoint,
-    PortId, PortTypeId, PropertyGridAffordanceLayout, PropertyGridLayout, PropertyGridRow,
-    PropertyGridRowAffordances, PropertyGridRowState, PropertyGridRowStatus,
-    PropertyGridStatusSeverity, RadioGroupChoice, SliderStep, TabStrip, TimelineDescriptor,
-    TimelineFrameRate, TimelineId, TimelineItemDescriptor, TimelineItemId, TimelineLaneDescriptor,
-    TimelineLaneId, TimelineRange, TimelineRulerTickRequest, TimelineSelection,
-    TimelineSelectionTarget, TimelineSnapCandidateRequest, TimelineSnapSource, TimelineZoom,
-    TransportControlIntent, TransportControls, Ui, VectorComponentLayout, VectorScrubInputConfig,
-    ViewportActionDescriptor, ViewportActionKind, ViewportActionRequest, ViewportActionTarget,
-    ViewportCursorMetadata, ViewportCursorRequest, ViewportCursorRequestSource,
-    ViewportCursorShape, ViewportFit, ViewportGuideDescriptor, ViewportGuideId,
-    ViewportGuideOrientation, ViewportGuidePlacement, ViewportOverlayDescriptor, ViewportOverlayId,
-    ViewportOverlayKind, ViewportOverlaySpace, ViewportPanZoomHudDescriptor,
+    ComponentCapabilityAxis, ComponentCapabilityEvidence, ComponentCategory,
+    ComponentConformanceStatus, ComponentConformanceValidationError, ComponentEvidenceCategory,
+    ComponentEvidenceProof, ComponentMetadata, DropdownCloseReason, DropdownItem, DropdownItemId,
+    DropdownModel, DropdownOverlay, EdgeDescriptor, GraphRect, JobList, JobPhase, JobProgress,
+    JobRow, JobRowId, NodeDescriptor, NodeGraphDescriptor, NodeGraphPanZoom, NodeGraphSelection,
+    NodeGraphSelectionTarget, NodeGraphStaticView, NodeGraphViewport, NodeId,
+    NumericScrubInputConfig, OverlayId, OverlayStack, PanZoom, PanelId, PopoverPlacement,
+    PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId, PropertyGridAffordanceLayout,
+    PropertyGridLayout, PropertyGridRow, PropertyGridRowAffordances, PropertyGridRowState,
+    PropertyGridRowStatus, PropertyGridStatusSeverity, RadioGroupChoice, SliderStep, TabStrip,
+    TimelineDescriptor, TimelineFrameRate, TimelineId, TimelineItemDescriptor, TimelineItemId,
+    TimelineLaneDescriptor, TimelineLaneId, TimelineRange, TimelineRulerTickRequest,
+    TimelineSelection, TimelineSelectionTarget, TimelineSnapCandidateRequest, TimelineSnapSource,
+    TimelineZoom, TransportControlIntent, TransportControls, Ui, VectorComponentLayout,
+    VectorScrubInputConfig, ViewportActionDescriptor, ViewportActionKind, ViewportActionRequest,
+    ViewportActionTarget, ViewportCursorMetadata, ViewportCursorRequest,
+    ViewportCursorRequestSource, ViewportCursorShape, ViewportFit, ViewportGuideDescriptor,
+    ViewportGuideId, ViewportGuideOrientation, ViewportGuidePlacement, ViewportOverlayDescriptor,
+    ViewportOverlayId, ViewportOverlayKind, ViewportOverlaySpace, ViewportPanZoomHudDescriptor,
     ViewportRulerDescriptor, ViewportRulerEdge, ViewportRulerId, ViewportSafeAreaDescriptor,
     ViewportSafeAreaId, ViewportSafeAreaSpace, ViewportSurface, ViewportToolDescriptor,
     ViewportToolId, classify_numeric_input_draft, component_conformance_matrix_by_stage,
@@ -37,8 +38,9 @@ use kinetik_ui_widgets::{
     components_by_evidence_category, hit_test_viewport_overlays, numeric_input,
     numeric_scrub_input, property_grid_row_affordance_controls, property_grid_row_affordance_rects,
     property_grid_row_status_semantics, slider_with_step, timeline_snap_candidates,
-    vector4_component_rects, viewport_action_requests, viewport_cursor_request, viewport_guides,
-    viewport_rulers, viewport_safe_areas,
+    validate_component_capability_claim, validate_component_conformance_matrix_row,
+    validate_component_metadata, vector4_component_rects, viewport_action_requests,
+    viewport_cursor_request, viewport_guides, viewport_rulers, viewport_safe_areas,
 };
 
 fn entry(name: &str) -> &'static ComponentMetadata {
@@ -180,6 +182,8 @@ fn viewport_action_and_cursor_contracts(
     (action_requests, cursor_request)
 }
 
+#[path = "component_taxonomy_conformance/capabilities.rs"]
+mod capabilities;
 #[path = "component_taxonomy_conformance/controls.rs"]
 mod controls;
 #[path = "component_taxonomy_conformance/inspector_contracts.rs"]

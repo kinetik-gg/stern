@@ -20,91 +20,90 @@ fn representative_components_report_honest_categories_and_statuses() {
     assert_entry(
         "Button",
         ComponentCategory::Control,
-        ComponentConformanceStatus::Implemented,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "TextField",
         ComponentCategory::TextEditing,
-        ComponentConformanceStatus::Implemented,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "Dock",
         ComponentCategory::Docking,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "Table",
         ComponentCategory::Collection,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "CommandPalette",
         ComponentCategory::Overlay,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "Viewport",
         ComponentCategory::Viewport,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "NodeGraph",
         ComponentCategory::Viewport,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "StatusBar",
         ComponentCategory::System,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 }
-
 #[test]
 fn stage9_basic_components_report_current_conformance_statuses() {
     assert_entry(
         "Label",
         ComponentCategory::Display,
-        ComponentConformanceStatus::Implemented,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "Button",
         ComponentCategory::Control,
-        ComponentConformanceStatus::Implemented,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "IconButton",
         ComponentCategory::Control,
-        ComponentConformanceStatus::Implemented,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "Checkbox",
         ComponentCategory::Input,
-        ComponentConformanceStatus::Implemented,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "RadioButton",
         ComponentCategory::Input,
-        ComponentConformanceStatus::Implemented,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "Toggle",
         ComponentCategory::Input,
-        ComponentConformanceStatus::Implemented,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "Slider",
         ComponentCategory::Input,
-        ComponentConformanceStatus::Implemented,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "Panel",
         ComponentCategory::Docking,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 }
 
 #[test]
-fn stage1_basic_control_matrix_reports_complete_statuses() {
+fn stage1_basic_control_matrix_reports_experimental_statuses() {
     for (name, category) in [
         ("TextField", ComponentCategory::TextEditing),
         ("MultiLineTextField", ComponentCategory::TextEditing),
@@ -118,7 +117,7 @@ fn stage1_basic_control_matrix_reports_complete_statuses() {
         ("Toggle", ComponentCategory::Input),
         ("Slider", ComponentCategory::Input),
     ] {
-        assert_entry(name, category, ComponentConformanceStatus::Implemented);
+        assert_entry(name, category, ComponentConformanceStatus::Experimental);
     }
 }
 
@@ -128,32 +127,32 @@ fn stage2_control_taxonomy_reports_honest_statuses() {
         (
             "Dropdown",
             ComponentCategory::Overlay,
-            ComponentConformanceStatus::Partial,
+            ComponentConformanceStatus::Experimental,
         ),
         (
             "Slider",
             ComponentCategory::Input,
-            ComponentConformanceStatus::Implemented,
+            ComponentConformanceStatus::Experimental,
         ),
         (
             "NumericInput",
             ComponentCategory::Input,
-            ComponentConformanceStatus::Implemented,
+            ComponentConformanceStatus::Experimental,
         ),
         (
             "NumericScrubInput",
             ComponentCategory::Input,
-            ComponentConformanceStatus::Implemented,
+            ComponentConformanceStatus::Experimental,
         ),
         (
             "RadioButton",
             ComponentCategory::Input,
-            ComponentConformanceStatus::Implemented,
+            ComponentConformanceStatus::Experimental,
         ),
         (
             "PropertyGrid",
             ComponentCategory::Inspector,
-            ComponentConformanceStatus::Partial,
+            ComponentConformanceStatus::Experimental,
         ),
     ] {
         assert_entry(name, category, status);
@@ -161,7 +160,7 @@ fn stage2_control_taxonomy_reports_honest_statuses() {
 }
 
 #[test]
-fn stage7_vector_and_color_fields_report_implemented_inspector_statuses() {
+fn stage7_vector_and_color_fields_report_experimental_inspector_statuses() {
     for name in [
         "PropertyAffordanceControls",
         "Vector2Field",
@@ -175,26 +174,26 @@ fn stage7_vector_and_color_fields_report_implemented_inspector_statuses() {
         assert_entry(
             name,
             ComponentCategory::Inspector,
-            ComponentConformanceStatus::Implemented,
+            ComponentConformanceStatus::Experimental,
         );
     }
 }
 
 #[test]
-fn component_taxonomy_conformance_reports_stage6_status_bar_partial() {
+fn component_taxonomy_conformance_reports_stage6_status_bar_experimental() {
     assert_entry(
         "StatusBar",
         ComponentCategory::System,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 }
 
 #[test]
-fn component_taxonomy_conformance_reports_stage6_tabs_partial() {
+fn component_taxonomy_conformance_reports_stage6_tabs_experimental() {
     assert_entry(
         "Tabs",
         ComponentCategory::Docking,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 
     let strip = TabStrip::from_tabs([
@@ -224,20 +223,20 @@ fn component_taxonomy_conformance_reports_stage6_tabs_partial() {
 }
 
 #[test]
-fn component_taxonomy_conformance_reports_stage6_modal_partial() {
+fn component_taxonomy_conformance_reports_stage6_modal_experimental() {
     assert_entry(
         "Modal",
         ComponentCategory::Overlay,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 }
 
 #[test]
-fn stage9_node_graph_taxonomy_reports_partial_status_backed_by_public_contracts() {
+fn stage9_node_graph_taxonomy_reports_experimental_status_backed_by_public_contracts() {
     assert_entry(
         "NodeGraph",
         ComponentCategory::Viewport,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 
     let color = PortTypeId::from_raw(1);
@@ -295,7 +294,7 @@ fn stage9_node_graph_taxonomy_reports_partial_status_backed_by_public_contracts(
 }
 
 #[test]
-fn stage10_to_stage13_entries_report_partial_status_with_evidence_categories() {
+fn stage10_to_stage13_entries_report_experimental_status_with_evidence_categories() {
     for (name, stage, category) in [
         ("Outliner", 10, ComponentCategory::Collection),
         ("AssetBrowser", 10, ComponentCategory::Collection),
@@ -311,26 +310,31 @@ fn stage10_to_stage13_entries_report_partial_status_with_evidence_categories() {
         ("DiagnosticStrip", 13, ComponentCategory::System),
         ("FeedbackStack", 13, ComponentCategory::System),
     ] {
-        assert_stage_entry(name, stage, category, ComponentConformanceStatus::Partial);
+        assert_stage_entry(
+            name,
+            stage,
+            category,
+            ComponentConformanceStatus::Experimental,
+        );
     }
 }
 
 #[test]
-fn stage11_timeline_taxonomy_reports_partial_status_backed_by_public_contracts() {
+fn stage11_timeline_taxonomy_reports_experimental_status_backed_by_public_contracts() {
     assert_entry(
         "Timeline",
         ComponentCategory::Viewport,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "Ruler",
         ComponentCategory::Viewport,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "TransportControls",
         ComponentCategory::Control,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 
     let ticks = TimelineRulerTickRequest::new(
@@ -381,26 +385,26 @@ fn stage11_timeline_taxonomy_reports_partial_status_backed_by_public_contracts()
 }
 
 #[test]
-fn stage12_viewport_taxonomy_reports_partial_status_backed_by_public_contracts() {
+fn stage12_viewport_taxonomy_reports_experimental_status_backed_by_public_contracts() {
     assert_entry(
         "Viewport",
         ComponentCategory::Viewport,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "ViewportTools",
         ComponentCategory::Viewport,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "ViewportActionRouting",
         ComponentCategory::Viewport,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "Ruler",
         ComponentCategory::Viewport,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 
     let mut pan_zoom = PanZoom::default();
@@ -473,31 +477,31 @@ fn stage12_viewport_taxonomy_reports_partial_status_backed_by_public_contracts()
 }
 
 #[test]
-fn stage13_job_progress_taxonomy_reports_partial_status_backed_by_public_contracts() {
+fn stage13_job_progress_taxonomy_reports_experimental_status_backed_by_public_contracts() {
     assert_entry(
         "StatusBar",
         ComponentCategory::System,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "ProgressIndicator",
         ComponentCategory::Display,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "JobList",
         ComponentCategory::System,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "DiagnosticStrip",
         ComponentCategory::System,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
     assert_entry(
         "FeedbackStack",
         ComponentCategory::System,
-        ComponentConformanceStatus::Partial,
+        ComponentConformanceStatus::Experimental,
     );
 
     let jobs = JobList::from_rows([

@@ -5,6 +5,7 @@ mod matrix;
 mod metadata;
 mod queries;
 mod types;
+mod validation;
 
 pub use evidence::COMPONENT_EVIDENCE;
 pub use matrix::COMPONENT_CONFORMANCE_MATRIX;
@@ -15,6 +16,11 @@ pub use queries::{
     components_by_evidence_category,
 };
 pub use types::{
-    ComponentCategory, ComponentConformanceMatrixRow, ComponentConformanceStatus,
-    ComponentEvidence, ComponentEvidenceCategory, ComponentMetadata,
+    ComponentCapabilityAxis, ComponentCapabilityEvidence, ComponentCategory,
+    ComponentConformanceMatrixRow, ComponentConformanceStatus, ComponentEvidence,
+    ComponentEvidenceCategory, ComponentEvidenceProof, ComponentMetadata,
+};
+pub use validation::{
+    ComponentConformanceValidationError, validate_component_capability_claim,
+    validate_component_conformance_matrix_row, validate_component_metadata,
 };
