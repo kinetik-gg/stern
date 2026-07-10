@@ -28,14 +28,7 @@ impl ShowcaseApp {
     /// Parses a page name used by showcase tooling.
     #[must_use]
     pub fn page_from_name(name: &str) -> Option<ShowcasePage> {
-        match name.trim().to_ascii_lowercase().as_str() {
-            "editor" | "engine" | "dcc" | "workbench" => Some(ShowcasePage::Editor),
-            "components" | "component" => Some(ShowcasePage::Components),
-            "layout" | "layouts" => Some(ShowcasePage::Layout),
-            "viewport" | "viewports" => Some(ShowcasePage::Viewport),
-            "systems" | "system" => Some(ShowcasePage::Systems),
-            _ => None,
-        }
+        ShowcasePage::parse(name)
     }
 
     /// Action invocation count.
@@ -147,6 +140,7 @@ impl ShowcaseApp {
 
             if self.page == ShowcasePage::Editor {
                 editor_invocations = self.editor.render(&mut ui, self.action_count);
+                self.editor_nav(&mut ui);
             } else {
                 Self::app_background(&mut ui);
                 self.chrome_nav(&mut ui);

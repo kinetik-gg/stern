@@ -169,29 +169,13 @@ pub fn dump_review_artifacts_to_dir(
 }
 
 fn selected_pages(page: Option<ShowcasePage>) -> Vec<ShowcasePage> {
-    page.map_or_else(all_pages, |page| vec![page])
-}
-
-fn all_pages() -> Vec<ShowcasePage> {
-    vec![
-        ShowcasePage::Editor,
-        ShowcasePage::Components,
-        ShowcasePage::Layout,
-        ShowcasePage::Viewport,
-        ShowcasePage::Systems,
-    ]
+    page.map_or_else(|| ShowcasePage::ALL.to_vec(), |page| vec![page])
 }
 
 /// Stable lowercase page name used by review artifacts.
 #[must_use]
 pub const fn page_name(page: ShowcasePage) -> &'static str {
-    match page {
-        ShowcasePage::Editor => "editor",
-        ShowcasePage::Components => "components",
-        ShowcasePage::Layout => "layout",
-        ShowcasePage::Viewport => "viewport",
-        ShowcasePage::Systems => "systems",
-    }
+    page.slug()
 }
 
 fn manifest_text(
@@ -397,6 +381,13 @@ mod tests {
         let manifest = std::fs::read_to_string(&dump.manifest_path).expect("manifest");
 
         assert_eq!(dump.frames.len(), 5);
+        assert_eq!(
+            dump.frames
+                .iter()
+                .map(|frame| frame.page_name)
+                .collect::<Vec<_>>(),
+            ShowcasePage::ALL.map(ShowcasePage::slug)
+        );
         for frame in &dump.frames {
             assert!(frame.smoke_path.starts_with(&dump.directory));
             assert!(std::fs::metadata(&frame.smoke_path).unwrap().len() > 0);

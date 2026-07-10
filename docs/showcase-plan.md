@@ -23,6 +23,7 @@ explicit non-goals. Fixture reachability alone remains metadata-only evidence.
 
 | Page | Purpose |
 | --- | --- |
+| Editor | Integrated DCC/game-engine workbench proving the toolkit layers compose into a reachable application surface. |
 | Components | Buttons, controls, text fields, list/grid states, tabs, and primitive output. |
 | Layout | Measurement-aware layout, interactive docking, splitter output, and virtualized tables. |
 | Viewport | Texture surfaces, pan/zoom mapping, guides, crosshair overlays, and dynamic surface placeholders. |

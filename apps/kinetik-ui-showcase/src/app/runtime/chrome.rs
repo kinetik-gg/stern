@@ -1,6 +1,6 @@
 use super::super::{
-    Axis, Color, Rect, RepaintRequest, ShowcaseApp, ShowcasePage, Size, Ui, nav_items, page_rect,
-    rect, rect_from_size, rgb, split_leading, text,
+    Axis, Color, Rect, RepaintRequest, ShowcaseApp, ShowcasePage, Size, Ui, editor_nav_bounds,
+    editor_nav_items, nav_items, page_rect, rect, rect_from_size, rgb, split_leading, text,
 };
 
 impl ShowcaseApp {
@@ -83,7 +83,22 @@ impl ShowcaseApp {
             rgb(238, 238, 238),
         );
         text(ui, 20.0, 40.0, "Workbench", 10.0, rgb(150, 160, 164));
-        for (page, item) in nav_items(viewport.width) {
+        self.page_selector(ui, nav_items(viewport.width));
+    }
+
+    pub(in crate::app) fn editor_nav(&mut self, ui: &mut Ui<'_>) {
+        let viewport = rect_from_size(ui.viewport().logical_size);
+        rect(
+            ui,
+            editor_nav_bounds(viewport),
+            rgb(19, 21, 23),
+            Some(rgb(58, 64, 72)),
+        );
+        self.page_selector(ui, editor_nav_items(viewport));
+    }
+
+    fn page_selector<const N: usize>(&mut self, ui: &mut Ui<'_>, items: [(ShowcasePage, Rect); N]) {
+        for (page, item) in items {
             let response = ui.tab_button_value(
                 ("nav", page as u8),
                 item,

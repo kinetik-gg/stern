@@ -11,7 +11,7 @@ use kinetik_ui::{
     render_vello::VelloRenderer,
 };
 use kinetik_ui_showcase::{
-    app::ShowcaseApp,
+    app::{ShowcaseApp, ShowcasePage},
     artifacts::{ReviewDumpRequest, dump_review_artifacts},
     raster::{Pixel, RasterFrame, write_bmp},
 };
@@ -42,25 +42,54 @@ struct RenderOnceTarget {
     scale_factor: f64,
 }
 
+#[derive(Clone, PartialEq, Eq)]
+enum PageArgError {
+    MissingValue,
+    UnknownValue(String),
+}
+
+impl fmt::Debug for PageArgError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, formatter)
+    }
+}
+
+impl fmt::Display for PageArgError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let expected = ShowcasePage::ALL
+            .iter()
+            .map(|page| page.slug())
+            .collect::<Vec<_>>()
+            .join(", ");
+        match self {
+            Self::MissingValue => write!(
+                formatter,
+                "--page requires a page value; expected one of: {expected}"
+            ),
+            Self::UnknownValue(value) => write!(
+                formatter,
+                "unknown --page value '{value}'; expected one of: {expected}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for PageArgError {}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args().collect::<Vec<_>>();
     if args.iter().any(|arg| arg == "--list") {
-        for scenario in kinetik_ui_showcase::all_scenarios() {
-            println!(
-                "{}: {} primitives",
-                scenario.name,
-                scenario.primitives.len()
-            );
-        }
+        print!("{}", showcase_page_list());
         return Ok(());
     }
+    let selected_page = page_arg(&args)?;
 
     if let Some(label) = dump_review_artifacts_label(&args) {
         let target = render_once_target(&args)?;
         let mut request =
             ReviewDumpRequest::new(label, target.physical_width, target.physical_height)
                 .with_logical_size(target.logical_size);
-        if let Some(page) = page_arg(&args).and_then(ShowcaseApp::page_from_name) {
+        if let Some(page) = selected_page {
             request = request.with_page(page);
         }
 
@@ -83,7 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let target = render_once_target(&args)?;
         let mut app = ShowcaseApp::new();
         app.set_viewport_size(target.logical_size);
-        if let Some(page) = page_arg(&args).and_then(ShowcaseApp::page_from_name) {
+        if let Some(page) = selected_page {
             app.set_page(page);
         }
 
@@ -97,8 +126,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    live::run(page_arg(&args).and_then(ShowcaseApp::page_from_name))?;
+    live::run(selected_page)?;
     Ok(())
+}
+
+fn showcase_page_list() -> String {
+    let mut output = ShowcasePage::ALL
+        .iter()
+        .map(|page| page.slug())
+        .collect::<Vec<_>>()
+        .join("\n");
+    output.push('\n');
+    output
 }
 
 fn render_once_path(args: &[String]) -> Option<&str> {
@@ -111,9 +150,16 @@ fn dump_review_artifacts_label(args: &[String]) -> Option<&str> {
         .find_map(|window| (window[0] == "--dump-review-artifacts").then_some(window[1].as_str()))
 }
 
-fn page_arg(args: &[String]) -> Option<&str> {
-    args.windows(2)
-        .find_map(|window| (window[0] == "--page").then_some(window[1].as_str()))
+fn page_arg(args: &[String]) -> Result<Option<ShowcasePage>, PageArgError> {
+    let Some(index) = args.iter().position(|arg| arg == "--page") else {
+        return Ok(None);
+    };
+    let Some(value) = args.get(index + 1).filter(|value| !value.starts_with('-')) else {
+        return Err(PageArgError::MissingValue);
+    };
+    ShowcasePage::parse(value)
+        .map(Some)
+        .ok_or_else(|| PageArgError::UnknownValue(value.clone()))
 }
 
 fn usize_arg(args: &[String], name: &str) -> Option<usize> {
@@ -434,12 +480,76 @@ impl From<vello::Error> for RenderOnceVelloError {
 #[cfg(test)]
 mod tests {
     use super::{
-        Size, align_to, dump_review_artifacts_label, f64_arg, logical_size_from_pixels,
-        render_once_target, render_once_viewport, showcase_antialiasing_method,
-        submit_render_once_to_vello, usize_arg,
+        PageArgError, ShowcasePage, Size, align_to, dump_review_artifacts_label, f64_arg,
+        logical_size_from_pixels, page_arg, render_once_target, render_once_viewport,
+        showcase_antialiasing_method, showcase_page_list, submit_render_once_to_vello, usize_arg,
     };
     use kinetik_ui_showcase::app::ShowcaseApp;
     use vello::AaConfig;
+
+    #[test]
+    fn showcase_cli_list_matches_canonical_page_catalogue() {
+        assert_eq!(
+            showcase_page_list(),
+            "editor\ncomponents\nlayout\nviewport\nsystems\n"
+        );
+    }
+
+    #[test]
+    fn showcase_cli_page_parser_accepts_every_canonical_slug() {
+        for page in ShowcasePage::ALL {
+            let args = [
+                "showcase".to_owned(),
+                "--page".to_owned(),
+                page.slug().to_owned(),
+            ];
+            assert_eq!(page_arg(&args), Ok(Some(page)));
+        }
+    }
+
+    #[test]
+    fn showcase_cli_page_parser_rejects_missing_and_unknown_values() {
+        let missing = ["showcase".to_owned(), "--page".to_owned()];
+        let followed_by_flag = [
+            "showcase".to_owned(),
+            "--page".to_owned(),
+            "--render-once".to_owned(),
+            "frame.bmp".to_owned(),
+        ];
+        let unknown = [
+            "showcase".to_owned(),
+            "--page".to_owned(),
+            "dashboard".to_owned(),
+        ];
+
+        assert_eq!(page_arg(&missing), Err(PageArgError::MissingValue));
+        assert_eq!(page_arg(&followed_by_flag), Err(PageArgError::MissingValue));
+        assert_eq!(
+            page_arg(&unknown),
+            Err(PageArgError::UnknownValue("dashboard".to_owned()))
+        );
+        assert_eq!(
+            page_arg(&missing).unwrap_err().to_string(),
+            "--page requires a page value; expected one of: editor, components, layout, viewport, systems"
+        );
+        assert_eq!(
+            page_arg(&unknown).unwrap_err().to_string(),
+            "unknown --page value 'dashboard'; expected one of: editor, components, layout, viewport, systems"
+        );
+        assert_eq!(
+            format!("{:?}", page_arg(&missing).unwrap_err()),
+            "--page requires a page value; expected one of: editor, components, layout, viewport, systems"
+        );
+    }
+
+    #[test]
+    fn showcase_cli_page_parser_preserves_default_editor_when_absent() {
+        let args = ["showcase".to_owned()];
+        let app = ShowcaseApp::new();
+
+        assert_eq!(page_arg(&args), Ok(None));
+        assert_eq!(app.page(), ShowcasePage::Editor);
+    }
 
     #[test]
     fn render_once_cli_parses_physical_scale_and_dimensions() {

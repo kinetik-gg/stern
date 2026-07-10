@@ -67,13 +67,49 @@ enum DockSplitDemoState {
 }
 
 impl ShowcasePage {
-    fn label(self) -> &'static str {
+    /// Every showcase page in canonical navigation and tooling order.
+    pub const ALL: [Self; 5] = [
+        Self::Editor,
+        Self::Components,
+        Self::Layout,
+        Self::Viewport,
+        Self::Systems,
+    ];
+
+    /// Stable lowercase page slug used by command-line tools and artifacts.
+    #[must_use]
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Self::Editor => "editor",
+            Self::Components => "components",
+            Self::Layout => "layout",
+            Self::Viewport => "viewport",
+            Self::Systems => "systems",
+        }
+    }
+
+    /// Human-readable page label used by showcase navigation.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Editor => "Editor",
             Self::Components => "Components",
             Self::Layout => "Layout",
             Self::Viewport => "Viewport",
             Self::Systems => "Systems",
+        }
+    }
+
+    /// Parses a canonical slug or label, including compatibility aliases.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "editor" | "engine" | "dcc" | "workbench" => Some(Self::Editor),
+            "components" | "component" => Some(Self::Components),
+            "layout" | "layouts" => Some(Self::Layout),
+            "viewport" | "viewports" => Some(Self::Viewport),
+            "systems" | "system" => Some(Self::Systems),
+            _ => None,
         }
     }
 }
@@ -205,23 +241,52 @@ fn showcase_action_router() -> ActionRouter {
     router
 }
 
-fn nav_items(viewport_width: f32) -> [(ShowcasePage, Rect); 4] {
-    let (start, widths) = if viewport_width >= 940.0 {
-        (360.0, [132.0, 92.0, 112.0, 112.0])
+fn nav_items(viewport_width: f32) -> [(ShowcasePage, Rect); 5] {
+    let (start, widths, gap) = if viewport_width >= 940.0 {
+        (300.0, [72.0, 122.0, 82.0, 104.0, 92.0], 10.0)
     } else {
-        (180.0, [112.0, 82.0, 98.0, 90.0])
+        (170.0, [60.0, 96.0, 66.0, 84.0, 72.0], 8.0)
     };
-    let gap = 10.0;
-    let components = Rect::new(start, 12.0, widths[0], 28.0);
-    let layout = Rect::new(components.max_x() + gap, 12.0, widths[1], 28.0);
-    let viewport = Rect::new(layout.max_x() + gap, 12.0, widths[2], 28.0);
-    let systems = Rect::new(viewport.max_x() + gap, 12.0, widths[3], 28.0);
-    [
-        (ShowcasePage::Components, components),
-        (ShowcasePage::Layout, layout),
-        (ShowcasePage::Viewport, viewport),
-        (ShowcasePage::Systems, systems),
-    ]
+    let mut x = start;
+    std::array::from_fn(|index| {
+        let item = (
+            ShowcasePage::ALL[index],
+            Rect::new(x, 12.0, widths[index], 28.0),
+        );
+        x += widths[index] + gap;
+        item
+    })
+}
+
+fn editor_nav_bounds(viewport: Rect) -> Rect {
+    let width = viewport.width.min(408.0);
+    let height = viewport.height.min(24.0);
+    Rect::new(
+        viewport.x + (viewport.width - width).max(0.0) * 0.5,
+        viewport.max_y() - height,
+        width,
+        height,
+    )
+}
+
+fn editor_nav_items(viewport: Rect) -> [(ShowcasePage, Rect); 5] {
+    let bounds = editor_nav_bounds(viewport);
+    let scale = bounds.width / 408.0;
+    let widths = [56.0, 104.0, 64.0, 84.0, 76.0];
+    let gap = 4.0 * scale;
+    let horizontal_padding = 4.0 * scale;
+    let vertical_padding = (bounds.height / 12.0).min(2.0);
+    let item_height = (bounds.height - vertical_padding * 2.0).max(0.0);
+    let mut x = bounds.x + horizontal_padding;
+    std::array::from_fn(|index| {
+        let width = widths[index] * scale;
+        let item = (
+            ShowcasePage::ALL[index],
+            Rect::new(x, bounds.y + vertical_padding, width, item_height),
+        );
+        x += width + gap;
+        item
+    })
 }
 
 fn static_render_resources() -> RenderResources {
