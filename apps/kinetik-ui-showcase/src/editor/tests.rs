@@ -3,8 +3,10 @@
 use std::{collections::HashSet, time::Duration};
 
 use super::{
-    ACTION_BUILD, ACTION_EXPORT, ACTION_GRID, ACTION_PALETTE, ACTION_PAUSE, ACTION_PLAY,
-    ACTION_SAVE, ACTION_STOP, ACTION_VIEWPORT_ACTUAL_SIZE, ACTION_VIEWPORT_FIT_CONTENT,
+    ABOUT_MODAL_DIALOG_TITLE, ABOUT_MODAL_PRODUCT_TITLE, ABOUT_MODAL_READINESS,
+    ABOUT_MODAL_VERSION, ACTION_ABOUT, ACTION_ABOUT_CLOSE, ACTION_BUILD, ACTION_DOCS,
+    ACTION_EXPORT, ACTION_GRID, ACTION_PALETTE, ACTION_PAUSE, ACTION_PLAY, ACTION_SAVE,
+    ACTION_STOP, ACTION_VIEWPORT_ACTUAL_SIZE, ACTION_VIEWPORT_FIT_CONTENT,
     ACTION_VIEWPORT_FIT_SELECTION, ACTION_VIEWPORT_FOCUS_SELECTED, ACTION_VIEWPORT_PAN,
     ACTION_VIEWPORT_ZOOM_IN, ACTION_VIEWPORT_ZOOM_OUT, EditorChromeMetrics, EditorMenuKind,
     EditorShowcase, EditorStatusItemKind, EditorTool, EditorToolbarGroupKind, FRAME_BOTTOM,
@@ -13,10 +15,10 @@ use super::{
     register_resources, rgb, rgba,
 };
 use kinetik_ui::core::{
-    ActionContext, ActionDescriptor, ActionId, ActionSource, Brush, CursorShape, FrameContext,
-    PhysicalSize, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect,
-    RepaintRequest, ScaleFactor, SemanticActionKind, SemanticRole, Size, TimeInfo, UiInput,
-    UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    ActionContext, ActionDescriptor, ActionId, ActionSource, Brush, CursorShape, FrameContext, Key,
+    KeyEvent, KeyState, Modifiers, PhysicalSize, PlatformRequest, Point, PointerButtonState,
+    PointerInput, Primitive, Rect, RepaintRequest, ScaleFactor, SemanticActionKind, SemanticRole,
+    Size, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use kinetik_ui::render::RenderResources;
 use kinetik_ui::widgets::{

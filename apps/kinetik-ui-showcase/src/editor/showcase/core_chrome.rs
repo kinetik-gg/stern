@@ -35,6 +35,8 @@ impl EditorShowcase {
                 status.clone_into(&mut self.status);
                 true
             }
+            ACTION_ABOUT => self.open_about_modal(),
+            ACTION_ABOUT_CLOSE => self.close_about_modal(),
             ACTION_TOOL_SELECT => self.select_tool(EditorTool::Select),
             ACTION_TOOL_MOVE => self.select_tool(EditorTool::Move),
             ACTION_TOOL_ROTATE => self.select_tool(EditorTool::Rotate),
@@ -53,15 +55,38 @@ impl EditorShowcase {
             ui.viewport().logical_size.height,
         );
         let mut invocations = Vec::new();
+        if self.about_modal_open {
+            self.about_modal_input(ui, viewport, &mut invocations);
+        }
         Self::background(ui, viewport);
         self.dismiss_menu_for_input(ui, viewport);
         self.tool_bar(ui, viewport, &mut invocations);
         self.menu_bar(ui, viewport);
         self.workspace(ui, viewport);
         self.menu_overlay(ui, viewport, &mut invocations);
-        let _modal_metadata = self.about_modal_overlay_model(viewport);
         self.status_bar(ui, viewport, action_count + invocations.len() as u32);
+        if self.about_modal_open {
+            let overlay = self.about_modal_overlay_model(viewport);
+            Self::paint_about_modal(ui, viewport, &overlay);
+        }
         invocations
+    }
+
+    fn open_about_modal(&mut self) -> bool {
+        if !self.about_modal_open {
+            self.about_modal_open = true;
+            self.open_menu = None;
+            "About Kinetik Forge open".clone_into(&mut self.status);
+        }
+        true
+    }
+
+    fn close_about_modal(&mut self) -> bool {
+        if self.about_modal_open {
+            self.about_modal_open = false;
+            "About Kinetik Forge closed".clone_into(&mut self.status);
+        }
+        true
     }
 
     pub(super) fn select_tool(&mut self, tool: EditorTool) -> bool {
@@ -297,16 +322,15 @@ impl EditorShowcase {
     }
 
     pub(super) fn about_modal_overlay_model(&self, viewport: Rect) -> ModalDialogOverlay {
-        let _ = self;
-        let dialog = ModalDialog::new(WidgetId::from_raw(40_001), "About Kinetik Forge")
-            .with_body("Kinetik Forge editor showcase chrome is action-driven and data-only.")
+        let dialog = ModalDialog::new(WidgetId::from_raw(40_001), ABOUT_MODAL_DIALOG_TITLE)
+            .with_body(format!("{ABOUT_MODAL_VERSION}\n{ABOUT_MODAL_READINESS}"))
             .with_actions([
                 ModalAction::new(
-                    modal_action(ACTION_DOCS, "Open Docs (Experimental)", false),
+                    modal_action(ACTION_DOCS, "Documentation (Experimental)", false),
                     ModalActionRole::Primary,
                 ),
                 ModalAction::new(
-                    modal_action(ACTION_ABOUT_CLOSE, "Close (Experimental)", false),
+                    modal_action(ACTION_ABOUT_CLOSE, "Close", self.about_modal_open),
                     ModalActionRole::Cancel,
                 ),
             ]);
@@ -324,6 +348,163 @@ impl EditorShowcase {
             OverlayDismissal::OutsideClickOrEscape,
             ActionContext::Editor,
         )
+    }
+
+    #[cfg(test)]
+    pub(super) fn about_modal_close_rect(&self, viewport: Rect) -> Rect {
+        about_modal_close_rect(self.about_modal_overlay_model(viewport).entry.rect)
+    }
+
+    fn about_modal_input(
+        &mut self,
+        ui: &mut Ui<'_>,
+        viewport: Rect,
+        invocations: &mut Vec<EditorInvocation>,
+    ) {
+        let overlay = self.about_modal_overlay_model(viewport);
+        let close = ui.pressable(
+            "editor.about-modal.close",
+            about_modal_close_rect(overlay.entry.rect),
+            false,
+        );
+
+        // Resolve the modal surface and guard before any editor controls. The
+        // first pointer press is therefore captured by the modal layer and its
+        // release cannot activate a control underneath it.
+        let _surface = ui.pressable(
+            "editor.about-modal.surface",
+            overlay.entry.rect,
+            false,
+        );
+        let _guard = ui.pressable("editor.about-modal.guard", viewport, false);
+
+        let escape_pressed = ui
+            .input()
+            .keyboard
+            .events
+            .iter()
+            .any(|event| event.state == KeyState::Pressed && matches!(event.key, Key::Escape));
+        let outside_activation = ui.input().pointer.position.filter(|point| {
+            ui.input().pointer.primary.released && !overlay.entry.rect.contains_point(*point)
+        });
+        let mut stack = OverlayStack::new();
+        overlay.open_in(&mut stack);
+
+        if close.clicked {
+            self.trigger(invocations, ACTION_ABOUT_CLOSE, ActionSource::Button);
+            ui.request_repaint(RepaintRequest::NextFrame);
+        } else if overlay
+            .dismissal_request(&stack, outside_activation, escape_pressed)
+            .is_some()
+            && self.close_about_modal()
+        {
+            ui.request_repaint(RepaintRequest::NextFrame);
+        }
+    }
+
+    fn paint_about_modal(ui: &mut Ui<'_>, viewport: Rect, overlay: &ModalDialogOverlay) {
+        let dialog = overlay.entry.rect;
+        let docs = about_modal_docs_rect(dialog);
+        let close = about_modal_close_rect(dialog);
+
+        rect_fill(
+            ui,
+            viewport,
+            rgba(0, 0, 0, 0.68),
+            None,
+            CornerRadius::all(0.0),
+        );
+        rect_fill(
+            ui,
+            dialog.translate(Vec2::new(0.0, 5.0)),
+            rgba(0, 0, 0, 0.55),
+            None,
+            CornerRadius::all(8.0),
+        );
+        rect_fill(
+            ui,
+            dialog,
+            rgb(31, 34, 40),
+            Some(rgb(82, 88, 100)),
+            CornerRadius::all(8.0),
+        );
+        rect_fill(
+            ui,
+            Rect::new(dialog.x, dialog.y, 4.0, dialog.height),
+            rgb(70, 132, 236),
+            None,
+            CornerRadius::all(8.0),
+        );
+        text(
+            ui,
+            dialog.x + 24.0,
+            dialog.y + 32.0,
+            &overlay.dialog.title,
+            18.0,
+            rgb(240, 243, 248),
+        );
+        text(
+            ui,
+            dialog.x + 24.0,
+            dialog.y + 59.0,
+            ABOUT_MODAL_PRODUCT_TITLE,
+            13.0,
+            rgb(204, 210, 220),
+        );
+        text(
+            ui,
+            dialog.x + 24.0,
+            dialog.y + 82.0,
+            ABOUT_MODAL_VERSION,
+            11.0,
+            rgb(160, 168, 181),
+        );
+        text(
+            ui,
+            dialog.x + 24.0,
+            dialog.y + 102.0,
+            ABOUT_MODAL_READINESS,
+            11.0,
+            rgb(235, 185, 92),
+        );
+
+        let documentation = overlay
+            .visible_action_by_role(ModalActionRole::Primary)
+            .expect("About modal declares Documentation");
+        rect_fill(
+            ui,
+            docs,
+            rgb(39, 42, 48),
+            Some(rgb(62, 66, 75)),
+            CornerRadius::all(4.0),
+        );
+        text(
+            ui,
+            docs.x + 10.0,
+            docs.y + 18.0,
+            &documentation.action.label,
+            10.0,
+            rgb(104, 110, 121),
+        );
+
+        let cancel = overlay
+            .visible_action_by_role(ModalActionRole::Cancel)
+            .expect("About modal declares Close");
+        rect_fill(
+            ui,
+            close,
+            rgb(45, 110, 230),
+            Some(rgb(86, 145, 244)),
+            CornerRadius::all(4.0),
+        );
+        text(
+            ui,
+            close.x + 20.0,
+            close.y + 18.0,
+            &cancel.action.label,
+            11.0,
+            rgb(244, 247, 252),
+        );
     }
 
     pub(super) fn background(ui: &mut Ui<'_>, viewport: Rect) {
@@ -439,4 +620,12 @@ impl EditorShowcase {
         }
     }
 
+}
+
+fn about_modal_docs_rect(dialog: Rect) -> Rect {
+    Rect::new(dialog.x + 24.0, dialog.max_y() - 38.0, 174.0, 26.0)
+}
+
+fn about_modal_close_rect(dialog: Rect) -> Rect {
+    Rect::new(dialog.max_x() - 96.0, dialog.max_y() - 38.0, 72.0, 26.0)
 }

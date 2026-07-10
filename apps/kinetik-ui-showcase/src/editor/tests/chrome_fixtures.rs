@@ -325,8 +325,6 @@ fn showcase_action_truth_apply_action_rejects_every_unfinished_outcome() {
         ACTION_PALETTE,
         super::ACTION_DOCS,
         super::ACTION_KEYBOARD_SHORTCUTS,
-        super::ACTION_ABOUT,
-        super::ACTION_ABOUT_CLOSE,
     ] {
         let mut editor = EditorShowcase::new();
         let before = editor.status.clone();
@@ -696,10 +694,43 @@ fn editor_viewport_tool_fixture_exercises_app_owned_action_routing() {
 }
 
 #[test]
-fn editor_chrome_modal_contract_exposes_data_only_action_metadata() {
-    let editor = EditorShowcase::new();
+fn showcase_about_modal_action_truth_and_open_is_idempotent() {
+    let mut editor = EditorShowcase::new();
     let viewport = Rect::new(0.0, 0.0, 1440.0, 900.0);
-    let before = editor.status.clone();
+    let help = editor.menu_model(EditorMenuKind::Help);
+    let help_actions = help
+        .visible_items()
+        .into_iter()
+        .filter_map(|item| match item {
+            MenuItem::Action(action) => Some(action),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let about = help_actions
+        .iter()
+        .find(|action| action.id.as_str() == ACTION_ABOUT)
+        .expect("Help menu declares About");
+    let documentation = help_actions
+        .iter()
+        .find(|action| action.id.as_str() == ACTION_DOCS)
+        .expect("Help menu declares Documentation");
+
+    assert_ne!(about.id, documentation.id);
+    assert_eq!(about.label, ABOUT_MODAL_DIALOG_TITLE);
+    assert!(about.can_invoke());
+    assert_eq!(about.shortcut, None);
+    assert_eq!(documentation.label, "Online Docs (Experimental)");
+    assert!(!documentation.can_invoke());
+    assert_eq!(documentation.shortcut, None);
+    assert!(!editor.apply_action(ACTION_DOCS));
+
+    assert!(editor.apply_action(ACTION_ABOUT));
+    assert!(editor.about_modal_open);
+    let opened_status = editor.status.clone();
+    assert!(editor.apply_action(ACTION_ABOUT));
+    assert!(editor.about_modal_open);
+    assert_eq!(editor.status, opened_status);
+
     let overlay = editor.about_modal_overlay_model(viewport);
 
     assert_eq!(overlay.entry.kind, OverlayKind::Modal);
@@ -709,33 +740,46 @@ fn editor_chrome_modal_contract_exposes_data_only_action_metadata() {
         OverlayDismissal::OutsideClickOrEscape
     );
     assert_eq!(overlay.context, ActionContext::Editor);
-    assert_eq!(overlay.dialog.title, "About Kinetik Forge");
-    assert_eq!(overlay.visible_actions().len(), 2);
+    assert_eq!(overlay.dialog.title, ABOUT_MODAL_DIALOG_TITLE);
+    let expected_body = format!("{ABOUT_MODAL_VERSION}\n{ABOUT_MODAL_READINESS}");
     assert_eq!(
-        overlay
-            .visible_action_by_role(ModalActionRole::Cancel)
-            .expect("cancel action")
-            .action
-            .label,
-        "Close (Experimental)"
+        overlay.dialog.body.as_ref().map(|body| body.text.as_str()),
+        Some(expected_body.as_str())
     );
-
-    assert!(
-        overlay
-            .visible_actions()
-            .iter()
-            .all(|action| !action.action.can_invoke()
-                && action.action.label.ends_with(" (Experimental)")
-                && action.action.shortcut.is_none())
-    );
+    assert_eq!(overlay.visible_actions().len(), 2);
+    let modal_documentation = overlay
+        .visible_action_by_role(ModalActionRole::Primary)
+        .expect("Documentation action");
+    let close = overlay
+        .visible_action_by_role(ModalActionRole::Cancel)
+        .expect("Close action");
+    assert_eq!(modal_documentation.action.id.as_str(), ACTION_DOCS);
+    assert_eq!(modal_documentation.action.label, "Documentation (Experimental)");
+    assert!(!modal_documentation.can_invoke());
+    assert_eq!(modal_documentation.action.shortcut, None);
+    assert_eq!(close.action.id.as_str(), ACTION_ABOUT_CLOSE);
+    assert_eq!(close.action.label, "Close");
+    assert!(close.can_invoke());
+    assert_eq!(close.action.shortcut, None);
     assert!(
         overlay
             .invocation_for_role(ModalActionRole::Primary)
             .is_none()
     );
+    assert_eq!(
+        overlay
+            .invocation_for_role(ModalActionRole::Cancel)
+            .expect("Close invokes")
+            .action_id,
+        ActionId::new(ACTION_ABOUT_CLOSE)
+    );
     assert_ne!(
         overlay.visible_actions()[0].action.id,
         overlay.visible_actions()[1].action.id
     );
-    assert_eq!(editor.status, before);
+    assert!(editor.apply_action(ACTION_ABOUT_CLOSE));
+    assert!(!editor.about_modal_open);
+    let closed_status = editor.status.clone();
+    assert!(editor.apply_action(ACTION_ABOUT_CLOSE));
+    assert_eq!(editor.status, closed_status);
 }

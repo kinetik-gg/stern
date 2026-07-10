@@ -361,10 +361,10 @@ impl EditorShowcase {
                 MenuItem::Separator,
                 menu_action(
                     ACTION_ABOUT,
-                    "About Kinetik Forge (Experimental)",
+                    "About Kinetik Forge",
                     None,
                     None,
-                    false,
+                    true,
                 ),
             ]),
         }
