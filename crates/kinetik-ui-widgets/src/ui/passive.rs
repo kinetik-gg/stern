@@ -177,22 +177,34 @@ impl Ui<'_> {
         f: impl FnOnce(&mut Self, Vec2) -> T,
     ) -> ScrollAreaOutput<T> {
         let id = self.id(key);
+        let frame_offset = kinetik_ui_core::clamp_scroll_offset(
+            self.runtime.memory().scroll_offset(id),
+            rect.size(),
+            content_size,
+        );
+        let freeze_offset =
+            self.runtime.memory().pointer_wheel_route() != kinetik_ui_core::PointerRoute::Unplanned;
         let (input, memory) = self.runtime.input_and_memory_mut();
         let scroll = scrollable(id, rect, content_size, input, memory, disabled);
         if scroll.delta != Vec2::ZERO {
             self.runtime.request_repaint(RepaintRequest::NextFrame);
         }
+        let content_offset = if freeze_offset {
+            frame_offset
+        } else {
+            scroll.offset
+        };
         let clip = ClipId::from_raw(id.raw());
 
         self.runtime
             .push_semantic_node(panel_semantics(id, rect, "Scroll area"));
         self.primitive(Primitive::ClipBegin { id: clip, rect });
         self.primitive(Primitive::TransformBegin(Transform::translation(
-            Vec2::new(-scroll.offset.x, -scroll.offset.y),
+            Vec2::new(-content_offset.x, -content_offset.y),
         )));
         self.runtime
             .push_id_scope(("scroll_area_content", id.raw()));
-        let inner = f(self, scroll.offset);
+        let inner = f(self, content_offset);
         self.runtime.pop_id_scope();
         self.primitive(Primitive::TransformEnd);
         self.primitive(Primitive::ClipEnd { id: clip });

@@ -56,7 +56,7 @@ pub use layout::{
 pub use liveness::{
     LivenessGeneration, LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus,
 };
-pub use memory::UiMemory;
+pub use memory::{PointerRoute, PointerRoutes, UiMemory};
 pub use observers::{
     ObserverDelivery, ObserverDeliverySkipReason, ObserverDeliveryStatus, ObserverDrain,
     ObserverNotification, ObserverNotificationId, ObserverPublishStatus, ObserverRegistry,
@@ -72,8 +72,8 @@ pub use render::{
     TextureId, TexturePrimitive, Transform,
 };
 pub use runtime::{
-    CursorShape, FrameContext, FrameOutput, FrameWarning, PlatformRequest, RepaintRequest,
-    TimeInfo, Ui, ViewportInfo,
+    CursorShape, FrameContext, FrameOutput, FrameWarning, PlatformRequest, PointerOrder,
+    PointerPlanError, PointerTarget, PointerTargetPlan, RepaintRequest, TimeInfo, Ui, ViewportInfo,
 };
 pub use test_harness::{
     FrameTrace, HarnessPhase, ScriptedInput, ScriptedKeyEvent, SettlePendingCause, SettleResult,

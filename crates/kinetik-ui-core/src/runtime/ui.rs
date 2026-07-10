@@ -13,6 +13,7 @@ use super::focus::{
     apply_window_focus_text_blur,
 };
 use super::output::FrameOutput;
+use super::pointer::{PointerPlanError, PointerTargetPlan};
 use super::primitive_stack::validate_primitive_stack;
 use super::spatial::SpatialStack;
 use super::types::{CursorShape, FrameContext, FrameWarning, PlatformRequest, RepaintRequest};
@@ -29,6 +30,7 @@ pub struct Ui<'a> {
     ids: IdStack,
     output: FrameOutput,
     spatial: SpatialStack,
+    pointer_plan_installed: bool,
 }
 
 impl<'a> Ui<'a> {
@@ -47,6 +49,7 @@ impl<'a> Ui<'a> {
             ids: IdStack::new(),
             output: FrameOutput::new(),
             spatial: SpatialStack::default(),
+            pointer_plan_installed: false,
         }
     }
 
@@ -81,6 +84,74 @@ impl<'a> Ui<'a> {
     /// Derives and registers a widget ID in the current scope.
     pub fn id(&mut self, key: impl Hash) -> WidgetId {
         self.ids.register_key(key)
+    }
+
+    /// Derives a widget ID without registering it yet.
+    ///
+    /// Layout code uses this to predeclare pointer targets before the matching
+    /// widget call registers the same ID.
+    #[must_use]
+    pub fn make_id(&self, key: impl Hash) -> WidgetId {
+        self.ids.make_id(key)
+    }
+
+    /// Resolves and installs one closed-world pointer target plan for this frame.
+    ///
+    /// The plan must be complete before the first routed behavior call. Its
+    /// transform and clip scopes reuse the current RT-01 spatial state, while
+    /// explicit paint ordinals make declaration order irrelevant.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PointerPlanError`] for a second plan, duplicate paint order,
+    /// or widget ID assigned to different visual descriptors. Invalid plans
+    /// install blocked-safe routes.
+    pub fn resolve_pointer_targets(
+        &mut self,
+        declare: impl FnOnce(&mut PointerTargetPlan),
+    ) -> Result<crate::PointerRoutes, PointerPlanError> {
+        if self.pointer_plan_installed {
+            self.memory.cancel_pointer_interaction();
+            self.memory
+                .install_pointer_routes(crate::PointerRoutes::BLOCKED, []);
+            return Err(PointerPlanError::AlreadyInstalled);
+        }
+        self.pointer_plan_installed = true;
+
+        let captured = self.memory.pointer_capture();
+        let mut plan =
+            PointerTargetPlan::new(self.root_input.pointer.position, self.spatial.clone());
+        declare(&mut plan);
+        let resolved = match plan.resolve(captured) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                self.memory.cancel_pointer_interaction();
+                self.memory
+                    .install_pointer_routes(crate::PointerRoutes::BLOCKED, []);
+                return Err(error);
+            }
+        };
+
+        let selected_owner = match resolved.routes.ordinary {
+            crate::PointerRoute::Target(owner) => Some(owner),
+            crate::PointerRoute::Unplanned | crate::PointerRoute::Blocked => None,
+        };
+        let owner_mismatch = !resolved.capture_valid
+            || [
+                self.memory.active(),
+                self.memory.pressed(),
+                self.memory.secondary_pressed(),
+                self.memory.drag_source(),
+            ]
+            .into_iter()
+            .flatten()
+            .any(|owner| Some(owner) != selected_owner);
+        if owner_mismatch {
+            self.memory.cancel_pointer_interaction();
+        }
+        self.memory
+            .install_pointer_routes(resolved.routes, resolved.cursor_equivalents);
+        Ok(resolved.routes)
     }
 
     /// Registers an externally derived widget ID for duplicate detection.
@@ -199,7 +270,7 @@ impl<'a> Ui<'a> {
             return false;
         }
         if let Some(captured) = self.memory.pointer_capture() {
-            if captured != owner {
+            if !self.memory.cursor_owner_matches_capture(captured, owner) {
                 return false;
             }
         } else if !self.memory.is_hovered(owner) {

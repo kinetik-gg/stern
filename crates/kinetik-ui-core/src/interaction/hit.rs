@@ -45,10 +45,7 @@ impl HitTarget {
         input: &UiInput,
         memory: &UiMemory,
     ) -> bool {
-        memory
-            .pointer_routing_owner()
-            .is_none_or(|captured| captured == id)
-            && self.hit_test(rect, input)
+        memory.pointer_route_allows(id) && self.hit_test(rect, input)
     }
 }
 

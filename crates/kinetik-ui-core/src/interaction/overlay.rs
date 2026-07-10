@@ -140,11 +140,16 @@ fn drop_target_with_hit_target(
     let hovered = !pointer_cancelled
         && !disabled
         && if source_candidate.is_some() {
-            target_hit
+            target_hit && memory.pointer_drop_route_allows(id)
         } else {
             hit_target.routed_hit_test(id, rect, input, memory)
         };
-    let source = if !pointer_cancelled && !disabled && source_candidate.is_some() && target_hit {
+    let source = if !pointer_cancelled
+        && !disabled
+        && source_candidate.is_some()
+        && target_hit
+        && memory.pointer_drop_route_allows(id)
+    {
         source_candidate
     } else {
         None

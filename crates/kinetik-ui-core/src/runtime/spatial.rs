@@ -113,20 +113,33 @@ impl SpatialStack {
                 .is_none_or(|clip| !clip.is_empty())
     }
 
+    pub(crate) fn hit_test_rect(&self, screen_point: Option<Point>, rect: Rect) -> bool {
+        if !rect_is_finite(rect) || rect.is_empty() {
+            return false;
+        }
+        screen_point.is_some_and(|point| {
+            self.accepts_screen_point(point)
+                && self.state.screen_to_local.is_some_and(|inverse| {
+                    let local = inverse.transform_point(point);
+                    point_is_finite(local) && rect.contains_point(local)
+                })
+        })
+    }
+
     fn accepts_screen_point(&self, point: Point) -> bool {
         point_is_finite(point)
             && self.state.screen_to_local.is_some()
             && self.state.clips.iter().all(|clip| clip.contains(point))
     }
 
-    fn push_transform(&mut self, transform: Transform) {
+    pub(crate) fn push_transform(&mut self, transform: Transform) {
         let previous = self.state.clone();
         self.scopes.push(SpatialScope::Transform(previous));
         self.state.local_to_screen = Transform::compose(self.state.local_to_screen, transform);
         self.state.screen_to_local = self.state.local_to_screen.try_inverse();
     }
 
-    fn pop_transform(&mut self) {
+    pub(crate) fn pop_transform(&mut self) {
         if matches!(self.scopes.last(), Some(SpatialScope::Transform(_))) {
             let Some(SpatialScope::Transform(previous)) = self.scopes.pop() else {
                 return;
@@ -135,7 +148,7 @@ impl SpatialStack {
         }
     }
 
-    fn push_clip(&mut self, id: ClipId, rect: Rect) {
+    pub(crate) fn push_clip(&mut self, id: ClipId, rect: Rect) {
         let previous = self.state.clone();
         self.scopes.push(SpatialScope::Clip { id, previous });
 
@@ -152,7 +165,7 @@ impl SpatialStack {
         });
     }
 
-    fn pop_clip(&mut self, id: ClipId) {
+    pub(crate) fn pop_clip(&mut self, id: ClipId) {
         if !matches!(self.scopes.last(), Some(SpatialScope::Clip { id: open, .. }) if *open == id) {
             return;
         }

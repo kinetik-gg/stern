@@ -212,6 +212,42 @@ fn showcase_about_modal_outside_dismissal_cannot_click_through() {
 }
 
 #[test]
+fn showcase_menu_outside_dismissal_cannot_click_through_workspace() {
+    let mut editor = EditorShowcase::new();
+    editor.open_menu = Some(EditorMenuKind::File);
+    let mut memory = UiMemory::new();
+    let theme = default_dark_theme();
+    let select = Point::new(14.0, 40.0);
+    assert_eq!(editor.selected_tool, EditorTool::Move);
+
+    let mut ui = Ui::begin_frame(
+        editor_test_context(pointer_input_at(select.x, select.y, true, true, false)),
+        &mut memory,
+        &theme,
+    );
+    let invocations = editor.render(&mut ui, 0);
+    let output = ui.finish_output();
+    assert!(invocations.is_empty());
+    assert_eq!(editor.open_menu, Some(EditorMenuKind::File));
+    assert_eq!(editor.selected_tool, EditorTool::Move);
+    assert_eq!(memory.pointer_capture(), None);
+    assert!(output.warnings.is_empty());
+
+    let mut ui = Ui::begin_frame(
+        editor_test_context(pointer_input_at(select.x, select.y, false, false, true)),
+        &mut memory,
+        &theme,
+    );
+    let invocations = editor.render(&mut ui, 0);
+    let output = ui.finish_output();
+    assert!(invocations.is_empty());
+    assert_eq!(editor.open_menu, None);
+    assert_eq!(editor.selected_tool, EditorTool::Move);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+    assert!(output.warnings.is_empty());
+}
+
+#[test]
 fn inspector_snap_toggle_updates_status_same_frame() {
     let mut editor = EditorShowcase::new();
     let mut memory = UiMemory::new();

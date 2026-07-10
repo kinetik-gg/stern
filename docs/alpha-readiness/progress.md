@@ -315,8 +315,9 @@ than final output including diagnostics emitted afterward.
 ## Stage 2: Runtime Foundation
 
 Status: In progress. `RT-01` passed its task gate and independent depth-two
-remedy review. `RT-02` and `RT-03` remain queued before the integrated Stage 2
-gate can close.
+remedy review. `RT-02` passed its depth-one independent critic and complete
+local gate. `RT-03` and the integrated Stage 2 gate remain pending, so the
+stage is not complete.
 
 ### `RT-01`: scoped coordinates and clipping
 
@@ -368,6 +369,62 @@ spatial resolver. Fully clipped semantic nodes retain zero bounds to preserve
 valid parent-child trees while focusability and focus actions are removed.
 Topmost/modal pointer arbitration and removed-owner reconciliation are
 deliberately assigned to `RT-02` and `RT-03` rather than hidden in this packet.
+
+### `RT-02`: topmost pointer-target arbitration
+
+#### Changed files
+
+- `crates/kinetik-ui-core/src/interaction/{hit,overlay,scroll}.rs`
+- `crates/kinetik-ui-core/src/{lib,memory,runtime}.rs`
+- `crates/kinetik-ui-core/src/runtime/{pointer,spatial,ui}.rs`
+- `crates/kinetik-ui-core/tests/pointer_arbitration_conformance.rs`
+- `crates/kinetik-ui-widgets/src/ui/{frame,passive}.rs`
+- `crates/kinetik-ui-widgets/tests/pointer_arbitration_conformance.rs`
+- `apps/kinetik-ui-showcase/src/editor/showcase/{core_chrome,menus}.rs`
+- `apps/kinetik-ui-showcase/src/editor/tests/interactions.rs`
+- `docs/specs/{01-foundations,02-layout-and-interaction,03-rendering-text-components}.md`
+- `docs/alpha-readiness/progress.md`
+
+#### Reasoning and contract decisions
+
+Added one render-start, frame-local pointer plan with explicit paint order and
+independent ordinary, drop, and wheel routes. Target resolution reuses the
+RT-01 transform and exact-clip contract, fails closed for ambiguous plans, and
+cancels stale or ineligible owners before routed behavior can observe release
+edges. Planned scrolling freezes the current frame's offset and commits the
+next offset at frame end so behavior evaluation order cannot move later hit,
+paint, semantic, debug, or clip geometry. The low-level unplanned path retains
+legacy immediate behavior for compatibility. Source-present drop responses now
+authorize source identity, hover, and drop through the resolved drop route.
+The showcase menu and modal install closed plans only while their overlays are
+open, including background blockers and modal barriers.
+
+#### Tests run and results
+
+- Core pointer-arbitration conformance: 8/8 passed, including fully clipped
+  top targets, removed owners, primary/secondary release-edge cancellation,
+  and losing drop destinations exposing no source identity.
+- Widget pointer-arbitration conformance: 1/1 passed for two-frame staged
+  scrolling with frozen current-frame geometry.
+- Showcase editor tests: 55/55 passed (69 filtered), including menu and modal
+  click-through guards.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- Warning-denied workspace Clippy, all-feature workspace tests, build, and
+  example checks passed.
+- Warning-denied all-feature workspace documentation passed locally and
+  generated all eight crate documentation sets.
+- The independent critic passed the depth-one remedy after verifying drop-route
+  authorization and the clipped, removed-owner, and release-edge evidence.
+
+#### Remaining risks and deferred findings
+
+Unplanned low-level interactions intentionally preserve evaluation-order
+compatibility; audited layered components must install a complete pointer plan.
+Unique paint ordinals are a caller contract, although duplicate ordinals or
+conflicting target IDs fail closed. Keyboard modal focus trapping remains an
+overlay/accessibility packet. Owner disappearance in a frame with no installed
+plan remains `RT-03`. Planned scrolling exposes its new offset on the next
+frame and therefore depends on the existing repaint contract.
 
 ## Packet Completion Template
 

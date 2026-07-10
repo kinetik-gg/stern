@@ -1,5 +1,5 @@
 use super::{HitTarget, InteractionState, Response, ScrollResponse};
-use crate::{Rect, Size, Transform, UiInput, UiMemory, Vec2, WidgetId};
+use crate::{PointerRoute, Rect, Size, Transform, UiInput, UiMemory, Vec2, WidgetId};
 
 /// Resolves neutral scroll behavior and stores a clamped offset in memory.
 ///
@@ -61,13 +61,15 @@ fn scrollable_with_hit_target(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> ScrollResponse {
-    let hovered = !disabled && hit_target.routed_hit_test(id, rect, input, memory);
+    let target_hit = hit_target.hit_test(rect, input);
+    let hovered = !disabled && target_hit && memory.pointer_route_allows(id);
     if hovered {
         memory.set_hovered(id);
     }
 
     let previous = clamp_scroll_offset(memory.scroll_offset(id), rect.size(), content_size);
-    let requested_delta = if hovered {
+    let wheel_routed = !disabled && target_hit && memory.pointer_wheel_route_allows(id);
+    let requested_delta = if wheel_routed {
         Vec2::new(-input.pointer.wheel_delta.x, -input.pointer.wheel_delta.y)
     } else {
         Vec2::ZERO
@@ -80,7 +82,11 @@ fn scrollable_with_hit_target(
         rect.size(),
         content_size,
     );
-    memory.set_scroll_offset(id, offset);
+    if memory.pointer_wheel_route() == PointerRoute::Unplanned {
+        memory.set_scroll_offset(id, offset);
+    } else {
+        memory.stage_scroll_offset(id, offset);
+    }
 
     let delta = Vec2::new(offset.x - previous.x, offset.y - previous.y);
     let max_offset = max_scroll_offset(rect.size(), content_size);

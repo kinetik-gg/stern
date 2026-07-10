@@ -404,6 +404,15 @@ DragPreview
 
 Overlays should use the same render primitive pipeline, but their layer ordering and input capture must be handled explicitly.
 
+An overlay's layout must also drive the frame-local pointer plan before lower
+controls evaluate. Overlay backgrounds declare blockers; interactive children
+declare higher explicit paint ordinals. Menus that dismiss on outside activation
+use a capture-lower barrier so dismissal consumes the activation without
+click-through. Modal barriers block every lower route even outside the dialog
+rectangle and cancel lower capture/drag ownership. Primitive emission remains
+back-to-front, while immediate behavior calls may execute in any order because
+the predeclared paint ordinals are authoritative.
+
 ## 22. Viewport Surfaces
 
 Viewport-like work is part of the toolkit's UI domain as a container and interaction surface, but domain rendering must remain separate.
