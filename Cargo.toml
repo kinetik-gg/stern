@@ -12,9 +12,14 @@ members = [
 ]
 
 [workspace.package]
+version = "0.1.0-alpha.1"
 edition = "2024"
+rust-version = "1.89"
 license = "MIT"
-repository = "https://github.com/kinetik/kinetik-ui"
+repository = "https://github.com/kinetik-gg/kinetik-ui"
+readme = "README.md"
+keywords = ["ui", "gui", "desktop", "editor", "graphics"]
+categories = ["gui", "graphics", "rendering"]
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

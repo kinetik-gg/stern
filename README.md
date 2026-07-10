@@ -2,9 +2,21 @@
 
 Kinetik UI is a Rust UI toolkit for editor-style desktop applications.
 
+> **Project status:** Kinetik UI is pre-alpha and has not been published to a
+> package registry. The workspace is preparing a planned
+> `0.1.0-alpha.1` package baseline; that version string does not mean a tag,
+> publication, or accepted alpha release exists.
+
 It is designed for dense, tool-oriented interfaces: docked frames, passive panels, inspectors, property grids, tables, media viewports, timelines, menus, command palettes, and action-driven controls.
 
 The architecture favors deterministic behavior, crisp rendering, reusable component patterns, and clear boundaries between UI runtime, application state, rendering, platform integration, and domain work.
+
+Catalogue claims use the ALPHA-00 capability vocabulary: **Model**, **Paint**,
+**Input**, **Accessibility**, **Platform**, and **Live Workflow**. A surface is
+`Stable` only when behavioral evidence proves every capability axis it
+requires. `Experimental` and `Planned` surfaces may be incomplete, and
+metadata-only evidence proves no capability axis. There are currently no
+`Stable` catalogue entries.
 
 ## Architecture
 
@@ -78,6 +90,9 @@ kinetik-ui-widgets
 kinetik-ui-render
   Renderer backend traits, frame contracts, diagnostics, resource payloads, and handles.
 
+kinetik-ui-text
+  Text shaping, layout, editing state, and bundled font assets.
+
 kinetik-ui-vello
   Vello renderer backend.
 
@@ -93,11 +108,14 @@ kinetik-ui-showcase
 
 `kinetik-ui-core` must remain independent of renderer, windowing, and operating-system APIs.
 
-For application code, depend on the facade crate:
+### Using the current source tree
+
+The crates are currently unpublished. From an application next to a Kinetik UI
+checkout, depend on the facade with a local path:
 
 ```toml
 [dependencies]
-kinetik-ui = { version = "0.1", features = ["platform-winit", "render-vello"] }
+kinetik-ui = { path = "../kinetik-ui/crates/kinetik-ui", features = ["platform-winit", "render-vello"] }
 ```
 
 Then start from the prelude:
@@ -106,14 +124,29 @@ Then start from the prelude:
 use kinetik_ui::prelude::*;
 ```
 
-Use lower-level crates for integration boundaries:
+Use checkout-relative paths for lower-level integration boundaries as well:
 
 ```toml
 [dependencies]
-kinetik-ui-render = "0.1" # custom renderer contracts
-kinetik-ui-vello = "0.1"  # Vello backend
-kinetik-ui-winit = "0.1"  # winit platform adapter
+kinetik-ui-render = { path = "../kinetik-ui/crates/kinetik-ui-render" } # custom renderer contracts
+kinetik-ui-vello = { path = "../kinetik-ui/crates/kinetik-ui-vello" }   # Vello backend
+kinetik-ui-winit = { path = "../kinetik-ui/crates/kinetik-ui-winit" }   # winit platform adapter
 ```
+
+### Future registry use
+
+Only after all seven crates are published may applications replace those paths
+with exact prerelease requirements:
+
+```toml
+[dependencies]
+kinetik-ui = { version = "=0.1.0-alpha.1", features = ["platform-winit", "render-vello"] }
+```
+
+Lower-level registry dependencies would likewise use
+`=0.1.0-alpha.1`. Package dry-runs and generated-archive checks establish
+packageability only; they do not create a tag, publish a crate, or constitute
+alpha acceptance.
 
 The `ef7c2f9` crate consolidation renamed the old `kinetik-ui-render-vello`
 crate to `kinetik-ui-vello` and the old `kinetik-ui-platform-winit` crate to

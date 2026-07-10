@@ -6,11 +6,20 @@ breaking crate-boundary change.
 
 ## Which Crate To Depend On
 
-Most applications should depend on the facade:
+The crates are currently unpublished. Most applications working from source
+should depend on the facade by path (adjust the relative path for the location
+of the checkout):
 
 ```toml
 [dependencies]
-kinetik-ui = { version = "0.1", features = ["platform-winit", "render-vello"] }
+kinetik-ui = { path = "../kinetik-ui/crates/kinetik-ui", features = ["platform-winit", "render-vello"] }
+```
+
+After `0.1.0-alpha.1` has actually been published, the future registry form is:
+
+```toml
+[dependencies]
+kinetik-ui = { version = "=0.1.0-alpha.1", features = ["platform-winit", "render-vello"] }
 ```
 
 The facade re-exports the common application stack through
@@ -21,16 +30,20 @@ use kinetik_ui::prelude::*;
 ```
 
 Use lower-level crates only when building an integration boundary or a custom
-backend:
+backend. Today, use source paths:
 
 ```toml
 [dependencies]
-kinetik-ui-core = "0.1"
-kinetik-ui-widgets = "0.1"
-kinetik-ui-render = "0.1"
-kinetik-ui-vello = "0.1"
-kinetik-ui-winit = "0.1"
+kinetik-ui-core = { path = "../kinetik-ui/crates/kinetik-ui-core" }
+kinetik-ui-widgets = { path = "../kinetik-ui/crates/kinetik-ui-widgets" }
+kinetik-ui-render = { path = "../kinetik-ui/crates/kinetik-ui-render" }
+kinetik-ui-vello = { path = "../kinetik-ui/crates/kinetik-ui-vello" }
+kinetik-ui-winit = { path = "../kinetik-ui/crates/kinetik-ui-winit" }
 ```
+
+Once published, each lower-level registry dependency must use the exact
+`=0.1.0-alpha.1` requirement. A package dry-run is not publication and is not
+a reason to use the registry snippets early.
 
 ## Migration Map
 
