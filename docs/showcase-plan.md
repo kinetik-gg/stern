@@ -41,6 +41,23 @@ explicit non-goals. Fixture reachability alone remains metadata-only evidence.
 - Preserve render-once output for visual inspection and raster tests.
 - Avoid showcase-only behavior shortcuts that bypass toolkit state transitions.
 
+## Action Truth Contract
+
+- An enabled action must produce its labeled, deterministic state transition or
+  output. Updating only a generic status string does not make an action
+  implemented.
+- Unfinished actions remain visible for catalogue context only when their label
+  ends in `(Experimental)`. They are disabled, have no shortcut, and cannot
+  enter an invocation queue or handler.
+- The editor currently demonstrates play, stop, grid visibility, tool selection,
+  panel focus, and dock rearrangement outcomes. Pause, persistence, project/file
+  operations, build/export/package, preferences, documentation, and command
+  palette lifecycles remain Experimental.
+- The Components counter and Systems dispatch actions mutate dedicated demo
+  counters. Systems `Save Workspace` captures a deterministic in-memory snapshot;
+  it does not imply file persistence.
+- These showcase corrections do not promote any capability to Stable.
+
 ## Verification
 
 Required local checks before showcase changes are review-ready:

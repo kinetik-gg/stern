@@ -36,13 +36,14 @@ use crate::editor::{self as editor_showcase, EditorShowcase};
 
 const MIN_VIEWPORT_WIDTH: f32 = 1.0;
 const MIN_VIEWPORT_HEIGHT: f32 = 1.0;
-const ACTION_COMPONENTS_RUN: &str = "components.run";
-const ACTION_SYSTEMS_DISPATCH: &str = "systems.dispatch";
-const ACTION_WORKSPACE_SAVE: &str = "workspace.save";
-const ACTION_COMMAND_PALETTE: &str = "command.palette";
-const ACTION_VIEWPORT_GRID: &str = "viewport.grid";
+const ACTION_COMPONENTS_RUN: &str = "components.counter.increment";
+const ACTION_SYSTEMS_DISPATCH: &str = "systems.dispatch.record";
+const ACTION_WORKSPACE_SAVE: &str = "workspace.snapshot.capture";
+const ACTION_COMMAND_PALETTE: &str = "command.palette.open";
+const ACTION_VIEWPORT_GRID: &str = "viewport.grid.toggle";
 const ACTION_EDITOR_DOCK_JOIN: &str = "editor.dock.join";
 const ACTION_EDITOR_DOCK_SWAP: &str = "editor.dock.swap";
+const EXPERIMENTAL_SUFFIX: &str = " (Experimental)";
 
 /// Available showcase pages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +65,25 @@ enum DockSplitDemoState {
     #[default]
     Base,
     Inserted,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ShowcaseWorkspaceSnapshot {
+    page: ShowcasePage,
+    selected_row: usize,
+    selected_tab: usize,
+    checkbox: bool,
+    toggle: bool,
+    radio: usize,
+    strength: f32,
+    dock_ratio: f32,
+    dock_split_demo: DockSplitDemoState,
+    zoom: f32,
+    stress: usize,
+    name: String,
+    number: String,
+    search: String,
+    notes: String,
 }
 
 impl ShowcasePage {
@@ -140,6 +160,9 @@ pub struct ShowcaseApp {
     previous_mouse: Option<Point>,
     viewport_size: Size,
     action_count: u32,
+    component_action_count: u32,
+    systems_dispatch_count: u32,
+    workspace_snapshot: Option<ShowcaseWorkspaceSnapshot>,
     selected_row: usize,
     selected_tab: usize,
     checkbox: bool,
@@ -170,6 +193,9 @@ impl Default for ShowcaseApp {
             previous_mouse: None,
             viewport_size: Size::new(1440.0, 900.0),
             action_count: 0,
+            component_action_count: 0,
+            systems_dispatch_count: 0,
+            workspace_snapshot: None,
             selected_row: 1,
             selected_tab: 0,
             checkbox: true,
@@ -197,41 +223,33 @@ impl Default for ShowcaseApp {
 fn showcase_actions() -> Vec<ActionDescriptor> {
     let mut save = ActionDescriptor::new(ACTION_WORKSPACE_SAVE, "Save Workspace");
     save.keywords = vec!["write".to_owned(), "persist".to_owned()];
-    let mut palette = ActionDescriptor::new(ACTION_COMMAND_PALETTE, "Open Command Palette");
+    let mut palette = ActionDescriptor::new(
+        ACTION_COMMAND_PALETTE,
+        format!("Open Command Palette{EXPERIMENTAL_SUFFIX}"),
+    );
     palette.keywords = vec!["search".to_owned(), "actions".to_owned()];
-    let mut toggle_grid = ActionDescriptor::new(ACTION_VIEWPORT_GRID, "Toggle Viewport Grid");
+    palette.state.enabled = false;
+    let mut toggle_grid = ActionDescriptor::new(
+        ACTION_VIEWPORT_GRID,
+        format!("Toggle Viewport Grid{EXPERIMENTAL_SUFFIX}"),
+    );
     toggle_grid.keywords = vec!["guides".to_owned(), "overlay".to_owned()];
+    toggle_grid.state.enabled = false;
     vec![save, palette, toggle_grid]
 }
 
-fn showcase_action_router() -> ActionRouter {
-    let mut enter = ActionDescriptor::new("keyboard.enter", "Confirm Focused Command");
-    enter.shortcut = Some(Shortcut::new(Modifiers::default(), Key::Enter));
-    let mut save = ActionDescriptor::new(editor_showcase::ACTION_SAVE, "Save Project");
-    save.shortcut = Some(Shortcut::new(
-        Modifiers::new(false, true, false, false),
-        Key::Character("s".to_owned()),
-    ));
+fn showcase_action_router(play_enabled: bool) -> ActionRouter {
     let mut play = ActionDescriptor::new(editor_showcase::ACTION_PLAY, "Play");
     play.shortcut = Some(Shortcut::new(Modifiers::default(), Key::Function(5)));
+    play.state.enabled = play_enabled;
     let mut grid = ActionDescriptor::new(editor_showcase::ACTION_GRID, "Toggle Grid");
     grid.shortcut = Some(Shortcut::new(
         Modifiers::default(),
         Key::Character("g".to_owned()),
     ));
-    let mut build = ActionDescriptor::new(editor_showcase::ACTION_BUILD, "Build");
-    build.shortcut = Some(Shortcut::new(
-        Modifiers::new(false, true, false, false),
-        Key::Character("b".to_owned()),
-    ));
-    let mut palette = ActionDescriptor::new(editor_showcase::ACTION_PALETTE, "Command Palette");
-    palette.shortcut = Some(Shortcut::new(
-        Modifiers::new(false, true, false, false),
-        Key::Character("p".to_owned()),
-    ));
 
     let mut router = ActionRouter::new();
-    for action in [enter, save, play, grid, build, palette] {
+    for action in [play, grid] {
         router.bind(ActionBinding::new(
             action,
             ActionContext::Global,

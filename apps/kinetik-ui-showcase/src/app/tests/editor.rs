@@ -20,12 +20,16 @@ fn default_page_is_engine_editor_surface() {
 }
 
 #[test]
-fn editor_file_menu_opens_dropdown_and_invokes_action() {
+fn showcase_action_truth_editor_file_menu_disables_unfinished_actions() {
     let mut app = ShowcaseApp::new();
 
     click(&mut app, Point::new(145.0, 14.0));
 
-    for label in ["New Scene", "Save Scene", "Export Build"] {
+    for label in [
+        "New Scene (Experimental)",
+        "Save Scene (Experimental)",
+        "Export Build (Experimental)",
+    ] {
         assert!(
             app.primitives().iter().any(|primitive| {
                 matches!(primitive, Primitive::Text(text) if text.text == label)
@@ -36,23 +40,14 @@ fn editor_file_menu_opens_dropdown_and_invokes_action() {
 
     click(&mut app, Point::new(170.0, 93.0));
 
-    assert_eq!(app.action_count(), 1);
-    assert_eq!(app.output().repaint, RepaintRequest::NextFrame);
-    for label in ["Saved project snapshot", "Actions: 1"] {
-        assert!(
-            app.primitives().iter().any(|primitive| {
-                matches!(primitive, Primitive::Text(text) if text.text == label)
-            }),
-            "{label}"
-        );
-    }
-    assert!(!app.primitives().iter().any(|primitive| {
-        matches!(primitive, Primitive::Text(text) if text.text == "Save Scene")
+    assert_eq!(app.action_count(), 0);
+    assert!(app.primitives().iter().any(|primitive| {
+        matches!(primitive, Primitive::Text(text) if text.text == "Save Scene (Experimental)")
     }));
 }
 
 #[test]
-fn editor_shortcut_updates_visible_action_count_same_frame() {
+fn showcase_action_truth_unfinished_editor_shortcut_does_not_invoke() {
     let mut app = ShowcaseApp::new();
     app.update_with_context(frame_context(
         Size::new(1440.0, 900.0),
@@ -70,9 +65,9 @@ fn editor_shortcut_updates_visible_action_count_same_frame() {
         },
     ));
 
-    assert_eq!(app.action_count(), 1);
+    assert_eq!(app.action_count(), 0);
     assert!(app.primitives().iter().any(|primitive| {
-        matches!(primitive, Primitive::Text(text) if text.text == "Actions: 1")
+        matches!(primitive, Primitive::Text(text) if text.text == "Actions: 0")
     }));
 }
 

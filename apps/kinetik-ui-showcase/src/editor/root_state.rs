@@ -1,7 +1,21 @@
-/// Saves the current editor project.
+const ACTION_NEW_SCENE: &str = "editor.scene.new";
+const ACTION_OPEN_PROJECT: &str = "editor.project.open";
+/// Saves the current editor project once persistence is implemented.
 pub const ACTION_SAVE: &str = "editor.save";
-/// Toggles editor play mode.
+const ACTION_IMPORT_ASSET: &str = "editor.asset.import";
+const ACTION_EXPORT: &str = "editor.export";
+const ACTION_QUIT: &str = "editor.quit";
+const ACTION_UNDO: &str = "editor.undo";
+const ACTION_REDO: &str = "editor.redo";
+const ACTION_DUPLICATE: &str = "editor.selection.duplicate";
+const ACTION_DELETE: &str = "editor.selection.delete";
+const ACTION_PREFERENCES: &str = "editor.preferences.open";
+const ACTION_VIEW_PERSPECTIVE: &str = "editor.viewport.perspective";
+const ACTION_SHOW_OVERLAYS: &str = "editor.viewport.overlays.toggle";
+/// Starts editor play mode.
 pub const ACTION_PLAY: &str = "editor.play";
+/// Pauses editor play mode once a pause lifecycle is implemented.
+pub const ACTION_PAUSE: &str = "editor.pause";
 /// Stops editor play mode.
 pub const ACTION_STOP: &str = "editor.stop";
 /// Toggles viewport grid overlays.
@@ -9,14 +23,25 @@ pub const ACTION_GRID: &str = "editor.grid";
 const ACTION_VIEWPORT_FOCUS_SELECTED: &str = "editor.viewport.focus-selected";
 const ACTION_VIEWPORT_FIT_CONTENT: &str = "editor.viewport.fit-content";
 const ACTION_VIEWPORT_FIT_SELECTION: &str = "editor.viewport.fit-selection";
+#[cfg(test)]
 const ACTION_VIEWPORT_ACTUAL_SIZE: &str = "editor.viewport.actual-size";
+#[cfg(test)]
 const ACTION_VIEWPORT_ZOOM_IN: &str = "editor.viewport.zoom-in";
+#[cfg(test)]
 const ACTION_VIEWPORT_ZOOM_OUT: &str = "editor.viewport.zoom-out";
+#[cfg(test)]
 const ACTION_VIEWPORT_PAN: &str = "editor.viewport.pan";
-/// Queues a project build.
+/// Builds the editor project once the build pipeline is implemented.
 pub const ACTION_BUILD: &str = "editor.build";
-/// Requests the command palette.
+const ACTION_PACKAGE_WINDOWS: &str = "editor.package.windows-x64";
+const ACTION_RUN_PROFILER: &str = "editor.profiler.run";
+const ACTION_PROJECT_SETTINGS: &str = "editor.project-settings.open";
+/// Opens the editor command palette once the palette lifecycle is implemented.
 pub const ACTION_PALETTE: &str = "editor.palette";
+const ACTION_DOCS: &str = "editor.docs.open";
+const ACTION_KEYBOARD_SHORTCUTS: &str = "editor.shortcuts.open";
+const ACTION_ABOUT: &str = "editor.about.open";
+const ACTION_ABOUT_CLOSE: &str = "editor.about.close";
 const ACTION_TOOL_SELECT: &str = "editor.tool.select";
 const ACTION_TOOL_MOVE: &str = "editor.tool.move";
 const ACTION_TOOL_ROTATE: &str = "editor.tool.rotate";

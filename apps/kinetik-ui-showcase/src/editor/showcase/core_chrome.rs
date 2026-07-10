@@ -5,21 +5,18 @@ impl EditorShowcase {
         Self::default()
     }
 
+    /// Reports whether the editor is currently in play mode.
+    #[must_use]
+    pub(crate) const fn is_running(&self) -> bool {
+        self.running
+    }
+
     /// Applies an editor-owned state transition for an action ID.
     pub fn apply_action(&mut self, action_id: &str) -> bool {
         match action_id {
-            ACTION_SAVE => {
-                "Saved project snapshot".clone_into(&mut self.status);
-                true
-            }
             ACTION_PLAY => {
-                self.running = !self.running;
-                let status = if self.running {
-                    "Play mode running"
-                } else {
-                    "Play mode paused"
-                };
-                status.clone_into(&mut self.status);
+                self.running = true;
+                "Play mode running".clone_into(&mut self.status);
                 true
             }
             ACTION_STOP => {
@@ -36,42 +33,6 @@ impl EditorShowcase {
                     "Viewport grid hidden"
                 };
                 status.clone_into(&mut self.status);
-                true
-            }
-            ACTION_VIEWPORT_FOCUS_SELECTED => {
-                "Viewport focus selected requested".clone_into(&mut self.status);
-                true
-            }
-            ACTION_VIEWPORT_FIT_CONTENT => {
-                "Viewport fit content requested".clone_into(&mut self.status);
-                true
-            }
-            ACTION_VIEWPORT_FIT_SELECTION => {
-                "Viewport fit selection requested".clone_into(&mut self.status);
-                true
-            }
-            ACTION_VIEWPORT_ACTUAL_SIZE => {
-                "Viewport actual size requested".clone_into(&mut self.status);
-                true
-            }
-            ACTION_VIEWPORT_ZOOM_IN => {
-                "Viewport zoom in requested".clone_into(&mut self.status);
-                true
-            }
-            ACTION_VIEWPORT_ZOOM_OUT => {
-                "Viewport zoom out requested".clone_into(&mut self.status);
-                true
-            }
-            ACTION_VIEWPORT_PAN => {
-                "Viewport pan mode requested".clone_into(&mut self.status);
-                true
-            }
-            ACTION_BUILD => {
-                "Build queued for Windows x64".clone_into(&mut self.status);
-                true
-            }
-            ACTION_PALETTE => {
-                "Command palette requested".clone_into(&mut self.status);
                 true
             }
             ACTION_TOOL_SELECT => self.select_tool(EditorTool::Select),
@@ -165,17 +126,17 @@ impl EditorShowcase {
             )),
             ToolbarItem::new(toolbar_action(
                 ACTION_VIEWPORT_FIT_SELECTION,
-                "Frame selected",
+                "Frame selected (Experimental)",
                 ToolbarIcon::Crosshair,
                 None,
-                true,
+                false,
             )),
             ToolbarItem::new(toolbar_action(
                 ACTION_VIEWPORT_FIT_CONTENT,
-                "Reset view",
+                "Reset view (Experimental)",
                 ToolbarIcon::Reset,
                 None,
-                true,
+                false,
             )),
         ];
 
@@ -202,35 +163,35 @@ impl EditorShowcase {
                 "Play",
                 ToolbarIcon::Play,
                 Some(self.running),
-                true,
+                !self.running,
             )),
             ToolbarItem::new(toolbar_action(
-                ACTION_PLAY,
-                "Pause",
+                ACTION_PAUSE,
+                "Pause (Experimental)",
                 ToolbarIcon::Pause,
-                Some(!self.running),
-                true,
+                None,
+                false,
             )),
             ToolbarItem::new(toolbar_action(
                 ACTION_STOP,
                 "Stop",
                 ToolbarIcon::Stop,
                 None,
-                true,
+                self.running || self.timeline > 0.0,
             )),
             ToolbarItem::new(toolbar_action(
                 ACTION_BUILD,
-                "Build",
+                "Build (Experimental)",
                 ToolbarIcon::Rocket,
                 None,
-                true,
+                false,
             )),
             ToolbarItem::new(toolbar_action(
-                ACTION_BUILD,
-                "Export",
+                ACTION_EXPORT,
+                "Export (Experimental)",
                 ToolbarIcon::Download,
                 None,
-                true,
+                false,
             )),
         ];
 
@@ -341,11 +302,11 @@ impl EditorShowcase {
             .with_body("Kinetik Forge editor showcase chrome is action-driven and data-only.")
             .with_actions([
                 ModalAction::new(
-                    modal_action(ACTION_PALETTE, "Open Docs", true),
+                    modal_action(ACTION_DOCS, "Open Docs (Experimental)", false),
                     ModalActionRole::Primary,
                 ),
                 ModalAction::new(
-                    modal_action(ACTION_PALETTE, "Close", true),
+                    modal_action(ACTION_ABOUT_CLOSE, "Close (Experimental)", false),
                     ModalActionRole::Cancel,
                 ),
             ]);

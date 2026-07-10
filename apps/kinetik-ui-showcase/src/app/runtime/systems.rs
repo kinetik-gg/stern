@@ -66,7 +66,7 @@ impl ShowcaseApp {
             ActionContext::Global,
         );
         let mut queue = ActionQueue::new();
-        let dispatch_action = ActionDescriptor::new(ACTION_SYSTEMS_DISPATCH, "Dispatch");
+        let dispatch_action = ActionDescriptor::new(ACTION_SYSTEMS_DISPATCH, "Record Dispatch");
         let x = panel.x + 20.0;
         let y = panel.y + 46.0;
         let dispatch = ui.button(
@@ -96,7 +96,7 @@ impl ShowcaseApp {
             ui,
             x + 160.0,
             y + 20.0,
-            &format!("Invocations: {}", self.action_count),
+            &format!("Dispatches: {}", self.systems_dispatch_count),
             11.0,
             rgb(144, 184, 255),
         );
@@ -261,16 +261,16 @@ impl ShowcaseApp {
             .matches()
             .into_iter()
             .take(4)
-            .map(|entry| entry.label.clone())
+            .map(|entry| (entry.label.clone(), !entry.enabled))
             .collect::<Vec<_>>();
-        for (index, label) in entries.into_iter().enumerate() {
+        for (index, (label, disabled)) in entries.into_iter().enumerate() {
             let y = panel.y + 50.0 + index as f32 * 32.0;
             let response = ui.list_row(
                 ("systems.palette", index),
                 Rect::new(x, y, row_width, 28.0),
                 &label,
                 false,
-                false,
+                disabled,
             );
             if response.clicked {
                 let mut queue = ActionQueue::new();

@@ -51,11 +51,12 @@ impl ShowcaseApp {
                 24.0,
             ),
             &format!(
-                "checkbox={} toggle={} radio={} selected_row={}",
+                "checkbox={} toggle={} radio={} selected_row={} action_counter={}",
                 self.checkbox,
                 self.toggle,
                 self.radio + 1,
-                self.selected_row + 1
+                self.selected_row + 1,
+                self.component_action_count
             ),
         );
     }
@@ -64,7 +65,7 @@ impl ShowcaseApp {
         let run = ui.button(
             "components.run-action",
             Rect::new(x, y, 128.0, 30.0),
-            "Run Action",
+            "Increment Counter",
             false,
         );
         if run.clicked {

@@ -1,14 +1,55 @@
 use super::super::{
-    ACTION_COMMAND_PALETTE, ACTION_COMPONENTS_RUN, ACTION_EDITOR_DOCK_JOIN,
-    ACTION_EDITOR_DOCK_SWAP, ACTION_SYSTEMS_DISPATCH, ACTION_VIEWPORT_GRID, ACTION_WORKSPACE_SAVE,
-    ActionContext, ActionInvocation, ActionQueue, ActionRoutingContext, ActionSource,
-    EditorShowcase, ShowcaseApp, showcase_action_router,
+    ACTION_COMPONENTS_RUN, ACTION_EDITOR_DOCK_JOIN, ACTION_EDITOR_DOCK_SWAP,
+    ACTION_SYSTEMS_DISPATCH, ACTION_WORKSPACE_SAVE, ActionContext, ActionInvocation, ActionQueue,
+    ActionRoutingContext, ActionSource, EditorShowcase, ShowcaseApp, ShowcaseWorkspaceSnapshot,
+    showcase_action_router,
 };
 
 impl ShowcaseApp {
     pub(in crate::app) fn invoke_action(&mut self, id: &str, source: ActionSource) -> bool {
-        let handled = self.editor.apply_action(id) || Self::is_showcase_action(id);
+        let handled = self.editor.apply_action(id) || self.apply_showcase_action(id);
         self.finish_action_invocation(id, source, handled)
+    }
+
+    pub(in crate::app) fn apply_showcase_action(&mut self, action_id: &str) -> bool {
+        match action_id {
+            ACTION_COMPONENTS_RUN => {
+                self.component_action_count += 1;
+                self.status = format!("Component demo counter: {}", self.component_action_count);
+                true
+            }
+            ACTION_SYSTEMS_DISPATCH => {
+                self.systems_dispatch_count += 1;
+                self.status = format!("Systems dispatches: {}", self.systems_dispatch_count);
+                true
+            }
+            ACTION_WORKSPACE_SAVE => {
+                self.workspace_snapshot = Some(self.capture_workspace_snapshot());
+                "Workspace snapshot captured in memory".clone_into(&mut self.status);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub(in crate::app) fn capture_workspace_snapshot(&self) -> ShowcaseWorkspaceSnapshot {
+        ShowcaseWorkspaceSnapshot {
+            page: self.page,
+            selected_row: self.selected_row,
+            selected_tab: self.selected_tab,
+            checkbox: self.checkbox,
+            toggle: self.toggle,
+            radio: self.radio,
+            strength: self.strength,
+            dock_ratio: self.dock_ratio,
+            dock_split_demo: self.dock_split_demo,
+            zoom: self.zoom,
+            stress: self.stress,
+            name: self.name.text.clone(),
+            number: self.number.text.clone(),
+            search: self.search.text.clone(),
+            notes: self.notes.text.clone(),
+        }
     }
 
     pub(in crate::app) fn handle_applied_action_invocation(
@@ -66,9 +107,8 @@ impl ShowcaseApp {
         invocations
     }
 
-    pub(in crate::app) fn record_action(&mut self, action_id: &str, source: ActionSource) {
+    pub(in crate::app) fn record_action(&mut self, _action_id: &str, _source: ActionSource) {
         self.action_count += 1;
-        self.status = format!("{} via {:?} ({})", action_id, source, self.action_count);
     }
 
     pub(in crate::app) fn ignore_action(&mut self, action_id: &str, source: ActionSource) {
@@ -78,11 +118,7 @@ impl ShowcaseApp {
     pub(in crate::app) fn is_showcase_action(action_id: &str) -> bool {
         matches!(
             action_id,
-            ACTION_COMPONENTS_RUN
-                | ACTION_SYSTEMS_DISPATCH
-                | ACTION_WORKSPACE_SAVE
-                | ACTION_COMMAND_PALETTE
-                | ACTION_VIEWPORT_GRID
+            ACTION_COMPONENTS_RUN | ACTION_SYSTEMS_DISPATCH | ACTION_WORKSPACE_SAVE
         )
     }
 
@@ -91,8 +127,8 @@ impl ShowcaseApp {
     }
 
     pub(in crate::app) fn resolve_shortcuts(&mut self, keyboard: &kinetik_ui::core::KeyboardInput) {
-        let Some(invocation) =
-            showcase_action_router().resolve_shortcut_in_context(keyboard, self.action_context())
+        let Some(invocation) = showcase_action_router(!self.editor.is_running())
+            .resolve_shortcut_in_context(keyboard, self.action_context())
         else {
             return;
         };

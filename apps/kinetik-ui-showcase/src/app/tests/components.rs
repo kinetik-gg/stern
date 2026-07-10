@@ -38,7 +38,11 @@ fn components_page_structural_smoke_emits_controls_semantics_and_platform_reques
     assert!(count_semantic_role(&app, &SemanticRole::Panel) >= 5);
     assert!(count_semantic_role(&app, &SemanticRole::ListItem) >= 4);
     assert!(count_semantic_role(&app, &SemanticRole::Tab) >= 3);
-    assert!(semantic_node(&app, &SemanticRole::Button, "Run Action"));
+    assert!(semantic_node(
+        &app,
+        &SemanticRole::Button,
+        "Increment Counter"
+    ));
     assert!(semantic_node(&app, &SemanticRole::Button, "Disabled"));
     assert!(semantic_node(
         &app,
@@ -146,7 +150,8 @@ fn component_status_reflects_toggle_click_same_frame() {
         matches!(
             primitive,
             Primitive::Text(text)
-                if text.text == "checkbox=true toggle=true radio=1 selected_row=2"
+                if text.text
+                    == "checkbox=true toggle=true radio=1 selected_row=2 action_counter=0"
         )
     }));
 }
@@ -166,7 +171,8 @@ fn component_status_reflects_checkbox_click_same_frame() {
         matches!(
             primitive,
             Primitive::Text(text)
-                if text.text == "checkbox=false toggle=false radio=1 selected_row=2"
+                if text.text
+                    == "checkbox=false toggle=false radio=1 selected_row=2 action_counter=0"
         )
     }));
 }

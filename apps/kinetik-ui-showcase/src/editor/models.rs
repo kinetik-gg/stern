@@ -40,13 +40,13 @@ fn menu_anchor(kind: EditorMenuKind) -> Rect {
 
 fn menu_size(kind: EditorMenuKind) -> Size {
     match kind {
-        EditorMenuKind::File => Size::new(238.0, 188.0),
-        EditorMenuKind::Edit => Size::new(226.0, 154.0),
-        EditorMenuKind::View => Size::new(224.0, 136.0),
-        EditorMenuKind::Project => Size::new(224.0, 106.0),
-        EditorMenuKind::Build => Size::new(224.0, 82.0),
-        EditorMenuKind::Window => Size::new(232.0, 340.0),
-        EditorMenuKind::Help => Size::new(230.0, 88.0),
+        EditorMenuKind::File => Size::new(306.0, 188.0),
+        EditorMenuKind::Edit => Size::new(286.0, 154.0),
+        EditorMenuKind::View => Size::new(292.0, 136.0),
+        EditorMenuKind::Project => Size::new(292.0, 106.0),
+        EditorMenuKind::Build => Size::new(306.0, 82.0),
+        EditorMenuKind::Window => Size::new(300.0, 340.0),
+        EditorMenuKind::Help => Size::new(304.0, 88.0),
     }
 }
 
@@ -66,7 +66,7 @@ fn menu_action(
     enabled: bool,
 ) -> MenuItem {
     let mut action = ActionDescriptor::new(action_id, label);
-    action.shortcut = shortcut;
+    action.shortcut = if enabled { shortcut } else { None };
     action.state.checked = checked;
     action.state.enabled = enabled;
     MenuItem::Action(action)
@@ -499,8 +499,8 @@ fn run_toolbar_buttons(
         (
             1,
             ToolbarIcon::Pause,
-            "Pause",
-            ACTION_PLAY,
+            "Pause (Experimental)",
+            ACTION_PAUSE,
             Rect::new(
                 right + chrome.toolbar_stride,
                 TOOLBAR_Y,
@@ -523,7 +523,7 @@ fn run_toolbar_buttons(
         (
             3,
             ToolbarIcon::Rocket,
-            "Build",
+            "Build (Experimental)",
             ACTION_BUILD,
             Rect::new(
                 right + 3.0 * chrome.toolbar_stride,
@@ -535,8 +535,8 @@ fn run_toolbar_buttons(
         (
             4,
             ToolbarIcon::Download,
-            "Export",
-            ACTION_BUILD,
+            "Export (Experimental)",
+            ACTION_EXPORT,
             Rect::new(
                 right + 4.0 * chrome.toolbar_stride,
                 TOOLBAR_Y,
