@@ -31,15 +31,16 @@ pub struct Ui<'a> {
     output: FrameOutput,
     spatial: SpatialStack,
     pointer_plan_installed: bool,
-    root_input_conflict: Option<InputStreamConflict>,
 }
 
 impl<'a> Ui<'a> {
     /// Starts a UI frame and clears transient retained memory.
     #[must_use]
     pub fn begin_frame(context: FrameContext, memory: &'a mut UiMemory) -> Self {
-        let input_conflict = context.input.validate_event_stream().err();
         memory.begin_frame();
+        let input_validation = context.input.validate_event_stream();
+        let input_conflict = input_validation.as_ref().err().copied();
+        memory.set_root_input_validation(input_validation);
         if !context.input.window_focused || pointer_release_all_cancelled(&context.input) {
             memory.cancel_pointer_interaction();
         }
@@ -56,7 +57,6 @@ impl<'a> Ui<'a> {
             output,
             spatial: SpatialStack::default(),
             pointer_plan_installed: false,
-            root_input_conflict: input_conflict,
         }
     }
 
@@ -401,7 +401,7 @@ impl<'a> Ui<'a> {
             &self.root_input,
             self.memory.pointer_capture().is_some(),
             self.memory.secondary_pressed().is_some(),
-            self.root_input_conflict == Some(InputStreamConflict::Pointer),
+            self.memory.root_input_conflict() == Some(InputStreamConflict::Pointer),
         );
     }
 }

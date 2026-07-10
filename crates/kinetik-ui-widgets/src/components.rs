@@ -11,8 +11,8 @@ use kinetik_ui_core::{
     drop_target, fit_box, focusable, pad_rect, pressable, selectable,
 };
 use kinetik_ui_text::{
-    ShapedTextLayout, TextEditMode, TextEditState, TextLayoutKey, TextLayoutStore, TextSelection,
-    TextStyle,
+    OrderedTextInputResult, ShapedTextLayout, TextEditMode, TextEditState, TextLayoutKey,
+    TextLayoutStore, TextSelection, TextStyle,
 };
 
 use crate::{
@@ -82,5 +82,6 @@ pub(crate) use selector_fields::path_field_with_text_layouts_and_caret_visibilit
 pub(crate) use text_fields::{
     multi_line_text_field_with_text_layouts_and_caret_visibility,
     text_field_with_text_layouts_and_caret_visibility,
+    text_field_with_text_layouts_and_caret_visibility_and_ordered_result,
 };
 pub(crate) use vector_color_fields::vector_scrub_input_with_text_layouts_and_caret_visibility;

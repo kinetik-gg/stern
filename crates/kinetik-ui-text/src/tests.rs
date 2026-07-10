@@ -1134,6 +1134,32 @@ fn ordered_hardware_text_accepts_repeat_altgr_option_and_dead_key_output_once() 
 }
 
 #[test]
+fn ordered_preedit_suppresses_hardware_text_until_ime_commit() {
+    let target = WidgetId::from_key("field");
+    let events = vec![
+        UiInputEvent::Text(TextInputEvent::CompositionStart),
+        UiInputEvent::Text(TextInputEvent::Composition {
+            text: "あ".to_owned(),
+            selection: None,
+        }),
+        ordered_key(
+            Key::Character("あ".to_owned()),
+            Some("あ"),
+            Modifiers::default(),
+            false,
+        ),
+        UiInputEvent::Text(TextInputEvent::CompositionEnd),
+        UiInputEvent::Text(TextInputEvent::Commit("あ".to_owned())),
+    ];
+    let mut state = TextEditState::new("");
+
+    let _ = state.apply_ordered_input(&events, target, TextEditMode::SingleLine);
+
+    assert_eq!(state.text, "あ");
+    assert_eq!(state.composition, None);
+}
+
+#[test]
 fn ordered_multiline_enter_inserts_once_at_key_position_and_ignores_carriage_text() {
     let target = WidgetId::from_key("field");
     let events = vec![

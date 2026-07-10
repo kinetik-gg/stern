@@ -706,13 +706,24 @@ impl UiInput {
                 button,
                 down,
                 click_count,
-                ..
+                position,
             } => {
+                if let Some(position) = position {
+                    self.pointer.position = Some(*position);
+                }
                 self.pointer.apply_button_transition(*button, *down);
                 self.pointer.click_count = *click_count;
             }
-            UiInputEvent::PointerReleaseAll { .. } => self.pointer.release_all_buttons(),
-            UiInputEvent::Wheel { delta, .. } => {
+            UiInputEvent::PointerReleaseAll { position } => {
+                if let Some(position) = position {
+                    self.pointer.position = Some(*position);
+                }
+                self.pointer.release_all_buttons();
+            }
+            UiInputEvent::Wheel { delta, position } => {
+                if let Some(position) = position {
+                    self.pointer.position = Some(*position);
+                }
                 self.pointer.wheel_delta = add_vectors(self.pointer.wheel_delta, delta.value());
             }
             UiInputEvent::ModifiersChanged(modifiers) => {
@@ -761,6 +772,17 @@ impl UiInput {
         if self.events.is_empty() {
             return Ok(());
         }
+
+        self.validate_text_event_stream()?;
+        if !pointer_projection_matches(self) {
+            return Err(InputStreamConflict::Pointer);
+        }
+
+        Ok(())
+    }
+
+    fn validate_text_event_stream(&self) -> Result<(), InputStreamConflict> {
+        debug_assert!(!self.events.is_empty());
 
         let key_events = self
             .events
@@ -818,9 +840,6 @@ impl UiInput {
         }) {
             return Err(InputStreamConflict::WindowFocus);
         }
-        if !pointer_projection_matches(self) {
-            return Err(InputStreamConflict::Pointer);
-        }
 
         Ok(())
     }
@@ -841,6 +860,21 @@ impl UiInput {
             return Ok(self.events.clone());
         }
 
+        Ok(self.legacy_text_events())
+    }
+
+    pub(crate) fn effective_scoped_text_events(
+        &self,
+    ) -> Result<Vec<UiInputEvent>, InputStreamConflict> {
+        if !self.events.is_empty() {
+            self.validate_text_event_stream()?;
+            return Ok(self.events.clone());
+        }
+
+        Ok(self.legacy_text_events())
+    }
+
+    fn legacy_text_events(&self) -> Vec<UiInputEvent> {
         let mut events = Vec::new();
         if !self.window_focused {
             events.push(UiInputEvent::WindowFocusChanged(false));
@@ -868,7 +902,7 @@ impl UiInput {
                 .cloned()
                 .map(UiInputEvent::Key),
         );
-        Ok(events)
+        events
     }
 }
 
@@ -882,29 +916,48 @@ fn pointer_projection_matches(input: &UiInput) -> bool {
     let mut click_count = 0;
     let mut saw_release_all = false;
     let mut buttons = HashSet::new();
+    let mut position_evidence = None;
 
     for event in &input.events {
         match event {
             UiInputEvent::PointerMoved {
-                delta: event_delta, ..
+                position,
+                delta: event_delta,
             } => {
+                position_evidence = Some(Some(*position));
                 delta = add_vectors(delta, *event_delta);
             }
             UiInputEvent::PointerLeft => {
+                position_evidence = Some(None);
                 delta = Vec2::ZERO;
             }
             UiInputEvent::PointerButton {
                 button,
                 click_count: event_click_count,
+                position,
                 ..
             } => {
+                if let Some(position) = position {
+                    position_evidence = Some(Some(*position));
+                }
                 buttons.insert(*button);
                 click_count = *event_click_count;
             }
-            UiInputEvent::PointerReleaseAll { .. } => saw_release_all = true,
+            UiInputEvent::PointerReleaseAll { position } => {
+                if let Some(position) = position {
+                    position_evidence = Some(Some(*position));
+                }
+                saw_release_all = true;
+            }
             UiInputEvent::Wheel {
-                delta: event_delta, ..
-            } => wheel = add_vectors(wheel, event_delta.value()),
+                delta: event_delta,
+                position,
+            } => {
+                if let Some(position) = position {
+                    position_evidence = Some(Some(*position));
+                }
+                wheel = add_vectors(wheel, event_delta.value());
+            }
             _ => {}
         }
     }
@@ -913,6 +966,7 @@ fn pointer_projection_matches(input: &UiInput) -> bool {
         || input.pointer.wheel_delta != wheel
         || input.pointer.click_count != click_count
         || input.pointer.release_all_cancelled() != saw_release_all
+        || position_evidence.is_some_and(|position| input.pointer.position != position)
     {
         return false;
     }

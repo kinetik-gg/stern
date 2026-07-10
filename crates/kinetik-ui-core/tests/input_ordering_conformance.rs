@@ -76,6 +76,63 @@ fn push_event_preserves_order_event_time_geometry_and_typed_wheel_provenance() {
 }
 
 #[test]
+fn positional_pointer_events_project_definitive_evidence_and_none_retains_position() {
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 1,
+        position: Some(Point::new(1.0, 2.0)),
+    });
+    assert_eq!(input.pointer.position, Some(Point::new(1.0, 2.0)));
+
+    input.push_event(UiInputEvent::Wheel {
+        delta: InputWheelDelta::Lines(Vec2::new(0.0, -1.0)),
+        position: None,
+    });
+    assert_eq!(input.pointer.position, Some(Point::new(1.0, 2.0)));
+
+    input.push_event(UiInputEvent::PointerReleaseAll {
+        position: Some(Point::new(3.0, 4.0)),
+    });
+    input.push_event(UiInputEvent::Wheel {
+        delta: InputWheelDelta::Pixels(Vec2::new(2.0, 3.0)),
+        position: None,
+    });
+    assert_eq!(input.pointer.position, Some(Point::new(3.0, 4.0)));
+
+    input.push_event(UiInputEvent::PointerLeft);
+    input.push_event(UiInputEvent::Wheel {
+        delta: InputWheelDelta::Lines(Vec2::new(1.0, 0.0)),
+        position: None,
+    });
+    assert_eq!(input.pointer.position, None);
+    assert_eq!(input.validate_event_stream(), Ok(()));
+}
+
+#[test]
+fn root_validation_rejects_mutated_final_pointer_position() {
+    let mut positioned = UiInput::default();
+    positioned.push_event(UiInputEvent::Wheel {
+        delta: InputWheelDelta::Pixels(Vec2::new(1.0, 2.0)),
+        position: Some(Point::new(4.0, 5.0)),
+    });
+    positioned.pointer.position = Some(Point::new(9.0, 9.0));
+    assert_eq!(
+        positioned.validate_event_stream(),
+        Err(InputStreamConflict::Pointer)
+    );
+
+    let mut left = UiInput::default();
+    left.push_event(UiInputEvent::PointerLeft);
+    left.pointer.position = Some(Point::new(1.0, 1.0));
+    assert_eq!(
+        left.validate_event_stream(),
+        Err(InputStreamConflict::Pointer)
+    );
+}
+
+#[test]
 fn mixed_canonical_and_direct_projection_mutation_fails_deterministically() {
     let mut input = UiInput::default();
     input.push_event(UiInputEvent::Key(hardware_key("a")));

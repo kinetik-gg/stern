@@ -3,9 +3,10 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus, ObserverDelivery,
-    ObserverDrain, ObserverNotification, ObserverNotificationId, ObserverPublishStatus,
-    ObserverRegistry, ObserverSubscriptionHandle, ObserverSubscriptionId, Vec2, WidgetId,
+    InputStreamConflict, LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus,
+    ObserverDelivery, ObserverDrain, ObserverNotification, ObserverNotificationId,
+    ObserverPublishStatus, ObserverRegistry, ObserverSubscriptionHandle, ObserverSubscriptionId,
+    UiInput, UiInputEvent, Vec2, WidgetId,
 };
 
 /// Frame-local routing decision for one pointer event class.
@@ -49,6 +50,14 @@ impl PointerRoutes {
     };
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum RootInputValidation {
+    #[default]
+    Unvalidated,
+    Valid,
+    Conflict(InputStreamConflict),
+}
+
 /// Retained interaction and widget state owned by the UI runtime.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UiMemory {
@@ -78,6 +87,8 @@ pub struct UiMemory {
     text_input_owner: Option<WidgetId>,
     /// Text-input owner that claimed this frame's ordered editing stream.
     text_input_event_claim: Option<WidgetId>,
+    /// Root stream validation recorded once by the frame runtime.
+    root_input_validation: RootInputValidation,
     /// Text-editing widget whose platform text input should be stopped.
     pending_text_input_stop: Option<WidgetId>,
     scroll_offsets: HashMap<WidgetId, Vec2>,
@@ -103,6 +114,7 @@ impl UiMemory {
         self.pointer_routes = PointerRoutes::default();
         self.pointer_cursor_equivalents.clear();
         self.text_input_event_claim = None;
+        self.root_input_validation = RootInputValidation::Unvalidated;
         self.liveness.begin_frame();
         self.observers.prune_inactive_subscriptions();
     }
@@ -296,7 +308,42 @@ impl UiMemory {
             return false;
         }
         self.text_input_event_claim = Some(id);
-        true
+        !matches!(self.root_input_validation, RootInputValidation::Conflict(_))
+    }
+
+    /// Resolves ordered text events using the validation authority for this frame.
+    ///
+    /// Runtime-owned frames validate the root once, then scoped components
+    /// revalidate only unchanged text-domain projections. Standalone component
+    /// callers retain full canonical/projection validation.
+    #[doc(hidden)]
+    pub fn effective_text_input_events(
+        &self,
+        input: &UiInput,
+    ) -> Result<Vec<UiInputEvent>, InputStreamConflict> {
+        match self.root_input_validation {
+            RootInputValidation::Unvalidated => input.effective_text_events(),
+            RootInputValidation::Valid => input.effective_scoped_text_events(),
+            RootInputValidation::Conflict(conflict) => Err(conflict),
+        }
+    }
+
+    pub(crate) fn set_root_input_validation(
+        &mut self,
+        validation: Result<(), InputStreamConflict>,
+    ) {
+        debug_assert_eq!(self.root_input_validation, RootInputValidation::Unvalidated);
+        self.root_input_validation = match validation {
+            Ok(()) => RootInputValidation::Valid,
+            Err(conflict) => RootInputValidation::Conflict(conflict),
+        };
+    }
+
+    pub(crate) const fn root_input_conflict(&self) -> Option<InputStreamConflict> {
+        match self.root_input_validation {
+            RootInputValidation::Conflict(conflict) => Some(conflict),
+            RootInputValidation::Unvalidated | RootInputValidation::Valid => None,
+        }
     }
 
     /// Marks the widget as hovered for this frame.

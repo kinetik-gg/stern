@@ -1,9 +1,10 @@
 use super::{
     DEFAULT_NUMERIC_SCRUB_COARSE_FACTOR, DEFAULT_NUMERIC_SCRUB_FINE_FACTOR,
-    DEFAULT_NUMERIC_SCRUB_STEP, Key, KeyState, NumericInputDraft, NumericInputPolicy, Rect,
-    Response, SemanticAction, SemanticActionKind, SemanticValue, TextEditState, TextFieldOutput,
-    TextLayoutStore, Theme, UiInput, UiMemory, WidgetId, classify_numeric_input_draft, draggable,
-    restore_text_draft, text_field_with_text_layouts_and_caret_visibility,
+    DEFAULT_NUMERIC_SCRUB_STEP, NumericInputDraft, NumericInputPolicy, OrderedTextInputResult,
+    Rect, Response, SemanticAction, SemanticActionKind, SemanticValue, TextEditState,
+    TextFieldOutput, TextLayoutStore, Theme, UiInput, UiMemory, WidgetId,
+    classify_numeric_input_draft, draggable, restore_text_draft,
+    text_field_with_text_layouts_and_caret_visibility_and_ordered_result,
 };
 
 /// Output emitted by numeric input.
@@ -198,19 +199,20 @@ pub(crate) fn numeric_input_with_text_layouts_and_caret_visibility(
     text_layouts: Option<&mut TextLayoutStore>,
     caret_visible: bool,
 ) -> NumericInputOutput {
-    let field = text_field_with_text_layouts_and_caret_visibility(
-        id,
-        rect,
-        state,
-        input,
-        memory,
-        theme,
-        disabled,
-        text_layouts,
-        caret_visible,
-    );
+    let (field, ordered_result) =
+        text_field_with_text_layouts_and_caret_visibility_and_ordered_result(
+            id,
+            rect,
+            state,
+            input,
+            memory,
+            theme,
+            disabled,
+            text_layouts,
+            caret_visible,
+        );
     let draft = classify_numeric_input_draft(&state.text);
-    let policy = numeric_input_keyboard_policy(draft, &field, input, disabled);
+    let policy = numeric_input_keyboard_policy(draft, &field, &ordered_result, disabled);
 
     NumericInputOutput {
         field,
@@ -336,7 +338,7 @@ pub(crate) fn numeric_scrub_input_with_text_layouts_and_caret_visibility(
 fn numeric_input_keyboard_policy(
     draft: NumericInputDraft,
     field: &TextFieldOutput,
-    input: &UiInput,
+    ordered_result: &OrderedTextInputResult,
     disabled: bool,
 ) -> NumericInputPolicy {
     let Some(response) = field.widget.response.as_ref() else {
@@ -347,20 +349,9 @@ fn numeric_input_keyboard_policy(
     }
 
     let mut policy = NumericInputPolicy::idle(draft);
-    for event in &input.keyboard.events {
-        if event.state != KeyState::Pressed || event.repeat || !event.modifiers.is_empty() {
-            continue;
-        }
-        match event.key {
-            Key::Enter if matches!(draft, NumericInputDraft::Valid(_)) => {
-                policy.commit_requested = true;
-            }
-            Key::Escape => {
-                policy.revert_requested = true;
-            }
-            _ => {}
-        }
-    }
+    policy.commit_requested =
+        ordered_result.commit_requested && matches!(draft, NumericInputDraft::Valid(_));
+    policy.revert_requested = ordered_result.revert_requested;
     policy
 }
 

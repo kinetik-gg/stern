@@ -498,7 +498,7 @@ fn ordered_pointer_events_localize_individually_and_clips_keep_only_release_clea
 
     assert_eq!(
         localized.validate_event_stream(),
-        Ok(()),
+        Err(kinetik_ui_core::InputStreamConflict::Pointer),
         "localized input: {localized:#?}"
     );
     assert_eq!(localized.pointer.position, None);
@@ -562,17 +562,22 @@ fn spatial_localization_never_heals_a_root_pointer_projection_conflict() {
     let mut harness = UiTestHarness::new();
     harness.set_pointer_position(Point::new(8.0, 12.0));
     harness.input_mut().pointer.delta = Vec2::new(99.0, 99.0);
+    harness.input_mut().pointer.click_count = 7;
 
-    let (conflict, output) = harness.run_frame(|ui| {
+    let ((localized, conflict), output) = harness.run_frame(|ui| {
         ui.push_primitive(Primitive::TransformBegin(Transform::scale(Vec2::new(
             2.0, 2.0,
         ))));
-        let conflict = ui.input().validate_event_stream();
+        let localized = ui.input().clone();
+        let conflict = localized.validate_event_stream();
         ui.push_primitive(Primitive::TransformEnd);
-        conflict
+        (localized, conflict)
     });
 
     assert_eq!(conflict, Err(kinetik_ui_core::InputStreamConflict::Pointer));
+    assert_eq!(localized.pointer.position, Some(Point::new(4.0, 6.0)));
+    assert_vec_close(localized.pointer.delta, Vec2::new(49.5, 49.5));
+    assert_eq!(localized.pointer.click_count, 7);
     assert!(matches!(
         output.warnings.as_slice(),
         [kinetik_ui_core::FrameWarning::InputStreamConflict {

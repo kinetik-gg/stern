@@ -15,6 +15,7 @@ use super::{
     shortcut_event, text_field, text_field_with_text_layouts, text_value, vector2_scrub_input,
     vector3_component_rects, vector3_scrub_input, vector4_scrub_input,
 };
+use kinetik_ui_core::UiInputEvent;
 
 #[test]
 fn numeric_input_distinguishes_valid_invalid_and_empty_states() {
@@ -184,6 +185,182 @@ fn focused_numeric_input_escape_requests_revert_and_helper_restores_baseline() {
         classify_numeric_input_draft(&state.text),
         NumericInputDraft::Valid(12.5)
     );
+}
+
+#[test]
+fn numeric_ordered_intent_is_emitted_only_by_the_single_claimed_pass() {
+    let theme = default_dark_theme();
+    let first = WidgetId::from_key("first-number");
+    let second = WidgetId::from_key("second-number");
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::Enter,
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    )));
+    let mut memory = UiMemory::new();
+    memory.focus(first);
+    memory.set_text_input_owner(first);
+    let mut first_state = TextEditState::new("42");
+    let mut second_state = TextEditState::new("7");
+
+    let claimed = numeric_input(
+        first,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut first_state,
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    let repeated = numeric_input(
+        first,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut first_state,
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    memory.focus(second);
+    memory.set_text_input_owner(second);
+    let handed_off = numeric_input(
+        second,
+        Rect::new(0.0, 30.0, 160.0, 24.0),
+        &mut second_state,
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+
+    assert!(claimed.policy.commit_requested);
+    assert!(!repeated.policy.commit_requested);
+    assert!(!handed_off.policy.commit_requested);
+
+    let revert_id = WidgetId::from_key("revert-number");
+    let mut revert_input = UiInput::default();
+    revert_input.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::Escape,
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    )));
+    let mut revert_memory = UiMemory::new();
+    revert_memory.focus(revert_id);
+    revert_memory.set_text_input_owner(revert_id);
+    let mut revert_state = TextEditState::new("invalid draft");
+    let reverted = numeric_input(
+        revert_id,
+        Rect::new(0.0, 60.0, 160.0, 24.0),
+        &mut revert_state,
+        &revert_input,
+        &mut revert_memory,
+        &theme,
+        false,
+    );
+    assert!(reverted.policy.revert_requested);
+}
+
+#[test]
+fn numeric_ordered_intent_rejects_focus_loss_repeat_modifiers_and_conflict() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("number-intent-guards");
+
+    let mut after_focus_loss = UiInput::default();
+    after_focus_loss.push_event(UiInputEvent::WindowFocusChanged(false));
+    after_focus_loss.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::Enter,
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    )));
+    after_focus_loss.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::Escape,
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    )));
+    let mut focus_memory = UiMemory::new();
+    focus_memory.focus(id);
+    focus_memory.set_text_input_owner(id);
+    let mut focus_state = TextEditState::new("42");
+    let focus_output = numeric_input(
+        id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut focus_state,
+        &after_focus_loss,
+        &mut focus_memory,
+        &theme,
+        false,
+    );
+    assert!(!focus_output.policy.commit_requested);
+    assert!(!focus_output.policy.revert_requested);
+
+    let mut filtered = UiInput::default();
+    filtered.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::Enter,
+        KeyState::Pressed,
+        Modifiers::default(),
+        true,
+    )));
+    filtered.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::Escape,
+        KeyState::Pressed,
+        Modifiers::new(true, false, false, false),
+        false,
+    )));
+    filtered.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::Enter,
+        KeyState::Released,
+        Modifiers::default(),
+        false,
+    )));
+    let mut filtered_memory = UiMemory::new();
+    filtered_memory.focus(id);
+    filtered_memory.set_text_input_owner(id);
+    let mut filtered_state = TextEditState::new("42");
+    let filtered_output = numeric_input(
+        id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut filtered_state,
+        &filtered,
+        &mut filtered_memory,
+        &theme,
+        false,
+    );
+    assert!(!filtered_output.policy.commit_requested);
+    assert!(!filtered_output.policy.revert_requested);
+
+    let mut conflicted = UiInput::default();
+    conflicted.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::Enter,
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    )));
+    conflicted.keyboard.events.push(KeyEvent::new(
+        Key::Escape,
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    ));
+    let mut conflict_memory = UiMemory::new();
+    conflict_memory.focus(id);
+    conflict_memory.set_text_input_owner(id);
+    let mut conflict_state = TextEditState::new("42");
+    let conflict_output = numeric_input(
+        id,
+        Rect::new(0.0, 0.0, 160.0, 24.0),
+        &mut conflict_state,
+        &conflicted,
+        &mut conflict_memory,
+        &theme,
+        false,
+    );
+    assert!(!conflict_output.policy.commit_requested);
+    assert!(!conflict_output.policy.revert_requested);
 }
 
 #[test]

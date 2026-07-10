@@ -1,9 +1,10 @@
 use super::{
-    ComponentState, CursorShape, Primitive, Rect, RectPrimitive, TextEditMode, TextEditState,
-    TextLayoutStore, TextSelection, Theme, UiInput, UiMemory, WidgetId, WidgetOutput,
-    display_text_with_composition, focusable, multi_line_hit_offset, multi_line_text_primitives,
-    single_line_hit_offset, single_line_text_primitives, text_field_layout, text_field_semantics,
-    text_input_platform_requests, text_line_fragments, with_hover_cursor, with_response_state,
+    ComponentState, CursorShape, OrderedTextInputResult, Primitive, Rect, RectPrimitive,
+    TextEditMode, TextEditState, TextLayoutStore, TextSelection, Theme, UiInput, UiMemory,
+    WidgetId, WidgetOutput, display_text_with_composition, focusable, multi_line_hit_offset,
+    multi_line_text_primitives, single_line_hit_offset, single_line_text_primitives,
+    text_field_layout, text_field_semantics, text_input_platform_requests, text_line_fragments,
+    with_hover_cursor, with_response_state,
 };
 
 /// Output emitted by editable text widgets.
@@ -63,9 +64,35 @@ pub(crate) fn text_field_with_text_layouts_and_caret_visibility(
     memory: &mut UiMemory,
     theme: &Theme,
     disabled: bool,
-    mut text_layouts: Option<&mut TextLayoutStore>,
+    text_layouts: Option<&mut TextLayoutStore>,
     caret_visible: bool,
 ) -> TextFieldOutput {
+    text_field_with_text_layouts_and_caret_visibility_and_ordered_result(
+        id,
+        rect,
+        state,
+        input,
+        memory,
+        theme,
+        disabled,
+        text_layouts,
+        caret_visible,
+    )
+    .0
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn text_field_with_text_layouts_and_caret_visibility_and_ordered_result(
+    id: WidgetId,
+    rect: Rect,
+    state: &mut TextEditState,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    disabled: bool,
+    mut text_layouts: Option<&mut TextLayoutStore>,
+    caret_visible: bool,
+) -> (TextFieldOutput, OrderedTextInputResult) {
     let before = state.text.clone();
     let mut response = focusable(id, rect, input, memory, disabled);
     let hit_recipe = theme.text_field(ComponentState {
@@ -99,12 +126,15 @@ pub(crate) fn text_field_with_text_layouts_and_caret_visibility(
         response.state.focused = true;
     }
     let mut platform_requests = text_input_platform_requests(id, rect, &response, memory);
+    let mut ordered_result = OrderedTextInputResult::default();
     if response.state.focused
         && !disabled
         && memory.claim_text_input_events(id)
-        && let Ok(events) = input.effective_text_events()
+        && let Ok(events) = memory.effective_text_input_events(input)
     {
-        platform_requests.extend(state.apply_ordered_input(&events, id, TextEditMode::SingleLine));
+        ordered_result =
+            state.apply_ordered_input_with_result(&events, id, TextEditMode::SingleLine);
+        platform_requests.extend(ordered_result.platform_requests.iter().cloned());
     }
     let recipe = theme.text_field(ComponentState {
         hovered: response.state.hovered,
@@ -131,19 +161,22 @@ pub(crate) fn text_field_with_text_layouts_and_caret_visibility(
         layout,
     ));
 
-    TextFieldOutput {
-        widget: with_hover_cursor(
-            WidgetOutput::new(Some(response), primitives)
-                .with_semantic(with_response_state(
-                    text_field_semantics(id, rect, "Text field", state.text.clone(), disabled),
-                    &response,
-                ))
-                .with_platform_requests(platform_requests),
-            &response,
-            CursorShape::Text,
-        ),
-        changed: before != state.text,
-    }
+    (
+        TextFieldOutput {
+            widget: with_hover_cursor(
+                WidgetOutput::new(Some(response), primitives)
+                    .with_semantic(with_response_state(
+                        text_field_semantics(id, rect, "Text field", state.text.clone(), disabled),
+                        &response,
+                    ))
+                    .with_platform_requests(platform_requests),
+                &response,
+                CursorShape::Text,
+            ),
+            changed: before != state.text,
+        },
+        ordered_result,
+    )
 }
 
 /// Output emitted by multi-line text fields.
@@ -332,7 +365,7 @@ pub(crate) fn multi_line_text_field_with_text_layouts_and_caret_visibility(
     if response.state.focused
         && !disabled
         && memory.claim_text_input_events(id)
-        && let Ok(events) = input.effective_text_events()
+        && let Ok(events) = memory.effective_text_input_events(input)
     {
         platform_requests.extend(state.apply_ordered_input(&events, id, TextEditMode::MultiLine));
     }

@@ -78,7 +78,6 @@ impl SpatialStack {
             return input;
         }
 
-        let release_snapshot = input.pointer.clone();
         input.events = root
             .events
             .iter()
@@ -86,6 +85,11 @@ impl SpatialStack {
                 self.localize_event(event, preserve_primary_release, preserve_secondary_release)
             })
             .collect();
+        if root_pointer_conflict {
+            return input;
+        }
+
+        let release_snapshot = input.pointer.clone();
         input.pointer.begin_frame();
         let mut saw_release_all = false;
         for event in &input.events {
@@ -121,11 +125,6 @@ impl SpatialStack {
                 preserve_primary_release,
                 preserve_secondary_release,
             );
-        }
-        if root_pointer_conflict && input.validate_event_stream().is_ok() {
-            // A scope may legitimately transform or suppress pointer evidence,
-            // but it must not heal a conflict already detected at the root.
-            input.pointer.click_count ^= 1;
         }
         input
     }

@@ -16,6 +16,17 @@ pub enum TextEditMode {
     MultiLine,
 }
 
+/// Side effects and non-replayed command intent from one ordered input pass.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OrderedTextInputResult {
+    /// Platform work emitted at exact ordered event positions.
+    pub platform_requests: Vec<PlatformRequest>,
+    /// An unmodified, non-repeated Enter press occurred before focus loss.
+    pub commit_requested: bool,
+    /// An unmodified, non-repeated Escape press occurred before focus loss.
+    pub revert_requested: bool,
+}
+
 /// Editable single-line text state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextEditState {
@@ -236,7 +247,23 @@ impl TextEditState {
         target: WidgetId,
         mode: TextEditMode,
     ) -> Vec<PlatformRequest> {
-        let mut platform_requests = Vec::new();
+        self.apply_ordered_input_with_result(events, target, mode)
+            .platform_requests
+    }
+
+    /// Applies one ordered stream and returns its platform effects and command intent.
+    ///
+    /// Callers must validate the stream before invoking this method. The result
+    /// belongs to this one application and must not be reconstructed from legacy
+    /// projections after the stream has been claimed.
+    #[must_use]
+    pub fn apply_ordered_input_with_result(
+        &mut self,
+        events: &[UiInputEvent],
+        target: WidgetId,
+        mode: TextEditMode,
+    ) -> OrderedTextInputResult {
+        let mut result = OrderedTextInputResult::default();
         let mut accepts_editing = true;
         for event in events {
             match event {
@@ -247,7 +274,17 @@ impl TextEditState {
                 UiInputEvent::WindowFocusChanged(true) => {}
                 _ if !accepts_editing => {}
                 UiInputEvent::Key(event) => {
-                    self.apply_ordered_key(event, target, mode, &mut platform_requests);
+                    if event.state == KeyState::Pressed
+                        && !event.repeat
+                        && event.modifiers.is_empty()
+                    {
+                        match event.key {
+                            Key::Enter => result.commit_requested = true,
+                            Key::Escape => result.revert_requested = true,
+                            _ => {}
+                        }
+                    }
+                    self.apply_ordered_key(event, target, mode, &mut result.platform_requests);
                 }
                 UiInputEvent::Text(event) => self.apply_ordered_text(event, mode),
                 UiInputEvent::ClipboardText(clipboard) if clipboard.target == target => {
@@ -265,7 +302,7 @@ impl TextEditState {
                 | UiInputEvent::ImeEnabled(_) => {}
             }
         }
-        platform_requests
+        result
     }
 
     /// Applies legacy separate text and key slices.
@@ -431,6 +468,9 @@ impl TextEditState {
         }
 
         if self.apply_ordered_edit_command(event, mode) || has_command_modifier(event) {
+            return;
+        }
+        if self.composition.is_some() {
             return;
         }
         if let Some(text) = event.text.as_deref().and_then(sanitize_hardware_text) {
