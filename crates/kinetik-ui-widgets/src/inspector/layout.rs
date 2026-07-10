@@ -225,6 +225,43 @@ impl PropertyGridLayout {
             .collect()
     }
 
+    /// Computes visible row rectangles in content coordinates.
+    ///
+    /// Use this variant inside a runtime-owned scroll transform. The scroll
+    /// offset selects the materialized range but is not subtracted from emitted
+    /// geometry, because the enclosing runtime scope owns that translation.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn visible_row_rects_content(
+        self,
+        bounds: Rect,
+        rows: &[PropertyGridRow],
+        scroll_offset: f32,
+        overscan: usize,
+    ) -> Vec<PropertyGridRowRect> {
+        let scroll_offset = self.clamp_scroll_offset(rows, bounds.height, scroll_offset);
+        let visible = self.visible_range(rows, scroll_offset, bounds.height, overscan);
+        let mut y = bounds.y;
+        for row in rows.iter().take(visible.start) {
+            y += self.row_extent(row.kind);
+        }
+
+        visible
+            .map(|index| {
+                let row = &rows[index];
+                let height = self.row_extent(row.kind);
+                let rect = Rect::new(
+                    bounds.x,
+                    y,
+                    finite_non_negative(bounds.width),
+                    finite_non_negative(height),
+                );
+                y += height;
+                self.row_rect(index, row, rect)
+            })
+            .collect()
+    }
+
     #[allow(clippy::cast_precision_loss)]
     fn row_rect(self, index: usize, row: &PropertyGridRow, rect: Rect) -> PropertyGridRowRect {
         match row.kind {

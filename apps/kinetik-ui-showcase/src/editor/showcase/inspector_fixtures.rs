@@ -46,8 +46,8 @@ impl EditorShowcase {
             grid,
             Size::new(grid.width, layout.content_height(&rows).max(grid.height)),
             false,
-            |ui, _| {
-                for row in layout.visible_row_rects(grid, &rows, 0.0, 2) {
+            |ui, offset| {
+                for row in layout.visible_row_rects_content(grid, &rows, offset.y, 2) {
                     match row.kind {
                         kinetik_ui::widgets::PropertyGridRowKind::Section => {
                             rect(ui, row.rect, rgb(31, 33, 36), Some(rgb(46, 49, 55)));

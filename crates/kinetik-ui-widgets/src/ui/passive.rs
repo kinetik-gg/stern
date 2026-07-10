@@ -164,6 +164,10 @@ impl Ui<'_> {
         ));
     }
     /// Emits a clipped, scrollable content region.
+    ///
+    /// The closure receives the retained offset for virtualization decisions.
+    /// Child rectangles remain in content coordinates; this runtime scope owns
+    /// the matching paint, input, semantic, debug, and IME translation.
     pub fn scroll_area<T>(
         &mut self,
         key: impl Hash,

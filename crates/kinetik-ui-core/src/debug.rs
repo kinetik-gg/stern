@@ -1,5 +1,6 @@
 //! Debug inspection models for renderer-neutral UI diagnostics.
 
+use crate::runtime::spatial::SpatialStack;
 use crate::{ClipId, FrameMetrics, LayerId, Point, Primitive, Rect, WidgetId};
 
 /// Severity for structured frame diagnostics.
@@ -86,7 +87,7 @@ pub struct PrimitiveInspection {
     pub index: usize,
     /// Primitive category.
     pub kind: PrimitiveKind,
-    /// Bounds when the primitive has explicit geometry.
+    /// Screen-logical bounds after resolving active transforms and clips.
     pub bounds: Option<Rect>,
     /// Human-readable summary.
     pub summary: String,
@@ -174,16 +175,40 @@ fn path_element_points(element: &crate::PathElement) -> Vec<Point> {
 /// Builds primitive inspection rows.
 #[must_use]
 pub fn inspect_primitives(primitives: &[Primitive]) -> Vec<PrimitiveInspection> {
-    primitives
-        .iter()
-        .enumerate()
-        .map(|(index, primitive)| PrimitiveInspection {
+    let mut spatial = SpatialStack::default();
+    let mut inspections = Vec::with_capacity(primitives.len());
+    for (index, primitive) in primitives.iter().enumerate() {
+        let bounds = match primitive {
+            Primitive::ClipBegin { .. } => {
+                spatial.observe_primitive(primitive);
+                spatial.effective_clip_bounds()
+            }
+            Primitive::TransformBegin(_)
+            | Primitive::LayerBegin { .. }
+            | Primitive::ClipEnd { .. }
+            | Primitive::TransformEnd
+            | Primitive::LayerEnd { .. } => {
+                spatial.observe_primitive(primitive);
+                None
+            }
+            Primitive::Rect(_)
+            | Primitive::Line(_)
+            | Primitive::Shadow(_)
+            | Primitive::Path(_)
+            | Primitive::Text(_)
+            | Primitive::Image(_)
+            | Primitive::Texture(_) => {
+                primitive_bounds(primitive).and_then(|bounds| spatial.project_rect(bounds))
+            }
+        };
+        inspections.push(PrimitiveInspection {
             index,
             kind: primitive_kind(primitive),
-            bounds: primitive_bounds(primitive),
+            bounds,
             summary: primitive_summary(primitive),
-        })
-        .collect()
+        });
+    }
+    inspections
 }
 
 fn primitive_summary(primitive: &Primitive) -> String {
@@ -259,9 +284,9 @@ mod tests {
 
     use super::{DebugOverlay, PrimitiveKind, inspect_primitives, primitive_bounds};
     use crate::{
-        Brush, Color, CornerRadius, FrameCounters, FrameMetrics, FrameTimings, LinePrimitive,
-        PathElement, PathPrimitive, Point, Primitive, Rect, RectPrimitive, ShadowPrimitive, Stroke,
-        Vec2,
+        Brush, ClipId, Color, CornerRadius, FrameCounters, FrameMetrics, FrameTimings,
+        LinePrimitive, PathElement, PathPrimitive, Point, Primitive, Rect, RectPrimitive,
+        ShadowPrimitive, Stroke, Transform, Vec2,
     };
 
     #[test]
@@ -352,5 +377,39 @@ mod tests {
                 .iter()
                 .any(|row| row.contains("primitives: 1"))
         );
+    }
+
+    #[test]
+    fn primitive_inspection_resolves_transform_clip_and_singular_scope_bounds() {
+        let clip = ClipId::from_raw(9);
+        let rect = |bounds| {
+            Primitive::Rect(RectPrimitive {
+                rect: bounds,
+                fill: Some(Brush::Solid(Color::WHITE)),
+                stroke: None,
+                radius: CornerRadius::all(0.0),
+            })
+        };
+        let primitives = vec![
+            Primitive::TransformBegin(Transform::translation(Vec2::new(10.0, 20.0))),
+            Primitive::ClipBegin {
+                id: clip,
+                rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+            },
+            rect(Rect::new(5.0, 5.0, 10.0, 10.0)),
+            Primitive::ClipEnd { id: clip },
+            Primitive::TransformEnd,
+            Primitive::TransformBegin(Transform::scale(Vec2::new(0.0, 1.0))),
+            rect(Rect::new(0.0, 0.0, 5.0, 5.0)),
+            Primitive::TransformEnd,
+            rect(Rect::new(1.0, 2.0, 3.0, 4.0)),
+        ];
+
+        let rows = inspect_primitives(&primitives);
+
+        assert_eq!(rows[1].bounds, Some(Rect::new(10.0, 20.0, 10.0, 10.0)));
+        assert_eq!(rows[2].bounds, Some(Rect::new(15.0, 25.0, 5.0, 5.0)));
+        assert_eq!(rows[6].bounds, None);
+        assert_eq!(rows[8].bounds, Some(Rect::new(1.0, 2.0, 3.0, 4.0)));
     }
 }

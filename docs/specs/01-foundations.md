@@ -315,6 +315,26 @@ The UI runtime lays out using `logical_size`.
 
 The renderer receives logical primitives plus `scale_factor`, then draws scale-aware output to the physical render target.
 
+Render transform and clip scopes also define the runtime coordinate scope.
+Transforms compose in stream order as parent then child. Widget rectangles,
+`Response::rect`, and all public `UiInput` accessors use current-scope logical
+coordinates. Pointer positions use the complete inverse affine transform;
+pointer movement and wheel vectors use its inverse linear portion. Semantic,
+debug, and IME rectangles are exported in screen-logical coordinates.
+
+Effective clipping preserves transformed clip regions rather than reducing
+them to screen-space bounding boxes. Input outside any active clip cannot
+hover, press, click, wheel-scroll, or contribute drag movement. Fully clipped
+semantic nodes remain structurally present but leave focus traversal, and a
+clipped focused text owner is blurred and stops platform text input in the same
+frame. Singular or non-finite scopes stay balanced in the primitive stream and
+make descendant input and exported geometry inert until the parent scope is
+restored.
+
+Runtime-owned scrolling emits one clip plus one translation. Collection layout
+may use the scroll offset to choose a virtualized materialization range, but
+content geometry inside that scope must not subtract the same offset again.
+
 Pixel alignment rules:
 
 - Filled rectangles may use logical coordinates directly.
@@ -360,7 +380,10 @@ struct UiInput {
 
 Input should be stored as a snapshot for the current frame. Widgets should query current input and prior `UiMemory` to produce responses.
 
-The input model must support pointer capture. During a drag, the active widget should continue receiving drag updates even if the pointer leaves its original rect.
+The input model must support pointer capture. During a drag, the active widget
+continues receiving drag updates after leaving its original rectangle while it
+remains inside the effective clip. Outside the effective clip, interaction is
+inert except that button-release edges remain available to clean up capture.
 
 Text input has priority when a text editor is focused. Keyboard shortcuts should not steal ordinary typing from focused text fields.
 

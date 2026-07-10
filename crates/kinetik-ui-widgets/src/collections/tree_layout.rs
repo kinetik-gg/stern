@@ -172,6 +172,57 @@ impl TreeLayout {
         .collect()
     }
 
+    /// Computes visible row rectangles in content coordinates.
+    ///
+    /// Use this variant inside a runtime-owned scroll transform. The scroll
+    /// offset selects the materialized range but is not subtracted from emitted
+    /// geometry, because the enclosing runtime scope owns that translation.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn visible_row_rects_content(
+        self,
+        bounds: Rect,
+        rows: &[TreeRow],
+        scroll_offset: f32,
+        overscan: usize,
+    ) -> Vec<TreeRowRect> {
+        let Some(row_height) = self.effective_row_height() else {
+            return Vec::new();
+        };
+        let indent_width = self.effective_indent_width();
+        let clamped_scroll =
+            clamp_virtual_scroll_offset(scroll_offset, rows.len(), row_height, bounds.height);
+        let row_bounds = Rect::new(
+            finite_coordinate(bounds.x),
+            finite_coordinate(bounds.y),
+            finite_non_negative(bounds.width),
+            finite_non_negative(bounds.height),
+        );
+        let list = ListLayout::new(row_height);
+        list.row_rects(
+            row_bounds,
+            rows.len(),
+            self.visible_range(rows.len(), clamped_scroll, bounds.height, overscan),
+        )
+        .into_iter()
+        .map(|item| {
+            let row = rows[item.index];
+            let indent = finite_index_extent(row.depth, indent_width);
+            let rect = item.rect;
+            TreeRowRect {
+                row,
+                rect,
+                content_rect: Rect::new(
+                    finite_sum(rect.x, indent),
+                    rect.y,
+                    (rect.width - indent).max(0.0),
+                    rect.height,
+                ),
+            }
+        })
+        .collect()
+    }
+
     /// Computes visible row rectangles from rows collected for a global range.
     ///
     /// Unlike [`Self::visible_row_rects`], `rows` may be a materialized subset
@@ -195,6 +246,56 @@ impl TreeLayout {
         let row_bounds = Rect::new(
             finite_coordinate(bounds.x),
             finite_sum(finite_coordinate(bounds.y), -clamped_scroll),
+            finite_non_negative(bounds.width),
+            finite_non_negative(bounds.height),
+        );
+        let visible_range = self.visible_range(total_rows, clamped_scroll, bounds.height, overscan);
+        let list = ListLayout::new(row_height);
+
+        rows.iter()
+            .copied()
+            .filter(|row| row.row < total_rows && visible_range.contains(&row.row))
+            .filter_map(|row| {
+                let rect = list.row_rect(row_bounds, row.row)?;
+                let indent = finite_index_extent(row.depth, indent_width);
+                Some(TreeRowRect {
+                    row,
+                    rect,
+                    content_rect: Rect::new(
+                        finite_sum(rect.x, indent),
+                        rect.y,
+                        (rect.width - indent).max(0.0),
+                        rect.height,
+                    ),
+                })
+            })
+            .collect()
+    }
+
+    /// Computes range-collected row rectangles in content coordinates.
+    ///
+    /// This is the runtime-scroll counterpart to
+    /// [`Self::visible_row_rects_in_range`]. The offset selects the global
+    /// materialized range but the enclosing runtime scope owns translation.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn visible_row_rects_in_range_content(
+        self,
+        bounds: Rect,
+        total_rows: usize,
+        rows: &[TreeRow],
+        scroll_offset: f32,
+        overscan: usize,
+    ) -> Vec<TreeRowRect> {
+        let Some(row_height) = self.effective_row_height() else {
+            return Vec::new();
+        };
+        let indent_width = self.effective_indent_width();
+        let clamped_scroll =
+            clamp_virtual_scroll_offset(scroll_offset, total_rows, row_height, bounds.height);
+        let row_bounds = Rect::new(
+            finite_coordinate(bounds.x),
+            finite_coordinate(bounds.y),
             finite_non_negative(bounds.width),
             finite_non_negative(bounds.height),
         );

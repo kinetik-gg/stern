@@ -5,7 +5,7 @@ use crate::memory::UiMemory;
 use crate::render::Primitive;
 use crate::{
     ActionContext, ActionId, ActionInvocation, ActionSource, IdStack, LivenessTargetId,
-    LivenessToken, Rect, SemanticNode, WidgetId,
+    LivenessToken, Rect, SemanticActionKind, SemanticNode, WidgetId,
 };
 
 use super::focus::{
@@ -14,6 +14,7 @@ use super::focus::{
 };
 use super::output::FrameOutput;
 use super::primitive_stack::validate_primitive_stack;
+use super::spatial::SpatialStack;
 use super::types::{CursorShape, FrameContext, FrameWarning, PlatformRequest, RepaintRequest};
 
 /// Frame-local UI runtime builder.
@@ -23,9 +24,11 @@ use super::types::{CursorShape, FrameContext, FrameWarning, PlatformRequest, Rep
 /// lowest-level runtime abstraction.
 pub struct Ui<'a> {
     context: FrameContext,
+    root_input: UiInput,
     memory: &'a mut UiMemory,
     ids: IdStack,
     output: FrameOutput,
+    spatial: SpatialStack,
 }
 
 impl<'a> Ui<'a> {
@@ -36,21 +39,24 @@ impl<'a> Ui<'a> {
         if !context.input.window_focused || pointer_release_all_cancelled(&context.input) {
             memory.cancel_pointer_interaction();
         }
+        let root_input = context.input.clone();
         Self {
             context,
+            root_input,
             memory,
             ids: IdStack::new(),
             output: FrameOutput::new(),
+            spatial: SpatialStack::default(),
         }
     }
 
-    /// Returns the frame context.
+    /// Returns the frame context with input localized to the current render scope.
     #[must_use]
     pub const fn context(&self) -> &FrameContext {
         &self.context
     }
 
-    /// Returns the input snapshot.
+    /// Returns the input snapshot localized to the current render scope.
     #[must_use]
     pub const fn input(&self) -> &UiInput {
         &self.context.input
@@ -107,14 +113,18 @@ impl<'a> Ui<'a> {
         &self.output
     }
 
-    /// Appends one render primitive.
+    /// Appends one render primitive and updates the matching spatial scope.
     pub fn push_primitive(&mut self, primitive: Primitive) {
+        self.spatial.observe_primitive(&primitive);
+        self.refresh_scoped_input();
         self.output.push_primitive(primitive);
     }
 
     /// Appends render primitives in order.
     pub fn extend_primitives(&mut self, primitives: impl IntoIterator<Item = Primitive>) {
-        self.output.extend_primitives(primitives);
+        for primitive in primitives {
+            self.push_primitive(primitive);
+        }
     }
 
     /// Sets the semantic root node.
@@ -123,7 +133,20 @@ impl<'a> Ui<'a> {
     }
 
     /// Appends one semantic node in traversal order.
-    pub fn push_semantic_node(&mut self, node: SemanticNode) {
+    pub fn push_semantic_node(&mut self, mut node: SemanticNode) {
+        if let Some(bounds) = self.spatial.project_semantic_rect(node.bounds) {
+            node.bounds = bounds;
+        } else {
+            if self.memory.is_focused(node.id) {
+                self.memory.clear_focus();
+                self.output.request_repaint(RepaintRequest::NextFrame);
+            }
+            node.bounds = Rect::ZERO;
+            node.focusable = false;
+            node.state.focused = false;
+            node.actions
+                .retain(|action| action.kind != SemanticActionKind::Focus);
+        }
         self.output.push_semantic_node(node);
     }
 
@@ -149,7 +172,18 @@ impl<'a> Ui<'a> {
 
     /// Appends one platform request.
     pub fn push_platform_request(&mut self, request: PlatformRequest) {
-        self.output.push_platform_request(request);
+        match request {
+            PlatformRequest::StartTextInput { rect: Some(rect) } => {
+                if let Some(rect) = self.spatial.project_rect(rect) {
+                    self.output
+                        .push_platform_request(PlatformRequest::StartTextInput {
+                            rect: Some(rect),
+                        });
+                }
+            }
+            PlatformRequest::StartTextInput { rect: None } if !self.spatial.is_visible() => {}
+            request => self.output.push_platform_request(request),
+        }
     }
 
     /// Requests a cursor shape for a hovered or captured widget.
@@ -159,7 +193,9 @@ impl<'a> Ui<'a> {
     /// owned elsewhere, and cancelled pointer frames suppress stale cursor
     /// output until a later frame establishes fresh hover or capture state.
     pub fn request_cursor_for(&mut self, owner: WidgetId, cursor: CursorShape) -> bool {
-        if self.memory.pointer_interaction_cancelled() {
+        if self.memory.pointer_interaction_cancelled()
+            || self.context.input.pointer.position.is_none()
+        {
             return false;
         }
         if let Some(captured) = self.memory.pointer_capture() {
@@ -176,13 +212,31 @@ impl<'a> Ui<'a> {
 
     /// Starts platform text input for a focused text-editing widget.
     ///
-    /// The rectangle is expressed in logical UI coordinates and is forwarded
-    /// unchanged for platform adapters to interpret. Unfocused widgets cannot
-    /// acquire text input ownership through this helper.
+    /// The rectangle is expressed in current-scope logical coordinates and is
+    /// transformed and clipped to screen-logical coordinates for platform
+    /// adapters. Unfocused or spatially invisible widgets cannot acquire text
+    /// input ownership through this helper.
     pub fn start_text_input(&mut self, owner: WidgetId, rect: Option<Rect>) -> bool {
         if !self.memory.is_focused(owner) {
             return false;
         }
+
+        let rect = match rect {
+            Some(rect) => {
+                let Some(rect) = self.spatial.project_rect(rect) else {
+                    self.memory.clear_focus();
+                    self.output.request_repaint(RepaintRequest::NextFrame);
+                    return false;
+                };
+                Some(rect)
+            }
+            None if self.spatial.is_visible() => None,
+            None => {
+                self.memory.clear_focus();
+                self.output.request_repaint(RepaintRequest::NextFrame);
+                return false;
+            }
+        };
 
         let previous_owner = self.memory.text_input_owner();
         if previous_owner == Some(owner) {
@@ -228,27 +282,19 @@ impl<'a> Ui<'a> {
                 false
             }
         };
-        if semantic_tree_valid && apply_escape_text_blur(&self.context.input, self.memory) {
+        if semantic_tree_valid && apply_escape_text_blur(&self.root_input, self.memory) {
             self.output.request_repaint(RepaintRequest::NextFrame);
         }
-        if apply_window_focus_text_blur(&self.context.input, self.memory) {
+        if apply_window_focus_text_blur(&self.root_input, self.memory) {
             self.output.request_repaint(RepaintRequest::NextFrame);
         }
         if semantic_tree_valid
-            && apply_pointer_text_owner_blur(
-                &self.context.input,
-                self.memory,
-                &self.output.semantics,
-            )
+            && apply_pointer_text_owner_blur(&self.root_input, self.memory, &self.output.semantics)
         {
             self.output.request_repaint(RepaintRequest::NextFrame);
         }
         if semantic_tree_valid
-            && apply_keyboard_focus_traversal(
-                &self.context.input,
-                self.memory,
-                &self.output.semantics,
-            )
+            && apply_keyboard_focus_traversal(&self.root_input, self.memory, &self.output.semantics)
         {
             self.output.request_repaint(RepaintRequest::NextFrame);
         }
@@ -261,6 +307,14 @@ impl<'a> Ui<'a> {
         let warnings = validate_primitive_stack(&self.output.primitives);
         self.output.warnings.extend(warnings);
         self.output
+    }
+
+    fn refresh_scoped_input(&mut self) {
+        self.context.input = self.spatial.localize_input(
+            &self.root_input,
+            self.memory.pointer_capture().is_some(),
+            self.memory.secondary_pressed().is_some(),
+        );
     }
 }
 

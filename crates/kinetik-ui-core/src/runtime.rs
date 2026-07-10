@@ -3,6 +3,7 @@
 mod focus;
 mod output;
 mod primitive_stack;
+pub(crate) mod spatial;
 mod types;
 mod ui;
 

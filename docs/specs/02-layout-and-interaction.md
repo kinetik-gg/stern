@@ -62,7 +62,10 @@ Recommended layout contracts:
 - `Column` lays children vertically.
 - `Stack` overlays children in the same rect.
 - `Grid` places children in rows and columns with fixed/fill/fit sizing.
-- `ScrollArea` lays content in a scrollable viewport and clips children.
+- `ScrollArea` lays content in a scrollable viewport, clips children, and owns
+  the content translation. Virtualized children use the offset to choose their
+  materialized range but emit content-coordinate rectangles without applying a
+  second translation.
 - `SplitPane` divides available space between two or more children.
 - `Dock` manages editor Frames.
 - `Frame` owns editor-region behavior and chrome.
@@ -255,6 +258,13 @@ Interaction state should support:
 - Focus gain/loss.
 - Keyboard activation.
 - Disabled state.
+
+Pointer capture remains authoritative outside the owner's original rectangle,
+but never outside an active effective clip. A clipped captured owner receives
+only button-release cleanup; it cannot hover, click, wheel, or emit drag
+movement there. Transform and clip scopes localize all `Ui` input accessors,
+while response rectangles stay local and semantic/debug/IME rectangles export
+screen-logical geometry.
 
 Examples:
 

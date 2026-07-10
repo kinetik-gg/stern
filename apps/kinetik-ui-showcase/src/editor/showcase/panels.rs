@@ -45,8 +45,10 @@ impl EditorShowcase {
             scroll,
             Size::new(scroll.width, content_height.max(scroll.height)),
             false,
-            |ui, _| {
-                for row_rect in layout.visible_row_rects(scroll, &rows, 0.0, 2) {
+            |ui, offset| {
+                for row_rect in
+                    layout.visible_row_rects_content(scroll, &rows, offset.y, 2)
+                {
                     let row = row_rect.row;
                     let twisty = Rect::new(
                         row_rect.content_rect.x + 3.0,
