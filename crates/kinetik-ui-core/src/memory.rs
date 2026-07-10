@@ -8,6 +8,47 @@ use crate::{
     ObserverRegistry, ObserverSubscriptionHandle, ObserverSubscriptionId, Vec2, WidgetId,
 };
 
+/// Frame-local routing decision for one pointer event class.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PointerRoute {
+    /// No explicit plan was installed, preserving low-level compatibility behavior.
+    #[default]
+    Unplanned,
+    /// An explicit plan blocks this event class at the current pointer position.
+    Blocked,
+    /// One exact widget owns this event class.
+    Target(WidgetId),
+}
+
+impl PointerRoute {
+    pub(crate) fn allows(self, id: WidgetId) -> bool {
+        match self {
+            Self::Unplanned => true,
+            Self::Blocked => false,
+            Self::Target(owner) => owner == id,
+        }
+    }
+}
+
+/// Ordinary, drop, and wheel routes resolved from one frame-local target plan.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PointerRoutes {
+    /// Exact owner for primary/secondary hover, press, focus, and drag behavior.
+    pub ordinary: PointerRoute,
+    /// Exact destination owner available alongside a captured drag source.
+    pub drop: PointerRoute,
+    /// Exact scroll viewport allowed to consume wheel input.
+    pub wheel: PointerRoute,
+}
+
+impl PointerRoutes {
+    pub(crate) const BLOCKED: Self = Self {
+        ordinary: PointerRoute::Blocked,
+        drop: PointerRoute::Blocked,
+        wheel: PointerRoute::Blocked,
+    };
+}
+
 /// Retained interaction and widget state owned by the UI runtime.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UiMemory {
@@ -27,6 +68,8 @@ pub struct UiMemory {
     pointer_capture_released: Option<WidgetId>,
     /// Pointer interaction was cancelled at this frame's runtime boundary.
     pointer_interaction_cancelled: bool,
+    pointer_routes: PointerRoutes,
+    pointer_cursor_equivalents: HashSet<WidgetId>,
     /// Widget currently acting as an active drag source.
     drag_source: Option<WidgetId>,
     /// Drag source released during this frame.
@@ -36,6 +79,7 @@ pub struct UiMemory {
     /// Text-editing widget whose platform text input should be stopped.
     pending_text_input_stop: Option<WidgetId>,
     scroll_offsets: HashMap<WidgetId, Vec2>,
+    pending_scroll_offsets: HashMap<WidgetId, Vec2>,
     open_popovers: HashSet<WidgetId>,
     liveness: LivenessRegistry,
     observers: ObserverRegistry,
@@ -54,12 +98,16 @@ impl UiMemory {
         self.pointer_capture_released = None;
         self.released_drag_source = None;
         self.pointer_interaction_cancelled = false;
+        self.pointer_routes = PointerRoutes::default();
+        self.pointer_cursor_equivalents.clear();
         self.liveness.begin_frame();
         self.observers.prune_inactive_subscriptions();
     }
 
     /// Removes liveness targets not seen during the current frame.
     pub(crate) fn end_frame(&mut self) {
+        self.scroll_offsets
+            .extend(std::mem::take(&mut self.pending_scroll_offsets));
         self.liveness.end_frame();
     }
 
@@ -106,6 +154,62 @@ impl UiMemory {
             Some(owner) => Some(owner),
             None => self.pointer_capture_released,
         }
+    }
+
+    /// Returns the ordinary route installed for the current frame.
+    #[must_use]
+    pub const fn pointer_route(&self) -> PointerRoute {
+        self.pointer_routes.ordinary
+    }
+
+    /// Returns the drop route installed for the current frame.
+    #[must_use]
+    pub const fn pointer_drop_route(&self) -> PointerRoute {
+        self.pointer_routes.drop
+    }
+
+    /// Returns the wheel route installed for the current frame.
+    #[must_use]
+    pub const fn pointer_wheel_route(&self) -> PointerRoute {
+        self.pointer_routes.wheel
+    }
+
+    pub(crate) fn install_pointer_routes(
+        &mut self,
+        routes: PointerRoutes,
+        cursor_equivalents: impl IntoIterator<Item = WidgetId>,
+    ) {
+        self.pointer_routes = routes;
+        self.pointer_cursor_equivalents.clear();
+        self.pointer_cursor_equivalents.extend(cursor_equivalents);
+    }
+
+    pub(crate) fn pointer_route_allows(&self, id: WidgetId) -> bool {
+        if self.pointer_interaction_cancelled {
+            return false;
+        }
+        self.pointer_routing_owner().map_or_else(
+            || self.pointer_routes.ordinary.allows(id),
+            |owner| owner == id,
+        )
+    }
+
+    pub(crate) fn pointer_drop_route_allows(&self, id: WidgetId) -> bool {
+        !self.pointer_interaction_cancelled && self.pointer_routes.drop.allows(id)
+    }
+
+    pub(crate) fn pointer_wheel_route_allows(&self, id: WidgetId) -> bool {
+        !self.pointer_interaction_cancelled && self.pointer_routes.wheel.allows(id)
+    }
+
+    pub(crate) fn cursor_owner_matches_capture(
+        &self,
+        captured: WidgetId,
+        requested: WidgetId,
+    ) -> bool {
+        captured == requested
+            || (self.pointer_cursor_equivalents.contains(&captured)
+                && self.pointer_cursor_equivalents.contains(&requested))
     }
 
     /// Returns true when pointer interaction was cancelled before primitive evaluation.
@@ -323,7 +427,12 @@ impl UiMemory {
 
     /// Sets the scroll offset for a widget.
     pub fn set_scroll_offset(&mut self, id: WidgetId, offset: Vec2) {
+        self.pending_scroll_offsets.remove(&id);
         self.scroll_offsets.insert(id, offset);
+    }
+
+    pub(crate) fn stage_scroll_offset(&mut self, id: WidgetId, offset: Vec2) {
+        self.pending_scroll_offsets.insert(id, offset);
     }
 
     /// Returns true when a popover is open for a widget.

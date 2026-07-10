@@ -172,6 +172,25 @@ impl<'a> Ui<'a> {
         self.runtime.id(key)
     }
 
+    /// Derives a widget ID without registering it before a pointer-plan prepass.
+    #[must_use]
+    pub fn make_id(&self, key: impl Hash) -> WidgetId {
+        self.runtime.make_id(key)
+    }
+
+    /// Resolves one closed-world pointer target plan before widget behaviors run.
+    ///
+    /// # Errors
+    ///
+    /// Returns a deterministic validation error when the frame installs a
+    /// second plan or declares duplicate paint orders or conflicting IDs.
+    pub fn resolve_pointer_targets(
+        &mut self,
+        declare: impl FnOnce(&mut kinetik_ui_core::PointerTargetPlan),
+    ) -> Result<kinetik_ui_core::PointerRoutes, kinetik_ui_core::PointerPlanError> {
+        self.runtime.resolve_pointer_targets(declare)
+    }
+
     /// Runs a closure inside a stable ID scope.
     pub fn scope<T>(&mut self, key: impl Hash, f: impl FnOnce(&mut Self) -> T) -> T {
         self.runtime.push_id_scope(key);

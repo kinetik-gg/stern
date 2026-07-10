@@ -1,3 +1,5 @@
+use kinetik_ui::core::{PointerOrder, PointerTarget};
+
 impl EditorShowcase {
     /// Creates an editor showcase.
     #[must_use]
@@ -55,6 +57,7 @@ impl EditorShowcase {
             ui.viewport().logical_size.height,
         );
         let mut invocations = Vec::new();
+        self.resolve_pointer_plan(ui, viewport);
         if self.about_modal_open {
             self.about_modal_input(ui, viewport, &mut invocations);
         }
@@ -87,6 +90,86 @@ impl EditorShowcase {
             "About Kinetik Forge closed".clone_into(&mut self.status);
         }
         true
+    }
+
+    fn resolve_pointer_plan(&self, ui: &mut Ui<'_>, viewport: Rect) {
+        if self.about_modal_open {
+            let overlay = self.about_modal_overlay_model(viewport);
+            let surface = ui.make_id("editor.about-modal.surface");
+            let close = ui.make_id("editor.about-modal.close");
+            ui.resolve_pointer_targets(|plan| {
+                plan.capture_lower_layers(PointerOrder::new(1_000));
+                plan.target(PointerTarget::new(
+                    surface,
+                    overlay.entry.rect,
+                    PointerOrder::new(2_000),
+                ));
+                plan.target(PointerTarget::new(
+                    close,
+                    about_modal_close_rect(overlay.entry.rect),
+                    PointerOrder::new(3_000),
+                ));
+            })
+            .expect("About modal pointer orders and IDs are static and unique");
+            return;
+        }
+
+        let Some(kind) = self.open_menu else {
+            return;
+        };
+        let overlay = self.menu_overlay_model(kind, viewport);
+        let headers = menu_header_rects().map(|(header_kind, _, rect)| {
+            (ui.make_id(("editor.menu-header", header_kind)), rect)
+        });
+        let mut rows = Vec::new();
+        let mut y = overlay.entry.rect.y + 6.0;
+        for (index, item) in overlay.visible_items().into_iter().enumerate() {
+            match item {
+                MenuItem::Label(_) => y += 22.0,
+                MenuItem::Separator => y += 9.0,
+                MenuItem::Action(action) => {
+                    let rect = Rect::new(
+                        overlay.entry.rect.x + 4.0,
+                        y,
+                        overlay.entry.rect.width - 8.0,
+                        24.0,
+                    );
+                    rows.push((
+                        ui.make_id(("editor.menu-row", kind, index, action.id.as_str())),
+                        rect,
+                        action.can_invoke(),
+                        index,
+                    ));
+                    y += 24.0;
+                }
+            }
+        }
+        ui.resolve_pointer_targets(|plan| {
+            plan.capture_lower_layers(PointerOrder::new(1_000));
+            for (index, (id, rect)) in headers.into_iter().enumerate() {
+                plan.target(PointerTarget::new(
+                    id,
+                    rect,
+                    PointerOrder::new(
+                        1_100 + u64::try_from(index).expect("seven menu headers"),
+                    ),
+                ));
+            }
+            plan.blocker(overlay.entry.rect, PointerOrder::new(2_000));
+            for (id, rect, enabled, index) in rows {
+                plan.target(
+                    PointerTarget::new(
+                        id,
+                        rect,
+                        PointerOrder::new(
+                            2_100 + u64::try_from(index).expect("bounded menu rows"),
+                        ),
+                    )
+                    .enabled(enabled),
+                );
+            }
+        })
+        .expect("menu pointer orders and IDs are static and unique");
     }
 
     pub(super) fn select_tool(&mut self, tool: EditorTool) -> bool {
@@ -368,15 +451,11 @@ impl EditorShowcase {
             false,
         );
 
-        // Resolve the modal surface and guard before any editor controls. The
-        // first pointer press is therefore captured by the modal layer and its
-        // release cannot activate a control underneath it.
         let _surface = ui.pressable(
             "editor.about-modal.surface",
             overlay.entry.rect,
             false,
         );
-        let _guard = ui.pressable("editor.about-modal.guard", viewport, false);
 
         let escape_pressed = ui
             .input()

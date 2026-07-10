@@ -9,9 +9,6 @@ impl EditorShowcase {
             return;
         };
         let overlay = self.menu_overlay_model(kind, viewport);
-        if self.menu_overlay_interactions(ui, kind, &overlay, invocations) {
-            return;
-        }
         let visible_items = overlay.visible_items();
         rect_fill(
             ui,
@@ -69,6 +66,15 @@ impl EditorShowcase {
                         row,
                         !enabled,
                     );
+                    if response.clicked && enabled {
+                        let mut queue = ActionQueue::new();
+                        if overlay.invoke_visible(index, &mut queue) {
+                            self.handle_action_queue(invocations, &mut queue);
+                            self.open_menu = None;
+                            ui.request_repaint(RepaintRequest::NextFrame);
+                            return;
+                        }
+                    }
                     if response.state.hovered && enabled {
                         rect_fill(ui, row, rgb(43, 78, 132), None, CornerRadius::all(0.0));
                     }
@@ -111,51 +117,6 @@ impl EditorShowcase {
                 }
             }
         }
-    }
-
-    pub(super) fn menu_overlay_interactions(
-        &mut self,
-        ui: &mut Ui<'_>,
-        kind: EditorMenuKind,
-        overlay: &MenuOverlay,
-        invocations: &mut Vec<EditorInvocation>,
-    ) -> bool {
-        let mut y = overlay.entry.rect.y + 6.0;
-        for (index, item) in overlay.visible_items().into_iter().enumerate() {
-            match item {
-                MenuItem::Label(_) => {
-                    y += 22.0;
-                }
-                MenuItem::Separator => {
-                    y += 9.0;
-                }
-                MenuItem::Action(action) => {
-                    let row = Rect::new(
-                        overlay.entry.rect.x + 4.0,
-                        y,
-                        overlay.entry.rect.width - 8.0,
-                        24.0,
-                    );
-                    let enabled = action.can_invoke();
-                    let response = ui.pressable(
-                        ("editor.menu-row.prepass", kind, index, action.id.as_str()),
-                        row,
-                        !enabled,
-                    );
-                    if response.clicked && enabled {
-                        let mut queue = ActionQueue::new();
-                        if overlay.invoke_visible(index, &mut queue) {
-                            self.handle_action_queue(invocations, &mut queue);
-                            self.open_menu = None;
-                            ui.request_repaint(RepaintRequest::NextFrame);
-                            return true;
-                        }
-                    }
-                    y += 24.0;
-                }
-            }
-        }
-        false
     }
 
     pub(super) fn menu_overlay_model(&self, kind: EditorMenuKind, viewport: Rect) -> MenuOverlay {

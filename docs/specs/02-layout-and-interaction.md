@@ -266,6 +266,22 @@ movement there. Transform and clip scopes localize all `Ui` input accessors,
 while response rectangles stay local and semantic/debug/IME rectangles export
 screen-logical geometry.
 
+Overlapping interaction uses a predeclared `PointerTargetPlan`. Each visual
+target has one canonical identity, at most one ordinary event owner, at most
+one drop owner, optional wheel ownership, and explicit cursor equivalents.
+Only the exact event owner receives its route; equivalence cannot cause a
+second press or click. Disabled, singular, or fully clipped declarations are
+ineligible, allowing the next eligible painted target to win. A visual blocker
+prevents ordinary, drop, and wheel fall-through, while a barrier also blocks
+points outside its own rectangle.
+
+`pressable`, `selectable`, `draggable`, `focusable`, context-menu, and tooltip
+behavior use the ordinary route. Drop behavior with an active source uses the
+drop route. `scrollable` uses ordinary routing for hover but the independent
+wheel route for mutation. When no plan is installed, low-level compatibility
+behavior remains available; audited layered components must install a complete
+plan before any behavior call.
+
 Examples:
 
 ```rust

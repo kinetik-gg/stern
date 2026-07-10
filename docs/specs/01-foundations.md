@@ -244,18 +244,39 @@ Frame lifecycle:
 3. Application calls ui.begin_frame(frame_context).
 4. Application builds UI top-down.
 5. Widgets measure and allocate layout rectangles.
-6. Widgets resolve interactions immediately during their calls.
-7. Widgets update UiMemory through stable WidgetIds.
-8. Widgets emit render primitives.
-9. Widgets emit semantic nodes.
-10. Widgets may emit action invocations.
-11. ui.end_frame() finalizes cleanup and returns FrameOutput.
-12. Renderer draws primitives.
-13. Platform presents the frame.
-14. Redraw scheduling decides whether another frame is needed.
+6. Layered or overlapping regions predeclare one closed pointer target plan.
+7. Widgets resolve interactions immediately during their calls.
+8. Widgets update UiMemory through stable WidgetIds.
+9. Widgets emit render primitives.
+10. Widgets emit semantic nodes.
+11. Widgets may emit action invocations.
+12. ui.end_frame() finalizes cleanup and returns FrameOutput.
+13. Renderer draws primitives.
+14. Platform presents the frame.
+15. Redraw scheduling decides whether another frame is needed.
 ```
 
 Interaction resolution should happen during widget calls, not in a hidden post-pass, unless a specific subsystem requires deferred resolution.
+
+An immediate response cannot discover a visually later overlapping target.
+After layout and before the first routed behavior call, layered UI therefore
+predeclares one frame-local pointer plan. Unique explicit paint ordinals, not
+declaration or behavior-evaluation order, select the top target. The plan is
+closed-world: undeclared behavior IDs are inert, duplicate ordinals or IDs fail
+safe, and no previous-frame hit tree or end-frame response rewrite is used.
+
+The plan installs exact ordinary, drop, and wheel owners. These routes are
+independent so a descendant may own press, its scroll ancestor may consume the
+wheel exactly once, and a captured drag source may coexist with one drop
+destination. Canonical cursor equivalence never grants activation. Capture-
+lower and modal barriers cancel incompatible lower pointer ownership before
+widget calls. Raw `hit_test` functions remain geometry queries rather than
+routed activation APIs.
+
+Wheel input stages the next retained scroll offset. Target geometry, paint,
+semantics, debug bounds, and clipping retain the frame-start offset until
+`end_frame`; the staged value becomes spatially observable in the next frame.
+This prevents routing and visible geometry from using different scroll states.
 
 Example:
 
