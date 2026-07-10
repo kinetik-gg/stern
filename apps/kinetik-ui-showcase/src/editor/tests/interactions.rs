@@ -1,4 +1,217 @@
 #[test]
+fn showcase_about_modal_retains_across_frames_and_paints_above_guard() {
+    let mut editor = EditorShowcase::new();
+    let mut memory = UiMemory::new();
+    let theme = default_dark_theme();
+    let viewport = Rect::new(0.0, 0.0, 1440.0, 900.0);
+
+    assert!(editor.apply_action(ACTION_ABOUT));
+    let mut retained_output = None;
+    for _ in 0..2 {
+        let mut ui = Ui::begin_frame(
+            editor_test_context(UiInput::default()),
+            &mut memory,
+            &theme,
+        );
+        let invocations = editor.render(&mut ui, 0);
+        let output = ui.finish_output();
+        assert!(invocations.is_empty());
+        assert!(editor.about_modal_open);
+        retained_output = Some(output);
+    }
+
+    let output = retained_output.expect("retained modal output");
+    let overlay = editor.about_modal_overlay_model(viewport);
+    let underlay_title = output
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == ABOUT_MODAL_PRODUCT_TITLE)
+        })
+        .expect("underlay title");
+    let guard = output
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(
+                primitive,
+                Primitive::Rect(rect)
+                    if rect.rect == viewport
+                        && matches!(&rect.fill, Some(Brush::Solid(color)) if *color == rgba(0, 0, 0, 0.68))
+            )
+        })
+        .expect("modal guard");
+    let dialog = output
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(
+                primitive,
+                Primitive::Rect(rect)
+                    if rect.rect == overlay.entry.rect
+                        && matches!(&rect.fill, Some(Brush::Solid(color)) if *color == rgb(31, 34, 40))
+            )
+        })
+        .expect("modal surface");
+    let modal_title = output
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == ABOUT_MODAL_DIALOG_TITLE)
+        })
+        .expect("modal title");
+    let modal_product = output
+        .primitives
+        .iter()
+        .rposition(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == ABOUT_MODAL_PRODUCT_TITLE)
+        })
+        .expect("modal product title");
+    let version = output
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == ABOUT_MODAL_VERSION)
+        })
+        .expect("modal version");
+    let readiness = output
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(primitive, Primitive::Text(text) if text.text == ABOUT_MODAL_READINESS)
+        })
+        .expect("modal readiness");
+
+    assert!(underlay_title < guard);
+    assert!(guard < dialog);
+    assert!(dialog < modal_title);
+    assert!(modal_title < modal_product);
+    assert!(modal_product < version);
+    assert!(version < readiness);
+}
+
+#[test]
+fn showcase_about_modal_close_control_emits_unique_close_action() {
+    let mut editor = EditorShowcase::new();
+    let mut memory = UiMemory::new();
+    let theme = default_dark_theme();
+    let viewport = Rect::new(0.0, 0.0, 1440.0, 900.0);
+    assert!(editor.apply_action(ACTION_ABOUT));
+    let close = editor.about_modal_close_rect(viewport).center();
+
+    let mut ui = Ui::begin_frame(
+        editor_test_context(pointer_input_at(close.x, close.y, true, true, false)),
+        &mut memory,
+        &theme,
+    );
+    let invocations = editor.render(&mut ui, 0);
+    let _ = ui.finish_output();
+    assert!(invocations.is_empty());
+    assert!(editor.about_modal_open);
+
+    let mut ui = Ui::begin_frame(
+        editor_test_context(pointer_input_at(close.x, close.y, false, false, true)),
+        &mut memory,
+        &theme,
+    );
+    let invocations = editor.render(&mut ui, 0);
+    let output = ui.finish_output();
+
+    assert_eq!(invocations.len(), 1);
+    assert_eq!(invocations[0].action_id, ActionId::new(ACTION_ABOUT_CLOSE));
+    assert_eq!(invocations[0].source, ActionSource::Button);
+    assert!(!editor.about_modal_open);
+    assert_eq!(editor.status, "About Kinetik Forge closed");
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+}
+
+#[test]
+fn showcase_about_modal_escape_dismisses_once() {
+    let mut editor = EditorShowcase::new();
+    let mut memory = UiMemory::new();
+    let theme = default_dark_theme();
+    assert!(editor.apply_action(ACTION_ABOUT));
+    let mut input = UiInput::default();
+    input.keyboard.events.push(KeyEvent::new(
+        Key::Escape,
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    ));
+
+    let mut ui = Ui::begin_frame(editor_test_context(input), &mut memory, &theme);
+    let invocations = editor.render(&mut ui, 0);
+    let output = ui.finish_output();
+
+    assert!(invocations.is_empty());
+    assert!(!editor.about_modal_open);
+    assert_eq!(editor.status, "About Kinetik Forge closed");
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+    let closed_status = editor.status.clone();
+    let mut ui = Ui::begin_frame(
+        editor_test_context(UiInput::default()),
+        &mut memory,
+        &theme,
+    );
+    let invocations = editor.render(&mut ui, 0);
+    let _ = ui.finish_output();
+    assert!(invocations.is_empty());
+    assert_eq!(editor.status, closed_status);
+}
+
+#[test]
+fn showcase_about_modal_outside_dismissal_cannot_click_through() {
+    let mut editor = EditorShowcase::new();
+    let mut memory = UiMemory::new();
+    let theme = default_dark_theme();
+    let select = Point::new(14.0, 40.0);
+    assert_eq!(editor.selected_tool, EditorTool::Move);
+    assert!(editor.apply_action(ACTION_ABOUT));
+
+    let mut ui = Ui::begin_frame(
+        editor_test_context(pointer_input_at(select.x, select.y, true, true, false)),
+        &mut memory,
+        &theme,
+    );
+    let invocations = editor.render(&mut ui, 0);
+    let _ = ui.finish_output();
+    assert!(invocations.is_empty());
+    assert!(editor.about_modal_open);
+    assert_eq!(editor.selected_tool, EditorTool::Move);
+
+    let mut ui = Ui::begin_frame(
+        editor_test_context(pointer_input_at(select.x, select.y, false, false, true)),
+        &mut memory,
+        &theme,
+    );
+    let invocations = editor.render(&mut ui, 0);
+    let output = ui.finish_output();
+    assert!(invocations.is_empty());
+    assert!(!editor.about_modal_open);
+    assert_eq!(editor.selected_tool, EditorTool::Move);
+    assert_eq!(output.repaint, RepaintRequest::NextFrame);
+
+    let mut ui = Ui::begin_frame(
+        editor_test_context(pointer_input_at(select.x, select.y, true, true, false)),
+        &mut memory,
+        &theme,
+    );
+    editor.render(&mut ui, 0);
+    let _ = ui.finish_output();
+    let mut ui = Ui::begin_frame(
+        editor_test_context(pointer_input_at(select.x, select.y, false, false, true)),
+        &mut memory,
+        &theme,
+    );
+    let invocations = editor.render(&mut ui, 0);
+    let _ = ui.finish_output();
+    assert_eq!(invocations.len(), 1);
+    assert_eq!(invocations[0].action_id, ActionId::new(super::ACTION_TOOL_SELECT));
+    assert_eq!(editor.selected_tool, EditorTool::Select);
+}
+
+#[test]
 fn inspector_snap_toggle_updates_status_same_frame() {
     let mut editor = EditorShowcase::new();
     let mut memory = UiMemory::new();

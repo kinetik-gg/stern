@@ -42,6 +42,10 @@ const ACTION_DOCS: &str = "editor.docs.open";
 const ACTION_KEYBOARD_SHORTCUTS: &str = "editor.shortcuts.open";
 const ACTION_ABOUT: &str = "editor.about.open";
 const ACTION_ABOUT_CLOSE: &str = "editor.about.close";
+const ABOUT_MODAL_DIALOG_TITLE: &str = "About Kinetik Forge";
+const ABOUT_MODAL_PRODUCT_TITLE: &str = "Kinetik Forge";
+const ABOUT_MODAL_VERSION: &str = concat!("Kinetik UI Showcase v", env!("CARGO_PKG_VERSION"));
+const ABOUT_MODAL_READINESS: &str = "Readiness: Foundation / developer preview";
 const ACTION_TOOL_SELECT: &str = "editor.tool.select";
 const ACTION_TOOL_MOVE: &str = "editor.tool.move";
 const ACTION_TOOL_ROTATE: &str = "editor.tool.rotate";
@@ -436,6 +440,8 @@ impl EditorStatusItemKind {
 pub type EditorInvocation = ActionInvocation;
 
 /// Interactive DCC/editor showcase state.
+// These booleans are independent editor toggles, not variants of one state machine.
+#[allow(clippy::struct_excessive_bools)]
 pub struct EditorShowcase {
     dock: Dock,
     scene_expansion: TreeExpansion,
@@ -458,6 +464,7 @@ pub struct EditorShowcase {
     timeline: f32,
     status: String,
     open_menu: Option<EditorMenuKind>,
+    about_modal_open: bool,
     next_drop_frame: u64,
 }
 
@@ -497,6 +504,7 @@ impl Default for EditorShowcase {
             timeline: 0.41,
             status: "Editor ready".to_owned(),
             open_menu: None,
+            about_modal_open: false,
             next_drop_frame: FRAME_DRAG_INSERT_START,
         }
     }
