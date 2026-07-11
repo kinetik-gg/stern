@@ -6,6 +6,7 @@ use super::{
     WidgetId, assert_entry, classify_numeric_input_draft, default_dark_theme, item, numeric_input,
     numeric_scrub_input, pressed_key, slider_with_step,
 };
+use kinetik_ui_core::{MouseButton, UiInputEvent};
 
 #[test]
 fn stage2_dropdown_experimental_status_is_backed_by_public_model_and_lifecycle() {
@@ -188,6 +189,151 @@ fn assert_numeric_scrub_contract(theme: &kinetik_ui_core::Theme) {
                         && (max - 10.0).abs() < f32::EPSILON
             ))
     );
+}
+
+#[test]
+fn numeric_scrub_resolves_one_canonical_domain_drag_lifecycle() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("canonical-numeric-scrub");
+    let rect = Rect::new(0.0, 56.0, 120.0, 24.0);
+    let config = NumericScrubInputConfig::new(0.5).with_range(0.0, 10.0);
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new("2");
+    let mut value = 2.0;
+
+    memory.begin_frame();
+    let mut press = UiInput::default();
+    press.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 1,
+        position: Some(Point::new(4.0, 60.0)),
+    });
+    let _ = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &press,
+        &mut memory,
+        &theme,
+    );
+
+    memory.begin_frame();
+    let mut moves = UiInput::default();
+    moves.pointer.position = Some(Point::new(4.0, 60.0));
+    moves.pointer.primary = PointerButtonState::new(true, false, false);
+    moves.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(6.0, 60.0),
+        delta: Vec2::new(2.0, 0.0),
+    });
+    moves.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(8.0, 60.0),
+        delta: Vec2::new(2.0, 0.0),
+    });
+    let crossing = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &moves,
+        &mut memory,
+        &theme,
+    );
+    assert!(crossing.scrub_response.dragged);
+    assert_eq!(crossing.scrub_response.drag_delta, Vec2::new(4.0, 0.0));
+    assert!(crossing.scrubbed);
+    assert!((value - 4.0).abs() < f32::EPSILON);
+
+    memory.begin_frame();
+    let mut release = UiInput::default();
+    release.pointer.position = Some(Point::new(8.0, 60.0));
+    release.pointer.primary = PointerButtonState::new(true, false, false);
+    release.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 1,
+        position: Some(Point::new(8.0, 60.0)),
+    });
+    let released = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &release,
+        &mut memory,
+        &theme,
+    );
+    assert!(!released.scrub_response.clicked);
+    assert_eq!(memory.released_drag_source(), Some(id));
+}
+
+#[test]
+fn numeric_scrub_ignores_pre_press_motion_and_keeps_below_threshold_focus() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("causal-numeric-scrub");
+    let rect = Rect::new(0.0, 56.0, 120.0, 24.0);
+    let config = NumericScrubInputConfig::new(0.5);
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new("2");
+    let mut value = 2.0;
+
+    memory.begin_frame();
+    let mut press = UiInput::default();
+    press.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(100.0, 60.0),
+        delta: Vec2::new(100.0, 60.0),
+    });
+    press.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(4.0, 60.0),
+        delta: Vec2::new(-96.0, 0.0),
+    });
+    press.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 1,
+        position: Some(Point::new(4.0, 60.0)),
+    });
+    let pressed = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &press,
+        &mut memory,
+        &theme,
+    );
+    assert!(!pressed.scrub_response.dragged);
+    assert_eq!(memory.drag_source(), None);
+
+    memory.begin_frame();
+    let mut release = UiInput::default();
+    release.pointer.position = Some(Point::new(4.0, 60.0));
+    release.pointer.primary = PointerButtonState::new(true, false, false);
+    release.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 1,
+        position: Some(Point::new(4.0, 60.0)),
+    });
+    let released = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &release,
+        &mut memory,
+        &theme,
+    );
+    assert!(released.scrub_response.clicked);
+    assert!(memory.is_focused(id));
+    assert_eq!(memory.released_drag_source(), None);
+    assert!((value - 2.0).abs() < f32::EPSILON);
 }
 
 #[test]

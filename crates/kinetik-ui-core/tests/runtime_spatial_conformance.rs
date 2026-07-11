@@ -603,7 +603,7 @@ fn ordered_pointer_events_localize_individually_and_clips_keep_only_release_clea
         localized
             .events
             .iter()
-            .all(|event| !matches!(event, UiInputEvent::PointerReleaseAll { .. }))
+            .any(|event| matches!(event, UiInputEvent::PointerReleaseAll { .. }))
     );
     let non_pointer = localized
         .events

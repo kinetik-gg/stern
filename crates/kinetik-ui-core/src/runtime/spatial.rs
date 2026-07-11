@@ -250,15 +250,9 @@ impl SpatialStack {
                     position: self.transform_optional_position(*position),
                 })
             }
-            UiInputEvent::PointerReleaseAll { position } => {
-                let cleanup = preserve_primary_release || preserve_secondary_release;
-                if !cleanup && !self.ordinary_event_allowed(*position) {
-                    return None;
-                }
-                Some(UiInputEvent::PointerReleaseAll {
-                    position: self.transform_optional_position(*position),
-                })
-            }
+            UiInputEvent::PointerReleaseAll { position } => Some(UiInputEvent::PointerReleaseAll {
+                position: self.transform_optional_position(*position),
+            }),
             UiInputEvent::Wheel { delta, position } => {
                 if !self.ordinary_event_allowed(*position) {
                     return None;
@@ -283,6 +277,10 @@ impl SpatialStack {
             Some(position) => self.accepts_screen_point(position),
             None => self.state.screen_to_local.is_some() && self.state.clips.is_empty(),
         }
+    }
+
+    pub(crate) fn transform_screen_point(&self, position: Point) -> Option<Point> {
+        self.transform_event_position(position)
     }
 
     fn localize_ordinary_position(&self, position: Point) -> Option<Point> {

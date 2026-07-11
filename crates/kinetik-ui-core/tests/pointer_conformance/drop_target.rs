@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use kinetik_ui_core::{
-    MouseButton, Point, UiTestHarness, draggable, draggable_transformed, drop_target,
-    drop_target_transformed,
+    MouseButton, Point, PointerOrder, PointerTarget, UiTestHarness, draggable,
+    draggable_transformed, drop_target, drop_target_transformed,
 };
 
 use crate::support::{
@@ -43,6 +43,18 @@ fn pointer_interaction_drop_target_accepts_released_drag_source_over_target() {
             .run_frame(|ui| {
                 let source = source_id(ui);
                 let target = target_id(ui);
+                ui.resolve_pointer_targets(|plan| {
+                    plan.target(
+                        PointerTarget::new(source, source_rect(), PointerOrder::new(20))
+                            .domain_drag_source(),
+                    );
+                    plan.target(
+                        PointerTarget::new(target, target_rect(), PointerOrder::new(30))
+                            .ordinary_owner(None)
+                            .drop_owner(target),
+                    );
+                })
+                .expect("valid release drop plan");
                 let (input, memory) = ui.input_and_memory_mut();
 
                 if source_first {
@@ -106,6 +118,22 @@ fn pointer_interaction_transformed_drop_target_reports_active_and_released_sourc
             .run_frame(|ui| {
                 let source = source_id(ui);
                 let target = target_id(ui);
+                ui.resolve_pointer_targets(|plan| {
+                    plan.with_transform(transformed_source_transform(), |plan| {
+                        plan.target(
+                            PointerTarget::new(source, source_rect(), PointerOrder::new(20))
+                                .domain_drag_source(),
+                        );
+                    });
+                    plan.with_transform(transformed_target_transform(), |plan| {
+                        plan.target(
+                            PointerTarget::new(target, local_target_rect(), PointerOrder::new(30))
+                                .ordinary_owner(None)
+                                .drop_owner(target),
+                        );
+                    });
+                })
+                .expect("valid transformed release drop plan");
                 let (input, memory) = ui.input_and_memory_mut();
 
                 if source_first {

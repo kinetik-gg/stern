@@ -1,5 +1,5 @@
 use super::{
-    ComponentState, CursorShape, OrderedTextInputResult, Primitive, Rect, RectPrimitive,
+    ComponentState, CursorShape, OrderedTextInputResult, Primitive, Rect, RectPrimitive, Response,
     TextEditMode, TextEditState, TextLayoutStore, TextSelection, Theme, UiInput, UiMemory,
     WidgetId, WidgetOutput, display_text_with_composition, focusable, multi_line_hit_offset,
     multi_line_text_primitives, single_line_hit_offset, single_line_text_primitives,
@@ -90,11 +90,42 @@ pub(crate) fn text_field_with_text_layouts_and_caret_visibility_and_ordered_resu
     memory: &mut UiMemory,
     theme: &Theme,
     disabled: bool,
-    mut text_layouts: Option<&mut TextLayoutStore>,
+    text_layouts: Option<&mut TextLayoutStore>,
     caret_visible: bool,
 ) -> (TextFieldOutput, OrderedTextInputResult) {
+    let response = focusable(id, rect, input, memory, disabled);
+    text_field_with_resolved_response_and_ordered_result(
+        id,
+        rect,
+        state,
+        input,
+        memory,
+        theme,
+        disabled,
+        text_layouts,
+        caret_visible,
+        response,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn text_field_with_resolved_response_and_ordered_result(
+    id: WidgetId,
+    rect: Rect,
+    state: &mut TextEditState,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    disabled: bool,
+    mut text_layouts: Option<&mut TextLayoutStore>,
+    caret_visible: bool,
+    mut response: Response,
+) -> (TextFieldOutput, OrderedTextInputResult) {
     let before = state.text.clone();
-    let mut response = focusable(id, rect, input, memory, disabled);
+    if response.clicked {
+        memory.focus(id);
+        response.state.focused = true;
+    }
     let hit_recipe = theme.text_field(ComponentState {
         hovered: response.state.hovered,
         pressed: response.state.pressed,

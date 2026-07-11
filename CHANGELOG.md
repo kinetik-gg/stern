@@ -31,9 +31,11 @@ published, or accepted as an alpha release.
   selection actions without turning text selection into a domain drag source.
   `Ui::claim_ordered_text_input_events` supplies the matching ordinal-bearing
   editing stream so text fields need not parse pointer events again. Text
-  selection remains isolated from the compatible press/domain-drag family,
-  cancellation fences only later transitions, and planned drops use the first
-  terminating release geometry.
+  composite numeric scrub fields resolve one domain-drag response without a
+  second press pass. Global cancellation fences preserve earlier owner and
+  wheel output, and planned drops use declared source intent plus the first
+  causal press/release geometry. Canonical unplanned drop commits now fail
+  closed; empty-stream legacy behavior remains compatible.
 
 ### Documentation
 

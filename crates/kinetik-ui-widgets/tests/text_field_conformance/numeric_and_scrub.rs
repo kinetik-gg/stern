@@ -506,7 +506,7 @@ fn numeric_scrub_input_uses_fine_and_coarse_modifier_steps() {
         &mut fine_value,
         &mut fine_state,
         config,
-        &scrub_drag_at(8.0, 4.0, 8.0, shift()),
+        &scrub_drag_at(12.0, 4.0, 8.0, shift()),
         &mut fine_memory,
         &theme,
     );
@@ -538,7 +538,7 @@ fn numeric_scrub_input_uses_fine_and_coarse_modifier_steps() {
         &theme,
     );
     assert!((coarse.step - 5.0).abs() < f32::EPSILON);
-    assert!((coarse_value - 25.0).abs() < f32::EPSILON);
+    assert!((coarse_value - 30.0).abs() < f32::EPSILON);
 }
 
 #[test]
@@ -570,7 +570,7 @@ fn numeric_scrub_input_sanitizes_steps_and_clamps_to_finite_bounds() {
         &mut value,
         &mut state,
         config,
-        &scrub_drag_at(8.0, 4.0, 20.0, Modifiers::default()),
+        &scrub_drag_at(24.0, 4.0, 20.0, Modifiers::default()),
         &mut memory,
         &theme,
     );
@@ -712,7 +712,7 @@ fn vector3_scrub_input_updates_components_independently() {
         &mut values,
         &mut states,
         config,
-        &scrub_drag_at(y_center.x + 8.0, y_center.y, 4.0, Modifiers::default()),
+        &scrub_drag_at(y_center.x + 4.0, y_center.y, 4.0, Modifiers::default()),
         &mut memory,
         &theme,
     );

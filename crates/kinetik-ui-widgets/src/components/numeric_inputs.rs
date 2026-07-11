@@ -4,6 +4,7 @@ use super::{
     Rect, Response, SemanticAction, SemanticActionKind, SemanticValue, TextEditState,
     TextFieldOutput, TextLayoutStore, Theme, UiInput, UiMemory, WidgetId,
     classify_numeric_input_draft, draggable, restore_text_draft,
+    text_field_with_resolved_response_and_ordered_result,
     text_field_with_text_layouts_and_caret_visibility_and_ordered_result,
 };
 
@@ -222,6 +223,42 @@ pub(crate) fn numeric_input_with_text_layouts_and_caret_visibility(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn numeric_input_with_resolved_response(
+    id: WidgetId,
+    rect: Rect,
+    state: &mut TextEditState,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    disabled: bool,
+    text_layouts: Option<&mut TextLayoutStore>,
+    caret_visible: bool,
+    response: Response,
+) -> NumericInputOutput {
+    let (field, ordered_result) = text_field_with_resolved_response_and_ordered_result(
+        id,
+        rect,
+        state,
+        input,
+        memory,
+        theme,
+        disabled,
+        text_layouts,
+        caret_visible,
+        response,
+    );
+    let draft = classify_numeric_input_draft(&state.text);
+    let policy = numeric_input_keyboard_policy(draft, &field, &ordered_result, disabled);
+
+    NumericInputOutput {
+        field,
+        policy,
+        value: draft.value(),
+        valid: draft.is_acceptable(),
+    }
+}
+
 /// Emits a numeric text field with horizontal scrub adjustment.
 #[allow(clippy::too_many_arguments)]
 pub fn numeric_scrub_input(
@@ -283,7 +320,8 @@ pub(crate) fn numeric_scrub_input_with_text_layouts_and_caret_visibility(
     let interactions_disabled = config.disabled || config.read_only;
     let before = *value;
     let resolved = resolve_numeric_scrub_config(config);
-    let mut numeric = numeric_input_with_text_layouts_and_caret_visibility(
+    let mut scrub_response = draggable(id, rect, input, memory, interactions_disabled);
+    let mut numeric = numeric_input_with_resolved_response(
         id,
         rect,
         state,
@@ -293,8 +331,9 @@ pub(crate) fn numeric_scrub_input_with_text_layouts_and_caret_visibility(
         interactions_disabled,
         text_layouts,
         caret_visible,
+        scrub_response,
     );
-    let scrub_response = draggable(id, rect, input, memory, interactions_disabled);
+    scrub_response.state.focused = memory.is_focused(id);
     let selected_step = numeric_scrub_step_for_modifiers(&resolved, input.keyboard.modifiers);
     let mut scrubbed = false;
 

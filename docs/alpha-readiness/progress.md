@@ -707,7 +707,10 @@ in serial packet `IN-03B`; no B-owned behavior is claimed here.
 - `crates/kinetik-ui-core/src/interaction/{drag_select,hit,overlay,press,scroll,tests}.rs`
 - `crates/kinetik-ui-core/src/runtime/{pointer,spatial,tests,ui}.rs`
 - `crates/kinetik-ui-core/tests/{drag_threshold_conformance,ownership_reconciliation_conformance,pointer_arbitration_conformance,runtime_spatial_conformance}.rs`
-- `crates/kinetik-ui-core/tests/pointer_conformance/drag_capture.rs`
+- `crates/kinetik-ui-core/tests/pointer_conformance/{drag_capture,drop_target}.rs`
+- `crates/kinetik-ui-widgets/src/components/{numeric_inputs,text_fields}.rs`
+- `crates/kinetik-ui-widgets/tests/component_taxonomy_conformance/controls.rs`
+- `crates/kinetik-ui-widgets/tests/text_field_conformance/numeric_and_scrub.rs`
 - `crates/kinetik-ui/tests/public_api_surface.rs`
 - `docs/specs/{01-foundations,02-layout-and-interaction}.md`
 - `docs/alpha-readiness/{03-input-and-shell,progress}.md`
@@ -738,29 +741,40 @@ positions, clears disabled secondary owners, blocks conflicted tooltip/scroll
 hover, and prevents selection from publishing a retained domain drag.
 
 The depth-one audit and complete workspace test exposed legacy pre-press delta
-replay, same-frame clipped cleanup loss, mode promotion, non-causal
-cancellation metadata, and final-snapshot/multiple-release drop routing. The
-depth-two remedy isolates selection from the compatible press/domain-drag
-family, localizes potential ownership sequentially, fences only later
-transitions, preserves earlier drag/drop output, and routes drops from the
-first terminating release after validating the captured source clip.
+replay, same-frame clipped cleanup loss, mode replay, non-causal cancellation
+metadata, and final-snapshot/multiple-release drop routing. The depth-two
+candidate now resolves numeric scrub as one DomainDrag response, retains global
+ReleaseAll fences through every scope, defers cancellation when an unrelated
+behavior encounters another owner, and preserves pre-fence wheel/move/release
+output. Closed plans require declared domain-drag source intent, derive
+same-frame ownership from the first causal press, latch threshold evidence in
+the source transform, validate source clipping, and route the matching causal
+release. Canonical unplanned commits fail closed; empty-stream legacy drops
+remain compatible.
 
 #### Tests run and results
 
-- New drag-threshold conformance: 31/31 passed, covering boundaries, accumulated
+- New drag-threshold conformance: 38/38 passed, covering boundaries, accumulated
   and subsequent deltas, move-back latch, same-frame release, pressable
   suppression, double-click, conflict cleanup, drop order, selection ordinals,
   spatial gaps and cleanup provenance, release-all cancellation, canonical drop
   geometry, ordered text merging, missing event positions, and plain-capture
   cleanup, plus legacy relocation, exact gesture modes, same-frame clipped
-  ownership, cancellation causality, multiple releases, and release-time plans.
-- Core all-feature suite: passed after updating superseded snapshot fixtures to
-  use canonical events and threshold-crossing geometry.
+  ownership, unrelated-first cancellation, global fences, pre-fence wheel
+  input, unplanned fail-closed drops, transformed target-first probes,
+  same-frame press/release planning, multiple releases, and release-time plans.
+- Widget component-taxonomy conformance: 44/44 passed, including canonical
+  accumulated scrub crossing, release publication, pre-press movement rejection,
+  and below-threshold focus preservation without a second pointer pass.
+- Core all-feature suite: passed, including 157 unit tests, 38 drag-threshold
+  cases, 28 pointer-conformance cases, and the remaining integration/doc tests.
+- Widget all-feature suite: passed after updating superseded legacy scrub
+  fixtures to use origin-to-position crossing geometry.
 - Showcase all-feature suite: 128 library plus 25 binary tests passed, including
   the three legacy click/navigation regressions found by the workspace gate.
 - Facade public API surface with all features: 5/5 passed.
-- Core/facade warning-denied all-target/all-feature Clippy and formatting are
-  pending one final candidate run after documentation integration.
+- Warning-denied all-target/all-feature Clippy across core, widgets, facade, and
+  Showcase passed; formatting and diff checks passed.
 - Independent audit and the complete six-command workspace gate remain pending
   on the implementation candidate.
 

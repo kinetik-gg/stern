@@ -6,7 +6,7 @@ use crate::{
     WidgetId,
 };
 
-const DRAG_THRESHOLD_SQUARED: f32 = 16.0;
+pub(super) const DRAG_THRESHOLD_SQUARED: f32 = 16.0;
 
 pub(super) struct PressResolution {
     pub response: Response,
@@ -90,9 +90,6 @@ pub(super) fn resolve_pressable_with_hit_target(
         retained != kind
             && (retained == PointerGestureKind::Selection || kind == PointerGestureKind::Selection)
     });
-    if kind == PointerGestureKind::DomainDrag && retained_kind == Some(PointerGestureKind::Press) {
-        memory.promote_pointer_gesture_to_domain_drag(id);
-    }
     let mut outcome = PointerOutcome::default();
 
     if (disabled && (owns_primary || owns_secondary)) || mode_mismatch {
@@ -272,6 +269,7 @@ fn resolve_canonical_pointer(
                         *click_count,
                         memory,
                         kind,
+                        Some(root_ordinal),
                         ordinal,
                         cleanup_only,
                         conflicted,
@@ -297,7 +295,9 @@ fn resolve_canonical_pointer(
             ),
             UiInputEvent::PointerReleaseAll { position } => {
                 let click_count = memory.pointer_gesture_click_count(id).unwrap_or(0);
-                if owns_primary_gesture(memory, id) {
+                let owns_primary = owns_primary_gesture(memory, id);
+                let owns_secondary = memory.is_secondary_pressed(id);
+                if owns_primary {
                     push_selection_action(
                         kind,
                         outcome,
@@ -308,12 +308,14 @@ fn resolve_canonical_pointer(
                         click_count,
                     );
                 }
-                memory.cancel_pointer_stream();
+                resolve_pointer_fence(memory, owns_primary || owns_secondary);
                 break;
             }
             UiInputEvent::WindowFocusChanged(false) => {
                 let click_count = memory.pointer_gesture_click_count(id).unwrap_or(0);
-                if owns_primary_gesture(memory, id) {
+                let owns_primary = owns_primary_gesture(memory, id);
+                let owns_secondary = memory.is_secondary_pressed(id);
+                if owns_primary {
                     push_selection_action(
                         kind,
                         outcome,
@@ -324,11 +326,19 @@ fn resolve_canonical_pointer(
                         click_count,
                     );
                 }
-                memory.cancel_pointer_stream();
+                resolve_pointer_fence(memory, owns_primary || owns_secondary);
                 break;
             }
             _ => {}
         }
+    }
+}
+
+fn resolve_pointer_fence(memory: &mut UiMemory, owns_pointer_transaction: bool) {
+    if owns_pointer_transaction {
+        memory.cancel_pointer_stream();
+    } else if !memory.has_pointer_transaction() {
+        memory.fence_pointer_stream();
     }
 }
 
@@ -393,6 +403,7 @@ fn resolve_legacy_pointer(
             input.pointer.click_count,
             memory,
             kind,
+            None,
             None,
             false,
             false,
@@ -461,6 +472,7 @@ fn resolve_primary_release(
     click_count: u8,
     memory: &mut UiMemory,
     kind: PointerGestureKind,
+    release_ordinal: Option<usize>,
     ordinal: Option<usize>,
     cleanup_only: bool,
     conflicted: bool,
@@ -508,7 +520,7 @@ fn resolve_primary_release(
     if cleanup_only || conflicted || !exact_domain_gesture {
         memory.clear_drag();
     } else {
-        memory.finish_drag(id);
+        memory.finish_drag_at(id, release_ordinal);
     }
     if cleanup_only || !released_inside {
         outcome.suppress_drag_output = true;

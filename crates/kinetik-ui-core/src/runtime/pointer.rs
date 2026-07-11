@@ -4,15 +4,37 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 
-use crate::{ClipId, Point, PointerRoute, PointerRoutes, Rect, Transform, WidgetId};
+use crate::memory::PlannedDragRelease;
+use crate::{
+    ClipId, MouseButton, Point, PointerRoute, PointerRoutes, Rect, Transform, UiInputEvent,
+    WidgetId,
+};
 
 use super::spatial::SpatialStack;
+
+const DRAG_THRESHOLD_SQUARED: f32 = 16.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum PointerDropProbe {
     Snapshot,
-    Release(Option<Point>),
+    Release {
+        ordinal: usize,
+        position: Option<Point>,
+    },
     Cancelled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct PointerPressProbe {
+    pub ordinal: usize,
+    pub position: Option<Point>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct RetainedDragProbe {
+    pub source: WidgetId,
+    pub origin: Option<Point>,
+    pub threshold_crossed: bool,
 }
 
 /// Explicit back-to-front paint ordinal used by pointer arbitration.
@@ -43,6 +65,7 @@ pub struct PointerTarget {
     drop_owner: Option<WidgetId>,
     wheel_owner: Option<WidgetId>,
     cursor_equivalents: Vec<WidgetId>,
+    domain_drag_source: bool,
     enabled: bool,
 }
 
@@ -58,6 +81,7 @@ impl PointerTarget {
             drop_owner: None,
             wheel_owner: None,
             cursor_equivalents: Vec::new(),
+            domain_drag_source: false,
             enabled: true,
         }
     }
@@ -80,6 +104,17 @@ impl PointerTarget {
     #[must_use]
     pub const fn wheel_owner(mut self, owner: WidgetId) -> Self {
         self.wheel_owner = Some(owner);
+        self
+    }
+
+    /// Declares that this target's ordinary owner resolves a `DomainDrag` gesture.
+    ///
+    /// Closed pointer plans use this intent to derive causal same-frame and
+    /// target-first drop commits without speculating that every pressable is a
+    /// drag source.
+    #[must_use]
+    pub const fn domain_drag_source(mut self) -> Self {
+        self.domain_drag_source = true;
         self
     }
 
@@ -144,7 +179,10 @@ impl Error for PointerPlanError {}
 /// first routed behavior call. Declarations may arrive in any order.
 pub struct PointerTargetPlan {
     pointer: Option<Point>,
+    press_probe: Option<PointerPressProbe>,
     drop_probe: PointerDropProbe,
+    retained_drag: Option<RetainedDragProbe>,
+    root_events: Vec<UiInputEvent>,
     spatial: SpatialStack,
     targets: Vec<ResolvedTarget>,
     blockers: Vec<ResolvedBlocker>,
@@ -159,12 +197,18 @@ pub struct PointerTargetPlan {
 impl PointerTargetPlan {
     pub(crate) fn new(
         pointer: Option<Point>,
+        press_probe: Option<PointerPressProbe>,
         drop_probe: PointerDropProbe,
+        retained_drag: Option<RetainedDragProbe>,
+        root_events: Vec<UiInputEvent>,
         spatial: SpatialStack,
     ) -> Self {
         Self {
             pointer,
+            press_probe,
             drop_probe,
+            retained_drag,
+            root_events,
             spatial,
             targets: Vec::new(),
             blockers: Vec::new(),
@@ -196,13 +240,19 @@ impl PointerTargetPlan {
         }
 
         let valid = target.enabled && self.spatial.project_rect(target.rect).is_some();
-        let hit = valid && self.spatial.hit_test_rect(self.pointer, target.rect);
+        let ordinary_hit = valid
+            && self
+                .spatial
+                .hit_test_rect(self.interaction_pointer(), target.rect);
+        let wheel_hit = valid && self.spatial.hit_test_rect(self.pointer, target.rect);
         let drop_hit = valid
             && !matches!(self.drop_probe, PointerDropProbe::Cancelled)
             && self.spatial.hit_test_rect(self.drop_pointer(), target.rect);
         let drop_event_allowed = match self.drop_probe {
             PointerDropProbe::Snapshot => true,
-            PointerDropProbe::Release(position) => self.spatial.ordinary_event_allowed(position),
+            PointerDropProbe::Release { position, .. } => {
+                self.spatial.ordinary_event_allowed(position)
+            }
             PointerDropProbe::Cancelled => false,
         };
         let mut cursor_equivalents = target.cursor_equivalents;
@@ -221,8 +271,11 @@ impl PointerTargetPlan {
             drop_owner: target.drop_owner,
             wheel_owner: target.wheel_owner,
             cursor_equivalents,
+            domain_drag_source: target.domain_drag_source,
+            spatial: self.spatial.clone(),
             valid,
-            hit,
+            ordinary_hit,
+            wheel_hit,
             drop_hit,
             drop_event_allowed,
         });
@@ -233,14 +286,16 @@ impl PointerTargetPlan {
         self.next_descriptor();
         self.record_order(order);
         let valid = self.spatial.project_rect(rect).is_some();
-        let hit = valid && self.spatial.hit_test_rect(self.pointer, rect);
+        let ordinary_hit = valid && self.spatial.hit_test_rect(self.interaction_pointer(), rect);
+        let wheel_hit = valid && self.spatial.hit_test_rect(self.pointer, rect);
         let drop_hit = valid
             && !matches!(self.drop_probe, PointerDropProbe::Cancelled)
             && self.spatial.hit_test_rect(self.drop_pointer(), rect);
         self.blockers.push(ResolvedBlocker {
             order,
             valid,
-            hit,
+            ordinary_hit,
+            wheel_hit,
             drop_hit,
         });
     }
@@ -277,6 +332,7 @@ impl PointerTargetPlan {
         output
     }
 
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn resolve(
         self,
         captured: Option<WidgetId>,
@@ -290,12 +346,12 @@ impl PointerTargetPlan {
         let top_target = self
             .targets
             .iter()
-            .filter(|target| target.valid && target.hit && eligible(target.order))
+            .filter(|target| target.valid && target.ordinary_hit && eligible(target.order))
             .max_by_key(|target| target.order);
         let top_blocker = self
             .blockers
             .iter()
-            .filter(|blocker| blocker.valid && blocker.hit && eligible(blocker.order))
+            .filter(|blocker| blocker.valid && blocker.ordinary_hit && eligible(blocker.order))
             .max_by_key(|blocker| blocker.order);
         let top_visual = match (top_target, top_blocker) {
             (Some(target), Some(blocker)) if blocker.order > target.order => TopVisual::Blocker,
@@ -333,9 +389,25 @@ impl PointerTargetPlan {
         let ordinary = ordinary_target
             .and_then(|target| target.ordinary_owner)
             .map_or(PointerRoute::Blocked, PointerRoute::Target);
-        let captured_accepts_drop_event =
-            captured_target.is_none_or(|target| target.drop_event_allowed);
-        let drop = if captured_accepts_drop_event {
+        let transaction_source_target = if captured.is_some() {
+            captured_target
+        } else if self.press_probe.is_some() {
+            ordinary_target
+        } else {
+            None
+        };
+        let release_source_valid = !matches!(self.drop_probe, PointerDropProbe::Release { .. })
+            || transaction_source_target.is_some_and(|target| {
+                target.domain_drag_source
+                    && target.drop_event_allowed
+                    && planned_source_matches(
+                        target,
+                        self.press_probe,
+                        self.retained_drag,
+                        captured,
+                    )
+            });
+        let drop = if release_source_valid {
             match top_drop_visual {
                 TopVisual::Target(target) => target
                     .drop_owner
@@ -345,15 +417,35 @@ impl PointerTargetPlan {
         } else {
             PointerRoute::Blocked
         };
+        let planned_drag_release = match drop {
+            PointerRoute::Target(_) => transaction_source_target.and_then(|target| {
+                planned_drag_release(
+                    target,
+                    self.press_probe,
+                    self.retained_drag,
+                    self.drop_probe,
+                    &self.root_events,
+                )
+            }),
+            PointerRoute::Unplanned | PointerRoute::Blocked => None,
+        };
 
         let top_wheel = self
             .targets
             .iter()
             .filter(|target| {
-                target.valid && target.hit && target.wheel_owner.is_some() && eligible(target.order)
+                target.valid
+                    && target.wheel_hit
+                    && target.wheel_owner.is_some()
+                    && eligible(target.order)
             })
             .max_by_key(|target| target.order);
-        let wheel = match (top_wheel, top_blocker) {
+        let top_wheel_blocker = self
+            .blockers
+            .iter()
+            .filter(|blocker| blocker.valid && blocker.wheel_hit && eligible(blocker.order))
+            .max_by_key(|blocker| blocker.order);
+        let wheel = match (top_wheel, top_wheel_blocker) {
             (Some(target), Some(blocker)) if blocker.order > target.order => PointerRoute::Blocked,
             (Some(target), _) => PointerRoute::Target(
                 target
@@ -373,6 +465,7 @@ impl PointerTargetPlan {
                 .map(|target| target.cursor_equivalents.clone())
                 .unwrap_or_default(),
             capture_valid: captured.is_none() || captured_target.is_some(),
+            planned_drag_release,
         })
     }
 
@@ -385,9 +478,14 @@ impl PointerTargetPlan {
     fn drop_pointer(&self) -> Option<Point> {
         match self.drop_probe {
             PointerDropProbe::Snapshot => self.pointer,
-            PointerDropProbe::Release(position) => position,
+            PointerDropProbe::Release { position, .. } => position,
             PointerDropProbe::Cancelled => None,
         }
+    }
+
+    fn interaction_pointer(&self) -> Option<Point> {
+        self.press_probe
+            .map_or(self.pointer, |probe| probe.position)
     }
 
     fn record_order(&mut self, order: PointerOrder) {
@@ -408,10 +506,101 @@ impl PointerTargetPlan {
     }
 }
 
+fn planned_source_matches(
+    target: &ResolvedTarget,
+    press_probe: Option<PointerPressProbe>,
+    retained_drag: Option<RetainedDragProbe>,
+    captured: Option<WidgetId>,
+) -> bool {
+    if let Some(retained) = retained_drag {
+        return captured == Some(retained.source) && target.ordinary_owner == Some(retained.source);
+    }
+    captured.is_none() && press_probe.is_some() && target.ordinary_owner.is_some()
+}
+
+fn planned_drag_release(
+    target: &ResolvedTarget,
+    press_probe: Option<PointerPressProbe>,
+    retained_drag: Option<RetainedDragProbe>,
+    drop_probe: PointerDropProbe,
+    root_events: &[UiInputEvent],
+) -> Option<PlannedDragRelease> {
+    if !target.domain_drag_source || !target.drop_event_allowed {
+        return None;
+    }
+    let PointerDropProbe::Release {
+        ordinal: release_ordinal,
+        ..
+    } = drop_probe
+    else {
+        return None;
+    };
+
+    let (source, origin, mut threshold_crossed, first_motion_ordinal) =
+        if let Some(retained) = retained_drag {
+            (
+                retained.source,
+                retained.origin,
+                retained.threshold_crossed,
+                0,
+            )
+        } else {
+            let press = press_probe?;
+            let source = target.ordinary_owner?;
+            let origin = press
+                .position
+                .and_then(|position| target.spatial.transform_screen_point(position));
+            (source, origin, false, press.ordinal.saturating_add(1))
+        };
+    if target.ordinary_owner != Some(source) {
+        return None;
+    }
+
+    for (ordinal, event) in root_events.iter().enumerate() {
+        if ordinal < first_motion_ordinal {
+            continue;
+        }
+        if ordinal > release_ordinal {
+            break;
+        }
+        let position = match event {
+            UiInputEvent::PointerMoved { position, .. } => Some(*position),
+            UiInputEvent::PointerButton {
+                button: MouseButton::Primary,
+                down: false,
+                position,
+                ..
+            } if ordinal == release_ordinal => *position,
+            _ => None,
+        };
+        if let (Some(origin), Some(position)) = (origin, position)
+            && target.spatial.ordinary_event_allowed(Some(position))
+            && let Some(position) = target.spatial.transform_screen_point(position)
+        {
+            threshold_crossed |= crosses_drag_threshold(origin, position);
+        }
+        if ordinal == release_ordinal {
+            return threshold_crossed.then_some(PlannedDragRelease {
+                source,
+                ordinal: release_ordinal,
+            });
+        }
+    }
+    None
+}
+
+fn crosses_drag_threshold(origin: Point, position: Point) -> bool {
+    let x = position.x - origin.x;
+    let y = position.y - origin.y;
+    let displacement_squared = x.mul_add(x, y * y);
+    displacement_squared.is_finite() && displacement_squared >= DRAG_THRESHOLD_SQUARED
+}
+
 pub(crate) struct ResolvedPointerPlan {
     pub(crate) routes: PointerRoutes,
     pub(crate) cursor_equivalents: Vec<WidgetId>,
     pub(crate) capture_valid: bool,
+    pub(crate) planned_drag_release: Option<PlannedDragRelease>,
 }
 
 #[derive(Debug)]
@@ -422,17 +611,22 @@ struct ResolvedTarget {
     drop_owner: Option<WidgetId>,
     wheel_owner: Option<WidgetId>,
     cursor_equivalents: Vec<WidgetId>,
+    domain_drag_source: bool,
+    spatial: SpatialStack,
     valid: bool,
-    hit: bool,
+    ordinary_hit: bool,
+    wheel_hit: bool,
     drop_hit: bool,
     drop_event_allowed: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
+#[allow(clippy::struct_excessive_bools)]
 struct ResolvedBlocker {
     order: PointerOrder,
     valid: bool,
-    hit: bool,
+    ordinary_hit: bool,
+    wheel_hit: bool,
     drop_hit: bool,
 }
 

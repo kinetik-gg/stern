@@ -15,7 +15,9 @@ use super::focus::{
     apply_window_focus_text_blur,
 };
 use super::output::FrameOutput;
-use super::pointer::{PointerDropProbe, PointerPlanError, PointerTargetPlan};
+use super::pointer::{
+    PointerDropProbe, PointerPlanError, PointerPressProbe, PointerTargetPlan, RetainedDragProbe,
+};
 use super::primitive_stack::validate_primitive_stack;
 use super::spatial::SpatialStack;
 use super::types::{CursorShape, FrameContext, FrameWarning, PlatformRequest, RepaintRequest};
@@ -210,19 +212,37 @@ impl<'a> Ui<'a> {
         if self.pointer_plan_installed {
             self.memory.cancel_pointer_interaction();
             self.memory
-                .install_pointer_routes(crate::PointerRoutes::BLOCKED, []);
+                .install_pointer_routes(crate::PointerRoutes::BLOCKED, [], None);
             return Err(PointerPlanError::AlreadyInstalled);
         }
         self.pointer_plan_installed = true;
 
         let captured = self.memory.pointer_capture();
-        let drop_probe = pointer_drop_probe(
+        let retained_drag = self
+            .memory
+            .domain_drag_gesture()
+            .map(|(source, origin, threshold_crossed)| RetainedDragProbe {
+                source,
+                origin: Some(origin),
+                threshold_crossed,
+            })
+            .or_else(|| {
+                self.memory.drag_source().map(|source| RetainedDragProbe {
+                    source,
+                    origin: None,
+                    threshold_crossed: true,
+                })
+            });
+        let (press_probe, drop_probe) = pointer_transaction_probe(
             &self.root_input,
             captured.is_some() || self.memory.drag_source().is_some(),
         );
         let mut plan = PointerTargetPlan::new(
             self.root_input.pointer.position,
+            press_probe,
             drop_probe,
+            retained_drag,
+            self.root_input.events.clone(),
             self.spatial.clone(),
         );
         declare(&mut plan);
@@ -231,7 +251,7 @@ impl<'a> Ui<'a> {
             Err(error) => {
                 self.memory.cancel_pointer_interaction();
                 self.memory
-                    .install_pointer_routes(crate::PointerRoutes::BLOCKED, []);
+                    .install_pointer_routes(crate::PointerRoutes::BLOCKED, [], None);
                 return Err(error);
             }
         };
@@ -254,8 +274,11 @@ impl<'a> Ui<'a> {
         if owner_mismatch {
             self.memory.cancel_pointer_interaction();
         }
-        self.memory
-            .install_pointer_routes(resolved.routes, resolved.cursor_equivalents);
+        self.memory.install_pointer_routes(
+            resolved.routes,
+            resolved.cursor_equivalents,
+            resolved.planned_drag_release,
+        );
         Ok(resolved.routes)
     }
 
@@ -532,25 +555,50 @@ fn pointer_release_all_cancelled(input: &UiInput) -> bool {
     input.pointer.release_all_cancelled()
 }
 
-fn pointer_drop_probe(input: &UiInput, retained_transaction: bool) -> PointerDropProbe {
-    if !retained_transaction || input.events.is_empty() {
-        return PointerDropProbe::Snapshot;
+fn pointer_transaction_probe(
+    input: &UiInput,
+    retained_transaction: bool,
+) -> (Option<PointerPressProbe>, PointerDropProbe) {
+    if input.events.is_empty() {
+        return (None, PointerDropProbe::Snapshot);
     }
-    for event in &input.events {
+    let mut transaction_started = retained_transaction;
+    let mut press_probe = None;
+    for (ordinal, event) in input.events.iter().enumerate() {
         match event {
+            UiInputEvent::PointerButton {
+                button: crate::MouseButton::Primary,
+                down: true,
+                position,
+                ..
+            } if !transaction_started => {
+                transaction_started = true;
+                press_probe = Some(PointerPressProbe {
+                    ordinal,
+                    position: *position,
+                });
+            }
             UiInputEvent::PointerButton {
                 button: crate::MouseButton::Primary,
                 down: false,
                 position,
                 ..
-            } => return PointerDropProbe::Release(*position),
+            } if transaction_started => {
+                return (
+                    press_probe,
+                    PointerDropProbe::Release {
+                        ordinal,
+                        position: *position,
+                    },
+                );
+            }
             UiInputEvent::PointerReleaseAll { .. } | UiInputEvent::WindowFocusChanged(false) => {
-                return PointerDropProbe::Cancelled;
+                return (press_probe, PointerDropProbe::Cancelled);
             }
             _ => {}
         }
     }
-    PointerDropProbe::Snapshot
+    (press_probe, PointerDropProbe::Snapshot)
 }
 
 fn is_editing_domain_event(event: &UiInputEvent) -> bool {
