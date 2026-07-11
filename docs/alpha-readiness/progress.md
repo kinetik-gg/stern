@@ -635,8 +635,68 @@ clipboard target reuse remains subject to `ASYNC-01` incarnation policy. This is
 a provisional breaking Winit API change; migration is recorded in the
 changelog. Direct archive creation still requires the Stage 1 ephemeral local
 registry until internal crates are published. Independent audit and the local
-full gate are accepted; exact-SHA three-OS CI, PR checks, and merge are not yet
-claimed.
+full gate are accepted. Exact-SHA three-OS CI run `29134362277` and PR checks
+passed; PR `#513` squash-merged as `e151b111` and issue `#512` is closed.
+
+### `IN-03A`: wheel and click normalization
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `crates/kinetik-ui-core/src/{input,test_harness}.rs`
+- `crates/kinetik-ui-core/src/interaction/scroll.rs`
+- `crates/kinetik-ui-core/tests/wheel_click_normalization_conformance.rs`
+- `crates/kinetik-ui-winit/src/{input,tests}.rs`
+- `apps/kinetik-ui-showcase/src/live.rs`
+- `docs/specs/{01-foundations,04-runtime-platform}.md`
+- `docs/alpha-readiness/{03-input-and-shell,progress}.md`
+
+#### Reasoning and contract decisions
+
+Canonical scroll consumption now folds ordered wheel events without reusing the
+mixed compatibility snapshot. Lines use a private 40-unit current-scope step;
+logical pixels remain exact after the existing Winit DPI conversion and RT-01
+spatial projection. Components, products, and accumulation sanitize to finite
+values before direction inverts once. Empty streams retain legacy behavior, and
+the ambiguous harness aliases now emit Pixels to preserve prior magnitude.
+
+Winit retains a private click sequence across frames. Inclusive 500 ms and
+four-logical-unit press boundaries increment with saturation; matching releases
+carry, unmatched releases emit zero, and mismatch, missing evidence, backwards
+time, pointer leave, focus loss, real sanitized scale change, or explicit input
+clears continuation. A scale change also records pointer leave to invalidate
+stale logical pointer evidence until the next move. The existing explicit-count
+method remains exact and documents its automatic-history reset. The live showcase uses
+`mouse_button_at(..., Instant::now())` instead of hardcoded one.
+
+#### Tests run and results
+
+- New wheel normalization conformance: 6/6 passed.
+- Input ordering: 9/9 passed.
+- Pointer arbitration: 8/8 passed.
+- Scrollable pointer conformance filter: 2/2 passed.
+- Ordered spatial localization filter: 1/1 passed.
+- Core all-feature suite: passed, including all routing and spatial regressions.
+- Winit all features: 45 unit plus 4 shell integration tests passed after the
+  depth-one DPI-evidence remedy.
+- Showcase all features: 128 library plus 25 binary tests passed.
+- Warning-denied focused Clippy across core, Winit, and showcase: passed.
+- Depth-zero audit found stale logical pointer evidence after a DPI change and
+  incomplete public mouse-button lifecycle docs. Depth one records PointerLeft
+  on a real sanitized scale change, clears private/projected evidence, documents
+  exact reset/output semantics, and passes its focused regression and Clippy.
+- Three independent depth-one re-reviewers passed with no P0/P1/P2 findings.
+- Complete workspace gate: formatting, warning-denied Clippy, all-feature tests,
+  all-feature build, all-feature examples, and warning-denied documentation all
+  passed on the audited code candidate.
+
+#### Remaining risks and deferred findings
+
+The 40-unit line step is a private cross-platform default without momentum,
+acceleration, overscroll, or gesture phases. Winit click sequencing has no
+portable OS setting or widget identity. Drag threshold, release-click
+suppression, canonical pointer transitions, and ordered selection ordinals stay
+in serial packet `IN-03B`; no B-owned behavior is claimed here.
 
 ## Packet Completion Template
 

@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | In progress; `IN-01` merged, `IN-02` local audit and full gate passed pending exact-SHA three-OS CI |
+| Status | In progress; `IN-01` and `IN-02` merged, `IN-03A` audit and local full gate passed pending exact-SHA three-OS CI |
 | Scope | Sequence-preserving input, platform request execution, and pointer normalization |
 | Impact / confidence | Critical / High (`IN-03` is High / High) |
 | Campaign prerequisite | Stage 2 gate; campaign authorization recorded |
@@ -18,7 +18,8 @@
 | --- | --- | --- | --- | --- |
 | `IN-01` | Preserve one ordered key/text/IME/pointer/focus/wheel stream and wire ordinary `KeyEvent.text` typing | Stage 2 gate | Critical / High | Root-owned contract |
 | `IN-02` | Execute clipboard, URL, cursor, IME, repaint, and async shell results with one-frame request ownership | `IN-01` | Critical / High | Root integration |
-| `IN-03` | Normalize line/pixel wheel, click counts, drag threshold, and drag-release click suppression | `IN-01`, `RT-02` | High / High | Root-owned while input contract is active |
+| `IN-03A` | Normalize line/pixel wheel units and calculate live click counts | `IN-02`, `RT-02` | High / High | Root-owned input adapter contract |
+| `IN-03B` | Add drag threshold, drag-release click suppression, and ordered selection gestures | `IN-03A` | High / High | Root-owned pointer transition contract |
 
 `IN-01` now defines one canonical ordered stream with compatibility projections,
 source-aware hardware text and preedit-driven IME behavior, one frame-local text
@@ -36,12 +37,26 @@ About control, and F1 route one fixed HTTPS Documentation action. Real Showcase
 output crosses fake Winit cursor, IME, clipboard, URL, and repaint boundaries in
 deterministic tests. Three independent depth-one re-reviewers closed the
 depth-zero audit's four findings with no P0/P1/P2 findings. The complete local
-CI-equivalent gate passes; exact-SHA three-OS CI, PR checks, and squash merge
-remain before acceptance.
+CI-equivalent gate, exact-SHA three-OS CI, PR checks, and squash merge passed;
+issue `#512` is closed and squash `e151b111` is accepted.
+
+`IN-03A` consumes canonical wheel events with typed line/pixel provenance, a
+private 40-unit line step, exact logical pixels, per-component sanitization, and
+one sign inversion. Empty canonical streams keep the legacy logical magnitude.
+The live Winit path now calculates click counts from inclusive 500 ms/four-unit
+press boundaries, carries counts through matching releases, resets invalid
+history deterministically, and retains the explicit-count compatibility API.
+Focused core, routing, spatial, Winit, showcase, and warning-denied Clippy gates
+pass. Three depth-one re-reviewers closed the DPI-evidence and rustdoc findings
+with no P0/P1/P2 findings, and the complete local CI-equivalent gate passes.
+Exact-SHA three-OS CI, PR checks, and squash merge remain.
 
 ## Ownership And Overlap
 
-`IN-01` and `IN-03` own Z2 and remain serial with text-input consumption. `IN-01` must replace the separate key/text collections with an ordered stream or equivalent sequence-preserving contract. `IN-02` owns Z3 and may not overlap `REND-03` or live `SHOW-01/02` changes.
+`IN-03A` and `IN-03B` own Z2 serially with text-input consumption. `IN-03B`
+cannot start until A's click metadata is squash-merged and must then freeze the
+ordered selection-gesture seam before `TEXT-01`. `ASYNC-01` and `TEXT-01` may
+not overlap B's memory/runtime ownership.
 
 ## Acceptance Gate And Verification Expectations
 

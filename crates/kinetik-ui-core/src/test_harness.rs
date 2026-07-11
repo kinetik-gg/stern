@@ -634,10 +634,10 @@ impl UiTestHarness {
             ScriptedInput::PointerMove(position) => self.set_pointer_position(position),
             ScriptedInput::PointerDown(button) => self.pointer_press(button),
             ScriptedInput::PointerUp(button) => self.pointer_release(button),
-            ScriptedInput::Wheel(delta) | ScriptedInput::WheelLines(delta) => {
-                self.wheel_lines(delta);
+            ScriptedInput::Wheel(delta) | ScriptedInput::WheelPixels(delta) => {
+                self.wheel_pixels(delta);
             }
-            ScriptedInput::WheelPixels(delta) => self.wheel_pixels(delta),
+            ScriptedInput::WheelLines(delta) => self.wheel_lines(delta),
             ScriptedInput::Key(event) => {
                 self.input
                     .push_event(UiInputEvent::Key(event.into_key_event()));
@@ -698,7 +698,7 @@ impl UiTestHarness {
 
     /// Adds a wheel delta to the next frame.
     pub fn wheel(&mut self, delta: Vec2) {
-        self.wheel_lines(delta);
+        self.wheel_pixels(delta);
     }
 
     /// Adds a line-wheel delta to the next frame.

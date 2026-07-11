@@ -455,9 +455,14 @@ pointer release-all and leave, then records focus loss; later editing events in
 that frame remain observable but do not mutate text.
 
 Input therefore exposes both an ordered canonical stream and compatibility
-snapshots for the current frame. Existing pointer primitives continue to query
-the final snapshot until the separate event-aware pointer-transition packet;
-text widgets consume the ordered stream.
+snapshots for the current frame. Scroll consumption reads individual canonical
+wheel events when the stream is nonempty: each line component uses a private
+40-logical-unit current-scope step, logical pixel components remain exact after
+platform DPI conversion and spatial localization, nonfinite components become
+zero, and direction inverts once. An empty stream preserves the raw logical
+compatibility magnitude. Other pointer primitives continue to query the final
+snapshot until the separate event-aware pointer-transition packet; text widgets
+consume the ordered stream.
 
 The input model must support pointer capture. During a drag, the active widget
 continues receiving drag updates after leaving its original rectangle while it

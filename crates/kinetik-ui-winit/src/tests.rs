@@ -1,4 +1,7 @@
 #![allow(clippy::float_cmp)]
+use core::time::Duration;
+use std::time::Instant;
+
 use crate::{
     WinitAccessibilityUpdate, WinitFrameClock, WinitInputAdapter, WinitPlatformRequests,
     WinitShellRequest, WinitTextInputRequest, WinitWindowOps, cursor_to_winit,
@@ -217,6 +220,344 @@ fn mouse_button_transitions_preserve_same_frame_edges_and_other_buttons() {
             .button(CoreMouseButton::Other(8))
             .down
     );
+}
+
+fn pointer_button_counts(adapter: &WinitInputAdapter) -> Vec<u8> {
+    adapter
+        .input()
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            UiInputEvent::PointerButton { click_count, .. } => Some(*click_count),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn automatic_click_sequence_counts_press_and_matching_release_at_inclusive_boundaries() {
+    let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+    let started = Instant::now();
+    adapter.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    adapter.mouse_button_at(WinitMouseButton::Left, ElementState::Pressed, started);
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(10),
+    );
+    assert_eq!(pointer_button_counts(&adapter), vec![1, 1]);
+
+    adapter.begin_frame();
+    adapter.pointer_moved(PhysicalPosition::new(14.0, 10.0));
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(500),
+    );
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(510),
+    );
+    assert_eq!(pointer_button_counts(&adapter), vec![2, 2]);
+}
+
+#[test]
+fn automatic_click_sequence_resets_beyond_time_or_distance_boundaries() {
+    let started = Instant::now();
+    let mut late = WinitInputAdapter::new(ScaleFactor::ONE);
+    late.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    late.mouse_button_at(WinitMouseButton::Left, ElementState::Pressed, started);
+    late.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(10),
+    );
+    late.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(501),
+    );
+    assert_eq!(pointer_button_counts(&late), vec![1, 1, 1]);
+
+    let mut far = WinitInputAdapter::new(ScaleFactor::ONE);
+    far.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    far.mouse_button_at(WinitMouseButton::Left, ElementState::Pressed, started);
+    far.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(10),
+    );
+    far.pointer_moved(PhysicalPosition::new(14.01, 10.0));
+    far.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(100),
+    );
+    assert_eq!(pointer_button_counts(&far), vec![1, 1, 1]);
+}
+
+#[test]
+fn automatic_click_sequence_defines_mismatch_missing_and_backward_transitions() {
+    let started = Instant::now();
+    let mut unmatched = WinitInputAdapter::new(ScaleFactor::ONE);
+    unmatched.mouse_button_at(WinitMouseButton::Left, ElementState::Released, started);
+    assert_eq!(pointer_button_counts(&unmatched), vec![0]);
+
+    let mut missing = WinitInputAdapter::new(ScaleFactor::ONE);
+    missing.mouse_button_at(WinitMouseButton::Left, ElementState::Pressed, started);
+    missing.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(1),
+    );
+    missing.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    missing.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(2),
+    );
+    assert_eq!(pointer_button_counts(&missing), vec![1, 1, 1]);
+
+    let mut backward = WinitInputAdapter::new(ScaleFactor::ONE);
+    backward.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    backward.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(10),
+    );
+    backward.mouse_button_at(WinitMouseButton::Left, ElementState::Released, started);
+    backward.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(20),
+    );
+    assert_eq!(pointer_button_counts(&backward), vec![1, 1, 1]);
+
+    let mut overlapping = WinitInputAdapter::new(ScaleFactor::ONE);
+    overlapping.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    overlapping.mouse_button_at(WinitMouseButton::Left, ElementState::Pressed, started);
+    overlapping.mouse_button_at(
+        WinitMouseButton::Right,
+        ElementState::Pressed,
+        started + Duration::from_millis(1),
+    );
+    overlapping.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(2),
+    );
+    assert_eq!(pointer_button_counts(&overlapping), vec![1, 1, 0]);
+
+    let mut different = WinitInputAdapter::new(ScaleFactor::ONE);
+    different.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    different.mouse_button_at(WinitMouseButton::Left, ElementState::Pressed, started);
+    different.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(1),
+    );
+    different.mouse_button_at(
+        WinitMouseButton::Right,
+        ElementState::Pressed,
+        started + Duration::from_millis(2),
+    );
+    different.mouse_button_at(
+        WinitMouseButton::Right,
+        ElementState::Released,
+        started + Duration::from_millis(3),
+    );
+    assert_eq!(pointer_button_counts(&different), vec![1, 1, 1, 1]);
+
+    let mut duplicate = WinitInputAdapter::new(ScaleFactor::ONE);
+    duplicate.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    duplicate.mouse_button_at(WinitMouseButton::Left, ElementState::Pressed, started);
+    duplicate.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(1),
+    );
+    duplicate.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(2),
+    );
+    assert_eq!(pointer_button_counts(&duplicate), vec![1, 1, 0]);
+
+    let mut backward_press = WinitInputAdapter::new(ScaleFactor::ONE);
+    backward_press.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    backward_press.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(10),
+    );
+    backward_press.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(11),
+    );
+    backward_press.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(9),
+    );
+    assert_eq!(pointer_button_counts(&backward_press), vec![1, 1, 1]);
+}
+
+#[test]
+fn automatic_click_sequence_resets_for_explicit_input_leave_focus_and_scale_changes() {
+    let started = Instant::now();
+    let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+    adapter.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    adapter.mouse_button_at(WinitMouseButton::Left, ElementState::Pressed, started);
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(1),
+    );
+    adapter.set_scale_factor(ScaleFactor::new(f64::NAN));
+    adapter.begin_frame();
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(2),
+    );
+    assert_eq!(pointer_button_counts(&adapter), vec![2]);
+
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(3),
+    );
+    adapter.set_scale_factor(ScaleFactor::new(2.0));
+    adapter.begin_frame();
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(4),
+    );
+    assert_eq!(pointer_button_counts(&adapter), vec![1]);
+
+    adapter.mouse_button(WinitMouseButton::Left, ElementState::Released, 9);
+    adapter.begin_frame();
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(5),
+    );
+    assert_eq!(pointer_button_counts(&adapter), vec![1]);
+
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(6),
+    );
+    adapter.pointer_left();
+    adapter.pointer_moved(PhysicalPosition::new(20.0, 20.0));
+    adapter.begin_frame();
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(7),
+    );
+    assert_eq!(pointer_button_counts(&adapter), vec![1]);
+
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(8),
+    );
+    adapter.set_window_focused(false);
+    adapter.set_window_focused(true);
+    adapter.pointer_moved(PhysicalPosition::new(20.0, 20.0));
+    adapter.begin_frame();
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(9),
+    );
+    assert_eq!(pointer_button_counts(&adapter), vec![1]);
+}
+
+#[test]
+fn scale_change_cannot_seed_click_history_from_stale_logical_pointer_evidence() {
+    let started = Instant::now();
+    let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+    adapter.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    adapter.mouse_button_at(WinitMouseButton::Left, ElementState::Pressed, started);
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(1),
+    );
+
+    adapter.set_scale_factor(ScaleFactor::new(2.0));
+    assert_eq!(adapter.input().pointer.position, None);
+    assert_eq!(adapter.input().pointer.delta, Vec2::ZERO);
+    assert!(matches!(
+        adapter.input().events.last(),
+        Some(UiInputEvent::PointerLeft)
+    ));
+    adapter.begin_frame();
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(2),
+    );
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(3),
+    );
+    assert_eq!(pointer_button_counts(&adapter), vec![1, 1]);
+
+    adapter.begin_frame();
+    adapter.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+    assert_eq!(adapter.input().pointer.delta, Vec2::ZERO);
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Pressed,
+        started + Duration::from_millis(4),
+    );
+    adapter.mouse_button_at(
+        WinitMouseButton::Left,
+        ElementState::Released,
+        started + Duration::from_millis(5),
+    );
+    assert_eq!(pointer_button_counts(&adapter), vec![1, 1]);
+}
+
+#[test]
+fn automatic_click_sequence_saturates_at_u8_max() {
+    let started = Instant::now();
+    let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+    adapter.pointer_moved(PhysicalPosition::new(10.0, 10.0));
+
+    for millisecond in 0..260 {
+        let at = started + Duration::from_millis(millisecond);
+        adapter.mouse_button_at(WinitMouseButton::Left, ElementState::Pressed, at);
+        adapter.mouse_button_at(WinitMouseButton::Left, ElementState::Released, at);
+    }
+
+    assert_eq!(adapter.input().pointer.click_count, u8::MAX);
+}
+
+#[test]
+fn physical_pixel_wheels_are_logically_equivalent_at_one_and_two_x_dpi() {
+    let mut one_x = WinitInputAdapter::new(ScaleFactor::ONE);
+    let mut two_x = WinitInputAdapter::new(ScaleFactor::new(2.0));
+    one_x.mouse_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(
+        8.0, -4.0,
+    )));
+    two_x.mouse_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(
+        16.0, -8.0,
+    )));
+
+    assert_eq!(
+        one_x.input().pointer.wheel_delta,
+        two_x.input().pointer.wheel_delta
+    );
+    assert_eq!(one_x.input().pointer.wheel_delta, Vec2::new(8.0, -4.0));
 }
 
 #[test]

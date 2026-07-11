@@ -77,7 +77,11 @@ pub struct PointerInput {
     pub position: Option<Point>,
     /// Pointer movement in logical UI units since the previous frame.
     pub delta: Vec2,
-    /// Scroll wheel delta in logical units or lines as normalized by the platform adapter.
+    /// Accumulated compatibility wheel delta in raw logical units or lines.
+    ///
+    /// This snapshot may mix typed line/pixel provenance. Canonical consumers
+    /// use ordered [`UiInputEvent::Wheel`] values when [`UiInput::events`] is
+    /// nonempty.
     pub wheel_delta: Vec2,
     /// Primary button state.
     pub primary: PointerButtonState,
@@ -585,7 +589,7 @@ pub enum InputWheelDelta {
 }
 
 impl InputWheelDelta {
-    /// Returns the underlying two-dimensional delta.
+    /// Returns the unnormalized two-dimensional compatibility magnitude.
     #[must_use]
     pub const fn value(self) -> Vec2 {
         match self {

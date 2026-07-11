@@ -21,6 +21,10 @@ published, or accepted as an alpha release.
   provisional public enum must handle the new same-owner IME geometry request.
 - Added native text clipboard and hardened HTTP/HTTPS browser services to the
   Winit adapter; image clipboard features remain disabled.
+- Normalized ordered line-wheel events to a fixed 40-logical-unit step while
+  preserving exact logical pixel deltas and the legacy empty-stream magnitude.
+  Added timestamped Winit click sequencing; the explicit-count method remains
+  available and resets automatic history.
 
 ### Documentation
 

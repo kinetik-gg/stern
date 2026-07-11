@@ -1,5 +1,10 @@
 use super::{HitTarget, InteractionState, Response, ScrollResponse};
-use crate::{PointerRoute, Rect, Size, Transform, UiInput, UiMemory, Vec2, WidgetId};
+use crate::{
+    InputWheelDelta, PointerRoute, Rect, Size, Transform, UiInput, UiInputEvent, UiMemory, Vec2,
+    WidgetId,
+};
+
+const DEFAULT_WHEEL_LINE_STEP: Vec2 = Vec2::new(40.0, 40.0);
 
 /// Resolves neutral scroll behavior and stores a clamped offset in memory.
 ///
@@ -70,7 +75,8 @@ fn scrollable_with_hit_target(
     let previous = clamp_scroll_offset(memory.scroll_offset(id), rect.size(), content_size);
     let wheel_routed = !disabled && target_hit && memory.pointer_wheel_route_allows(id);
     let requested_delta = if wheel_routed {
-        Vec2::new(-input.pointer.wheel_delta.x, -input.pointer.wheel_delta.y)
+        let delta = normalized_wheel_delta(input);
+        Vec2::new(-delta.x, -delta.y)
     } else {
         Vec2::ZERO
     };
@@ -110,6 +116,45 @@ fn scrollable_with_hit_target(
         delta,
         max_offset,
     }
+}
+
+fn normalized_wheel_delta(input: &UiInput) -> Vec2 {
+    if input.events.is_empty() {
+        return sanitize_wheel_vector(input.pointer.wheel_delta);
+    }
+
+    input
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            UiInputEvent::Wheel { delta, .. } => Some(match *delta {
+                InputWheelDelta::Lines(delta) => {
+                    multiply_wheel_vectors(sanitize_wheel_vector(delta), DEFAULT_WHEEL_LINE_STEP)
+                }
+                InputWheelDelta::Pixels(delta) => sanitize_wheel_vector(delta),
+            }),
+            _ => None,
+        })
+        .fold(Vec2::ZERO, add_wheel_vectors)
+}
+
+fn sanitize_wheel_vector(value: Vec2) -> Vec2 {
+    Vec2::new(
+        sanitize_wheel_component(value.x),
+        sanitize_wheel_component(value.y),
+    )
+}
+
+fn multiply_wheel_vectors(left: Vec2, right: Vec2) -> Vec2 {
+    sanitize_wheel_vector(Vec2::new(left.x * right.x, left.y * right.y))
+}
+
+fn add_wheel_vectors(left: Vec2, right: Vec2) -> Vec2 {
+    sanitize_wheel_vector(Vec2::new(left.x + right.x, left.y + right.y))
+}
+
+fn sanitize_wheel_component(value: f32) -> f32 {
+    if value.is_finite() { value } else { 0.0 }
 }
 
 /// Clamps a scroll offset to the range implied by a viewport and content size.

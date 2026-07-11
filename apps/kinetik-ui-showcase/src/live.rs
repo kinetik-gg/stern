@@ -240,7 +240,7 @@ impl ApplicationHandler for LiveShowcase {
                 self.request_interactive_redraw();
             }
             WindowEvent::MouseInput { button, state, .. } => {
-                self.input.mouse_button(button, state, 1);
+                self.input.mouse_button_at(button, state, Instant::now());
                 self.request_interactive_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {

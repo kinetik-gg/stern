@@ -134,6 +134,18 @@ Responsibilities:
 - Optional drag/drop path.
 - Optional file-dialog integration path.
 
+The Winit adapter provides a timestamped automatic mouse-button path. A repeat
+requires the same button, nondecreasing event time, no more than 500
+milliseconds between presses, and squared logical press distance at most 16.
+Press counts saturate; matching releases carry the active count and unmatched
+releases report zero. Pointer leave, focus loss, mismatched transitions,
+missing comparison evidence, backwards time, an actual sanitized DPI change,
+or explicit-count input clears automatic continuation. A DPI change also
+invalidates prior logical pointer evidence as a pointer-leave transition until a
+new cursor event establishes the new coordinate basis. The explicit-count API remains available for
+platforms and tests that already supply click counts and clears automatic
+history before emitting the supplied count unchanged.
+
 The UI core consumes platform-independent input and emits platform-independent requests.
 
 Platform request examples:
