@@ -505,9 +505,9 @@ fn captured_duplicates_return_the_exact_response_without_memory_mutation() {
     let ((first, second, unchanged), _) = harness.run_frame(|ui| {
         let id = ui.id("drag");
         let first = ui.captured_domain_drag_gesture(id, FULL, false);
-        let after_first = ui.memory().clone();
+        let after_first = format!("{:#?}", ui.memory());
         let second = ui.captured_domain_drag_gesture(id, MISS, true);
-        let unchanged = after_first == *ui.memory();
+        let unchanged = after_first == format!("{:#?}", ui.memory());
         (first, second, unchanged)
     });
     assert!(!first.actions.is_empty());
@@ -528,9 +528,13 @@ fn ordinary_captured_and_transformed_calls_share_one_exact_response() {
             let (input, memory) = ui.input_and_memory_mut();
             draggable_transformed(id, FULL, Transform::IDENTITY, input, memory, false)
         };
-        let after_first = ui.memory().clone();
+        let after_first = format!("{:#?}", ui.memory());
         let captured = ui.captured_domain_drag_gesture(id, MISS, true);
-        (ordinary, captured, after_first == *ui.memory())
+        (
+            ordinary,
+            captured,
+            after_first == format!("{:#?}", ui.memory()),
+        )
     });
     assert_eq!(captured.response, ordinary);
     assert!(captured.actions.is_empty());
@@ -543,12 +547,16 @@ fn ordinary_captured_and_transformed_calls_share_one_exact_response() {
     let ((captured, ordinary, unchanged), _) = captured_first.run_frame(|ui| {
         let id = ui.id("drag");
         let captured = ui.captured_domain_drag_gesture(id, FULL, false);
-        let after_first = ui.memory().clone();
+        let after_first = format!("{:#?}", ui.memory());
         let ordinary = {
             let (input, memory) = ui.input_and_memory_mut();
             draggable_transformed(id, MISS, Transform::IDENTITY, input, memory, true)
         };
-        (captured, ordinary, after_first == *ui.memory())
+        (
+            captured,
+            ordinary,
+            after_first == format!("{:#?}", ui.memory()),
+        )
     });
     assert_eq!(ordinary, captured.response);
     assert!(!captured.actions.is_empty());

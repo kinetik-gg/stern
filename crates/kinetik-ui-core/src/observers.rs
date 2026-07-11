@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    LivenessGeneration, LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus,
+    LivenessIncarnation, LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus,
 };
 
 /// Retained identity for an observer subscription.
@@ -98,18 +98,9 @@ impl ObserverSubscriptionEntry {
     }
 }
 
-impl Clone for ObserverSubscriptionEntry {
-    fn clone(&self) -> Self {
-        Self {
-            token: self.token,
-            active: Rc::new(Cell::new(self.active.get())),
-        }
-    }
-}
-
 impl PartialEq for ObserverSubscriptionEntry {
     fn eq(&self, other: &Self) -> bool {
-        self.token == other.token && self.active.get() == other.active.get()
+        self.token.observational_eq(other.token) && self.active.get() == other.active.get()
     }
 }
 
@@ -208,15 +199,22 @@ pub enum ObserverDeliverySkipReason {
         /// Target carried by the stale subscription token.
         target: LivenessTargetId,
     },
-    /// The liveness target was live at a newer generation than the subscription
+    /// The exact subscription incarnation was cancelled.
+    Cancelled {
+        /// Target carried by the cancelled subscription token.
+        target: LivenessTargetId,
+        /// Cancelled subscription incarnation.
+        incarnation: LivenessIncarnation,
+    },
+    /// The liveness target has a newer incarnation than the subscription
     /// token.
-    StaleGeneration {
+    StaleIncarnation {
         /// Target carried by the stale subscription token.
         target: LivenessTargetId,
-        /// Generation carried by the stale subscription token.
-        token_generation: LivenessGeneration,
-        /// Current retained generation for the target.
-        current_generation: LivenessGeneration,
+        /// Incarnation carried by the stale subscription token.
+        token_incarnation: LivenessIncarnation,
+        /// Current retained incarnation for the target.
+        current_incarnation: LivenessIncarnation,
     },
 }
 
@@ -226,15 +224,22 @@ impl ObserverDeliverySkipReason {
             LivenessUpdateStatus::Applied => {
                 unreachable!("applied liveness status is delivered, not skipped")
             }
+            LivenessUpdateStatus::Cancelled {
+                target,
+                incarnation,
+            } => Self::Cancelled {
+                target,
+                incarnation,
+            },
             LivenessUpdateStatus::StaleTarget { target } => Self::StaleTarget { target },
-            LivenessUpdateStatus::StaleGeneration {
+            LivenessUpdateStatus::StaleIncarnation {
                 target,
-                token_generation,
-                current_generation,
-            } => Self::StaleGeneration {
+                token_incarnation,
+                current_incarnation,
+            } => Self::StaleIncarnation {
                 target,
-                token_generation,
-                current_generation,
+                token_incarnation,
+                current_incarnation,
             },
         }
     }
@@ -346,23 +351,22 @@ impl ObserverDrain {
 }
 
 /// Retained observer registry owned by [`crate::UiMemory`].
+///
+/// The registry is deliberately non-cloneable because retained subscriptions
+/// carry authority-scoped liveness tokens.
+///
+/// ```compile_fail
+/// use kinetik_ui_core::ObserverRegistry;
+///
+/// let registry = ObserverRegistry::new();
+/// let _authority_copy = registry.clone();
+/// ```
 #[derive(Debug, Default, PartialEq)]
 pub struct ObserverRegistry {
     next_subscription_id: u64,
     subscriptions: HashMap<ObserverSubscriptionId, ObserverSubscriptionEntry>,
     queue: VecDeque<ObserverNotification>,
     draining: bool,
-}
-
-impl Clone for ObserverRegistry {
-    fn clone(&self) -> Self {
-        Self {
-            next_subscription_id: self.next_subscription_id,
-            subscriptions: self.subscriptions.clone(),
-            queue: self.queue.clone(),
-            draining: self.draining,
-        }
-    }
 }
 
 impl ObserverRegistry {
@@ -419,24 +423,6 @@ impl ObserverRegistry {
             ObserverSubscriptionEntry::new(token, Rc::clone(&active)),
         );
         ObserverSubscriptionHandle::new(id, active)
-    }
-
-    /// Updates an active subscription to a renewed liveness token.
-    ///
-    /// Returns false when the subscription is missing or inactive.
-    pub fn update_subscription_token(
-        &mut self,
-        id: ObserverSubscriptionId,
-        token: LivenessToken,
-    ) -> bool {
-        let Some(entry) = self.subscriptions.get_mut(&id) else {
-            return false;
-        };
-        if !entry.is_active() {
-            return false;
-        }
-        entry.token = token;
-        true
     }
 
     /// Explicitly unsubscribes and removes a retained subscription.

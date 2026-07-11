@@ -3,10 +3,10 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    InputStreamConflict, LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus,
-    Modifiers, ObserverDelivery, ObserverDrain, ObserverNotification, ObserverNotificationId,
-    ObserverPublishStatus, ObserverRegistry, ObserverSubscriptionHandle, ObserverSubscriptionId,
-    Point, Response, UiInput, UiInputEvent, Vec2, WidgetId,
+    InputStreamConflict, LivenessRegistry, LivenessRemovalStatus, LivenessTargetId, LivenessToken,
+    LivenessUpdateStatus, Modifiers, ObserverDelivery, ObserverDrain, ObserverNotification,
+    ObserverNotificationId, ObserverPublishStatus, ObserverRegistry, ObserverSubscriptionHandle,
+    ObserverSubscriptionId, Point, Response, UiInput, UiInputEvent, Vec2, WidgetId,
 };
 
 /// Frame-local routing decision for one pointer event class.
@@ -88,7 +88,17 @@ pub(crate) struct PlannedDragRelease {
 }
 
 /// Retained interaction and widget state owned by the UI runtime.
-#[derive(Debug, Clone, Default, PartialEq)]
+///
+/// Memory is deliberately non-cloneable because it contains authority-scoped
+/// async liveness and observer registries.
+///
+/// ```compile_fail
+/// use kinetik_ui_core::UiMemory;
+///
+/// let memory = UiMemory::new();
+/// let _authority_copy = memory.clone();
+/// ```
+#[derive(Debug, Default, PartialEq)]
 pub struct UiMemory {
     /// Widget hovered during the current frame.
     hovered: Option<WidgetId>,
@@ -848,13 +858,35 @@ impl UiMemory {
         &mut self.liveness
     }
 
-    /// Marks a liveness target live and returns a renewed token.
+    /// Marks an async owner present and returns its stable incarnation token.
+    pub fn mark_present_target(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
+        self.liveness.mark_present(target)
+    }
+
+    /// Marks an async owner present using the previous live terminology.
+    #[deprecated(note = "use mark_present_target")]
     pub fn mark_live_target(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
-        self.liveness.mark_live(target)
+        self.mark_present_target(target)
+    }
+
+    /// Starts a replacement incarnation and marks it present.
+    pub fn restart_liveness_target(
+        &mut self,
+        target: impl Into<LivenessTargetId>,
+    ) -> LivenessToken {
+        self.liveness.restart(target)
+    }
+
+    /// Cancels the exact active token incarnation.
+    pub fn cancel_liveness_token(&mut self, token: LivenessToken) -> LivenessUpdateStatus {
+        self.liveness.cancel(token)
     }
 
     /// Removes a liveness target from the retained registry.
-    pub fn remove_live_target(&mut self, target: impl Into<LivenessTargetId>) -> bool {
+    pub fn remove_live_target(
+        &mut self,
+        target: impl Into<LivenessTargetId>,
+    ) -> LivenessRemovalStatus {
         self.liveness.remove(target)
     }
 
@@ -881,15 +913,6 @@ impl UiMemory {
     /// Retains an observer subscription tied to the provided liveness token.
     pub fn subscribe_observer(&mut self, token: LivenessToken) -> ObserverSubscriptionHandle {
         self.observers.subscribe(token)
-    }
-
-    /// Updates an active observer subscription to a renewed liveness token.
-    pub fn update_observer_subscription_token(
-        &mut self,
-        id: ObserverSubscriptionId,
-        token: LivenessToken,
-    ) -> bool {
-        self.observers.update_subscription_token(id, token)
     }
 
     /// Explicitly unsubscribes a retained observer subscription.

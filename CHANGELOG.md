@@ -53,6 +53,17 @@ published, or accepted as an alpha release.
   change for callers that resolve the same `WidgetId` more than once in a begun
   frame: use one authoritative call and share its `Response`, or use distinct
   widget IDs for genuinely distinct interactions.
+- Separated frame-local async-owner presence from durable registry-scoped
+  incarnation. Repeated presence marks now return one stable opaque token,
+  while restart, exact-token cancellation, removal, same-ID reuse, foreign
+  registries, observer delivery, and one-following-frame tombstone cleanup have
+  deterministic typed outcomes. This is a provisional breaking API change:
+  `LivenessToken::new` and observer token-refresh APIs were removed; Clone was
+  removed from `UiMemory`, `LivenessRegistry`, `ObserverRegistry`, and
+  `UiTestHarness`; generation/status terminology moved to incarnation; and
+  `remove_live_target` now returns `LivenessRemovalStatus`. Mark owners present
+  each frame, retain one token per incarnation, call `restart` for replacement
+  work, and create a new observer subscription after restart or reentry.
 
 ### Documentation
 

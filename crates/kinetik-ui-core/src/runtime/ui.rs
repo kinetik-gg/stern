@@ -8,8 +8,9 @@ use crate::memory::UiMemory;
 use crate::render::Primitive;
 use crate::{
     ActionContext, ActionId, ActionInvocation, ActionSource, CapturedDomainDragGesture,
-    CapturedSelectionGesture, IdStack, LivenessTargetId, LivenessToken, Modifiers,
-    OrderedTextInputEvent, Rect, SemanticActionKind, SemanticNode, WidgetId,
+    CapturedSelectionGesture, IdStack, LivenessRemovalStatus, LivenessTargetId, LivenessToken,
+    LivenessUpdateStatus, Modifiers, OrderedTextInputEvent, Rect, SemanticActionKind, SemanticNode,
+    WidgetId,
 };
 
 use super::focus::{
@@ -528,12 +529,36 @@ impl<'a> Ui<'a> {
         true
     }
 
-    /// Marks a target live for deterministic external update validation.
-    ///
-    /// Calling this again for the same target renews its generation, making
-    /// older tokens for that target stale.
+    /// Marks an async owner present and returns its stable incarnation token.
+    pub fn mark_present_target(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
+        self.memory.mark_present_target(target)
+    }
+
+    /// Marks an async owner present using the previous live terminology.
+    #[deprecated(note = "use mark_present_target")]
     pub fn mark_live_target(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
-        self.memory.mark_live_target(target)
+        self.mark_present_target(target)
+    }
+
+    /// Starts a replacement incarnation and marks it present.
+    pub fn restart_liveness_target(
+        &mut self,
+        target: impl Into<LivenessTargetId>,
+    ) -> LivenessToken {
+        self.memory.restart_liveness_target(target)
+    }
+
+    /// Cancels the exact active token incarnation.
+    pub fn cancel_liveness_token(&mut self, token: LivenessToken) -> LivenessUpdateStatus {
+        self.memory.cancel_liveness_token(token)
+    }
+
+    /// Removes the target's active incarnation.
+    pub fn remove_live_target(
+        &mut self,
+        target: impl Into<LivenessTargetId>,
+    ) -> LivenessRemovalStatus {
+        self.memory.remove_live_target(target)
     }
 
     /// Appends one runtime warning.
