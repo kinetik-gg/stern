@@ -81,6 +81,7 @@ struct PointerGesture {
     threshold_crossed: bool,
     kind: PointerGestureKind,
     click_count: u8,
+    selection_anchor: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -573,7 +574,35 @@ impl UiMemory {
             threshold_crossed: false,
             kind,
             click_count,
+            selection_anchor: None,
         });
+    }
+
+    /// Stores an opaque consumer-defined anchor on the active Selection gesture.
+    ///
+    /// The token has the same retained lifetime as the captured gesture. Core
+    /// deliberately does not interpret it.
+    #[doc(hidden)]
+    pub fn set_selection_gesture_anchor(&mut self, owner: WidgetId, anchor: usize) -> bool {
+        let Some(gesture) = &mut self.pointer_gesture else {
+            return false;
+        };
+        if gesture.owner != owner || gesture.kind != PointerGestureKind::Selection {
+            return false;
+        }
+        gesture.selection_anchor = Some(anchor);
+        true
+    }
+
+    /// Returns the opaque anchor stored on the matching active Selection gesture.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn selection_gesture_anchor(&self, owner: WidgetId) -> Option<usize> {
+        self.pointer_gesture
+            .filter(|gesture| {
+                gesture.owner == owner && gesture.kind == PointerGestureKind::Selection
+            })
+            .and_then(|gesture| gesture.selection_anchor)
     }
 
     pub(crate) fn pointer_gesture(&self, owner: WidgetId) -> Option<(Point, bool)> {
@@ -1130,8 +1159,39 @@ impl UiMemory {
 
 #[cfg(test)]
 mod tests {
-    use super::UiMemory;
-    use crate::{PointerRoute, PointerRoutes, Vec2, WidgetId};
+    use super::{PointerGestureKind, UiMemory};
+    use crate::interaction::captured_selection_gesture_with_ordinals;
+    use crate::{
+        MouseButton, Point, PointerRoute, PointerRoutes, Rect, UiInput, UiInputEvent, Vec2,
+        WidgetId,
+    };
+
+    fn selection_gesture_memory(owner: WidgetId) -> UiMemory {
+        let mut memory = UiMemory::new();
+        memory.activate(owner);
+        memory.press(owner);
+        memory.capture_pointer(owner);
+        memory.begin_pointer_gesture(
+            owner,
+            Point::new(4.0, 4.0),
+            PointerGestureKind::Selection,
+            1,
+        );
+        memory
+    }
+
+    fn resolve_selection_event(memory: &mut UiMemory, owner: WidgetId, event: UiInputEvent) {
+        let mut input = UiInput::default();
+        input.push_event(event);
+        let _ = captured_selection_gesture_with_ordinals(
+            owner,
+            Rect::new(0.0, 0.0, 20.0, 20.0),
+            &input,
+            &[0],
+            memory,
+            false,
+        );
+    }
 
     fn install_ordinary_route(memory: &mut UiMemory, ordinary: PointerRoute) {
         memory.install_pointer_routes(
@@ -1175,6 +1235,117 @@ mod tests {
         assert!(memory.cancel_pointer_interaction());
         assert!(!memory.canonical_primary_route_allows(released, 8));
         assert!(!memory.canonical_primary_route_allows(next, 8));
+    }
+
+    #[test]
+    fn selection_gesture_anchor_is_owner_checked_opaque_and_retained_across_frames() {
+        let owner = WidgetId::from_key("owner");
+        let other = WidgetId::from_key("other");
+        let mut memory = selection_gesture_memory(owner);
+
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+        assert!(!memory.set_selection_gesture_anchor(other, 7));
+        assert_eq!(memory.selection_gesture_anchor(other), None);
+        assert!(memory.set_selection_gesture_anchor(owner, usize::MAX));
+        assert_eq!(memory.selection_gesture_anchor(owner), Some(usize::MAX));
+
+        memory.focus(owner);
+        memory.clear_focus();
+        assert_eq!(memory.selection_gesture_anchor(owner), Some(usize::MAX));
+        memory.begin_frame();
+        assert_eq!(memory.selection_gesture_anchor(owner), Some(usize::MAX));
+    }
+
+    #[test]
+    fn selection_gesture_anchor_rejects_missing_press_and_domain_drag_gestures() {
+        let owner = WidgetId::from_key("owner");
+        let mut memory = UiMemory::new();
+        assert!(!memory.set_selection_gesture_anchor(owner, 1));
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+
+        for kind in [PointerGestureKind::Press, PointerGestureKind::DomainDrag] {
+            memory.begin_pointer_gesture(owner, Point::ZERO, kind, 1);
+            assert!(!memory.set_selection_gesture_anchor(owner, 2));
+            assert_eq!(memory.selection_gesture_anchor(owner), None);
+        }
+    }
+
+    #[test]
+    fn direct_selection_gesture_cleanup_paths_clear_anchor_without_inheritance() {
+        let owner = WidgetId::from_key("owner");
+
+        let mut memory = selection_gesture_memory(owner);
+        assert!(memory.set_selection_gesture_anchor(owner, 1));
+        memory.release_pointer_capture(owner);
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+
+        let mut memory = selection_gesture_memory(owner);
+        assert!(memory.set_selection_gesture_anchor(owner, 2));
+        memory.clear_primary_interaction();
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+
+        let mut memory = selection_gesture_memory(owner);
+        assert!(memory.set_selection_gesture_anchor(owner, 3));
+        memory.clear_primary_interaction_at(9);
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+
+        let mut memory = selection_gesture_memory(owner);
+        assert!(memory.set_selection_gesture_anchor(owner, 4));
+        memory.discard_primary_interaction();
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+
+        let mut memory = selection_gesture_memory(owner);
+        assert!(memory.set_selection_gesture_anchor(owner, 5));
+        assert!(memory.cancel_pointer_interaction());
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+
+        let mut memory = selection_gesture_memory(owner);
+        assert!(memory.set_selection_gesture_anchor(owner, 6));
+        assert!(memory.reconcile_widget_owners(|id| id != owner));
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+
+        memory.begin_pointer_gesture(
+            owner,
+            Point::new(8.0, 8.0),
+            PointerGestureKind::Selection,
+            1,
+        );
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+    }
+
+    #[test]
+    fn canonical_release_and_cancellation_fences_clear_selection_gesture_anchor() {
+        let owner = WidgetId::from_key("owner");
+
+        let mut memory = selection_gesture_memory(owner);
+        assert!(memory.set_selection_gesture_anchor(owner, 1));
+        resolve_selection_event(
+            &mut memory,
+            owner,
+            UiInputEvent::PointerButton {
+                button: MouseButton::Primary,
+                down: false,
+                click_count: 1,
+                position: Some(Point::new(4.0, 4.0)),
+            },
+        );
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+
+        let mut memory = selection_gesture_memory(owner);
+        assert!(memory.set_selection_gesture_anchor(owner, 2));
+        resolve_selection_event(
+            &mut memory,
+            owner,
+            UiInputEvent::PointerReleaseAll {
+                position: Some(Point::new(4.0, 4.0)),
+            },
+        );
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
+
+        let mut memory = selection_gesture_memory(owner);
+        assert!(memory.set_selection_gesture_anchor(owner, 3));
+        resolve_selection_event(&mut memory, owner, UiInputEvent::WindowFocusChanged(false));
+        assert_eq!(memory.selection_gesture_anchor(owner), None);
     }
 
     #[test]
