@@ -25,6 +25,10 @@ published, or accepted as an alpha release.
   preserving exact logical pixel deltas and the legacy empty-stream magnitude.
   Added timestamped Winit click sequencing; the explicit-count method remains
   available and resets automatic history.
+- Added a fixed four-current-scope-logical-unit drag threshold with latched
+  release-click suppression. Canonical pointer transitions now resolve once in
+  order, and `Ui::captured_selection_gesture` exposes original-root-ordinal
+  selection actions without turning text selection into a domain drag source.
 
 ### Documentation
 

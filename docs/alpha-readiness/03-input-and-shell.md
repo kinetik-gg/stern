@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | In progress; `IN-01` and `IN-02` merged, `IN-03A` audit and local full gate passed pending exact-SHA three-OS CI |
+| Status | In progress; `IN-01`, `IN-02`, and `IN-03A` merged; `IN-03B` implementation and focused verification are in progress |
 | Scope | Sequence-preserving input, platform request execution, and pointer normalization |
 | Impact / confidence | Critical / High (`IN-03` is High / High) |
 | Campaign prerequisite | Stage 2 gate; campaign authorization recorded |
@@ -49,7 +49,17 @@ history deterministically, and retains the explicit-count compatibility API.
 Focused core, routing, spatial, Winit, showcase, and warning-denied Clippy gates
 pass. Three depth-one re-reviewers closed the DPI-evidence and rustdoc findings
 with no P0/P1/P2 findings, and the complete local CI-equivalent gate passes.
-Exact-SHA three-OS CI, PR checks, and squash merge remain.
+Exact-SHA three-OS CI run `29135844832`, PR checks, and squash merge
+`889c3762` passed; issue `#514` is closed.
+
+`IN-03B` folds nonempty canonical primary/secondary transitions once, retains
+a private four-current-scope-unit inclusive threshold latch, and suppresses
+release clicks after crossing. Only domain draggables publish drag sources.
+The runtime also retains original root event ordinals in a private spatial
+sidecar and exposes neutral captured-selection actions without changing public
+input or common response layouts. Empty canonical streams remain compatible.
+Focused threshold, conflict, drop-order, ordinal, spatial, and public-surface
+verification is in progress before independent audit and the complete gate.
 
 ## Ownership And Overlap
 

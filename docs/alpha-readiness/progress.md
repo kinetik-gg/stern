@@ -698,6 +698,57 @@ portable OS setting or widget identity. Drag threshold, release-click
 suppression, canonical pointer transitions, and ordered selection ordinals stay
 in serial packet `IN-03B`; no B-owned behavior is claimed here.
 
+### `IN-03B`: drag threshold and ordered selection gestures
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `crates/kinetik-ui-core/src/{interaction,lib,memory}.rs`
+- `crates/kinetik-ui-core/src/interaction/{drag_select,hit,overlay,press,tests}.rs`
+- `crates/kinetik-ui-core/src/runtime/{spatial,ui}.rs`
+- `crates/kinetik-ui-core/tests/{drag_threshold_conformance,ownership_reconciliation_conformance,pointer_arbitration_conformance,runtime_spatial_conformance}.rs`
+- `crates/kinetik-ui/tests/public_api_surface.rs`
+- `docs/specs/{01-foundations,02-layout-and-interaction}.md`
+- `docs/alpha-readiness/{03-input-and-shell,progress}.md`
+
+#### Reasoning and contract decisions
+
+Nonempty canonical pointer transitions now fold once in order; the empty stream
+keeps legacy snapshot behavior. A private retained press origin and inclusive
+four-current-scope-unit latch suppress clicks after crossing. The first domain
+drag update reports full origin displacement and later frames report only new
+movement. Pressable and selection behavior share suppression without becoming
+drop sources; only `draggable` publishes active/released drag identity.
+
+Spatial localization carries original root event indices in a private sidecar
+owned by `Ui`, so public `UiInput`, `UiInputEvent`, and `Response` layouts remain
+unchanged. `Ui::captured_selection_gesture` emits ordinal-bearing Press, Move,
+Release, and Cancel actions, reports below-threshold selection movement, and
+cannot replay actions for the same owner in one frame. Root conflicts block new
+pointer/drop actions while ordered release/cancel evidence can clean an existing
+owner.
+
+#### Tests run and results
+
+- New drag-threshold conformance: 12/12 passed, covering boundaries, accumulated
+  and subsequent deltas, move-back latch, same-frame release, pressable
+  suppression, double-click, conflict cleanup, drop order, selection ordinals,
+  spatial gaps, release-all cancellation, and plain-capture cleanup.
+- Core all-feature suite: passed after updating superseded snapshot fixtures to
+  use canonical events and threshold-crossing geometry.
+- Facade public API surface with all features: 5/5 passed.
+- Core warning-denied all-target/all-feature Clippy: passed.
+- Independent audit and the complete six-command workspace gate remain pending
+  on the implementation candidate.
+
+#### Remaining risks and deferred findings
+
+The threshold is a fixed private current-scope logical default rather than an OS
+or application setting. Scope changes during a retained gesture, touch/stylus/
+multipointer input, momentum, gesture phases, per-widget adapter click identity,
+and drag payload semantics remain deferred. `TEXT-01` owns actual caret/word/
+selection editing and must consume this seam without reparsing pointer events.
+
 ## Packet Completion Template
 
 Every packet review must use these exact headings and include commands plus concrete results:

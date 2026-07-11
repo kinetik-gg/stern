@@ -131,7 +131,8 @@ fn drop_target_with_hit_target(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> DropTargetResponse {
-    let pointer_cancelled = memory.pointer_interaction_cancelled();
+    let pointer_cancelled =
+        memory.pointer_interaction_cancelled() || memory.pointer_input_conflicted(input);
     let source_candidate = memory
         .released_drag_source()
         .or_else(|| memory.drag_source())

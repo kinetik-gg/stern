@@ -266,6 +266,22 @@ movement there. Transform and clip scopes localize all `Ui` input accessors,
 while response rectangles stay local and semantic/debug/IME rectangles export
 screen-logical geometry.
 
+A primary gesture retains its press origin in the current logical scope. Net
+displacement crosses the private drag threshold at four units inclusive and
+then remains latched. The crossing update reports the full origin-to-current
+displacement; later frames report only newly accumulated movement. A crossed
+release never clicks, even after moving back. `pressable` uses the same latch
+for click suppression but never becomes a domain drag; only `draggable` sets
+`drag_source` and can produce a released source for drop targets.
+
+Text selection uses `Ui::captured_selection_gesture`, a visually neutral
+capture seam that returns the common `Response` plus ordered Press, Move,
+Release, and Cancel actions. Canonical actions retain their original root event
+ordinal through transforms and clips; legacy snapshot actions have no ordinal.
+Selection reports movement below the domain threshold and never publishes a
+drag source. A field merges these actions with its single claimed editing
+stream instead of parsing pointer input a second time.
+
 Overlapping interaction uses a predeclared `PointerTargetPlan`. Each visual
 target has one canonical identity, at most one ordinary event owner, at most
 one drop owner, optional wheel ownership, and explicit cursor equivalents.

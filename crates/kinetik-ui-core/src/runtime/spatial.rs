@@ -9,6 +9,11 @@ pub(crate) struct SpatialStack {
     scopes: Vec<SpatialScope>,
 }
 
+pub(crate) struct LocalizedInput {
+    pub input: UiInput,
+    pub event_ordinals: Vec<usize>,
+}
+
 impl SpatialStack {
     pub(crate) fn observe_primitive(&mut self, primitive: &Primitive) {
         match primitive {
@@ -34,7 +39,7 @@ impl SpatialStack {
         preserve_primary_release: bool,
         preserve_secondary_release: bool,
         root_input_conflict: bool,
-    ) -> UiInput {
+    ) -> LocalizedInput {
         let mut input = root.clone();
         let local_position = root.pointer.position.and_then(|position| {
             if !self.accepts_screen_point(position) {
@@ -75,18 +80,20 @@ impl SpatialStack {
         }
 
         if root.events.is_empty() {
-            return input;
+            return LocalizedInput {
+                input,
+                event_ordinals: Vec::new(),
+            };
         }
 
-        input.events = root
-            .events
-            .iter()
-            .filter_map(|event| {
-                self.localize_event(event, preserve_primary_release, preserve_secondary_release)
-            })
-            .collect();
+        let (events, event_ordinals) =
+            self.localize_events(root, preserve_primary_release, preserve_secondary_release);
+        input.events = events;
         if root_input_conflict {
-            return input;
+            return LocalizedInput {
+                input,
+                event_ordinals,
+            };
         }
 
         let release_snapshot = input.pointer.clone();
@@ -126,7 +133,30 @@ impl SpatialStack {
                 preserve_secondary_release,
             );
         }
-        input
+        LocalizedInput {
+            input,
+            event_ordinals,
+        }
+    }
+
+    fn localize_events(
+        &self,
+        root: &UiInput,
+        preserve_primary_release: bool,
+        preserve_secondary_release: bool,
+    ) -> (Vec<UiInputEvent>, Vec<usize>) {
+        let localized = root
+            .events
+            .iter()
+            .enumerate()
+            .filter_map(|(ordinal, event)| {
+                self.localize_event(event, preserve_primary_release, preserve_secondary_release)
+                    .map(|event| (ordinal, event))
+            })
+            .collect::<Vec<_>>();
+        let ordinals = localized.iter().map(|(ordinal, _)| *ordinal).collect();
+        let events = localized.into_iter().map(|(_, event)| event).collect();
+        (events, ordinals)
     }
 
     fn localize_event(

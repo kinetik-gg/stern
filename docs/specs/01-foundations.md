@@ -271,13 +271,16 @@ non-duplicating presence evidence for their owner. Deriving an ID with
 intentionally hidden-but-retained widgets register their externally derived ID
 explicitly.
 
-At `end_frame`, persistent capture, active, pressed, secondary-pressed, drag,
-focus, and text/IME ownership is reconciled against that frame-local presence
-set. A missing pointer owner cancels the whole pointer transaction. Missing
+At `end_frame`, persistent capture, active, pressed, secondary-pressed,
+press-origin/threshold, drag, focus, and text/IME ownership is reconciled
+against that frame-local presence set. A missing pointer owner cancels the
+whole pointer transaction. Missing
 focus and text owners are cleared, and text removal queues exactly one platform
 stop intent. This cleanup requests a follow-up repaint but never rewrites a
 current-frame response. Disabled, clipped, collapsed, or hidden-but-registered
 widgets are present even when another contract makes them ineligible for input.
+Evaluating a disabled current pointer owner cancels its transaction immediately;
+presence alone does not keep an ineligible active gesture alive.
 
 Interaction resolution should happen during widget calls, not in a hidden post-pass, unless a specific subsystem requires deferred resolution.
 
@@ -445,7 +448,10 @@ for text editing. Root projection validation is recorded once before spatial
 localization. Scoped text validation rechecks only unchanged non-pointer
 projections, so legitimate local pointer coordinates do not block editing;
 root conflicts remain out-of-band and preserve the canonical pointer snapshot
-instead of healing from an inconsistent compatibility projection.
+instead of healing from an inconsistent compatibility projection. Pointer
+behaviors fail closed for new hover, activation, click, drag, and drop work on
+any root conflict; a previously captured owner may consume only an ordered
+release or cancellation edge to clean up retained state.
 
 Winit IME Enabled/Disabled events describe availability, not active
 composition. Non-empty preedit starts or updates composition, empty preedit
@@ -460,14 +466,22 @@ wheel events when the stream is nonempty: each line component uses a private
 40-logical-unit current-scope step, logical pixel components remain exact after
 platform DPI conversion and spatial localization, nonfinite components become
 zero, and direction inverts once. An empty stream preserves the raw logical
-compatibility magnitude. Other pointer primitives continue to query the final
-snapshot until the separate event-aware pointer-transition packet; text widgets
-consume the ordered stream.
+compatibility magnitude. Press, secondary press, drag, release, and captured
+selection consume canonical pointer transitions once in order whenever that
+stream is nonempty; they never replay compatibility snapshot edges. The empty
+stream remains the legacy snapshot path. Spatial localization privately keeps
+each surviving event paired with its original root-stream ordinal, including
+gaps created by clipping, without adding metadata to public `UiInput`.
 
 The input model must support pointer capture. During a drag, the active widget
 continues receiving drag updates after leaving its original rectangle while it
 remains inside the effective clip. Outside the effective clip, interaction is
 inert except that button-release edges remain available to clean up capture.
+Primary presses retain their current-scope logical origin and use a private
+four-unit inclusive threshold. Crossing latches even if the pointer moves back;
+the crossing response reports the full origin displacement and later frames
+report only subsequent movement. Any crossed release suppresses a pointer
+click. Only the `draggable` primitive publishes a domain drag source.
 
 Text input has priority when a text editor is focused. Keyboard shortcuts should not steal ordinary typing from focused text fields.
 

@@ -119,7 +119,7 @@ fn registered_same_frame_text_handoff_emits_one_ordered_stop_start_pair() {
 }
 
 #[test]
-fn registered_disabled_clipped_and_hidden_owners_are_not_removals() {
+fn disabled_owner_cancels_while_clipped_and_hidden_owners_remain_live() {
     let disabled = WidgetId::from_key("disabled-owner");
     let clipped = WidgetId::from_key("clipped-owner");
     let hidden = WidgetId::from_key("hidden-owner");
@@ -132,7 +132,7 @@ fn registered_disabled_clipped_and_hidden_owners_are_not_removals() {
         let response = pressable(disabled, FULL, input, memory, true);
         assert!(response.state.disabled);
     });
-    assert_eq!(disabled_harness.memory().pointer_capture(), Some(disabled));
+    assert_no_pointer_transaction(&disabled_harness);
 
     let mut clipped_harness = UiTestHarness::new();
     clipped_harness.set_pointer_position(Point::new(10.0, 10.0));

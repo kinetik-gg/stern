@@ -74,8 +74,7 @@ fn overlay_blocker_routes_submenu_and_blocks_viewport_wheel() {
     let submenu_rect = Rect::new(10.0, 10.0, 60.0, 60.0);
     let mut harness = UiTestHarness::new();
     harness.set_pointer_position(Point::new(20.0, 20.0));
-    harness.input_mut().pointer.primary.pressed = true;
-    harness.input_mut().pointer.primary.down = true;
+    harness.pointer_press(MouseButton::Primary);
     harness.wheel(Vec2::new(0.0, -30.0));
 
     let ((viewport_response, scroll, submenu_response), _) = harness.run_frame(|ui| {
@@ -325,7 +324,6 @@ fn ordinary_press_wheel_viewport_and_drop_destination_have_independent_routes() 
     harness.memory_mut().start_drag(source);
     harness.set_pointer_position(Point::new(20.0, 20.0));
     harness.input_mut().pointer.primary.down = true;
-    harness.input_mut().pointer.delta = Vec2::new(2.0, 0.0);
     harness.wheel(Vec2::new(0.0, -25.0));
 
     let ((routes, outer_scroll, inner_scroll, lower, upper), _) = harness.run_frame(|ui| {

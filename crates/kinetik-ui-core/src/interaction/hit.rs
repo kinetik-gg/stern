@@ -30,11 +30,20 @@ pub(super) enum HitTarget {
 
 impl HitTarget {
     pub(super) fn hit_test(self, rect: Rect, input: &UiInput) -> bool {
+        self.hit_test_position(rect, input.pointer.position)
+    }
+
+    pub(super) fn hit_test_position(self, rect: Rect, position: Option<Point>) -> bool {
         match self {
-            Self::Rect => hit_test(rect, input),
-            Self::Transformed(local_to_screen) => {
-                hit_test_transformed(rect, local_to_screen, input)
-            }
+            Self::Rect => position.is_some_and(|position| rect.contains_point(position)),
+            Self::Transformed(local_to_screen) => position.is_some_and(|position| {
+                local_to_screen
+                    .try_inverse()
+                    .is_some_and(|screen_to_local| {
+                        let local_position = screen_to_local.transform_point(position);
+                        point_is_finite(local_position) && rect.contains_point(local_position)
+                    })
+            }),
         }
     }
 

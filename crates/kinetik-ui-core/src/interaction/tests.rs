@@ -203,7 +203,8 @@ fn draggable_finishes_drag_on_release_for_drop_targets() {
     input.pointer.primary = PointerButtonState::new(true, true, false);
     draggable(id, rect, &input, &mut memory, false);
     input.pointer.primary = PointerButtonState::new(true, false, false);
-    input.pointer.delta = Vec2::new(1.0, 0.0);
+    input.pointer.position = Some(Point::new(9.0, 5.0));
+    input.pointer.delta = Vec2::new(4.0, 0.0);
     draggable(id, rect, &input, &mut memory, false);
 
     input.pointer.primary = PointerButtonState::new(false, false, true);
@@ -400,6 +401,7 @@ fn drop_target_reports_drag_source_released_over_target() {
     draggable(source, source_rect, &input, &mut memory, false);
 
     input.pointer.primary = PointerButtonState::new(true, false, false);
+    input.pointer.position = Some(Point::new(40.0, 5.0));
     input.pointer.delta = Vec2::new(5.0, 0.0);
     draggable(source, source_rect, &input, &mut memory, false);
 

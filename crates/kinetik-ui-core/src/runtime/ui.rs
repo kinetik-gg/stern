@@ -1,11 +1,12 @@
 use std::hash::Hash;
 
 use crate::input::UiInput;
+use crate::interaction::captured_selection_gesture_with_ordinals;
 use crate::memory::UiMemory;
 use crate::render::Primitive;
 use crate::{
-    ActionContext, ActionId, ActionInvocation, ActionSource, IdStack, LivenessTargetId,
-    LivenessToken, Rect, SemanticActionKind, SemanticNode, WidgetId,
+    ActionContext, ActionId, ActionInvocation, ActionSource, CapturedSelectionGesture, IdStack,
+    LivenessTargetId, LivenessToken, Rect, SemanticActionKind, SemanticNode, WidgetId,
 };
 
 use super::focus::{
@@ -26,6 +27,7 @@ use super::types::{CursorShape, FrameContext, FrameWarning, PlatformRequest, Rep
 pub struct Ui<'a> {
     context: FrameContext,
     root_input: UiInput,
+    input_event_ordinals: Vec<usize>,
     memory: &'a mut UiMemory,
     ids: IdStack,
     output: FrameOutput,
@@ -45,6 +47,7 @@ impl<'a> Ui<'a> {
             memory.cancel_pointer_interaction();
         }
         let root_input = context.input.clone();
+        let input_event_ordinals = (0..root_input.events.len()).collect();
         let mut output = FrameOutput::new();
         if let Some(conflict) = input_conflict {
             output.push_warning(FrameWarning::InputStreamConflict { conflict });
@@ -52,6 +55,7 @@ impl<'a> Ui<'a> {
         Self {
             context,
             root_input,
+            input_event_ordinals,
             memory,
             ids: IdStack::new(),
             output,
@@ -86,6 +90,27 @@ impl<'a> Ui<'a> {
     /// Returns input and mutable memory as separate borrows for widget composition.
     pub fn input_and_memory_mut(&mut self) -> (&UiInput, &mut UiMemory) {
         (&self.context.input, self.memory)
+    }
+
+    /// Resolves a neutral captured pointer gesture for text selection.
+    ///
+    /// Canonical actions retain their original root event ordinals even when
+    /// the current spatial scope filtered earlier events. Legacy snapshot
+    /// actions use `None`. Selection capture never creates a domain drag source.
+    pub fn captured_selection_gesture(
+        &mut self,
+        id: WidgetId,
+        rect: Rect,
+        disabled: bool,
+    ) -> CapturedSelectionGesture {
+        captured_selection_gesture_with_ordinals(
+            id,
+            rect,
+            &self.context.input,
+            &self.input_event_ordinals,
+            self.memory,
+            disabled,
+        )
     }
 
     /// Derives and registers a widget ID in the current scope.
@@ -149,6 +174,7 @@ impl<'a> Ui<'a> {
                 self.memory.pressed(),
                 self.memory.secondary_pressed(),
                 self.memory.drag_source(),
+                self.memory.pointer_gesture_owner(),
             ]
             .into_iter()
             .flatten()
@@ -407,12 +433,14 @@ impl<'a> Ui<'a> {
     }
 
     fn refresh_scoped_input(&mut self) {
-        self.context.input = self.spatial.localize_input(
+        let localized = self.spatial.localize_input(
             &self.root_input,
             self.memory.pointer_capture().is_some(),
             self.memory.secondary_pressed().is_some(),
             self.memory.root_input_conflict().is_some(),
         );
+        self.context.input = localized.input;
+        self.input_event_ordinals = localized.event_ordinals;
     }
 }
 

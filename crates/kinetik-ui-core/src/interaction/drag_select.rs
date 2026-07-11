@@ -1,7 +1,44 @@
 use super::hit::HitTarget;
-use super::press::pressable_with_hit_target;
+use super::press::{PointerGestureKind, resolve_pressable_with_hit_target};
 use super::{Response, pressable, pressable_transformed};
-use crate::{Rect, Transform, UiInput, UiMemory, Vec2, WidgetId};
+use crate::{Point, Rect, Transform, UiInput, UiMemory, Vec2, WidgetId};
+
+/// Ordered phase emitted by a captured text-selection gesture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionGesturePhase {
+    /// Primary pointer capture started inside the target.
+    Press,
+    /// Captured pointer movement, including movement below the drag threshold.
+    Move,
+    /// Primary pointer capture ended normally.
+    Release,
+    /// Capture ended because input or ownership was cancelled.
+    Cancel,
+}
+
+/// One ordered action from a captured text-selection gesture.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SelectionGestureAction {
+    /// Original index in the root canonical event stream, or `None` for legacy input.
+    pub ordinal: Option<usize>,
+    /// Gesture transition phase.
+    pub phase: SelectionGesturePhase,
+    /// Event-time position in the current spatial scope, when available.
+    pub position: Option<Point>,
+    /// Event-time movement in the current spatial scope.
+    pub delta: Vec2,
+    /// Click sequence count carried by the transition.
+    pub click_count: u8,
+}
+
+/// Common response plus ordered actions for neutral captured text selection.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CapturedSelectionGesture {
+    /// Common interaction response.
+    pub response: Response,
+    /// Ordered press, move, release, and cancellation actions.
+    pub actions: Vec<SelectionGestureAction>,
+}
 
 /// Resolves neutral draggable behavior.
 pub fn draggable(
@@ -41,20 +78,44 @@ fn draggable_with_hit_target(
     memory: &mut UiMemory,
     disabled: bool,
 ) -> Response {
-    let mut response = pressable_with_hit_target(id, rect, hit_target, input, memory, disabled);
-    let active = memory.is_active(id);
+    resolve_pressable_with_hit_target(
+        id,
+        rect,
+        hit_target,
+        input,
+        memory,
+        disabled,
+        PointerGestureKind::DomainDrag,
+        None,
+        true,
+    )
+    .response
+}
 
-    response.dragged =
-        !disabled && active && input.pointer.primary.down && input.pointer.delta != Vec2::ZERO;
-    response.drag_delta = if response.dragged {
-        memory.start_drag(id);
-        input.pointer.delta
-    } else {
-        Vec2::ZERO
-    };
-    response.state.active = active;
-
-    response
+pub(crate) fn captured_selection_gesture_with_ordinals(
+    id: WidgetId,
+    rect: Rect,
+    input: &UiInput,
+    event_ordinals: &[usize],
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> CapturedSelectionGesture {
+    let process_events = memory.claim_selection_gesture(id);
+    let resolution = resolve_pressable_with_hit_target(
+        id,
+        rect,
+        HitTarget::Rect,
+        input,
+        memory,
+        disabled,
+        PointerGestureKind::Selection,
+        Some(event_ordinals),
+        process_events,
+    );
+    CapturedSelectionGesture {
+        response: resolution.response,
+        actions: resolution.selection_actions,
+    }
 }
 
 /// Resolves neutral selectable behavior.
