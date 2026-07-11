@@ -1,142 +1,147 @@
 use kinetik_ui_core::TextRange;
+use unicode_segmentation::UnicodeSegmentation;
 
 pub(crate) fn clamp_boundary(text: &str, offset: usize) -> usize {
-    let mut offset = offset.min(text.len());
-    while !text.is_char_boundary(offset) {
-        offset -= 1;
+    let offset = offset.min(text.len());
+    if offset == text.len() {
+        return offset;
     }
-    offset
+
+    text.grapheme_indices(true)
+        .map(|(index, _)| index)
+        .take_while(|index| *index <= offset)
+        .last()
+        .unwrap_or(0)
 }
 
 pub(crate) fn previous_boundary(text: &str, offset: usize) -> Option<usize> {
-    let offset = offset.min(text.len());
+    let requested = offset.min(text.len());
+    let offset = clamp_boundary(text, requested);
+    if requested != offset {
+        return Some(offset);
+    }
     if offset == 0 {
         return None;
     }
 
-    let mut previous = offset - 1;
-    while !text.is_char_boundary(previous) {
-        previous -= 1;
-    }
-    Some(previous)
+    text[..offset]
+        .grapheme_indices(true)
+        .next_back()
+        .map(|(index, _)| index)
 }
 
 pub(crate) fn next_boundary(text: &str, offset: usize) -> Option<usize> {
+    let offset = clamp_boundary(text, offset);
     if offset >= text.len() {
         return None;
     }
 
-    let mut next = offset + 1;
-    while !text.is_char_boundary(next) {
-        next += 1;
-    }
-    Some(next)
+    text[offset..]
+        .graphemes(true)
+        .next()
+        .map(|grapheme| offset + grapheme.len())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ScalarClass {
-    Whitespace,
-    Word,
-    Other,
+struct WordSegment {
+    start: usize,
+    end: usize,
+    whitespace: bool,
 }
 
-impl ScalarClass {
-    fn of(character: char) -> Self {
-        if character.is_whitespace() {
-            Self::Whitespace
-        } else if character.is_ascii_alphanumeric() || character == '_' {
-            Self::Word
-        } else {
-            Self::Other
-        }
-    }
+fn word_segments(text: &str) -> Vec<WordSegment> {
+    text.split_word_bound_indices()
+        .map(|(start, segment)| WordSegment {
+            start,
+            end: start + segment.len(),
+            whitespace: !segment.is_empty() && segment.chars().all(char::is_whitespace),
+        })
+        .collect()
 }
 
 pub(crate) fn previous_word_boundary(text: &str, offset: usize) -> usize {
-    let mut cursor = clamp_boundary(text, offset);
+    let cursor = clamp_boundary(text, offset);
+    if cursor == 0 {
+        return 0;
+    }
+    let segments = word_segments(text);
+    let containing = segments
+        .iter()
+        .position(|segment| segment.start < cursor && cursor < segment.end);
 
-    while let Some((index, character)) = text[..cursor].char_indices().next_back() {
-        if ScalarClass::of(character) != ScalarClass::Whitespace {
-            break;
-        }
-        cursor = index;
+    if let Some(index) = containing
+        && !segments[index].whitespace
+    {
+        return segments[index].start;
     }
 
-    let Some((_, character)) = text[..cursor].char_indices().next_back() else {
-        return cursor;
-    };
-    let class = ScalarClass::of(character);
-    while let Some((index, character)) = text[..cursor].char_indices().next_back() {
-        if ScalarClass::of(character) != class {
-            break;
-        }
-        cursor = index;
+    let mut preceding = containing.map_or_else(
+        || segments.partition_point(|segment| segment.end <= cursor),
+        |index| index + 1,
+    );
+    while preceding > 0 && segments[preceding - 1].whitespace {
+        preceding -= 1;
     }
 
-    cursor
+    segments
+        .get(preceding.saturating_sub(1))
+        .map_or(0, |segment| segment.start)
 }
 
 pub(crate) fn next_word_boundary(text: &str, offset: usize) -> usize {
-    let mut cursor = clamp_boundary(text, offset);
-    let Some(character) = text[cursor..].chars().next() else {
-        return cursor;
+    let cursor = clamp_boundary(text, offset);
+    if cursor >= text.len() {
+        return text.len();
+    }
+    let segments = word_segments(text);
+    let Some(mut index) = segments
+        .iter()
+        .position(|segment| segment.start <= cursor && cursor < segment.end)
+    else {
+        return text.len();
     };
-    let class = ScalarClass::of(character);
 
-    while let Some(character) = text[cursor..].chars().next() {
-        if ScalarClass::of(character) != class {
-            break;
-        }
-        cursor += character.len_utf8();
+    index += 1;
+    while index < segments.len() && segments[index].whitespace {
+        index += 1;
     }
 
-    if class != ScalarClass::Whitespace {
-        while let Some(character) = text[cursor..].chars().next() {
-            if ScalarClass::of(character) != ScalarClass::Whitespace {
-                break;
-            }
-            cursor += character.len_utf8();
-        }
-    }
-
-    cursor
+    segments
+        .get(index.saturating_sub(1))
+        .map_or(text.len(), |segment| segment.end)
 }
 
-pub(crate) fn scalar_run_range_at(text: &str, offset: usize) -> core::ops::Range<usize> {
+pub(crate) fn word_segment_range_at(text: &str, offset: usize) -> core::ops::Range<usize> {
     if text.is_empty() {
         return 0..0;
     }
 
     let offset = clamp_boundary(text, offset);
-    let scalar_start = if offset == text.len() {
-        previous_boundary(text, offset).expect("non-empty text has a preceding scalar")
+    let segments = word_segments(text);
+    if offset == text.len() {
+        return segments
+            .last()
+            .map_or(0..0, |segment| segment.start..segment.end);
+    }
+
+    segments
+        .into_iter()
+        .find(|segment| segment.start <= offset && offset < segment.end)
+        .map_or(0..0, |segment| segment.start..segment.end)
+}
+
+fn line_end_before_newline(text: &str, newline: usize) -> usize {
+    if newline > 0 && text.as_bytes()[newline - 1] == b'\r' {
+        newline - 1
     } else {
-        offset
-    };
-    let class = ScalarClass::of(
-        text[scalar_start..]
-            .chars()
-            .next()
-            .expect("scalar start is inside non-empty text"),
-    );
-
-    let mut start = scalar_start;
-    while let Some((index, character)) = text[..start].char_indices().next_back() {
-        if ScalarClass::of(character) != class {
-            break;
-        }
-        start = index;
+        newline
     }
+}
 
-    let mut end = scalar_start;
-    while let Some(character) = text[end..].chars().next() {
-        if ScalarClass::of(character) != class {
-            break;
-        }
-        end += character.len_utf8();
-    }
-
-    start..end
+fn line_end_from(text: &str, start: usize) -> usize {
+    text[start..].find('\n').map_or(text.len(), |relative| {
+        line_end_before_newline(text, start + relative)
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -151,9 +156,7 @@ impl<'a> ExplicitLineCursor<'a> {
         let start = text[..offset]
             .rfind('\n')
             .map_or(0, |index| index + '\n'.len_utf8());
-        let end = text[offset..]
-            .find('\n')
-            .map_or(text.len(), |index| offset + index);
+        let end = line_end_from(text, offset);
 
         Self {
             text,
@@ -163,17 +166,17 @@ impl<'a> ExplicitLineCursor<'a> {
 
     fn column_at(&self, offset: usize) -> usize {
         let offset = clamp_boundary(self.text, offset).clamp(self.range.start, self.range.end);
-        self.text[self.range.start..offset].chars().count()
+        self.text[self.range.start..offset].graphemes(true).count()
     }
 
     fn offset_at_column(&self, column: usize) -> usize {
         let mut offset = self.range.start;
         let mut remaining = column;
-        for character in self.text[self.range.clone()].chars() {
+        for grapheme in self.text[self.range.clone()].graphemes(true) {
             if remaining == 0 {
                 break;
             }
-            offset += character.len_utf8();
+            offset += grapheme.len();
             remaining -= 1;
         }
         offset.min(self.range.end)
@@ -184,7 +187,8 @@ impl<'a> ExplicitLineCursor<'a> {
             return None;
         }
 
-        let end = self.range.start - '\n'.len_utf8();
+        let newline = self.range.start - '\n'.len_utf8();
+        let end = line_end_before_newline(self.text, newline);
         let start = self.text[..end]
             .rfind('\n')
             .map_or(0, |index| index + '\n'.len_utf8());
@@ -192,14 +196,10 @@ impl<'a> ExplicitLineCursor<'a> {
     }
 
     fn next_range(&self) -> Option<core::ops::Range<usize>> {
-        if self.range.end >= self.text.len() {
-            return None;
-        }
+        let relative_newline = self.text[self.range.end..].find('\n')?;
 
-        let start = self.range.end + '\n'.len_utf8();
-        let end = self.text[start..]
-            .find('\n')
-            .map_or(self.text.len(), |index| start + index);
+        let start = self.range.end + relative_newline + '\n'.len_utf8();
+        let end = line_end_from(self.text, start);
         Some(start..end)
     }
 

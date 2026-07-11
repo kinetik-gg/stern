@@ -235,6 +235,21 @@ fn canonical_advanced_widget_modules_compile() {
 }
 
 #[test]
+fn additive_text_caret_api_is_qualified_and_legacy_offsets_remain_compatible() {
+    use kinetik_ui::text::{TextAffinity, TextCaret, TextEditState};
+
+    let mut state = TextEditState::new("ab");
+    state.set_caret(1);
+    assert_eq!(state.caret(), 1);
+
+    state.set_caret_position(TextCaret::new(1, TextAffinity::Before));
+    assert_eq!(
+        state.caret_position(),
+        TextCaret::new(1, TextAffinity::Before)
+    );
+}
+
+#[test]
 fn root_widget_compatibility_exports_remain_source_compatible() {
     use kinetik_ui::widgets::{
         self, asset_browser, chrome, collection_actions, collections, dock, inline_edit, inspector,

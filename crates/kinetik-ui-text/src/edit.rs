@@ -4,9 +4,9 @@ use kinetik_ui_core::{
 
 use crate::boundary::{
     clamp_boundary, line_range_at_offset, next_boundary, next_word_boundary, previous_boundary,
-    previous_word_boundary, scalar_run_range_at, vertical_line_target,
+    previous_word_boundary, vertical_line_target, word_segment_range_at,
 };
-use crate::{EditSnapshot, TextComposition, TextSelection, TextUndoStack};
+use crate::{EditSnapshot, TextAffinity, TextCaret, TextComposition, TextSelection, TextUndoStack};
 
 /// Editing policy used by ordered platform input application.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +29,7 @@ pub struct OrderedTextInputResult {
 }
 
 /// Editable single-line text state.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct TextEditState {
     /// Text buffer.
     pub text: String,
@@ -37,8 +37,22 @@ pub struct TextEditState {
     pub selection: TextSelection,
     /// Active text composition, if any.
     pub composition: Option<TextComposition>,
+    caret_affinity: TextAffinity,
+    affinity_offset: usize,
     undo: TextUndoStack,
 }
+
+impl PartialEq for TextEditState {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text
+            && self.selection == other.selection
+            && self.composition == other.composition
+            && self.caret_position().affinity == other.caret_position().affinity
+            && self.undo == other.undo
+    }
+}
+
+impl Eq for TextEditState {}
 
 impl TextEditState {
     /// Creates text editing state.
@@ -50,6 +64,12 @@ impl TextEditState {
             text,
             selection: TextSelection::new(caret, caret),
             composition: None,
+            caret_affinity: if caret == 0 {
+                TextAffinity::After
+            } else {
+                TextAffinity::Before
+            },
+            affinity_offset: caret,
             undo: TextUndoStack::new(),
         }
     }
@@ -60,20 +80,58 @@ impl TextEditState {
         self.selection.active
     }
 
+    /// Returns the grapheme-clamped caret offset and its effective affinity.
+    #[must_use]
+    pub fn caret_position(&self) -> TextCaret {
+        let offset = clamp_boundary(&self.text, self.selection.active);
+        let affinity =
+            if self.affinity_offset == self.selection.active && offset == self.selection.active {
+                Self::canonical_affinity(&self.text, TextCaret::new(offset, self.caret_affinity))
+                    .affinity
+            } else {
+                Self::default_affinity(&self.text, offset)
+            };
+        TextCaret::new(offset, affinity)
+    }
+
     /// Sets a collapsed caret.
     pub fn set_caret(&mut self, caret: usize) {
         let caret = clamp_boundary(&self.text, caret);
-        self.selection = TextSelection::new(caret, caret);
+        self.set_caret_position(TextCaret::new(
+            caret,
+            Self::default_affinity(&self.text, caret),
+        ));
     }
 
-    /// Sets a selection after clamping both endpoints to UTF-8 boundaries.
+    /// Sets a collapsed grapheme-safe caret with explicit affinity.
+    pub fn set_caret_position(&mut self, caret: TextCaret) {
+        let caret = Self::canonical_affinity(&self.text, caret);
+        self.selection = TextSelection::new(caret.offset, caret.offset);
+        self.set_affinity(caret);
+    }
+
+    /// Sets a selection after clamping both endpoints to grapheme boundaries.
     pub fn set_selection(&mut self, selection: TextSelection) {
+        let selection = selection.clamp_to_text(&self.text);
+        let affinity = Self::default_affinity(&self.text, selection.active);
+        self.set_selection_with_affinity(selection, affinity);
+    }
+
+    /// Sets a grapheme-safe selection and explicit active-caret affinity.
+    pub fn set_selection_with_affinity(
+        &mut self,
+        selection: TextSelection,
+        affinity: TextAffinity,
+    ) {
         self.selection = selection.clamp_to_text(&self.text);
+        let caret =
+            Self::canonical_affinity(&self.text, TextCaret::new(self.selection.active, affinity));
+        self.set_affinity(caret);
     }
 
     /// Selects the full text buffer.
     pub fn select_all(&mut self) {
-        self.selection = TextSelection::new(0, self.text.len());
+        self.set_selection(TextSelection::new(0, self.text.len()));
     }
 
     /// Returns the selected text, if the current selection is non-empty.
@@ -85,6 +143,7 @@ impl TextEditState {
 
     /// Applies committed text input.
     pub fn insert_text(&mut self, text: &str) {
+        self.canonicalize_selection();
         self.record_undo();
         self.composition = None;
         self.replace_selection(text);
@@ -104,18 +163,20 @@ impl TextEditState {
 
     /// Deletes backward from the current selection or caret.
     pub fn backspace(&mut self) {
+        self.canonicalize_selection();
         if !self.selection.is_caret() {
             self.record_undo();
             self.replace_selection("");
         } else if let Some(previous) = previous_boundary(&self.text, self.caret()) {
             self.record_undo();
             self.text.replace_range(previous..self.caret(), "");
-            self.set_caret(previous);
+            self.set_caret_after_edit(previous);
         }
     }
 
     /// Deletes forward from the current selection or caret.
     pub fn delete_forward(&mut self) {
+        self.canonicalize_selection();
         if !self.selection.is_caret() {
             self.record_undo();
             self.replace_selection("");
@@ -123,99 +184,110 @@ impl TextEditState {
             self.record_undo();
             let caret = self.caret();
             self.text.replace_range(caret..next, "");
-            self.set_caret(caret);
+            self.set_caret_after_edit(caret);
         }
     }
 
-    /// Moves the caret left.
+    /// Moves the caret backward by one extended grapheme cluster.
     pub fn move_left(&mut self) {
+        self.canonicalize_selection();
         if !self.selection.is_caret() {
             let start = self.selection.range_in(&self.text).start;
-            self.set_caret(start);
+            self.set_caret_position(TextCaret::new(start, TextAffinity::After));
             return;
         }
         if let Some(previous) = previous_boundary(&self.text, self.caret()) {
-            self.set_caret(previous);
+            self.set_caret_position(TextCaret::new(previous, TextAffinity::After));
         }
     }
 
-    /// Extends the selection left by one character boundary.
+    /// Extends the selection backward by one extended grapheme cluster.
     pub fn extend_left(&mut self) {
+        self.canonicalize_selection();
         if let Some(previous) = previous_boundary(&self.text, self.selection.active) {
-            self.selection.active = previous;
-            self.selection = self.selection.clamp_to_text(&self.text);
+            self.set_active(previous, TextAffinity::After);
         }
     }
 
-    /// Moves the caret right.
+    /// Moves the caret forward by one extended grapheme cluster.
     pub fn move_right(&mut self) {
+        self.canonicalize_selection();
         if !self.selection.is_caret() {
             let end = self.selection.range_in(&self.text).end;
-            self.set_caret(end);
+            self.set_caret_position(TextCaret::new(end, TextAffinity::Before));
             return;
         }
         if let Some(next) = next_boundary(&self.text, self.caret()) {
-            self.set_caret(next);
+            self.set_caret_position(TextCaret::new(next, TextAffinity::Before));
         }
     }
 
-    /// Extends the selection right by one character boundary.
+    /// Extends the selection forward by one extended grapheme cluster.
     pub fn extend_right(&mut self) {
+        self.canonicalize_selection();
         if let Some(next) = next_boundary(&self.text, self.selection.active) {
-            self.selection.active = next;
-            self.selection = self.selection.clamp_to_text(&self.text);
+            self.set_active(next, TextAffinity::Before);
         }
     }
 
-    /// Moves the caret left across preceding whitespace and one scalar-class run.
-    ///
-    /// ASCII alphanumeric scalars and `_` form word runs, whitespace forms
-    /// whitespace runs, and every other scalar forms other runs.
+    /// Moves backward across whitespace and one full-buffer UAX #29 segment.
     pub fn move_word_left(&mut self) {
+        self.canonicalize_selection();
         if !self.selection.is_caret() {
             let start = self.selection.range_in(&self.text).start;
-            self.set_caret(start);
+            self.set_caret_position(TextCaret::new(start, TextAffinity::After));
             return;
         }
 
         let target = previous_word_boundary(&self.text, self.caret());
-        self.set_caret(target);
+        if target != self.caret() {
+            self.set_caret_position(TextCaret::new(target, TextAffinity::After));
+        }
     }
 
-    /// Moves the caret right across the current scalar-class run and following whitespace.
+    /// Moves forward across one UAX #29 segment and following whitespace.
     pub fn move_word_right(&mut self) {
+        self.canonicalize_selection();
         if !self.selection.is_caret() {
             let end = self.selection.range_in(&self.text).end;
-            self.set_caret(end);
+            self.set_caret_position(TextCaret::new(end, TextAffinity::Before));
             return;
         }
 
         let target = next_word_boundary(&self.text, self.caret());
-        self.set_caret(target);
+        if target != self.caret() {
+            self.set_caret_position(TextCaret::new(target, TextAffinity::Before));
+        }
     }
 
     /// Extends the selection left using [`Self::move_word_left`] boundary policy.
     pub fn extend_word_left(&mut self) {
-        self.selection = self.selection.clamp_to_text(&self.text);
-        self.selection.active = previous_word_boundary(&self.text, self.selection.active);
+        self.canonicalize_selection();
+        let target = previous_word_boundary(&self.text, self.selection.active);
+        if target != self.selection.active {
+            self.set_active(target, TextAffinity::After);
+        }
     }
 
     /// Extends the selection right using [`Self::move_word_right`] boundary policy.
     pub fn extend_word_right(&mut self) {
-        self.selection = self.selection.clamp_to_text(&self.text);
-        self.selection.active = next_word_boundary(&self.text, self.selection.active);
+        self.canonicalize_selection();
+        let target = next_word_boundary(&self.text, self.selection.active);
+        if target != self.selection.active {
+            self.set_active(target, TextAffinity::Before);
+        }
     }
 
     /// Deletes the current selection or the span to [`Self::move_word_left`]'s target.
     pub fn backspace_word(&mut self) {
+        self.canonicalize_selection();
         if !self.selection.is_caret() {
             self.record_undo();
             self.replace_selection("");
             return;
         }
 
-        let caret = clamp_boundary(&self.text, self.caret());
-        self.set_caret(caret);
+        let caret = self.caret();
         let target = previous_word_boundary(&self.text, caret);
         if target == caret {
             return;
@@ -223,19 +295,19 @@ impl TextEditState {
 
         self.record_undo();
         self.text.replace_range(target..caret, "");
-        self.set_caret(target);
+        self.set_caret_after_edit(target);
     }
 
     /// Deletes the current selection or the span to [`Self::move_word_right`]'s target.
     pub fn delete_word_forward(&mut self) {
+        self.canonicalize_selection();
         if !self.selection.is_caret() {
             self.record_undo();
             self.replace_selection("");
             return;
         }
 
-        let caret = clamp_boundary(&self.text, self.caret());
-        self.set_caret(caret);
+        let caret = self.caret();
         let target = next_word_boundary(&self.text, caret);
         if target == caret {
             return;
@@ -243,84 +315,119 @@ impl TextEditState {
 
         self.record_undo();
         self.text.replace_range(caret..target, "");
-        self.set_caret(caret);
+        self.set_caret_after_edit(caret);
     }
 
-    /// Selects the scalar-class run containing the clamped offset.
-    ///
-    /// ASCII alphanumeric scalars and `_`, whitespace, and all other scalars
-    /// are the three distinct classes.
+    /// Selects the full-buffer UAX #29 segment containing the clamped offset.
     pub fn select_word_at(&mut self, offset: usize) {
-        let range = scalar_run_range_at(&self.text, offset);
+        let range = word_segment_range_at(&self.text, offset);
         self.set_selection(TextSelection::new(range.start, range.end));
     }
 
     /// Moves the caret to the start of the buffer.
     pub fn move_home(&mut self) {
-        self.set_caret(0);
+        self.canonicalize_selection();
+        if self.caret() != 0 || !self.selection.is_caret() {
+            self.set_caret_position(TextCaret::new(0, TextAffinity::After));
+        }
     }
 
     /// Extends the selection to the start of the buffer.
     pub fn extend_home(&mut self) {
-        self.selection.active = 0;
-        self.selection = self.selection.clamp_to_text(&self.text);
+        self.canonicalize_selection();
+        if self.selection.active != 0 {
+            self.set_active(0, TextAffinity::After);
+        }
     }
 
     /// Moves the caret to the end of the buffer.
     pub fn move_end(&mut self) {
-        self.set_caret(self.text.len());
+        self.canonicalize_selection();
+        if self.caret() != self.text.len() || !self.selection.is_caret() {
+            self.set_caret_position(TextCaret::new(self.text.len(), TextAffinity::Before));
+        }
     }
 
     /// Extends the selection to the end of the buffer.
     pub fn extend_end(&mut self) {
-        self.selection.active = self.text.len();
-        self.selection = self.selection.clamp_to_text(&self.text);
+        self.canonicalize_selection();
+        if self.selection.active != self.text.len() {
+            self.set_active(self.text.len(), TextAffinity::Before);
+        }
     }
 
     /// Moves the caret to the start of the current explicit line.
     pub fn move_line_home(&mut self) {
-        self.set_caret(line_range_at_offset(&self.text, self.selection.active).start);
+        self.canonicalize_selection();
+        let target = line_range_at_offset(&self.text, self.selection.active).start;
+        if target != self.caret() || !self.selection.is_caret() {
+            self.set_caret_position(TextCaret::new(target, TextAffinity::After));
+        }
     }
 
     /// Extends the selection to the start of the current explicit line.
     pub fn extend_line_home(&mut self) {
-        self.selection.active = line_range_at_offset(&self.text, self.selection.active).start;
-        self.selection = self.selection.clamp_to_text(&self.text);
+        self.canonicalize_selection();
+        let target = line_range_at_offset(&self.text, self.selection.active).start;
+        if target != self.selection.active {
+            self.set_active(target, TextAffinity::After);
+        }
     }
 
     /// Moves the caret to the end of the current explicit line.
     pub fn move_line_end(&mut self) {
-        self.set_caret(line_range_at_offset(&self.text, self.selection.active).end);
+        self.canonicalize_selection();
+        let target = line_range_at_offset(&self.text, self.selection.active).end;
+        if target != self.caret() || !self.selection.is_caret() {
+            self.set_caret_position(TextCaret::new(target, TextAffinity::Before));
+        }
     }
 
     /// Extends the selection to the end of the current explicit line.
     pub fn extend_line_end(&mut self) {
-        self.selection.active = line_range_at_offset(&self.text, self.selection.active).end;
-        self.selection = self.selection.clamp_to_text(&self.text);
+        self.canonicalize_selection();
+        let target = line_range_at_offset(&self.text, self.selection.active).end;
+        if target != self.selection.active {
+            self.set_active(target, TextAffinity::Before);
+        }
     }
 
     /// Moves the caret to the previous explicit line, preserving logical column for this event.
     pub fn move_line_up(&mut self) {
+        self.canonicalize_selection();
         let target = vertical_line_target(&self.text, self.selection.active, -1);
-        self.set_caret(target);
+        if target != self.caret() || !self.selection.is_caret() {
+            self.set_caret(target);
+        }
     }
 
     /// Extends the selection to the previous explicit line.
     pub fn extend_line_up(&mut self) {
-        self.selection.active = vertical_line_target(&self.text, self.selection.active, -1);
-        self.selection = self.selection.clamp_to_text(&self.text);
+        self.canonicalize_selection();
+        let target = vertical_line_target(&self.text, self.selection.active, -1);
+        if target != self.selection.active {
+            let affinity = Self::default_affinity(&self.text, target);
+            self.set_active(target, affinity);
+        }
     }
 
     /// Moves the caret to the next explicit line, preserving logical column for this event.
     pub fn move_line_down(&mut self) {
+        self.canonicalize_selection();
         let target = vertical_line_target(&self.text, self.selection.active, 1);
-        self.set_caret(target);
+        if target != self.caret() || !self.selection.is_caret() {
+            self.set_caret(target);
+        }
     }
 
     /// Extends the selection to the next explicit line.
     pub fn extend_line_down(&mut self) {
-        self.selection.active = vertical_line_target(&self.text, self.selection.active, 1);
-        self.selection = self.selection.clamp_to_text(&self.text);
+        self.canonicalize_selection();
+        let target = vertical_line_target(&self.text, self.selection.active, 1);
+        if target != self.selection.active {
+            let affinity = Self::default_affinity(&self.text, target);
+            self.set_active(target, affinity);
+        }
     }
 
     /// Applies one authoritative ordered platform-input stream.
@@ -559,9 +666,59 @@ impl TextEditState {
     }
 
     fn replace_selection(&mut self, replacement: &str) {
+        self.canonicalize_selection();
         let range = self.selection.range_in(&self.text);
         self.text.replace_range(range.clone(), replacement);
-        self.set_caret(range.start + replacement.len());
+        self.set_caret_after_edit(range.start + replacement.len());
+    }
+
+    fn canonicalize_selection(&mut self) {
+        let caret = self.caret_position();
+        self.selection = self.selection.clamp_to_text(&self.text);
+        self.set_affinity(Self::canonical_affinity(
+            &self.text,
+            TextCaret::new(self.selection.active, caret.affinity),
+        ));
+    }
+
+    fn set_active(&mut self, active: usize, affinity: TextAffinity) {
+        let active = clamp_boundary(&self.text, active);
+        self.selection.active = active;
+        self.set_affinity(Self::canonical_affinity(
+            &self.text,
+            TextCaret::new(active, affinity),
+        ));
+    }
+
+    fn set_caret_after_edit(&mut self, offset: usize) {
+        self.set_caret_position(TextCaret::new(offset, TextAffinity::Before));
+    }
+
+    fn set_affinity(&mut self, caret: TextCaret) {
+        self.caret_affinity = caret.affinity;
+        self.affinity_offset = caret.offset;
+    }
+
+    fn default_affinity(text: &str, offset: usize) -> TextAffinity {
+        if offset == 0 {
+            TextAffinity::After
+        } else if offset >= text.len() {
+            TextAffinity::Before
+        } else {
+            TextAffinity::After
+        }
+    }
+
+    fn canonical_affinity(text: &str, caret: TextCaret) -> TextCaret {
+        let offset = clamp_boundary(text, caret.offset);
+        let affinity = if offset == 0 {
+            TextAffinity::After
+        } else if offset == text.len() {
+            TextAffinity::Before
+        } else {
+            caret.affinity
+        };
+        TextCaret::new(offset, affinity)
     }
 
     fn apply_ordered_text(&mut self, event: &TextInputEvent, mode: TextEditMode) {
@@ -878,6 +1035,10 @@ impl TextEditState {
     fn restore(&mut self, snapshot: EditSnapshot) {
         self.text = snapshot.text;
         self.selection = snapshot.selection;
+        self.set_affinity(Self::canonical_affinity(
+            &self.text,
+            TextCaret::new(self.selection.active, snapshot.caret_affinity),
+        ));
         self.composition = None;
     }
 }

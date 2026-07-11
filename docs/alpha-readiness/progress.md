@@ -1089,6 +1089,68 @@ components remain compatibility paths, and future retained `Ui` wrappers must
 use the canonical transaction kernel rather than reintroduce split ownership or
 aggregate-pointer authority.
 
+### `TEXT-02A`: Unicode editing and caret-affinity foundation
+
+Status: Locally verified implementation candidate for Issue #554. This is the
+first serialized foundation of `TEXT-02`; exact-SHA review, PR, CI, and squash
+evidence are pending. It does not close audit §6.9 or roadmap `TEXT-02`.
+
+#### Changed files
+
+- `Cargo.lock`
+- `CHANGELOG.md`
+- `crates/kinetik-ui-text/Cargo.toml`
+- `crates/kinetik-ui-text/src/{boundary,edit,lib,selection,tests,undo}.rs`
+- `crates/kinetik-ui-text/tests/unicode_editing_conformance.rs`
+- `crates/kinetik-ui/tests/public_api_surface.rs`
+- `docs/specs/03-rendering-text-components.md`
+- `docs/alpha-readiness/{04-text-renderer-lifetime,progress}.md`
+
+#### Reasoning and contract decisions
+
+Logical editing now uses UAX #29 extended grapheme clusters and one full-buffer
+word-bound segmentation pass. Unicode whitespace is the only traversal
+separator; punctuation, symbols, and emoji remain distinct UAX segments.
+Offsets inside a segment, exact boundaries, and buffer end have explicit
+forward/backward/select tie rules. Combining sequences, emoji modifiers,
+regional-indicator flags, ZWJ emoji, and CRLF are indivisible; explicit-line
+columns count graphemes without normalizing bytes.
+
+`TextCaret` adds an offset plus `TextAffinity::{Before, After}` without removing
+byte-only APIs. Start/internal byte-only positions default to `After`, a
+non-empty end defaults to `Before`, movement has fixed directional affinity,
+and undo/redo records the effective affinity. A private offset stamp prevents
+direct mutation of public `TextSelection::active` from exposing stale affinity.
+Every operation canonicalizes public endpoints before selection-vs-caret
+branching, so two raw endpoints inside one grapheme take the canonical caret
+path and true no-ops preserve redo.
+
+#### Tests run and results
+
+- Dedicated Unicode editing conformance passed 12/12, covering combining,
+  emoji modifier/flag/ZWJ, CRLF and grapheme columns, contextual words,
+  punctuation/whitespace ties, affinity/equality/undo, malformed public
+  selections, ordered insertion/navigation, composition, and ReadOnly copy.
+- Complete text verification passed: 65 unit, 9 ReadOnly ordered-input, 14 text
+  viewport, and 12 Unicode editing tests; doc tests also passed.
+- Facade public API conformance passed 8/8, including qualified additive caret
+  APIs and unchanged legacy byte-offset calls.
+- All six workspace gates passed in ignored `target/runway/text02a`: formatting,
+  warning-denied workspace Clippy, all-feature workspace tests, all-feature
+  workspace build, all-feature examples, and warning-denied workspace docs.
+- Exact-SHA candidate critics, three-OS CI, PR CI, and squash merge: **PENDING**.
+
+#### Remaining risks and deferred findings
+
+This packet deliberately supplies logical segmentation and affinity only.
+Authoritative shaped visual stops, mixed-bidi Left/Right, ligature subdivision,
+and hit/caret/selection rectangles remain `TEXT-02B`; canonical widget,
+ReadOnly, pointer, ordered re-resolution, and IME integration remain
+`TEXT-02C`. Fractional-DPI paint/hit/caret/selection parity remains `REND-02`.
+Undo coalescing and layout/resource generation and byte budgets remain
+`TEXT-03`. Locale-tailored segmentation, normalization, color emoji, and an
+engine replacement remain out of scope.
+
 ### `REND-01B`: sRGB, alpha, and tint contract
 
 Status: Complete / Accepted. Issue #550 closed through PR #551. Candidate

@@ -574,7 +574,7 @@ fn applies_text_and_key_events() {
 }
 
 #[test]
-fn moves_caret_by_character_boundaries() {
+fn moves_caret_by_extended_grapheme_boundaries() {
     let mut state = TextEditState::new("aé");
 
     state.move_left();
@@ -584,17 +584,13 @@ fn moves_caret_by_character_boundaries() {
 }
 
 #[test]
-fn word_movement_uses_scalar_classes_and_skips_repeated_whitespace() {
-    let text = "ab_9é中!?  cd";
-    let word_end = "ab_9".len();
-    let other_end = "ab_9é中!?".len();
-    let final_word_start = other_end + "  ".len();
+fn word_movement_uses_uax_segments_and_skips_repeated_whitespace() {
+    let text = "café  crème";
+    let final_word_start = "café  ".len();
     let mut state = TextEditState::new(text);
 
     state.set_caret(0);
     state.move_word_right();
-    assert_eq!(state.caret(), word_end);
-    state.move_word_right();
     assert_eq!(state.caret(), final_word_start);
     state.move_word_right();
     assert_eq!(state.caret(), text.len());
@@ -603,8 +599,6 @@ fn word_movement_uses_scalar_classes_and_skips_repeated_whitespace() {
 
     state.move_word_left();
     assert_eq!(state.caret(), final_word_start);
-    state.move_word_left();
-    assert_eq!(state.caret(), word_end);
     state.move_word_left();
     assert_eq!(state.caret(), 0);
     state.move_word_left();
@@ -615,35 +609,28 @@ fn word_movement_uses_scalar_classes_and_skips_repeated_whitespace() {
     assert_eq!(state.caret(), 0);
     state.set_caret(2);
     state.move_word_right();
-    assert_eq!(state.caret(), word_end);
-
-    state.set_caret("ab_9é".len());
-    state.move_word_left();
-    assert_eq!(state.caret(), word_end);
-    state.set_caret("ab_9é".len());
-    state.move_word_right();
     assert_eq!(state.caret(), final_word_start);
 
-    state.set_caret(other_end + 1);
+    state.set_caret("café ".len());
     state.move_word_left();
-    assert_eq!(state.caret(), word_end);
-    state.set_caret(other_end + 1);
+    assert_eq!(state.caret(), 0);
+    state.set_caret("café ".len());
     state.move_word_right();
     assert_eq!(state.caret(), final_word_start);
 }
 
 #[test]
 fn word_movement_collapses_selection_and_extension_preserves_anchor() {
-    let text = "ab_9é中!?  cd";
-    let word_end = "ab_9".len();
-    let final_word_start = "ab_9é中!?  ".len();
+    let text = "café  crème";
+    let word_start = 0;
+    let final_word_start = "café  ".len();
     let mut state = TextEditState::new(text);
 
-    state.set_selection(TextSelection::new(final_word_start, word_end));
+    state.set_selection(TextSelection::new(final_word_start, word_start));
     state.move_word_left();
-    assert_eq!(state.selection, TextSelection::new(word_end, word_end));
+    assert_eq!(state.selection, TextSelection::new(word_start, word_start));
 
-    state.set_selection(TextSelection::new(word_end, final_word_start));
+    state.set_selection(TextSelection::new(word_start, final_word_start));
     state.move_word_right();
     assert_eq!(
         state.selection,
@@ -654,51 +641,48 @@ fn word_movement_collapses_selection_and_extension_preserves_anchor() {
     state.extend_word_left();
     assert_eq!(
         state.selection,
-        TextSelection::new(final_word_start, word_end)
+        TextSelection::new(final_word_start, word_start)
     );
     state.extend_word_left();
     assert_eq!(state.selection, TextSelection::new(final_word_start, 0));
 
-    state.set_caret(word_end);
+    state.set_caret(word_start);
     state.extend_word_right();
     assert_eq!(
         state.selection,
-        TextSelection::new(word_end, final_word_start)
+        TextSelection::new(word_start, final_word_start)
     );
     state.extend_word_right();
-    assert_eq!(state.selection, TextSelection::new(word_end, text.len()));
+    assert_eq!(state.selection, TextSelection::new(word_start, text.len()));
 }
 
 #[test]
-fn word_selection_chooses_clamped_scalar_class_runs() {
-    let text = "ab_é中!? \tcd";
-    let word_end = "ab_".len();
+fn word_selection_chooses_clamped_uax_segments() {
+    let text = "café!? \t中";
+    let word_end = "café".len();
     let whitespace_start = text.find('\u{2003}').expect("whitespace run");
-    let final_word_start = text.rfind("cd").expect("final word");
+    let final_word_start = text.rfind('中').expect("final word");
     let mut state = TextEditState::new(text);
 
     state.select_word_at(0);
-    assert_eq!(state.selected_text(), Some("ab_"));
+    assert_eq!(state.selected_text(), Some("café"));
     assert_eq!(state.selection, TextSelection::new(0, word_end));
 
-    state.select_word_at(word_end + 1);
-    assert_eq!(state.selected_text(), Some("é中!?"));
-    assert_eq!(
-        state.selection,
-        TextSelection::new(word_end, whitespace_start)
-    );
+    state.select_word_at(word_end);
+    assert_eq!(state.selected_text(), Some("!"));
+    assert_eq!(state.selection, TextSelection::new(word_end, word_end + 1));
 
     state.select_word_at(whitespace_start);
-    assert_eq!(state.selected_text(), Some(" \t"));
+    assert_eq!(state.selected_text(), Some(" "));
     assert_eq!(
         state.selection,
-        TextSelection::new(whitespace_start, final_word_start)
+        TextSelection::new(whitespace_start, whitespace_start + " ".len())
     );
 
     state.select_word_at(final_word_start);
-    assert_eq!(state.selected_text(), Some("cd"));
+    assert_eq!(state.selected_text(), Some("中"));
     state.select_word_at(usize::MAX);
-    assert_eq!(state.selected_text(), Some("cd"));
+    assert_eq!(state.selected_text(), Some("中"));
     assert_eq!(
         state.selection,
         TextSelection::new(final_word_start, text.len())
@@ -749,15 +733,15 @@ fn word_deletion_handles_boundaries_whitespace_and_selection_precedence() {
 }
 
 #[test]
-fn word_deletion_preserves_utf8_scalar_boundaries() {
+fn word_deletion_uses_uax_segments_and_preserves_grapheme_boundaries() {
     let text = "aé中!?  z";
     let mut backward = TextEditState::new(text);
     backward.set_caret("aé中".len());
 
     backward.backspace_word();
 
-    assert_eq!(backward.text, "a!?  z");
-    assert_eq!(backward.caret(), 1);
+    assert_eq!(backward.text, "aé!?  z");
+    assert_eq!(backward.caret(), "aé".len());
     assert!(backward.text.is_char_boundary(backward.caret()));
 
     let mut forward = TextEditState::new(text);
@@ -765,7 +749,7 @@ fn word_deletion_preserves_utf8_scalar_boundaries() {
 
     forward.delete_word_forward();
 
-    assert_eq!(forward.text, "az");
+    assert_eq!(forward.text, "a中!?  z");
     assert_eq!(forward.caret(), 1);
     assert!(forward.text.is_char_boundary(forward.caret()));
 }

@@ -78,9 +78,16 @@ published, or accepted as an alpha release.
   APIs stay source-compatible (`false` maps to Editable and `true` to Disabled),
   while explicit read-only behavior uses the retained `Ui` access/config APIs.
   Public free component functions retain their legacy compatible signatures and
-  output shapes. Word classes remain the documented whitespace / ASCII
-  alphanumeric-or-underscore / other-scalar baseline until Unicode editing is
-  completed.
+  output shapes.
+- Upgraded logical text editing to UAX #29 extended grapheme clusters and
+  full-buffer word-bound segments. Combining sequences, emoji modifiers,
+  regional-indicator flags, ZWJ emoji, and CRLF are atomic for navigation and
+  deletion; explicit-line columns count graphemes; selections and composition
+  ranges clamp to grapheme boundaries. Added qualified `TextCaret` and
+  `TextAffinity` APIs with deterministic before/after association, stale-public-
+  selection fallback, and undo/redo restoration. Existing byte-only setters
+  remain compatible. Shaped mixed-bidi/ligature geometry remains in the next
+  serialized Unicode text packet.
 - Defined renderer-bound `Color` as straight sRGB plus straight alpha and made
   Vello translation diagnose and sanitize every invalid color occurrence before
   command snapshots. Peniko gradients now explicitly select sRGB with

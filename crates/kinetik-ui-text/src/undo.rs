@@ -1,4 +1,4 @@
-use crate::{TextEditState, TextSelection};
+use crate::{TextAffinity, TextEditState, TextSelection};
 
 /// Text-field-local undo/redo history.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -44,6 +44,7 @@ impl TextUndoStack {
 pub(crate) struct EditSnapshot {
     pub(crate) text: String,
     pub(crate) selection: TextSelection,
+    pub(crate) caret_affinity: TextAffinity,
 }
 
 impl EditSnapshot {
@@ -51,6 +52,7 @@ impl EditSnapshot {
         Self {
             text: state.text.clone(),
             selection: state.selection,
+            caret_affinity: state.caret_position().affinity,
         }
     }
 }

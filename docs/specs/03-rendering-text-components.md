@@ -203,14 +203,26 @@ start/update/end, commits insert once, and ordered focus loss clears composition
 and stops all later editing for that frame. Separate text/key slice methods are
 compatibility helpers only because they cannot recover event interleaving.
 
-The Stage 4A desktop baseline is UTF-8 scalar safe. Word operations classify
-whitespace, ASCII alphanumeric scalars plus `_`, and every other scalar as
-three run classes. Ctrl, or Alt/Option where configured by the canonical field,
-moves or deletes across those runs; Shift extends; an existing selection
-collapses or deletes before word traversal. `select_word_at` selects the
-clamped scalar-class run. Grapheme clusters, Unicode word boundaries, emoji,
-ligatures, and mixed-direction visual movement remain the Unicode editing
-contract rather than being approximated here.
+The Stage 4B logical editing foundation uses UAX #29 extended grapheme clusters
+and full-buffer word-bound segments. Carets, selections, composition ranges,
+Backspace/Delete, and explicit-line columns clamp to grapheme boundaries, so
+combining sequences, emoji modifiers, regional-indicator flags, ZWJ sequences,
+and CRLF remain atomic without normalizing source bytes. Word movement uses the
+complete buffer so contextual boundaries such as apostrophes are not cut at the
+caret. It traverses one UAX segment and adjacent whitespace under the documented
+desktop policy; punctuation, symbols, and emoji remain distinct traversable
+segments. An existing selection still collapses or deletes before traversal,
+and `select_word_at` selects the containing UAX segment.
+
+`TextCaret` pairs a logical UTF-8 byte offset with `TextAffinity::{Before,
+After}`. `Before` associates a seam with preceding content and `After` with
+following content. Byte-only setters default to `After` at start/internal
+boundaries and `Before` at a non-empty buffer end. `TextEditState` stamps active
+affinity so direct mutation of public selection offsets falls back to that
+canonical rule rather than exposing stale hidden state; local undo/redo restores
+the effective affinity. Shaped mixed-direction visual traversal, ligature caret
+subdivision, and authoritative hit/caret/selection geometry remain the next
+serialized `TEXT-02` work rather than being approximated by this logical layer.
 
 Canonical fields expose `TextFieldAccess::{Editable, ReadOnly, Disabled}`.
 Editable fields navigate, select, copy, mutate, use cut/paste, and activate
@@ -226,8 +238,8 @@ true read-only behavior.
 
 Primary press places the caret; Shift-primary extends from the retained anchor;
 captured movement extends and clamps outside the content; release and
-cancellation clean capture; and an accepted second click selects one scalar
-run. Pointer actions retain their original root ordinals and event-time
+cancellation clean capture; and an accepted second click selects one UAX word-
+boundary segment. Pointer actions retain their original root ordinals and event-time
 modifiers. Text selection is visually neutral Selection behavior and never a
 domain drag source. Editable numeric scrub instead owns one DomainDrag
 resolution: a threshold-crossed accepted transaction scrubs, while an exact

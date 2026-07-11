@@ -23,6 +23,15 @@
 | 4B | `TEXT-03` | Bound/coalesce undo and impose generation/byte budgets on text layouts/resources | `TEXT-01`; ordered input frozen | High / Medium-high | Isolated only after text-store API freezes |
 | 4B | `REND-02` | Use one authoritative text layout for paint, hit, caret, and selection at fractional DPI | `TEXT-02`, `REND-01` | Critical / Medium | Root integration |
 
+`TEXT-02` executes as one serialized root-owned Z4 chain: `TEXT-02A` establishes
+UAX #29 grapheme/word editing plus explicit caret affinity; `TEXT-02B` derives
+authoritative shaped visual stops for ligatures and bidi hit/caret/selection;
+`TEXT-02C` integrates that authority through canonical retained widgets,
+ReadOnly, ordered mutation/re-resolution, pointer selection, and IME before the
+roadmap ID closes. The subpackets never run concurrently. Issue #554 tracks
+`TEXT-02A`; its implementation is under acceptance and does not close audit
+§6.9 by itself.
+
 `TEXT-01-PRE` is a root-owned shared-foundation prerequisite discovered by the
 `TEXT-01` task gate. It adds event-time modifier state to the already accepted
 ordered selection seam before either `ASYNC-01` or `TEXT-01` edits the shared
@@ -166,7 +175,8 @@ remains `REND-02`.
 
 The `TEXT-01` semantic prerequisites of `TEXT-02`, `TEXT-03`, and dependent
 editor packets are satisfied, and accepted `REND-01` unblocks the renderer side
-of 4B. `TEXT-02` is the next packet. `TEXT-03` remains behind the text-store API
+of 4B. `TEXT-02A` is the current first serialized `TEXT-02` foundation.
+`TEXT-03` remains behind the text-store API
 freeze, and `REND-02` remains behind both `TEXT-02` and accepted `REND-01`;
 inspector/outliner still wait for their Stage 5 composition and collection
 prerequisites. Checkpoint 4A is complete, while Stage 4 remains Current at 4B.

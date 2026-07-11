@@ -17,7 +17,7 @@ pub use cache::TextLayoutCache;
 pub use edit::{OrderedTextInputResult, TextEditMode, TextEditState};
 pub use engine::CosmicTextEngine;
 pub use layout::{ShapedGlyph, ShapedGlyphRun, ShapedTextLayout, ShapedTextLine, TextLayout};
-pub use selection::{TextComposition, TextSelection};
+pub use selection::{TextAffinity, TextCaret, TextComposition, TextSelection};
 pub use store::{StoredTextLayout, TextLayoutStore};
 pub use style::{TextLayoutKey, TextStyle};
 pub use undo::TextUndoStack;
