@@ -830,7 +830,7 @@ fn render_translation_conformance_reports_invalid_stack_primitives() {
 
     assert_command_snapshot(
         "invalid_stack_primitives",
-        "commands:\n  0: layer=2 transform=[1.000, 0.000, 0.000, 1.000, 4.000, 5.000] clips=[{rect=(1.000, 2.000, 30.000, 20.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(6.000, 7.000, 8.000, 9.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(0.000, 0.000, 0.000, 0.000)\ndiagnostics:\n  invalid_geometry:clip\n  invalid_geometry:transform\n  invalid_geometry:layer_stack\n  invalid_geometry:transform_stack\n  invalid_geometry:clip_stack\n  invalid_geometry:layer_stack\n  invalid_geometry:transform_stack",
+        "commands:\n  0: layer=2 transform=[1.000, 0.000, 0.000, 1.000, 4.000, 5.000] clips=[{rect=(1.000, 2.000, 30.000, 20.000) transform=[1.000, 0.000, 0.000, 1.000, 0.000, 0.000]}] rect rect=(6.000, 7.000, 8.000, 9.000) fill=rgba(1.000, 1.000, 1.000, 1.000) stroke=none radius=(0.000, 0.000, 0.000, 0.000)\ndiagnostics:\n  invalid_geometry:clip\n  invalid_geometry:transform\n  invalid_geometry:layer_stack\n  invalid_geometry:clip_stack\n  invalid_geometry:layer_stack\n  invalid_geometry:transform_stack",
         &render_translation_snapshot(&translation),
     );
 }

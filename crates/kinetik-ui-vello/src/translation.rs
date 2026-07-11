@@ -232,12 +232,12 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                 }
             }
             Primitive::TransformBegin(next_transform) => {
+                transforms.push(transform);
                 let Some(next_transform) =
                     sanitize_transform(*next_transform, &mut diagnostics, "transform")
                 else {
                     continue;
                 };
-                transforms.push(transform);
                 let next = compose_transform(transform, next_transform);
                 if transform_is_finite(next) {
                     transform = next;

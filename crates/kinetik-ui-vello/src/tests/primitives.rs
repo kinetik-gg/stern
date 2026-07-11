@@ -319,6 +319,7 @@ fn invalid_geometry_is_diagnosed_and_sanitized_before_encoding() {
             RenderDiagnostic::InvalidGeometry("rect_fill"),
             RenderDiagnostic::InvalidGeometry("rect_stroke"),
             RenderDiagnostic::InvalidGeometry("rect_radius"),
+            RenderDiagnostic::InvalidGeometry("transform_stack"),
         ]
     );
     assert_eq!(translation.commands.len(), 1);
