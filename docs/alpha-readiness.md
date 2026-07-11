@@ -6,17 +6,17 @@ Runway state controls execution details such as executor, depth, and gate status
 
 ## Authorization And Status
 
-Stage 0 is **Complete**. Stage 1 is **Current / Authorized**. Stages 2-7 are **Authorized / Queued** and execute in order as their prerequisite gates pass. The Stage 1-7 campaign is authorized for continuous sequential execution without intermediate approval, but any Runway stop condition halts the active packet or stage.
+Stages 0-3 are **Complete**. Stage 4 is **Current / Authorized**. Stages 5-7 are **Authorized / Queued** and execute in order as their prerequisite gates pass. The Stage 1-7 campaign is authorized for continuous sequential execution without intermediate approval, but any Runway stop condition halts the active packet or stage.
 
 The campaign workflow policy is `create-if-available` for issues, `create-if-gates-pass` for pull requests, and `squash-after-gates` for merges. Those permissions do not authorize a tag, package publish, alpha release, or a claim that unresolved findings are fixed.
 
 | Stage | Status | Scope | Spend checkpoint |
 | --- | --- | --- | --- |
-| [0. Plan And Baseline](alpha-readiness/00-plan-and-baseline.md) | Complete; documentation only | Publish the packet ledger, dependencies, overlap rules, gates, and deferrals | Documentation gate passed; Stage 1 is current |
-| [1. Truth And Release](alpha-readiness/01-truth-and-release.md) | Current / Authorized | Capability truth, provisional API boundary, showcase truth, packageability baseline | Small-medium; continue after the gate unless a stop condition triggers |
-| [2. Runtime Foundation](alpha-readiness/02-runtime-foundation.md) | Authorized / Queued | Coordinates, arbitration, and interaction ownership | Large; root-owned and serial |
-| [3. Input And Shell](alpha-readiness/03-input-and-shell.md) | Authorized / Queued | Ordered input, platform requests, and pointer normalization | Medium-large; serial through contract freeze |
-| [4. Text, Renderer, And Lifetime](alpha-readiness/04-text-renderer-lifetime.md) | Authorized / Queued | Async liveness, desktop/Unicode text, bounded caches, renderer correctness | Very large; checkpoint 4A and 4B without intermediate approval |
+| [0. Plan And Baseline](alpha-readiness/00-plan-and-baseline.md) | Complete; documentation only | Publish the packet ledger, dependencies, overlap rules, gates, and deferrals | Documentation gate passed |
+| [1. Truth And Release](alpha-readiness/01-truth-and-release.md) | Complete / Accepted | Capability truth, provisional API boundary, showcase truth, packageability baseline | Gate passed at `c8fbf53` |
+| [2. Runtime Foundation](alpha-readiness/02-runtime-foundation.md) | Complete / Accepted | Coordinates, arbitration, and interaction ownership | Gate passed at `5cf07b8` |
+| [3. Input And Shell](alpha-readiness/03-input-and-shell.md) | Complete / Accepted | Ordered input, platform requests, and pointer normalization | Gate passed at `1f99111` |
+| [4. Text, Renderer, And Lifetime](alpha-readiness/04-text-renderer-lifetime.md) | Current / Authorized | Async liveness, desktop/Unicode text, bounded caches, renderer correctness | Very large; checkpoint 4A and 4B without intermediate approval |
 | [5. Composition Foundations](alpha-readiness/05-composition-foundations.md) | Authorized / Queued | Presenter ADR/path, external textures, measured layout, overlays, chrome, collections | Very large; checkpoint the ADR and shared-`Ui` seams |
 | [6. Editor Vertical Slice](alpha-readiness/06-editor-vertical-slice.md) | Authorized / Queued | Dock, inspector, outliner, assets, viewport, feedback, and public workflow | Very large; gate non-deferred packets individually |
 | [7. Quality And Alpha Gate](alpha-readiness/07-quality-and-alpha-gate.md) | Authorized / Queued | Performance, visuals, accessibility boundary, CI, final API and release decision | Large; no tag or publish without explicit authority |
