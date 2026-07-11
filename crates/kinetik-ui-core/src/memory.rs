@@ -130,6 +130,8 @@ pub struct UiMemory {
     pointer_capture: Option<WidgetId>,
     /// Widget that released pointer capture during this frame.
     pointer_capture_released: Option<WidgetId>,
+    /// Greatest root event ordinal that released primary capture this frame.
+    pointer_capture_released_ordinal: Option<usize>,
     /// Pointer interaction was cancelled at this frame's runtime boundary.
     pointer_interaction_cancelled: bool,
     /// Owner whose retained primary gesture was cancelled during this frame.
@@ -140,6 +142,7 @@ pub struct UiMemory {
     pointer_cursor_equivalents: HashSet<WidgetId>,
     scoped_pointer_cleanup_events: HashSet<usize>,
     scoped_pointer_event_ordinals: Vec<usize>,
+    scoped_primary_transaction_open: Vec<bool>,
     selection_gesture_claims: HashSet<WidgetId>,
     domain_drag_frame_open: bool,
     domain_drag_responses: HashMap<WidgetId, Response>,
@@ -185,6 +188,7 @@ impl UiMemory {
     pub fn begin_frame(&mut self) {
         self.hovered = None;
         self.pointer_capture_released = None;
+        self.pointer_capture_released_ordinal = None;
         self.released_drag_source = None;
         self.released_drag_ordinal = None;
         self.pointer_interaction_cancelled = false;
@@ -195,6 +199,7 @@ impl UiMemory {
         self.pointer_cursor_equivalents.clear();
         self.scoped_pointer_cleanup_events.clear();
         self.scoped_pointer_event_ordinals.clear();
+        self.scoped_primary_transaction_open.clear();
         self.selection_gesture_claims.clear();
         self.domain_drag_frame_open = true;
         self.domain_drag_responses.clear();
@@ -298,6 +303,31 @@ impl UiMemory {
             || self.pointer_routes.ordinary.allows(id),
             |owner| owner == id,
         )
+    }
+
+    pub(crate) fn canonical_primary_route_allows(
+        &self,
+        id: WidgetId,
+        event_ordinal: usize,
+    ) -> bool {
+        if self.pointer_interaction_cancelled {
+            return false;
+        }
+        if let Some(owner) = self.pointer_capture {
+            return owner == id;
+        }
+        match (
+            self.pointer_capture_released,
+            self.pointer_capture_released_ordinal,
+        ) {
+            (Some(owner), Some(release_ordinal)) if event_ordinal <= release_ordinal => owner == id,
+            (Some(owner), None) => owner == id,
+            (Some(_), Some(_)) | (None, None) => self.pointer_routes.ordinary.allows(id),
+            (None, Some(_)) => {
+                debug_assert!(false, "released pointer owner and ordinal must be paired");
+                false
+            }
+        }
     }
 
     pub(crate) fn pointer_drop_route_allows(&self, id: WidgetId) -> bool {
@@ -632,11 +662,20 @@ impl UiMemory {
         &mut self,
         event_ordinals: impl IntoIterator<Item = usize>,
         event_indices: impl IntoIterator<Item = usize>,
+        primary_transaction_open: impl IntoIterator<Item = bool>,
     ) {
         self.scoped_pointer_event_ordinals.clear();
         self.scoped_pointer_event_ordinals.extend(event_ordinals);
         self.scoped_pointer_cleanup_events.clear();
         self.scoped_pointer_cleanup_events.extend(event_indices);
+        self.scoped_primary_transaction_open.clear();
+        self.scoped_primary_transaction_open
+            .extend(primary_transaction_open);
+        debug_assert_eq!(
+            self.scoped_pointer_event_ordinals.len(),
+            self.scoped_primary_transaction_open.len(),
+            "scoped pointer ordinals and transaction provenance must stay aligned"
+        );
     }
 
     pub(crate) fn scoped_pointer_event_is_cleanup(&self, event_index: usize) -> bool {
@@ -648,6 +687,12 @@ impl UiMemory {
             .get(event_index)
             .copied()
             .unwrap_or(event_index)
+    }
+
+    pub(crate) fn scoped_primary_transaction_was_open(&self, event_index: usize) -> Option<bool> {
+        self.scoped_primary_transaction_open
+            .get(event_index)
+            .copied()
     }
 
     /// Marks a widget as the active drag source.
@@ -721,6 +766,7 @@ impl UiMemory {
             self.clear_active_drag();
             self.clear_primary_interaction();
             self.pointer_capture_released = None;
+            self.pointer_capture_released_ordinal = None;
         }
         cancelled
     }
@@ -735,9 +781,12 @@ impl UiMemory {
     }
 
     pub(crate) const fn has_pointer_transaction(&self) -> bool {
+        self.has_primary_pointer_transaction() || self.secondary_pressed.is_some()
+    }
+
+    pub(crate) const fn has_primary_pointer_transaction(&self) -> bool {
         self.active.is_some()
             || self.pressed.is_some()
-            || self.secondary_pressed.is_some()
             || self.pointer_capture.is_some()
             || self.drag_source.is_some()
             || self.pointer_gesture.is_some()
@@ -800,7 +849,39 @@ impl UiMemory {
     }
 
     pub(crate) fn clear_primary_interaction(&mut self) {
-        self.pointer_capture_released = self.pointer_capture;
+        self.record_released_pointer_capture(None);
+        self.clear_primary_interaction_state();
+    }
+
+    pub(crate) fn clear_primary_interaction_at(&mut self, release_ordinal: usize) {
+        self.record_released_pointer_capture(Some(release_ordinal));
+        self.clear_primary_interaction_state();
+    }
+
+    pub(crate) fn discard_primary_interaction(&mut self) {
+        self.pointer_capture_released = None;
+        self.pointer_capture_released_ordinal = None;
+        self.clear_primary_interaction_state();
+    }
+
+    fn record_released_pointer_capture(&mut self, release_ordinal: Option<usize>) {
+        let Some(owner) = self.pointer_capture else {
+            return;
+        };
+        if let (Some(current), Some(previous)) =
+            (release_ordinal, self.pointer_capture_released_ordinal)
+            && current < previous
+        {
+            return;
+        }
+        if release_ordinal.is_none() && self.pointer_capture_released_ordinal.is_some() {
+            return;
+        }
+        self.pointer_capture_released = Some(owner);
+        self.pointer_capture_released_ordinal = release_ordinal;
+    }
+
+    fn clear_primary_interaction_state(&mut self) {
         self.active = None;
         self.pressed = None;
         self.pointer_capture = None;
@@ -1050,7 +1131,80 @@ impl UiMemory {
 #[cfg(test)]
 mod tests {
     use super::UiMemory;
-    use crate::{Vec2, WidgetId};
+    use crate::{PointerRoute, PointerRoutes, Vec2, WidgetId};
+
+    fn install_ordinary_route(memory: &mut UiMemory, ordinary: PointerRoute) {
+        memory.install_pointer_routes(
+            PointerRoutes {
+                ordinary,
+                drop: PointerRoute::Unplanned,
+                wheel: PointerRoute::Unplanned,
+            },
+            [],
+            None,
+            None,
+        );
+    }
+
+    #[test]
+    fn canonical_primary_route_uses_release_ordinal_then_base_route() {
+        let released = WidgetId::from_key("released");
+        let next = WidgetId::from_key("next");
+        let mut memory = UiMemory::new();
+        memory.capture_pointer(released);
+        memory.clear_primary_interaction_at(7);
+
+        install_ordinary_route(&mut memory, PointerRoute::Target(next));
+        assert!(memory.canonical_primary_route_allows(released, 7));
+        assert!(!memory.canonical_primary_route_allows(next, 7));
+        assert!(!memory.canonical_primary_route_allows(released, 8));
+        assert!(memory.canonical_primary_route_allows(next, 8));
+
+        install_ordinary_route(&mut memory, PointerRoute::Target(released));
+        assert!(memory.canonical_primary_route_allows(released, 8));
+        assert!(!memory.canonical_primary_route_allows(next, 8));
+
+        install_ordinary_route(&mut memory, PointerRoute::Blocked);
+        assert!(!memory.canonical_primary_route_allows(released, 8));
+        assert!(!memory.canonical_primary_route_allows(next, 8));
+
+        install_ordinary_route(&mut memory, PointerRoute::Target(next));
+        memory.capture_pointer(released);
+        assert!(memory.canonical_primary_route_allows(released, 8));
+        assert!(!memory.canonical_primary_route_allows(next, 8));
+        assert!(memory.cancel_pointer_interaction());
+        assert!(!memory.canonical_primary_route_allows(released, 8));
+        assert!(!memory.canonical_primary_route_allows(next, 8));
+    }
+
+    #[test]
+    fn canonical_release_provenance_keeps_greatest_ordinal_and_resets() {
+        let earlier_owner = WidgetId::from_key("earlier-owner");
+        let later_owner = WidgetId::from_key("later-owner");
+        let base_owner = WidgetId::from_key("base-owner");
+        let mut memory = UiMemory::new();
+        install_ordinary_route(&mut memory, PointerRoute::Target(base_owner));
+
+        memory.capture_pointer(later_owner);
+        memory.clear_primary_interaction_at(9);
+        memory.capture_pointer(earlier_owner);
+        memory.clear_primary_interaction_at(7);
+        memory.capture_pointer(earlier_owner);
+        memory.clear_primary_interaction();
+        assert!(memory.canonical_primary_route_allows(later_owner, 9));
+        assert!(!memory.canonical_primary_route_allows(earlier_owner, 9));
+        assert!(memory.canonical_primary_route_allows(base_owner, 10));
+
+        memory.begin_frame();
+        assert!(memory.canonical_primary_route_allows(earlier_owner, 0));
+        assert!(memory.canonical_primary_route_allows(later_owner, 0));
+
+        memory.capture_pointer(earlier_owner);
+        memory.clear_primary_interaction();
+        install_ordinary_route(&mut memory, PointerRoute::Target(base_owner));
+        assert!(memory.canonical_primary_route_allows(earlier_owner, usize::MAX));
+        assert!(!memory.canonical_primary_route_allows(base_owner, usize::MAX));
+    }
 
     #[test]
     fn starts_empty() {
