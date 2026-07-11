@@ -504,6 +504,25 @@ metadata only: release/drop authority always comes from the private scoped root
 pointer sidecar. No standalone captured adapter or local ordinal namespace is
 defined.
 
+The runtime retains one logical text-input owner with an explicit
+`TextInputOwnerMode`. Editable and ReadOnly owners may each claim the canonical
+ordered editing stream once. ReadOnly ownership permits navigation, selection,
+scrolling, and copy but cannot mutate text, request or accept paste, cut, or
+activate native IME. Editable ownership may do both logical editing and native
+IME work. Disabled fields do not become logical owners. The native platform
+text-input state is separate from logical ownership, so changing between
+Editable and ReadOnly does not invent an owner handoff or a spurious platform
+stop.
+
+Text fields merge pointer and editing actions by original root ordinal. A
+retained selection anchor preserves multiframe drag identity, while exact
+release-click provenance distinguishes caret placement from a threshold-crossed
+domain drag. Authoritative editable numeric scrub resolves DomainDrag exactly
+once; it previews ordered editing on cloned state, validates the arithmetic and
+pointer transaction, consumes the exact cached claim, and commits once. Other
+text selection consumes the neutral Selection facade. Aggregate response flags
+cannot substitute for causal pointer metadata.
+
 The input model must support pointer capture. During a drag, the active widget
 continues receiving drag updates after leaving its original rectangle while it
 remains inside the effective clip. Outside the effective clip, interaction is
@@ -518,10 +537,14 @@ pointer snapshot; missing canonical button positions fail closed.
 
 Text input has priority when a text editor is focused. Keyboard shortcuts should not steal ordinary typing from focused text fields.
 
-Starting a text-input owner and moving its candidate area are distinct platform
-operations. Initial ownership emits `StartTextInput`; the same focused owner
-emits `UpdateTextInputRect` with the current screen-logical rectangle, without
-restarting IME or composition. Owner handoff remains ordered Stop then Start.
+Starting native text input and moving its candidate area are distinct platform
+operations. Only an Editable logical owner may activate native IME. Initial
+activation emits `StartTextInput`; the same focused editable owner emits
+`UpdateTextInputRect` with its visible clipped caret rectangle in
+screen-logical coordinates, without restarting IME or composition. Owner
+handoff remains ordered Stop then Start. If a frozen text viewport hides the
+caret, the runtime retains the previous platform rectangle, stages caret reveal,
+and publishes the new rectangle with the following frame's geometry.
 
 ## 9. Widget Identity
 

@@ -64,6 +64,23 @@ published, or accepted as an alpha release.
   `remove_live_target` now returns `LivenessRemovalStatus`. Mark owners present
   each frame, retain one token per incarnation, call `restart` for replacement
   work, and create a new observer subscription after restart or reentry.
+- Completed canonical retained-`Ui` desktop text behavior. Added scalar-safe
+  word movement, extension, deletion, and run selection; deterministic
+  horizontal single-line and vertical wrapped-multiline `TextViewport`
+  helpers; logical `TextInputOwnerMode`; and
+  `TextFieldAccess::{Editable, ReadOnly, Disabled}` entry points. Canonical
+  fields now merge root-ordinal pointer selection with exactly-once ordered
+  editing input, retain viewport offsets between frames, publish visible
+  clipped caret rectangles for editable IME, and give numeric scrub, search,
+  path, and vector wrappers one shared transaction boundary. Read-only fields
+  remain focusable, selectable, scrollable, navigable, and copyable without
+  mutation or native IME; disabled fields remain non-interactive. Existing bool
+  APIs stay source-compatible (`false` maps to Editable and `true` to Disabled),
+  while explicit read-only behavior uses the retained `Ui` access/config APIs.
+  Public free component functions retain their legacy compatible signatures and
+  output shapes. Word classes remain the documented whitespace / ASCII
+  alphanumeric-or-underscore / other-scalar baseline until Unicode editing is
+  completed.
 
 ### Documentation
 

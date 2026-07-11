@@ -184,6 +184,66 @@ start/update/end, commits insert once, and ordered focus loss clears composition
 and stops all later editing for that frame. Separate text/key slice methods are
 compatibility helpers only because they cannot recover event interleaving.
 
+The Stage 4A desktop baseline is UTF-8 scalar safe. Word operations classify
+whitespace, ASCII alphanumeric scalars plus `_`, and every other scalar as
+three run classes. Ctrl, or Alt/Option where configured by the canonical field,
+moves or deletes across those runs; Shift extends; an existing selection
+collapses or deletes before word traversal. `select_word_at` selects the
+clamped scalar-class run. Grapheme clusters, Unicode word boundaries, emoji,
+ligatures, and mixed-direction visual movement remain the Unicode editing
+contract rather than being approximated here.
+
+Canonical fields expose `TextFieldAccess::{Editable, ReadOnly, Disabled}`.
+Editable fields navigate, select, copy, mutate, use cut/paste, and activate
+native IME. ReadOnly fields remain focusable, navigable, selectable, scrollable,
+and copyable, paint caret and selection, and may logically own/claim input, but
+cannot mutate, cut, request or accept paste, apply composition, or activate
+native IME. Disabled fields cannot focus, claim, select, scroll, copy, or own
+text input and expose disabled, non-focusable semantics. Editable semantics
+include `SetText`; ReadOnly semantics remain focusable without a mutation
+action. Existing bool entry points remain compatible (`false = Editable`,
+`true = Disabled`); callers use retained `Ui` access/config entry points for
+true read-only behavior.
+
+Primary press places the caret; Shift-primary extends from the retained anchor;
+captured movement extends and clamps outside the content; release and
+cancellation clean capture; and an accepted second click selects one scalar
+run. Pointer actions retain their original root ordinals and event-time
+modifiers. Text selection is visually neutral Selection behavior and never a
+domain drag source. Editable numeric scrub instead owns one DomainDrag
+resolution: a threshold-crossed accepted transaction scrubs, while an exact
+below-threshold clicked release places the caret. ReadOnly and Disabled numeric
+fields use Selection behavior and never scrub.
+
+Each canonical field evaluation uses one frozen retained viewport offset and
+two intentional geometry snapshots. Entry geometry resolves event-time pointer
+hits. After ordered editing, post-edit geometry supplies text paint, caret,
+selection, preedit, viewport reveal, and the IME caret rectangle. Single-line
+viewports move only horizontally; wrapped
+multiline viewports move only vertically. Offsets are finite and clamped.
+Wheel and caret-follow changes stage the next frame, with caret reveal taking
+priority when required; the current frame's paint and routing remain frozen.
+Text subgeometry adds or subtracts the offset exactly once. Semantic field
+bounds remain the field rectangle projected through the runtime spatial scope,
+not scrolled text subgeometry.
+
+The IME candidate rectangle is derived from the visible clipped caret, never
+the field rectangle. It is exported in screen-logical coordinates. When the
+current frozen viewport hides the caret, the field retains the previous
+platform rectangle, stages reveal, and publishes the new visible caret
+rectangle on the following frame.
+
+Retained `Ui` methods for text, numeric/scrub, search, path, and vector fields
+enter through one crate-private canonical runtime kernel. Ordered editing is
+claimed at most once and accepted state commits once. Authoritative editable
+scrub additionally previews on cloned state and validates the arithmetic and
+pointer transaction before claim/commit. Path Browse resolves first and fences
+text focus, ownership, claims, mutation, clipboard, wheel, IME, and open intent
+for the whole frame regardless call order. Public free component functions
+remain legacy compatibility paths with unchanged signatures and output shapes;
+new retained wrappers must use the canonical kernel rather than reimplementing
+pointer or ordered-input arbitration.
+
 ## 18. Styling And Theme Model
 
 Styling uses tokens, semantic roles, and component recipes.
