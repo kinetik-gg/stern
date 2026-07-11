@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | In progress; `IN-01`, `IN-02`, and `IN-03A` merged; `IN-03B` final-depth candidate passes focused verification pending exact-SHA audit |
+| Status | Complete / Accepted at `1f99111`; all four serial packets merged and the final exact-SHA gates passed |
 | Scope | Sequence-preserving input, platform request execution, and pointer normalization |
 | Impact / confidence | Critical / High (`IN-03` is High / High) |
 | Campaign prerequisite | Stage 2 gate; campaign authorization recorded |
@@ -86,7 +86,7 @@ not overlap B's memory/runtime ownership.
 
 Go only when hardware-style typing and the IME lifecycle work in the supported live shell; mixed key/text order is preserved; copy/cut/paste, URLs, cursor, IME rectangles, repaint, and async requests execute with one-frame ownership; and mouse/touchpad scroll, double-click, drag threshold, and click suppression are deterministic.
 
-Packet tasks must include contract, core, adapter, and supported-shell checks appropriate to their owned paths. Event reordering, stale requests, Z2/Z3 overlap, and shell behavior with no recorded owner are stop conditions; otherwise, record the gate and advance to the already Authorized / Queued Stage 4 without new approval.
+Packet tasks must include contract, core, adapter, and supported-shell checks appropriate to their owned paths. Event reordering, stale requests, Z2/Z3 overlap, and shell behavior with no recorded owner are stop conditions. Those checks passed, the gate is recorded, and Stage 4 is now Current / Authorized without requiring new approval.
 
 ## Deferrals
 

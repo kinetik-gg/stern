@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Authorized / Queued |
+| Status | Current / Authorized after the accepted Stage 3 gate at `1f99111` |
 | Scope | Async liveness, desktop/Unicode text, bounded caches, and renderer correctness |
 | Impact / confidence | Critical / Medium-high overall |
 | Campaign prerequisite | Stage 3 gate; campaign authorization recorded |

@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Complete / Accepted; Stage 3 is Authorized / Current |
+| Status | Complete / Accepted at `5cf07b8`; Stage 3 subsequently passed and Stage 4 is Current |
 | Scope | Shared coordinate, arbitration, and interaction-ownership invariants |
 | Impact / confidence | Critical / High |
 | Campaign prerequisite | Stage 1 gate; campaign authorization recorded |
@@ -33,8 +33,8 @@ Each packet receives its own bounded task and checks. An unresolved invariant or
 `RT-03` uses frame-local widget presence, kept distinct from eligibility and
 duplicate registration, to cancel removed interaction owners at `end_frame`.
 Its independent critic and the integrated Stage 2 gate passed after one
-fixture-only depth-one remedy. Stage 3 is Authorized / Current under the
-continuous campaign authorization.
+fixture-only depth-one remedy. Stage 3 subsequently passed, and Stage 4 is
+Current / Authorized under the continuous campaign authorization.
 
 ## Deferrals
 

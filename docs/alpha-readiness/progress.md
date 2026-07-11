@@ -2,13 +2,13 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Stages 0-2 are Complete. Stage 3 is Current / Authorized. Stages 4-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-3 are Complete. Stage 4 is Current / Authorized. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
 ## Stage 0: Plan And Baseline
 
-Status: Complete. This closes the documentation task only; Stage 1 is Current / Authorized under the recorded campaign authorization.
+Status: Complete. This closed the documentation task only; Stages 1-3 subsequently completed and Stage 4 is Current / Authorized under the recorded campaign authorization.
 
 ### Changed files
 
@@ -315,8 +315,8 @@ than final output including diagnostics emitted afterward.
 ## Stage 2: Runtime Foundation
 
 Status: Complete / Accepted. `RT-01`, `RT-02`, and `RT-03` passed their bounded
-critics and complete gates. The integrated Stage 2 gate passed, and Stage 3 is
-Current / Authorized.
+critics and complete gates. The integrated Stage 2 gate passed at `5cf07b8`;
+Stage 3 subsequently passed and Stage 4 is Current / Authorized.
 
 ### `RT-01`: scoped coordinates and clipping
 
@@ -482,14 +482,18 @@ Standalone behavior functions used outside a `Ui` frame cannot participate in
 end-frame reconciliation; framed custom widgets must register their identity.
 Presence deliberately does not define async incarnation, cancellation-token,
 or tombstone policy; those remain `ASYNC-01`. Ordered platform input and shell
-execution remain Stage 3 work under the now-current authorization.
+execution were subsequently completed as Stage 3 work under the continuous
+campaign authorization.
 
 ## Stage 3: Ordered Input And Shell
 
-Status: Current. `IN-01` is accepted and squash-merged at
-`ca3747b9e407259575508398f67304303a6539bd`. `IN-02` focused implementation
-gates pass on `agent/in02-shell-services`; independent audit, the complete
-workspace gate, PR CI, and squash merge remain pending. `IN-03` remains queued.
+Status: Complete / Accepted at `1f991113816f3c6b8ce9063a9d37ebe367109f2c`.
+`IN-01`, `IN-02`, `IN-03A`, and `IN-03B` all passed independent exact-SHA
+audit, complete local workspace gates, remote CI, PR checks, and squash merge.
+The final Stage 3 matrix was
+[CI run 29140855335](https://github.com/kinetik-gg/kinetik-ui/actions/runs/29140855335);
+PR [#517](https://github.com/kinetik-gg/kinetik-ui/pull/517) passed checks in
+run 29141040177 and produced the accepted merge.
 
 ### `IN-01`: ordered platform input
 
@@ -787,8 +791,10 @@ the same captured-source effective clip as release commits.
 - Facade public API surface with all features: 5/5 passed.
 - Warning-denied all-target/all-feature Clippy across core, widgets, facade, and
   Showcase passed; formatting and diff checks passed.
-- The complete six-command workspace gate passed on the final evidence
-  candidate; independent exact-SHA re-audit is the remaining pre-PR gate.
+- The complete six-command workspace gate and three independent exact-SHA
+  critics passed with no P0/P1/P2 findings. Ubuntu, Windows, and macOS passed in
+  run 29140855335; PR checks passed in run 29141040177; PR #517 squash-merged as
+  `1f991113` and issue #516 is closed.
 
 #### Remaining risks and deferred findings
 
