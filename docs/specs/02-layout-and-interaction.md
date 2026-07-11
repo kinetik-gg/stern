@@ -273,11 +273,11 @@ displacement; later frames report only newly accumulated movement. A crossed
 release never clicks, even after moving back. `pressable` uses the same latch
 for click suppression but never becomes a domain drag; only `draggable` sets
 `drag_source` and can produce a released source for drop targets. The retained
-transaction also records whether Press, DomainDrag, or Selection initiated it;
-changing primitive modes cancels rather than promoting or releasing another
-mode's gesture. Legacy snapshot input starts a fresh press at the current
-position and does not reinterpret that frame's aggregate pointer delta as
-post-press movement.
+transaction records its gesture family. Press may promote to DomainDrag for
+intentional composites such as numeric scrub fields, while Selection is
+isolated and cannot be promoted into or release a domain drag. Legacy snapshot
+input starts a fresh press at the current position and does not reinterpret
+that frame's aggregate pointer delta as post-press movement.
 
 Text selection uses `Ui::captured_selection_gesture`, a visually neutral
 capture seam that returns the common `Response` plus ordered Press, Move,

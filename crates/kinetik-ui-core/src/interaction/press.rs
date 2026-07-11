@@ -85,9 +85,14 @@ pub(super) fn resolve_pressable_with_hit_target(
     let conflicted = memory.pointer_input_conflicted(input);
     let owns_primary = owns_primary_gesture(memory, id);
     let owns_secondary = memory.is_secondary_pressed(id);
-    let mode_mismatch = memory
-        .pointer_gesture_kind(id)
-        .is_some_and(|retained| retained != kind);
+    let retained_kind = memory.pointer_gesture_kind(id);
+    let mode_mismatch = retained_kind.is_some_and(|retained| {
+        retained != kind
+            && (retained == PointerGestureKind::Selection || kind == PointerGestureKind::Selection)
+    });
+    if kind == PointerGestureKind::DomainDrag && retained_kind == Some(PointerGestureKind::Press) {
+        memory.promote_pointer_gesture_to_domain_drag(id);
+    }
     let mut outcome = PointerOutcome::default();
 
     if (disabled && (owns_primary || owns_secondary)) || mode_mismatch {

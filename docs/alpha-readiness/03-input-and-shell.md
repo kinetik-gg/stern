@@ -60,9 +60,10 @@ sidecar and exposes neutral captured-selection actions without changing public
 input or common response layouts. A matching ordered text claim exposes editing
 events with the same ordinals, so `TEXT-01` can merge without pointer reparsing.
 Empty canonical streams remain compatible.
-Its final-depth remedy preserves initiating gesture mode, sequential same-frame
-cleanup provenance, causal cancellation metadata, and the first terminating
-release as drop authority. Planned drop routing now uses release-time geometry
+Its final-depth remedy isolates selection from the compatible press/domain-drag
+family, preserves sequential same-frame cleanup provenance and causal
+cancellation metadata, and treats the first terminating release as drop
+authority. Planned drop routing now uses release-time geometry
 and validates the captured source clip while ordinary/wheel routes keep their
 final-pointer basis. Thirty-one focused adversarial tests, the core and Showcase
 all-feature suites, and the public surface pass; exact-SHA audit and the

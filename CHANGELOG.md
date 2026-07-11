@@ -30,9 +30,10 @@ published, or accepted as an alpha release.
   order, and `Ui::captured_selection_gesture` exposes original-root-ordinal
   selection actions without turning text selection into a domain drag source.
   `Ui::claim_ordered_text_input_events` supplies the matching ordinal-bearing
-  editing stream so text fields need not parse pointer events again. Retained
-  gestures preserve their initiating mode, cancellation fences only later
-  transitions, and planned drops use the first terminating release geometry.
+  editing stream so text fields need not parse pointer events again. Text
+  selection remains isolated from the compatible press/domain-drag family,
+  cancellation fences only later transitions, and planned drops use the first
+  terminating release geometry.
 
 ### Documentation
 

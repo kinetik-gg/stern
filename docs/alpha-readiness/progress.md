@@ -740,10 +740,10 @@ hover, and prevents selection from publishing a retained domain drag.
 The depth-one audit and complete workspace test exposed legacy pre-press delta
 replay, same-frame clipped cleanup loss, mode promotion, non-causal
 cancellation metadata, and final-snapshot/multiple-release drop routing. The
-depth-two remedy makes gesture mode exact, localizes potential ownership
-sequentially, fences only later transitions, preserves earlier drag/drop
-output, and routes drops from the first terminating release after validating
-the captured source clip.
+depth-two remedy isolates selection from the compatible press/domain-drag
+family, localizes potential ownership sequentially, fences only later
+transitions, preserves earlier drag/drop output, and routes drops from the
+first terminating release after validating the captured source clip.
 
 #### Tests run and results
 

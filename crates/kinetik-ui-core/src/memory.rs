@@ -482,6 +482,15 @@ impl UiMemory {
             .map(|gesture| gesture.click_count)
     }
 
+    pub(crate) fn promote_pointer_gesture_to_domain_drag(&mut self, owner: WidgetId) {
+        if let Some(gesture) = &mut self.pointer_gesture
+            && gesture.owner == owner
+            && gesture.kind == PointerGestureKind::Press
+        {
+            gesture.kind = PointerGestureKind::DomainDrag;
+        }
+    }
+
     pub(crate) fn mark_pointer_threshold_crossed(&mut self, owner: WidgetId) {
         if let Some(gesture) = &mut self.pointer_gesture
             && gesture.owner == owner
