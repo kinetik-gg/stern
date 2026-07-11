@@ -1,7 +1,6 @@
 use kinetik_ui_core::{
-    ClipboardText, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton as CoreMouseButton,
-    Point, PointerButtonState, PointerInput, ScaleFactor, TextInputEvent, TextRange, UiInput, Vec2,
-    WidgetId,
+    ClipboardText, InputWheelDelta, KeyEvent, KeyState, MouseButton as CoreMouseButton, Point,
+    ScaleFactor, TextInputEvent, TextRange, UiInput, UiInputEvent, Vec2, WidgetId,
 };
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, Ime, MouseButton as WinitMouseButton, MouseScrollDelta};
@@ -15,6 +14,8 @@ pub struct WinitInputAdapter {
     input: UiInput,
     last_pointer_position: Option<Point>,
     scale_factor: ScaleFactor,
+    ime_enabled: bool,
+    composition_active: bool,
 }
 
 impl Default for WinitInputAdapter {
@@ -29,26 +30,13 @@ impl WinitInputAdapter {
     pub fn new(scale_factor: ScaleFactor) -> Self {
         Self {
             input: UiInput {
-                pointer: PointerInput {
-                    position: None,
-                    delta: Vec2::ZERO,
-                    wheel_delta: Vec2::ZERO,
-                    primary: PointerButtonState::new(false, false, false),
-                    secondary: PointerButtonState::new(false, false, false),
-                    middle: PointerButtonState::new(false, false, false),
-                    other_buttons: Vec::new(),
-                    click_count: 0,
-                },
-                keyboard: KeyboardInput {
-                    modifiers: Modifiers::new(false, false, false, false),
-                    events: Vec::new(),
-                },
-                text_events: Vec::new(),
-                clipboard_text: Vec::new(),
                 window_focused: false,
+                ..UiInput::default()
             },
             last_pointer_position: None,
             scale_factor: sanitize_scale_factor(scale_factor),
+            ime_enabled: false,
+            composition_active: false,
         }
     }
 
@@ -61,6 +49,12 @@ impl WinitInputAdapter {
     #[must_use]
     pub fn input(&self) -> &UiInput {
         &self.input
+    }
+
+    /// Returns the most recently reported platform IME availability.
+    #[must_use]
+    pub const fn ime_enabled(&self) -> bool {
+        self.ime_enabled
     }
 
     /// Consumes the adapter and returns the current input snapshot.
@@ -77,10 +71,15 @@ impl WinitInputAdapter {
     /// Updates window focus state.
     pub fn set_window_focused(&mut self, focused: bool) {
         if !focused {
-            self.input.release_pointer_buttons();
-            self.clear_pointer_position();
+            self.end_composition();
+            self.input.push_event(UiInputEvent::PointerReleaseAll {
+                position: self.last_pointer_position,
+            });
+            self.input.push_event(UiInputEvent::PointerLeft);
+            self.last_pointer_position = None;
         }
-        self.input.window_focused = focused;
+        self.input
+            .push_event(UiInputEvent::WindowFocusChanged(focused));
     }
 
     /// Applies a pointer move event.
@@ -89,52 +88,50 @@ impl WinitInputAdapter {
         let delta = self.last_pointer_position.map_or(Vec2::ZERO, |last| {
             Vec2::new(point.x - last.x, point.y - last.y)
         });
-        self.input.pointer.position = Some(point);
-        self.input.pointer.delta = Vec2::new(
-            self.input.pointer.delta.x + delta.x,
-            self.input.pointer.delta.y + delta.y,
-        );
+        self.input.push_event(UiInputEvent::PointerMoved {
+            position: point,
+            delta,
+        });
         self.last_pointer_position = Some(point);
     }
 
     /// Applies a pointer leave event.
     pub fn pointer_left(&mut self) {
-        self.clear_pointer_position();
+        self.input.push_event(UiInputEvent::PointerLeft);
+        self.last_pointer_position = None;
     }
 
     /// Applies a mouse button event.
     pub fn mouse_button(&mut self, button: WinitMouseButton, state: ElementState, click_count: u8) {
-        self.input.pointer.apply_button_transition(
-            mouse_button_from_winit(button),
-            state == ElementState::Pressed,
-        );
-        self.input.pointer.click_count = click_count;
+        self.input.push_event(UiInputEvent::PointerButton {
+            button: mouse_button_from_winit(button),
+            down: state == ElementState::Pressed,
+            click_count,
+            position: self.last_pointer_position,
+        });
     }
 
     /// Applies a mouse wheel event.
     pub fn mouse_wheel(&mut self, delta: MouseScrollDelta) {
         let delta = match delta {
-            MouseScrollDelta::LineDelta(x, y) => Vec2::new(x, y),
-            MouseScrollDelta::PixelDelta(position) => Vec2::new(
+            MouseScrollDelta::LineDelta(x, y) => InputWheelDelta::Lines(Vec2::new(x, y)),
+            MouseScrollDelta::PixelDelta(position) => InputWheelDelta::Pixels(Vec2::new(
                 f64_to_f32(position.x / self.scale_factor.value()),
                 f64_to_f32(position.y / self.scale_factor.value()),
-            ),
+            )),
         };
-        self.input.pointer.wheel_delta = Vec2::new(
-            self.input.pointer.wheel_delta.x + delta.x,
-            self.input.pointer.wheel_delta.y + delta.y,
-        );
+        self.input.push_event(UiInputEvent::Wheel {
+            delta,
+            position: self.last_pointer_position,
+        });
     }
 
     /// Updates the current keyboard modifier state.
     pub fn set_modifiers(&mut self, modifiers: ModifiersState) {
-        self.input.keyboard.modifiers = modifiers_from_winit(modifiers);
-    }
-
-    fn clear_pointer_position(&mut self) {
-        self.input.pointer.position = None;
-        self.input.pointer.delta = Vec2::ZERO;
-        self.last_pointer_position = None;
+        self.input
+            .push_event(UiInputEvent::ModifiersChanged(modifiers_from_winit(
+                modifiers,
+            )));
     }
 
     /// Applies a keyboard event.
@@ -145,18 +142,27 @@ impl WinitInputAdapter {
         modifiers: ModifiersState,
         repeat: bool,
     ) {
-        let key_state = match state {
-            ElementState::Pressed => KeyState::Pressed,
-            ElementState::Released => KeyState::Released,
-        };
-        let modifiers = modifiers_from_winit(modifiers);
-        self.input.keyboard.modifiers = modifiers;
-        self.input.keyboard.events.push(KeyEvent::new(
-            key_from_winit(key),
-            key_state,
-            modifiers,
-            repeat,
-        ));
+        self.keyboard_event_with_text(key, state, modifiers, repeat, None);
+    }
+
+    /// Applies a keyboard event with layout-produced hardware text.
+    pub fn keyboard_event_with_text(
+        &mut self,
+        key: &WinitKey,
+        state: ElementState,
+        modifiers: ModifiersState,
+        repeat: bool,
+        text: Option<&str>,
+    ) {
+        self.push_key_event(
+            KeyEvent::new(
+                key_from_winit(key),
+                key_state_from_winit(state),
+                modifiers_from_winit(modifiers),
+                repeat,
+            ),
+            text,
+        );
     }
 
     /// Applies a keyboard event with physical key identity.
@@ -168,47 +174,107 @@ impl WinitInputAdapter {
         modifiers: ModifiersState,
         repeat: bool,
     ) {
-        let key_state = match state {
-            ElementState::Pressed => KeyState::Pressed,
-            ElementState::Released => KeyState::Released,
-        };
-        let modifiers = modifiers_from_winit(modifiers);
-        self.input.keyboard.modifiers = modifiers;
-        self.input.keyboard.events.push(KeyEvent::with_physical_key(
-            key_from_winit(key),
-            physical_key_from_winit(physical_key),
-            key_state,
+        self.keyboard_event_with_physical_key_and_text(
+            key,
+            physical_key,
+            state,
             modifiers,
             repeat,
-        ));
+            None,
+        );
+    }
+
+    /// Applies a physical keyboard event with layout-produced hardware text.
+    #[allow(clippy::too_many_arguments)]
+    pub fn keyboard_event_with_physical_key_and_text(
+        &mut self,
+        key: &WinitKey,
+        physical_key: &WinitPhysicalKey,
+        state: ElementState,
+        modifiers: ModifiersState,
+        repeat: bool,
+        text: Option<&str>,
+    ) {
+        self.push_key_event(
+            KeyEvent::with_physical_key(
+                key_from_winit(key),
+                physical_key_from_winit(physical_key),
+                key_state_from_winit(state),
+                modifiers_from_winit(modifiers),
+                repeat,
+            ),
+            text,
+        );
     }
 
     /// Applies committed text input.
     pub fn text_input(&mut self, text: impl Into<String>) {
-        self.input
-            .text_events
-            .push(TextInputEvent::Commit(text.into()));
+        self.commit_text(text.into());
     }
 
     /// Applies clipboard text returned by the application shell for a text input.
     pub fn clipboard_text(&mut self, target: WidgetId, text: impl Into<String>) {
         self.input
-            .clipboard_text
-            .push(ClipboardText::new(target, text));
+            .push_event(UiInputEvent::ClipboardText(ClipboardText::new(
+                target, text,
+            )));
     }
 
     /// Applies a winit IME event.
     pub fn ime_event(&mut self, event: Ime) {
-        let event = match event {
-            Ime::Enabled => TextInputEvent::CompositionStart,
-            Ime::Preedit(text, selection) => TextInputEvent::Composition {
-                text,
-                selection: selection.map(|(start, end)| TextRange::new(start, end)),
-            },
-            Ime::Commit(text) => TextInputEvent::Commit(text),
-            Ime::Disabled => TextInputEvent::CompositionEnd,
-        };
-        self.input.text_events.push(event);
+        match event {
+            Ime::Enabled => {
+                self.ime_enabled = true;
+                self.input.push_event(UiInputEvent::ImeEnabled(true));
+            }
+            Ime::Preedit(text, _) if text.is_empty() => self.end_composition(),
+            Ime::Preedit(text, selection) => {
+                if !self.composition_active {
+                    self.composition_active = true;
+                    self.input
+                        .push_event(UiInputEvent::Text(TextInputEvent::CompositionStart));
+                }
+                self.input
+                    .push_event(UiInputEvent::Text(TextInputEvent::Composition {
+                        text,
+                        selection: selection.map(|(start, end)| TextRange::new(start, end)),
+                    }));
+            }
+            Ime::Commit(text) => self.commit_text(text),
+            Ime::Disabled => {
+                self.end_composition();
+                self.ime_enabled = false;
+                self.input.push_event(UiInputEvent::ImeEnabled(false));
+            }
+        }
+    }
+
+    fn push_key_event(&mut self, mut event: KeyEvent, text: Option<&str>) {
+        if event.state == KeyState::Pressed && !self.composition_active {
+            event.text = text.filter(|text| !text.is_empty()).map(str::to_owned);
+        }
+        self.input.push_event(UiInputEvent::Key(event));
+    }
+
+    fn commit_text(&mut self, text: String) {
+        self.end_composition();
+        self.input
+            .push_event(UiInputEvent::Text(TextInputEvent::Commit(text)));
+    }
+
+    fn end_composition(&mut self) {
+        if self.composition_active {
+            self.composition_active = false;
+            self.input
+                .push_event(UiInputEvent::Text(TextInputEvent::CompositionEnd));
+        }
+    }
+}
+
+fn key_state_from_winit(state: ElementState) -> KeyState {
+    match state {
+        ElementState::Pressed => KeyState::Pressed,
+        ElementState::Released => KeyState::Released,
     }
 }
 

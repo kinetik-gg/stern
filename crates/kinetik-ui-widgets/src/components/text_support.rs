@@ -1,8 +1,7 @@
 use super::{
-    Brush, ClipId, CornerRadius, Key, KeyState, LinePrimitive, PlatformRequest, Point, Primitive,
-    Rect, RectPrimitive, Response, ShapedTextLayout, Stroke, TextEditState, TextFieldRecipe,
-    TextInputEvent, TextLayoutKey, TextLayoutStore, TextPrimitive, TextSelection, TextStyle,
-    UiInput, UiMemory, WidgetId,
+    Brush, ClipId, CornerRadius, LinePrimitive, PlatformRequest, Point, Primitive, Rect,
+    RectPrimitive, Response, ShapedTextLayout, Stroke, TextEditState, TextFieldRecipe,
+    TextLayoutKey, TextLayoutStore, TextPrimitive, TextSelection, TextStyle, UiMemory, WidgetId,
 };
 
 pub(super) fn text_input_platform_requests(
@@ -33,112 +32,6 @@ pub(super) fn text_input_platform_requests(
         }
     } else {
         Vec::new()
-    }
-}
-
-pub(super) fn single_line_text_events(events: &[TextInputEvent]) -> Vec<TextInputEvent> {
-    events
-        .iter()
-        .filter_map(|event| match event {
-            TextInputEvent::Commit(text) => {
-                let text = text.replace(['\r', '\n'], "");
-                (!text.is_empty()).then_some(TextInputEvent::Commit(text))
-            }
-            TextInputEvent::Composition { text, selection } => Some(TextInputEvent::Composition {
-                text: text.replace(['\r', '\n'], " "),
-                selection: *selection,
-            }),
-            TextInputEvent::CompositionStart => Some(TextInputEvent::CompositionStart),
-            TextInputEvent::CompositionEnd => Some(TextInputEvent::CompositionEnd),
-        })
-        .collect()
-}
-
-pub(super) fn text_events_for_text_field(
-    id: WidgetId,
-    input: &UiInput,
-    multiline: bool,
-) -> Vec<TextInputEvent> {
-    let mut events = if multiline {
-        input.text_events.clone()
-    } else {
-        single_line_text_events(&input.text_events)
-    };
-    events.extend(
-        input
-            .clipboard_text
-            .iter()
-            .filter(|clipboard| clipboard.target == id)
-            .filter_map(|clipboard| clipboard_text_event(&clipboard.text, multiline)),
-    );
-    events
-}
-
-pub(super) fn clipboard_text_event(text: &str, multiline: bool) -> Option<TextInputEvent> {
-    let text = if multiline {
-        text.replace("\r\n", "\n").replace('\r', "\n")
-    } else {
-        text.replace(['\r', '\n'], "")
-    };
-    (!text.is_empty()).then_some(TextInputEvent::Commit(text))
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ClipboardShortcut {
-    Copy,
-    Cut,
-    Paste,
-}
-
-pub(super) fn apply_clipboard_shortcuts(
-    id: WidgetId,
-    state: &mut TextEditState,
-    input: &UiInput,
-    platform_requests: &mut Vec<PlatformRequest>,
-) {
-    for event in &input.keyboard.events {
-        match clipboard_shortcut(event) {
-            Some(ClipboardShortcut::Copy) => {
-                if let Some(selected) = state.selected_text() {
-                    platform_requests.push(PlatformRequest::CopyToClipboard(selected.to_owned()));
-                }
-            }
-            Some(ClipboardShortcut::Cut) => {
-                if let Some(selected) = state.cut_selection() {
-                    platform_requests.push(PlatformRequest::CopyToClipboard(selected));
-                }
-            }
-            Some(ClipboardShortcut::Paste) => {
-                platform_requests.push(PlatformRequest::RequestClipboardText { target: id });
-            }
-            None => {}
-        }
-    }
-}
-
-fn clipboard_shortcut(event: &kinetik_ui_core::KeyEvent) -> Option<ClipboardShortcut> {
-    if event.state != KeyState::Pressed
-        || event.repeat
-        || event.modifiers.alt
-        || !(event.modifiers.ctrl || event.modifiers.super_key)
-    {
-        return None;
-    }
-
-    if let Key::Character(character) = &event.key {
-        match character.to_ascii_lowercase().as_str() {
-            "c" => return Some(ClipboardShortcut::Copy),
-            "x" => return Some(ClipboardShortcut::Cut),
-            "v" => return Some(ClipboardShortcut::Paste),
-            _ => {}
-        }
-    }
-
-    match event.physical_key {
-        kinetik_ui_core::PhysicalKey::KeyC => Some(ClipboardShortcut::Copy),
-        kinetik_ui_core::PhysicalKey::KeyX => Some(ClipboardShortcut::Cut),
-        kinetik_ui_core::PhysicalKey::KeyV => Some(ClipboardShortcut::Paste),
-        _ => None,
     }
 }
 

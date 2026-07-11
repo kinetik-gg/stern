@@ -2,8 +2,9 @@
 
 use kinetik_ui_core::{
     ClipId, DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity, FrameDiagnostic,
-    FrameWarning, LayerId, Primitive, Rect, SemanticNode, SemanticRole, SemanticTreeError,
-    Transform, UiTestHarness, WidgetId,
+    FrameWarning, InputStreamConflict, Key, KeyEvent, KeyState, LayerId, Modifiers, Primitive,
+    Rect, SemanticNode, SemanticRole, SemanticTreeError, TextInputEvent, Transform, UiInputEvent,
+    UiTestHarness, WidgetId,
 };
 
 fn assert_warning_diagnostic(warning: FrameWarning, expected: FrameDiagnostic) {
@@ -31,6 +32,41 @@ fn duplicate_widget_id_reports_identity_diagnostic() {
             severity: DiagnosticSeverity::Warning,
             category: DiagnosticCategory::Identity,
             location: DiagnosticLocation::Widget(id),
+        }]
+    );
+}
+
+#[test]
+fn mixed_input_authorities_report_one_structured_input_diagnostic() {
+    let mut harness = UiTestHarness::new();
+    harness
+        .input_mut()
+        .push_event(UiInputEvent::Key(KeyEvent::new(
+            Key::Character("a".to_owned()),
+            KeyState::Pressed,
+            Modifiers::default(),
+            false,
+        )));
+    harness
+        .input_mut()
+        .text_events
+        .push(TextInputEvent::Commit("legacy".to_owned()));
+
+    let ((), output) = harness.run_frame(|_| {});
+
+    assert_eq!(
+        output.warnings,
+        vec![FrameWarning::InputStreamConflict {
+            conflict: InputStreamConflict::TextEvents,
+        }]
+    );
+    assert_eq!(
+        output.diagnostics(),
+        vec![FrameDiagnostic {
+            code: "input.stream_projection_conflict",
+            severity: DiagnosticSeverity::Warning,
+            category: DiagnosticCategory::Input,
+            location: DiagnosticLocation::InputStream,
         }]
     );
 }

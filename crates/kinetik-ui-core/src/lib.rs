@@ -38,8 +38,9 @@ pub use debug::{
 pub use geometry::{Point, Rect, Size, Vec2};
 pub use identity::{DuplicateWidgetId, IdStack, WidgetId};
 pub use input::{
-    ClipboardText, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PhysicalKey,
-    PointerButtonState, PointerInput, TextInputEvent, TextRange, UiInput,
+    ClipboardText, InputStreamConflict, InputWheelDelta, Key, KeyEvent, KeyState, KeyboardInput,
+    Modifiers, MouseButton, PhysicalKey, PointerButtonState, PointerInput, TextInputEvent,
+    TextRange, UiInput, UiInputEvent,
 };
 pub use interaction::{
     DropTargetResponse, InteractionState, Response, ScrollResponse, clamp_scroll_offset,

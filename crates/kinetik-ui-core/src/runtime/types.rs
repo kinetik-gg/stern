@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::debug::{DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity, FrameDiagnostic};
-use crate::input::UiInput;
+use crate::input::{InputStreamConflict, UiInput};
 use crate::render::{ClipId, LayerId};
 use crate::{PhysicalSize, Rect, ScaleFactor, SemanticTreeError, Size, WidgetId};
 
@@ -169,6 +169,11 @@ pub enum PlatformRequest {
 /// Runtime warning detected while finalizing a UI frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrameWarning {
+    /// Canonical input events conflict with their compatibility projections.
+    InputStreamConflict {
+        /// First mismatch in the deterministic projection validation order.
+        conflict: InputStreamConflict,
+    },
     /// The same widget ID was registered more than once in one frame.
     DuplicateWidgetId {
         /// Duplicated widget identity.
@@ -213,6 +218,12 @@ impl FrameWarning {
     #[must_use]
     pub const fn diagnostic(&self) -> FrameDiagnostic {
         match *self {
+            Self::InputStreamConflict { .. } => FrameDiagnostic {
+                code: "input.stream_projection_conflict",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::Input,
+                location: DiagnosticLocation::InputStream,
+            },
             Self::DuplicateWidgetId { id } => FrameDiagnostic {
                 code: "identity.duplicate_widget_id",
                 severity: DiagnosticSeverity::Warning,

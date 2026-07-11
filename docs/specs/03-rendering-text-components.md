@@ -165,6 +165,25 @@ password/masked later if needed
 
 Text field undo should be local to text editing and should not conflict with application-level undo unless the application explicitly bridges them.
 
+Production text fields consume one canonical ordered input stream through the
+current text-input owner. Key edit and shortcut commands run before hardware
+text carried by that key; clipboard copy/cut/paste requests and targeted paste
+results remain at their event positions. Repeated widget evaluation cannot
+apply the frame twice, and a mixed canonical/legacy projection conflict applies
+no editing input.
+
+Pressed and repeated hardware text may insert outside active preedit; releases,
+control strings, navigation/deletion keys, Tab, Escape, and Ctrl/Super commands
+do not. Ctrl+Alt AltGr output, Alt/Option output, and multi-character dead-key
+output remain eligible. Single-line fields remove line breaks and other control
+text. Multiline Enter with empty modifiers inserts exactly one newline at the
+key's stream position and ignores Winit's carriage-return hardware text.
+
+IME availability stays separate from composition. Preedit drives composition
+start/update/end, commits insert once, and ordered focus loss clears composition
+and stops all later editing for that frame. Separate text/key slice methods are
+compatibility helpers only because they cannot recover event interleaving.
+
 ## 18. Styling And Theme Model
 
 Styling uses tokens, semantic roles, and component recipes.

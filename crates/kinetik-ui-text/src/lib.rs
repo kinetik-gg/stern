@@ -13,7 +13,7 @@ mod style;
 mod undo;
 
 pub use cache::TextLayoutCache;
-pub use edit::TextEditState;
+pub use edit::{OrderedTextInputResult, TextEditMode, TextEditState};
 pub use engine::CosmicTextEngine;
 pub use layout::{ShapedGlyph, ShapedGlyphRun, ShapedTextLayout, ShapedTextLine, TextLayout};
 pub use selection::{TextComposition, TextSelection};

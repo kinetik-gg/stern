@@ -312,6 +312,7 @@ fn path_field_clipboard_routing_targets_composed_text_field_without_opening() {
     assert!(!copy.browse_requested);
     assert!(!copy.open_requested);
 
+    memory.begin_frame();
     let paste = path_field(
         id,
         rect,
@@ -334,6 +335,7 @@ fn path_field_clipboard_routing_targets_composed_text_field_without_opening() {
     assert!(!paste.browse_requested);
     assert!(!paste.open_requested);
 
+    memory.begin_frame();
     let mut clipboard_input = double_released_at(8.0, 8.0);
     clipboard_input.clipboard_text = vec![
         kinetik_ui_core::ClipboardText::new(other, "wrong"),

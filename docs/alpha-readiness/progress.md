@@ -484,6 +484,80 @@ Presence deliberately does not define async incarnation, cancellation-token,
 or tombstone policy; those remain `ASYNC-01`. Ordered platform input and shell
 execution remain Stage 3 work under the now-current authorization.
 
+## Stage 3: Ordered Input And Shell
+
+Status: Current. `IN-01` implementation, bounded remedies, independent audit,
+and the complete local CI-equivalent gate are accepted on
+`agent/in01-ordered-platform-input`; PR CI and squash merge remain pending.
+`IN-02` and `IN-03` remain queued.
+
+### `IN-01`: ordered platform input
+
+#### Changed files
+
+- `apps/kinetik-ui-showcase/src/{live,app/runtime/lifecycle}.rs`
+- `crates/kinetik-ui-core/src/{debug,input,lib,memory,test_harness}.rs`
+- `crates/kinetik-ui-core/src/runtime/{spatial,types,ui}.rs`
+- `crates/kinetik-ui-core/tests/{diagnostic_conformance,harness,input_ordering_conformance,runtime_spatial_conformance}.rs`
+- `crates/kinetik-ui-text/src/{edit,lib,tests}.rs`
+- `crates/kinetik-ui-winit/src/{input,tests}.rs`
+- `crates/kinetik-ui-widgets/src/components.rs`
+- `crates/kinetik-ui-widgets/src/components/numeric_inputs.rs`
+- `crates/kinetik-ui-widgets/src/components/{text_fields,text_support}.rs`
+- `crates/kinetik-ui-widgets/tests/text_field_conformance.rs`
+- `crates/kinetik-ui-widgets/tests/text_field_conformance/{focus_and_clipboard,multiline_navigation,numeric_and_scrub,ordered_input,wrappers_and_path}.rs`
+- `docs/specs/{01-foundations,03-rendering-text-components}.md`
+- `docs/alpha-readiness/{03-input-and-shell,progress}.md`
+
+#### Reasoning and contract decisions
+
+Added one public ordered `UiInputEvent` stream whose official producers update
+legacy projections atomically. Mixed canonical/direct mutation diagnoses once
+and fails text editing closed, while an empty stream retains deterministic
+legacy text-domain ordering. Winit now retains event-time pointer positions,
+typed wheel provenance, ordinary hardware key text, and preedit-driven IME
+composition separately from IME availability.
+
+Text editing applies ordered commands, hardware text, IME, clipboard results,
+and focus loss once through a frame-local owner claim. Spatial scopes transform
+each pointer event independently, retain line units, transform pixel vectors,
+and preserve only required release cleanup. Existing pointer primitives remain
+snapshot-driven by design; `IN-03` owns event-aware pointer policy.
+
+The initial critic found mixed-mode projection validation, scoped pointer
+localization, numeric-wrapper rescanning, event-position evidence, and active
+preedit insertion gaps. A depth-one remedy closed those findings. Re-review
+then found one combined text-plus-pointer conflict that could still heal a
+pointer snapshot; the depth-two remedy preserved canonical pointer evidence for
+every root conflict, and the final independent re-review passed with no finding.
+
+#### Tests run and results
+
+- Initial focused packet commands: 231/231 passed across core input,
+  diagnostics, spatial, focus/keyboard, harness, text, Winit, widget text
+  fields, and the accepted RT-02/RT-03 regressions.
+- Depth-one remedy commands passed 160/160 focused tests; the depth-two remedy
+  passed 41/41 focused tests.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- Warning-denied all-target/all-feature workspace Clippy passed.
+- All-feature workspace tests passed 1,462/1,462; the workspace build and
+  example checks passed.
+- Warning-denied all-feature workspace documentation passed for all eight
+  packages.
+- Showcase all-feature compilation passed with live `KeyEvent.text` forwarding.
+- Final independent critic passed at depth two with zero P0, P1, or P2 findings.
+
+#### Remaining risks and deferred findings
+
+Adding `UiInput.events` is source-breaking for unknown external callers that use
+exhaustive public struct literals; in-repository literals were inventoried and
+migrated, and the facade remains provisional Experimental. Empty-stream legacy
+input cannot recover pointer order. The compatibility `wheel_delta` still mixes
+line and pixel units, and press/drag/click primitives still consume final
+snapshots until `IN-03`. Shell request execution remains `IN-02`. Independent
+critic and the complete local gate are accepted; PR CI and squash merge are not
+yet claimed by this implementation record.
+
 ## Packet Completion Template
 
 Every packet review must use these exact headings and include commands plus concrete results:

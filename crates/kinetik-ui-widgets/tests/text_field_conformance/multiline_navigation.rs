@@ -134,6 +134,7 @@ fn multi_line_text_field_moves_vertically_between_explicit_lines() {
     assert_eq!(state.text, "one\ntwo\nthree");
     assert_eq!(state.caret(), 2);
 
+    memory.begin_frame();
     let down_input = UiInput {
         keyboard: key_input(Key::ArrowDown, Modifiers::default()),
         ..UiInput::default()
@@ -207,6 +208,7 @@ fn multi_line_text_field_home_end_are_line_local() {
     assert!(!home.changed);
     assert_eq!(state.caret(), 4);
 
+    memory.begin_frame();
     state.set_caret(5);
     let end_input = UiInput {
         keyboard: key_input(Key::End, Modifiers::default()),
@@ -251,6 +253,7 @@ fn multi_line_text_field_shift_home_end_extend_to_current_line_edges() {
     assert!(!shift_home.changed);
     assert_eq!(state.selection, TextSelection::new(5, 4));
 
+    memory.begin_frame();
     state.set_caret(5);
     let shift_end_input = UiInput {
         keyboard: key_input(Key::End, shift()),

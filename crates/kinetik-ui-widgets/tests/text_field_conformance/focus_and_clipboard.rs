@@ -209,6 +209,7 @@ fn text_field_clipboard_requests_are_targeted_and_targeted_text_is_applied() {
         matches!(request, PlatformRequest::CopyToClipboard(text) if text == "bc")
     }));
 
+    memory.begin_frame();
     let paste_input = UiInput {
         keyboard: KeyboardInput {
             modifiers: ctrl(),
@@ -229,6 +230,7 @@ fn text_field_clipboard_requests_are_targeted_and_targeted_text_is_applied() {
         matches!(request, PlatformRequest::RequestClipboardText { target } if *target == id)
     }));
 
+    memory.begin_frame();
     let clipboard_input = UiInput {
         clipboard_text: vec![
             kinetik_ui_core::ClipboardText::new(other, "wrong"),
@@ -283,6 +285,7 @@ fn focused_text_field_handles_physical_clipboard_shortcuts_with_mismatched_logic
         matches!(request, PlatformRequest::CopyToClipboard(text) if text == "bc")
     }));
 
+    memory.begin_frame();
     let mut cut_state = TextEditState::new("abcd");
     cut_state.set_selection(TextSelection::new(1, 3));
     let cut_input = UiInput {
@@ -310,6 +313,7 @@ fn focused_text_field_handles_physical_clipboard_shortcuts_with_mismatched_logic
     assert!(cut_state.undo());
     assert_eq!(cut_state.text, "abcd");
 
+    memory.begin_frame();
     let mut paste_state = TextEditState::new("abcd");
     paste_state.set_caret(2);
     let paste_input = UiInput {
@@ -434,6 +438,7 @@ fn focused_text_field_handles_backspace_delete_and_replacement() {
     assert_eq!(backspace_state.text, "az");
     assert_eq!(backspace_state.caret(), 1);
 
+    memory.begin_frame();
     let mut delete_state = TextEditState::new("aéz");
     delete_state.set_caret(1);
     let delete_input = UiInput {
@@ -453,6 +458,7 @@ fn focused_text_field_handles_backspace_delete_and_replacement() {
     assert_eq!(delete_state.text, "az");
     assert_eq!(delete_state.caret(), 1);
 
+    memory.begin_frame();
     let mut replace_state = TextEditState::new("abcd");
     replace_state.set_selection(TextSelection::new(3, 1));
     let replace_input = UiInput {

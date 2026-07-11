@@ -1,5 +1,7 @@
 //! Platform-independent input snapshots.
 
+use std::collections::HashSet;
+
 use crate::WidgetId;
 use crate::geometry::{Point, Vec2};
 
@@ -172,7 +174,22 @@ impl PointerInput {
             .any(|(number, state)| *number == RELEASE_ALL_CANCEL_BUTTON && state.released)
     }
 
-    fn mark_release_all_cancelled(&mut self) {
+    pub(crate) fn record_button_edge(&mut self, button: MouseButton, down: bool) {
+        let state = match button {
+            MouseButton::Primary => &mut self.primary,
+            MouseButton::Secondary => &mut self.secondary,
+            MouseButton::Middle => &mut self.middle,
+            MouseButton::Other(RELEASE_ALL_CANCEL_BUTTON) => return,
+            MouseButton::Other(number) => self.other_button_mut(number),
+        };
+        if down {
+            state.pressed = true;
+        } else {
+            state.released = true;
+        }
+    }
+
+    pub(crate) fn mark_release_all_cancelled(&mut self) {
         if let Some((_, state)) = self
             .other_buttons
             .iter_mut()
@@ -445,6 +462,11 @@ pub struct KeyEvent {
     pub modifiers: Modifiers,
     /// Whether this event is an auto-repeat.
     pub repeat: bool,
+    /// Text produced by this hardware key after keyboard-layout processing.
+    ///
+    /// IME commits use [`TextInputEvent::Commit`] instead. Platform adapters
+    /// suppress this field while an IME preedit is active.
+    pub text: Option<String>,
 }
 
 impl KeyEvent {
@@ -457,6 +479,7 @@ impl KeyEvent {
             state,
             modifiers,
             repeat,
+            text: None,
         }
     }
 
@@ -475,7 +498,16 @@ impl KeyEvent {
             state,
             modifiers,
             repeat,
+            text: None,
         }
+    }
+
+    /// Adds layout-produced hardware text to this keyboard event.
+    #[must_use]
+    pub fn with_text(mut self, text: impl Into<String>) -> Self {
+        let text = text.into();
+        self.text = (!text.is_empty()).then_some(text);
+        self
     }
 }
 
@@ -543,9 +575,96 @@ impl ClipboardText {
     }
 }
 
+/// Provenance-preserving scroll delta carried by an ordered input event.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InputWheelDelta {
+    /// Device-independent wheel lines.
+    Lines(Vec2),
+    /// Logical pixel delta.
+    Pixels(Vec2),
+}
+
+impl InputWheelDelta {
+    /// Returns the underlying two-dimensional delta.
+    #[must_use]
+    pub const fn value(self) -> Vec2 {
+        match self {
+            Self::Lines(delta) | Self::Pixels(delta) => delta,
+        }
+    }
+}
+
+/// One normalized platform event in event-time order.
+#[derive(Debug, Clone, PartialEq)]
+pub enum UiInputEvent {
+    /// Pointer moved to an event-time position.
+    PointerMoved {
+        /// Position in the input's current logical coordinate scope.
+        position: Point,
+        /// Movement since the preceding platform pointer position.
+        delta: Vec2,
+    },
+    /// Pointer left the window or current input surface.
+    PointerLeft,
+    /// Pointer button transition at the event-time pointer position.
+    PointerButton {
+        /// Button that changed state.
+        button: MouseButton,
+        /// Whether the button became down.
+        down: bool,
+        /// Platform-provided consecutive click count.
+        click_count: u8,
+        /// Event-time pointer position, when known.
+        position: Option<Point>,
+    },
+    /// Cancel every retained pointer button at an event-time position.
+    PointerReleaseAll {
+        /// Event-time pointer position, when known.
+        position: Option<Point>,
+    },
+    /// Scroll event with retained line or pixel provenance.
+    Wheel {
+        /// Typed scroll delta.
+        delta: InputWheelDelta,
+        /// Event-time pointer position, when known.
+        position: Option<Point>,
+    },
+    /// Keyboard modifiers changed.
+    ModifiersChanged(Modifiers),
+    /// Physical/logical keyboard event, including optional hardware text.
+    Key(KeyEvent),
+    /// IME or committed text event.
+    Text(TextInputEvent),
+    /// Targeted clipboard result.
+    ClipboardText(ClipboardText),
+    /// Platform IME availability changed.
+    ImeEnabled(bool),
+    /// Window focus changed.
+    WindowFocusChanged(bool),
+}
+
+/// Deterministic mismatch between the canonical stream and legacy projections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum InputStreamConflict {
+    /// Pointer movement, button edge, click, or wheel projection differs.
+    Pointer,
+    /// Keyboard-event projection differs.
+    KeyboardEvents,
+    /// Text-event projection differs.
+    TextEvents,
+    /// Targeted clipboard projection differs.
+    ClipboardText,
+    /// Retained keyboard modifier projection differs.
+    Modifiers,
+    /// Final focus state contradicts the ordered focus stream.
+    WindowFocus,
+}
+
 /// Complete normalized input snapshot for one UI frame.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UiInput {
+    /// Authoritative ordered event stream for official input producers.
+    pub events: Vec<UiInputEvent>,
     /// Pointer input.
     pub pointer: PointerInput,
     /// Keyboard input.
@@ -561,6 +680,7 @@ pub struct UiInput {
 impl Default for UiInput {
     fn default() -> Self {
         Self {
+            events: Vec::new(),
             pointer: PointerInput::default(),
             keyboard: KeyboardInput::default(),
             text_events: Vec::new(),
@@ -571,8 +691,63 @@ impl Default for UiInput {
 }
 
 impl UiInput {
+    /// Appends one canonical event and updates its legacy snapshot projection.
+    pub fn push_event(&mut self, event: UiInputEvent) {
+        match &event {
+            UiInputEvent::PointerMoved { position, delta } => {
+                self.pointer.position = Some(*position);
+                self.pointer.delta = add_vectors(self.pointer.delta, *delta);
+            }
+            UiInputEvent::PointerLeft => {
+                self.pointer.position = None;
+                self.pointer.delta = Vec2::ZERO;
+            }
+            UiInputEvent::PointerButton {
+                button,
+                down,
+                click_count,
+                position,
+            } => {
+                if let Some(position) = position {
+                    self.pointer.position = Some(*position);
+                }
+                self.pointer.apply_button_transition(*button, *down);
+                self.pointer.click_count = *click_count;
+            }
+            UiInputEvent::PointerReleaseAll { position } => {
+                if let Some(position) = position {
+                    self.pointer.position = Some(*position);
+                }
+                self.pointer.release_all_buttons();
+            }
+            UiInputEvent::Wheel { delta, position } => {
+                if let Some(position) = position {
+                    self.pointer.position = Some(*position);
+                }
+                self.pointer.wheel_delta = add_vectors(self.pointer.wheel_delta, delta.value());
+            }
+            UiInputEvent::ModifiersChanged(modifiers) => {
+                self.keyboard.modifiers = *modifiers;
+            }
+            UiInputEvent::Key(event) => {
+                self.keyboard.modifiers = event.modifiers;
+                self.keyboard.events.push(event.clone());
+            }
+            UiInputEvent::Text(event) => self.text_events.push(event.clone()),
+            UiInputEvent::ClipboardText(clipboard) => {
+                self.clipboard_text.push(clipboard.clone());
+            }
+            UiInputEvent::ImeEnabled(_) => {}
+            UiInputEvent::WindowFocusChanged(focused) => {
+                self.window_focused = *focused;
+            }
+        }
+        self.events.push(event);
+    }
+
     /// Clears frame-local input while preserving retained down/focus state.
     pub fn begin_frame(&mut self) {
+        self.events.clear();
         self.pointer.begin_frame();
         self.keyboard.events.clear();
         self.text_events.clear();
@@ -581,8 +756,286 @@ impl UiInput {
 
     /// Releases all pointer buttons, intended for focus loss or input cancellation.
     pub fn release_pointer_buttons(&mut self) {
-        self.pointer.release_all_buttons();
+        self.push_event(UiInputEvent::PointerReleaseAll {
+            position: self.pointer.position,
+        });
     }
+
+    /// Validates a non-empty canonical stream against all transient projections.
+    ///
+    /// Empty streams are the documented legacy snapshot compatibility path.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first mismatch in a stable projection order.
+    pub fn validate_event_stream(&self) -> Result<(), InputStreamConflict> {
+        if self.events.is_empty() {
+            return Ok(());
+        }
+
+        self.validate_text_event_stream()?;
+        if !pointer_projection_matches(self) {
+            return Err(InputStreamConflict::Pointer);
+        }
+
+        Ok(())
+    }
+
+    fn validate_text_event_stream(&self) -> Result<(), InputStreamConflict> {
+        debug_assert!(!self.events.is_empty());
+
+        let key_events = self
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                UiInputEvent::Key(event) => Some(event.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if self.keyboard.events != key_events {
+            return Err(InputStreamConflict::KeyboardEvents);
+        }
+
+        let text_events = self
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                UiInputEvent::Text(event) => Some(event.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if self.text_events != text_events {
+            return Err(InputStreamConflict::TextEvents);
+        }
+
+        let clipboard_text = self
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                UiInputEvent::ClipboardText(clipboard) => Some(clipboard.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if self.clipboard_text != clipboard_text {
+            return Err(InputStreamConflict::ClipboardText);
+        }
+
+        let mut projected_modifiers = None;
+        let mut projected_focus = None;
+        for event in &self.events {
+            match event {
+                UiInputEvent::ModifiersChanged(modifiers) => {
+                    projected_modifiers = Some(*modifiers);
+                }
+                UiInputEvent::Key(event) => projected_modifiers = Some(event.modifiers),
+                UiInputEvent::WindowFocusChanged(focused) => projected_focus = Some(*focused),
+                _ => {}
+            }
+        }
+        if projected_modifiers.is_some_and(|modifiers| modifiers != self.keyboard.modifiers) {
+            return Err(InputStreamConflict::Modifiers);
+        }
+        if projected_focus.map_or(!self.window_focused, |focused| {
+            focused != self.window_focused
+        }) {
+            return Err(InputStreamConflict::WindowFocus);
+        }
+
+        Ok(())
+    }
+
+    /// Returns the canonical stream or a deterministic legacy text-domain synthesis.
+    ///
+    /// Legacy synthesis preserves the pre-stream component order: focus-loss
+    /// guard, clipboard shortcuts, text/IME events, targeted clipboard results,
+    /// then remaining keyboard events. Pointer ordering cannot be recovered from
+    /// an empty canonical stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns a projection conflict for inconsistent mixed-mode input.
+    pub fn effective_text_events(&self) -> Result<Vec<UiInputEvent>, InputStreamConflict> {
+        if !self.events.is_empty() {
+            self.validate_event_stream()?;
+            return Ok(self.events.clone());
+        }
+
+        Ok(self.legacy_text_events())
+    }
+
+    pub(crate) fn effective_scoped_text_events(
+        &self,
+    ) -> Result<Vec<UiInputEvent>, InputStreamConflict> {
+        if !self.events.is_empty() {
+            self.validate_text_event_stream()?;
+            return Ok(self.events.clone());
+        }
+
+        Ok(self.legacy_text_events())
+    }
+
+    fn legacy_text_events(&self) -> Vec<UiInputEvent> {
+        let mut events = Vec::new();
+        if !self.window_focused {
+            events.push(UiInputEvent::WindowFocusChanged(false));
+        }
+        events.extend(
+            self.keyboard
+                .events
+                .iter()
+                .filter(|event| is_legacy_clipboard_shortcut(event))
+                .cloned()
+                .map(UiInputEvent::Key),
+        );
+        events.extend(self.text_events.iter().cloned().map(UiInputEvent::Text));
+        events.extend(
+            self.clipboard_text
+                .iter()
+                .cloned()
+                .map(UiInputEvent::ClipboardText),
+        );
+        events.extend(
+            self.keyboard
+                .events
+                .iter()
+                .filter(|event| !is_legacy_clipboard_shortcut(event))
+                .cloned()
+                .map(UiInputEvent::Key),
+        );
+        events
+    }
+}
+
+fn add_vectors(left: Vec2, right: Vec2) -> Vec2 {
+    Vec2::new(left.x + right.x, left.y + right.y)
+}
+
+fn pointer_projection_matches(input: &UiInput) -> bool {
+    let mut delta = Vec2::ZERO;
+    let mut wheel = Vec2::ZERO;
+    let mut click_count = 0;
+    let mut saw_release_all = false;
+    let mut buttons = HashSet::new();
+    let mut position_evidence = None;
+
+    for event in &input.events {
+        match event {
+            UiInputEvent::PointerMoved {
+                position,
+                delta: event_delta,
+            } => {
+                position_evidence = Some(Some(*position));
+                delta = add_vectors(delta, *event_delta);
+            }
+            UiInputEvent::PointerLeft => {
+                position_evidence = Some(None);
+                delta = Vec2::ZERO;
+            }
+            UiInputEvent::PointerButton {
+                button,
+                click_count: event_click_count,
+                position,
+                ..
+            } => {
+                if let Some(position) = position {
+                    position_evidence = Some(Some(*position));
+                }
+                buttons.insert(*button);
+                click_count = *event_click_count;
+            }
+            UiInputEvent::PointerReleaseAll { position } => {
+                if let Some(position) = position {
+                    position_evidence = Some(Some(*position));
+                }
+                saw_release_all = true;
+            }
+            UiInputEvent::Wheel {
+                delta: event_delta,
+                position,
+            } => {
+                if let Some(position) = position {
+                    position_evidence = Some(Some(*position));
+                }
+                wheel = add_vectors(wheel, event_delta.value());
+            }
+            _ => {}
+        }
+    }
+
+    if input.pointer.delta != delta
+        || input.pointer.wheel_delta != wheel
+        || input.pointer.click_count != click_count
+        || input.pointer.release_all_cancelled() != saw_release_all
+        || position_evidence.is_some_and(|position| input.pointer.position != position)
+    {
+        return false;
+    }
+
+    buttons.extend(
+        input
+            .pointer
+            .other_buttons
+            .iter()
+            .filter_map(|(number, _)| {
+                (*number != RELEASE_ALL_CANCEL_BUTTON).then_some(MouseButton::Other(*number))
+            }),
+    );
+    buttons.extend([
+        MouseButton::Primary,
+        MouseButton::Secondary,
+        MouseButton::Middle,
+    ]);
+    buttons
+        .into_iter()
+        .all(|button| button_projection_matches(input, button))
+}
+
+fn button_projection_matches(input: &UiInput, button: MouseButton) -> bool {
+    let state = input.pointer.button(button);
+    let mut pressed = false;
+    let mut released = false;
+    let mut final_down = None;
+    for event in &input.events {
+        match event {
+            UiInputEvent::PointerButton {
+                button: event_button,
+                down,
+                ..
+            } if *event_button == button => {
+                pressed |= *down;
+                released |= !*down;
+                final_down = Some(*down);
+            }
+            UiInputEvent::PointerReleaseAll { .. } => {
+                final_down = Some(false);
+            }
+            _ => {}
+        }
+    }
+
+    state.pressed == pressed
+        && (!state.released || released || input.pointer.release_all_cancelled())
+        && (!released || state.released)
+        && final_down.is_none_or(|down| state.down == down)
+}
+
+fn is_legacy_clipboard_shortcut(event: &KeyEvent) -> bool {
+    if event.state != KeyState::Pressed
+        || event.repeat
+        || event.modifiers.alt
+        || !(event.modifiers.ctrl || event.modifiers.super_key)
+    {
+        return false;
+    }
+    if let Key::Character(character) = &event.key
+        && matches!(character.to_ascii_lowercase().as_str(), "c" | "x" | "v")
+    {
+        return true;
+    }
+    matches!(
+        event.physical_key,
+        PhysicalKey::KeyC | PhysicalKey::KeyX | PhysicalKey::KeyV
+    )
 }
 
 #[cfg(test)]
@@ -735,6 +1188,7 @@ mod tests {
     #[test]
     fn ui_input_begin_frame_clears_transient_events() {
         let mut input = UiInput {
+            events: Vec::new(),
             pointer: PointerInput {
                 position: Some(Point::new(1.0, 1.0)),
                 delta: Vec2::new(2.0, 3.0),

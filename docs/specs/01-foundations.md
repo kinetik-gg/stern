@@ -355,9 +355,11 @@ The renderer receives logical primitives plus `scale_factor`, then draws scale-a
 Render transform and clip scopes also define the runtime coordinate scope.
 Transforms compose in stream order as parent then child. Widget rectangles,
 `Response::rect`, and all public `UiInput` accessors use current-scope logical
-coordinates. Pointer positions use the complete inverse affine transform;
-pointer movement and wheel vectors use its inverse linear portion. Semantic,
-debug, and IME rectangles are exported in screen-logical coordinates.
+coordinates. Every ordered pointer event is localized from its own event-time
+position. Pointer positions use the complete inverse affine transform; movement
+and pixel-wheel vectors use its inverse linear portion, while line-wheel values
+remain device-independent lines. Semantic, debug, and IME rectangles are
+exported in screen-logical coordinates.
 
 Effective clipping preserves transformed clip regions rather than reducing
 them to screen-space bounding boxes. Input outside any active clip cannot
@@ -407,15 +409,48 @@ Recommended core input shape:
 
 ```rust
 struct UiInput {
+    events: Vec<UiInputEvent>,
     pointer: PointerInput,
     keyboard: KeyboardInput,
     text_events: Vec<TextInputEvent>,
+    clipboard_text: Vec<ClipboardText>,
     window_focused: bool,
-    time: TimeInfo,
 }
 ```
 
-Input should be stored as a snapshot for the current frame. Widgets should query current input and prior `UiMemory` to produce responses.
+`UiInput.events` is the authoritative sequence for Winit, the test harness, and
+other official producers. It records pointer movement, leave, button and
+release-all transitions with event-time positions; typed line/pixel wheel
+events; modifier and key events; text/IME events; targeted clipboard results;
+IME availability; and window focus. `KeyEvent.text` carries layout-produced
+hardware text. IME commits remain `TextInputEvent::Commit`, so adapters never
+deduplicate by comparing strings.
+
+`UiInput::push_event` appends exactly once and updates the compatibility
+snapshots in the same call. `begin_frame` clears the ordered stream and all
+transient projections together while preserving retained button-down,
+modifier, pointer-position, and focus state. An empty stream is the explicit
+legacy snapshot path; text consumption synthesizes the historical text-domain
+order because legacy pointer order cannot be recovered. A non-empty stream
+whose key, text, clipboard, focus, modifier, or pointer transient projections
+were mutated inconsistently emits a structured frame warning and fails closed
+for text editing. Root projection validation is recorded once before spatial
+localization. Scoped text validation rechecks only unchanged non-pointer
+projections, so legitimate local pointer coordinates do not block editing;
+root conflicts remain out-of-band and preserve the canonical pointer snapshot
+instead of healing from an inconsistent compatibility projection.
+
+Winit IME Enabled/Disabled events describe availability, not active
+composition. Non-empty preedit starts or updates composition, empty preedit
+ends it, and commit ends active preedit before inserting. Hardware key text is
+suppressed only while preedit is active. Focus loss ends composition, records
+pointer release-all and leave, then records focus loss; later editing events in
+that frame remain observable but do not mutate text.
+
+Input therefore exposes both an ordered canonical stream and compatibility
+snapshots for the current frame. Existing pointer primitives continue to query
+the final snapshot until the separate event-aware pointer-transition packet;
+text widgets consume the ordered stream.
 
 The input model must support pointer capture. During a drag, the active widget
 continues receiving drag updates after leaving its original rectangle while it
@@ -522,6 +557,11 @@ struct UiMemory {
 ```
 
 Widgets should access memory through controlled runtime APIs rather than directly mutating global structures.
+
+Only the current `text_input_owner` may claim a frame's ordered editing stream,
+and only one claim succeeds. Ownership handoff before the claim routes the
+stream to the new owner; handoff after a claim cannot replay it. The transient
+claim clears at frame start alongside other frame-local memory.
 
 Owner reconciliation clears only runtime ownership handles. It must not prune
 application documents, values, selections, domain drag state, scroll offsets,

@@ -1,5 +1,6 @@
 use crate::{
-    ClipId, LayerId, Point, PointerButtonState, Primitive, Rect, Transform, UiInput, Vec2,
+    ClipId, InputWheelDelta, LayerId, MouseButton, Point, PointerButtonState, Primitive, Rect,
+    Transform, UiInput, UiInputEvent, Vec2,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -32,6 +33,7 @@ impl SpatialStack {
         root: &UiInput,
         preserve_primary_release: bool,
         preserve_secondary_release: bool,
+        root_input_conflict: bool,
     ) -> UiInput {
         let mut input = root.clone();
         let local_position = root.pointer.position.and_then(|position| {
@@ -71,7 +73,151 @@ impl SpatialStack {
             input.pointer.other_buttons.clear();
             input.pointer.click_count = 0;
         }
+
+        if root.events.is_empty() {
+            return input;
+        }
+
+        input.events = root
+            .events
+            .iter()
+            .filter_map(|event| {
+                self.localize_event(event, preserve_primary_release, preserve_secondary_release)
+            })
+            .collect();
+        if root_input_conflict {
+            return input;
+        }
+
+        let release_snapshot = input.pointer.clone();
+        input.pointer.begin_frame();
+        let mut saw_release_all = false;
+        for event in &input.events {
+            match event {
+                UiInputEvent::PointerMoved { delta, .. } => {
+                    input.pointer.delta = add_vectors(input.pointer.delta, *delta);
+                }
+                UiInputEvent::PointerLeft => input.pointer.delta = Vec2::ZERO,
+                UiInputEvent::PointerButton {
+                    button,
+                    down,
+                    click_count,
+                    ..
+                } => {
+                    input.pointer.record_button_edge(*button, *down);
+                    input.pointer.click_count = *click_count;
+                }
+                UiInputEvent::PointerReleaseAll { .. } => {
+                    saw_release_all = true;
+                    input.pointer.mark_release_all_cancelled();
+                }
+                UiInputEvent::Wheel { delta, .. } => {
+                    input.pointer.wheel_delta =
+                        add_vectors(input.pointer.wheel_delta, delta.value());
+                }
+                _ => {}
+            }
+        }
+        if saw_release_all {
+            restore_release_edges(
+                &mut input.pointer,
+                &release_snapshot,
+                preserve_primary_release,
+                preserve_secondary_release,
+            );
+        }
         input
+    }
+
+    fn localize_event(
+        &self,
+        event: &UiInputEvent,
+        preserve_primary_release: bool,
+        preserve_secondary_release: bool,
+    ) -> Option<UiInputEvent> {
+        match event {
+            UiInputEvent::PointerMoved { position, delta } => {
+                let position = self.localize_ordinary_position(*position)?;
+                let delta = self.transform_event_vector(*delta)?;
+                Some(UiInputEvent::PointerMoved { position, delta })
+            }
+            UiInputEvent::PointerLeft => Some(UiInputEvent::PointerLeft),
+            UiInputEvent::PointerButton {
+                button,
+                down,
+                click_count,
+                position,
+            } => {
+                let ordinary = self.ordinary_event_allowed(*position);
+                let cleanup = !*down
+                    && ((*button == MouseButton::Primary && preserve_primary_release)
+                        || (*button == MouseButton::Secondary && preserve_secondary_release));
+                if !ordinary && !cleanup {
+                    return None;
+                }
+                Some(UiInputEvent::PointerButton {
+                    button: *button,
+                    down: *down,
+                    click_count: *click_count,
+                    position: self.transform_optional_position(*position),
+                })
+            }
+            UiInputEvent::PointerReleaseAll { position } => {
+                let cleanup = preserve_primary_release || preserve_secondary_release;
+                if !cleanup && !self.ordinary_event_allowed(*position) {
+                    return None;
+                }
+                Some(UiInputEvent::PointerReleaseAll {
+                    position: self.transform_optional_position(*position),
+                })
+            }
+            UiInputEvent::Wheel { delta, position } => {
+                if !self.ordinary_event_allowed(*position) {
+                    return None;
+                }
+                let delta = match *delta {
+                    InputWheelDelta::Lines(delta) => InputWheelDelta::Lines(delta),
+                    InputWheelDelta::Pixels(delta) => {
+                        InputWheelDelta::Pixels(self.transform_event_vector(delta)?)
+                    }
+                };
+                Some(UiInputEvent::Wheel {
+                    delta,
+                    position: self.transform_optional_position(*position),
+                })
+            }
+            event => Some(event.clone()),
+        }
+    }
+
+    fn ordinary_event_allowed(&self, position: Option<Point>) -> bool {
+        match position {
+            Some(position) => self.accepts_screen_point(position),
+            None => self.state.screen_to_local.is_some() && self.state.clips.is_empty(),
+        }
+    }
+
+    fn localize_ordinary_position(&self, position: Point) -> Option<Point> {
+        if !self.accepts_screen_point(position) {
+            return None;
+        }
+        self.transform_event_position(position)
+    }
+
+    fn transform_optional_position(&self, position: Option<Point>) -> Option<Point> {
+        position.and_then(|position| self.transform_event_position(position))
+    }
+
+    fn transform_event_position(&self, position: Point) -> Option<Point> {
+        let inverse = self.state.screen_to_local?;
+        let position = inverse.transform_point(position);
+        point_is_finite(position).then_some(position)
+    }
+
+    fn transform_event_vector(&self, vector: Vec2) -> Option<Vec2> {
+        self.state
+            .screen_to_local
+            .and_then(|inverse| transform_vector(inverse, vector))
     }
 
     pub(crate) fn project_rect(&self, rect: Rect) -> Option<Rect> {
@@ -184,6 +330,24 @@ impl SpatialStack {
 
 fn release_cleanup(state: PointerButtonState, preserve: bool) -> PointerButtonState {
     PointerButtonState::new(false, false, preserve && state.released)
+}
+
+fn add_vectors(left: Vec2, right: Vec2) -> Vec2 {
+    Vec2::new(left.x + right.x, left.y + right.y)
+}
+
+fn restore_release_edges(
+    pointer: &mut crate::PointerInput,
+    snapshot: &crate::PointerInput,
+    preserve_primary: bool,
+    preserve_secondary: bool,
+) {
+    if preserve_primary {
+        pointer.primary.released |= snapshot.primary.released;
+    }
+    if preserve_secondary {
+        pointer.secondary.released |= snapshot.secondary.released;
+    }
 }
 
 #[derive(Debug, Clone)]

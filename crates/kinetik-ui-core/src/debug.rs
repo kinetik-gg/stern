@@ -13,6 +13,8 @@ pub enum DiagnosticSeverity {
 /// Stable diagnostic grouping for downstream filtering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DiagnosticCategory {
+    /// Canonical input stream and compatibility projection issues.
+    Input,
     /// Widget identity and stable ID issues.
     Identity,
     /// Accessibility semantic tree validation issues.
@@ -24,6 +26,8 @@ pub enum DiagnosticCategory {
 /// Structured diagnostic source location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DiagnosticLocation {
+    /// The frame's canonical input stream.
+    InputStream,
     /// A widget identity.
     Widget(WidgetId),
     /// A clip primitive stack scope.

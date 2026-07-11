@@ -287,5 +287,7 @@ mod layout_selection_shortcuts;
 mod multiline_navigation;
 #[path = "text_field_conformance/numeric_and_scrub.rs"]
 mod numeric_and_scrub;
+#[path = "text_field_conformance/ordered_input.rs"]
+mod ordered_input;
 #[path = "text_field_conformance/wrappers_and_path.rs"]
 mod wrappers_and_path;

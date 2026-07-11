@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Authorized / Queued |
+| Status | In progress; `IN-01` accepted pending PR CI and squash merge |
 | Scope | Sequence-preserving input, platform request execution, and pointer normalization |
 | Impact / confidence | Critical / High (`IN-03` is High / High) |
 | Campaign prerequisite | Stage 2 gate; campaign authorization recorded |
@@ -19,6 +19,13 @@
 | `IN-01` | Preserve one ordered key/text/IME/pointer/focus/wheel stream and wire ordinary `KeyEvent.text` typing | Stage 2 gate | Critical / High | Root-owned contract |
 | `IN-02` | Execute clipboard, URL, cursor, IME, repaint, and async shell results with one-frame request ownership | `IN-01` | Critical / High | Root integration |
 | `IN-03` | Normalize line/pixel wheel, click counts, drag threshold, and drag-release click suppression | `IN-01`, `RT-02` | High / High | Root-owned while input contract is active |
+
+`IN-01` now defines one canonical ordered stream with compatibility projections,
+source-aware hardware text and preedit-driven IME behavior, one frame-local text
+claim, event-time pointer localization, and deterministic mixed-mode conflict
+diagnostics. Its depth-two remedy and independent re-review passed, as did the
+complete local CI-equivalent gate. Existing pointer primitives intentionally remain snapshot-driven;
+event-aware click, drag, and wheel policy stays in `IN-03`.
 
 ## Ownership And Overlap
 

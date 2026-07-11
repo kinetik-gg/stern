@@ -248,12 +248,13 @@ impl ApplicationHandler for LiveShowcase {
                 self.request_interactive_redraw();
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                self.input.keyboard_event_with_physical_key(
+                self.input.keyboard_event_with_physical_key_and_text(
                     &event.logical_key,
                     &event.physical_key,
                     event.state,
                     self.modifiers,
                     event.repeat,
+                    event.text.as_deref(),
                 );
                 self.request_interactive_redraw();
             }

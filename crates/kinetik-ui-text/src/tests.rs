@@ -4,12 +4,13 @@ use crate::boundary::{clamp_boundary, next_boundary, previous_boundary};
 use crate::fonts::INTER_FONTDB_FAMILY;
 use crate::{
     CosmicTextEngine, DEFAULT_FONT_FAMILY, DEFAULT_MONOSPACE_FONT_FAMILY, ShapedTextLayout,
-    TextComposition, TextEditState, TextLayoutCache, TextLayoutKey, TextLayoutStore, TextSelection,
-    TextStyle, fonts,
+    TextComposition, TextEditMode, TextEditState, TextLayoutCache, TextLayoutKey, TextLayoutStore,
+    TextSelection, TextStyle, fonts,
 };
 use cosmic_text::fontdb;
 use kinetik_ui_core::{
-    Key, KeyEvent, KeyState, Modifiers, TextInputEvent, TextLayoutId, TextRange,
+    ClipboardText, Key, KeyEvent, KeyState, Modifiers, PhysicalKey, PlatformRequest,
+    TextInputEvent, TextLayoutId, TextRange, UiInputEvent, WidgetId,
 };
 
 #[test]
@@ -1026,6 +1027,222 @@ fn undo_and_redo_preserve_repeated_selection_replacements() {
     assert!(state.redo());
     assert_eq!(state.text, "one two");
     assert!(!state.redo());
+}
+
+fn ordered_key(key: Key, text: Option<&str>, modifiers: Modifiers, repeat: bool) -> UiInputEvent {
+    let mut event = KeyEvent::with_physical_key(
+        key,
+        PhysicalKey::Unidentified,
+        KeyState::Pressed,
+        modifiers,
+        repeat,
+    );
+    if let Some(text) = text {
+        event = event.with_text(text);
+    }
+    UiInputEvent::Key(event)
+}
+
+#[test]
+fn ordered_backspace_then_text_differs_from_text_then_backspace() {
+    let target = WidgetId::from_key("field");
+    let backspace = ordered_key(Key::Backspace, None, Modifiers::default(), false);
+    let text = ordered_key(
+        Key::Character("b".to_owned()),
+        Some("b"),
+        Modifiers::default(),
+        false,
+    );
+
+    let mut delete_first = TextEditState::new("a");
+    let _ = delete_first.apply_ordered_input(
+        &[backspace.clone(), text.clone()],
+        target,
+        TextEditMode::SingleLine,
+    );
+    let mut text_first = TextEditState::new("a");
+    let _ = text_first.apply_ordered_input(&[text, backspace], target, TextEditMode::SingleLine);
+
+    assert_eq!(delete_first.text, "b");
+    assert_eq!(text_first.text, "a");
+}
+
+#[test]
+fn ordered_hardware_text_accepts_repeat_altgr_option_and_dead_key_output_once() {
+    let target = WidgetId::from_key("field");
+    let mut released = KeyEvent::new(
+        Key::Character("ignored".to_owned()),
+        KeyState::Released,
+        Modifiers::default(),
+        false,
+    )
+    .with_text("ignored");
+    released.physical_key = PhysicalKey::KeyZ;
+    let events = vec![
+        ordered_key(
+            Key::Character("a".to_owned()),
+            Some("a"),
+            Modifiers::default(),
+            false,
+        ),
+        ordered_key(Key::Space, Some(" "), Modifiers::default(), false),
+        ordered_key(
+            Key::Character("!".to_owned()),
+            Some("!"),
+            Modifiers::default(),
+            false,
+        ),
+        ordered_key(
+            Key::Character("a".to_owned()),
+            Some("a"),
+            Modifiers::default(),
+            true,
+        ),
+        ordered_key(
+            Key::Unidentified,
+            Some("e\u{301}"),
+            Modifiers::default(),
+            false,
+        ),
+        ordered_key(
+            Key::Unidentified,
+            Some("ø"),
+            Modifiers::new(false, false, true, false),
+            false,
+        ),
+        ordered_key(
+            Key::Unidentified,
+            Some("@"),
+            Modifiers::new(false, true, true, false),
+            false,
+        ),
+        UiInputEvent::Key(released),
+        ordered_key(Key::Tab, Some("\t"), Modifiers::default(), false),
+        ordered_key(
+            Key::Character("x".to_owned()),
+            Some("x"),
+            Modifiers::new(false, true, false, false),
+            false,
+        ),
+    ];
+    let mut state = TextEditState::new("");
+
+    let requests = state.apply_ordered_input(&events, target, TextEditMode::SingleLine);
+
+    assert_eq!(state.text, "a !ae\u{301}ø@");
+    assert!(requests.is_empty());
+}
+
+#[test]
+fn ordered_preedit_suppresses_hardware_text_until_ime_commit() {
+    let target = WidgetId::from_key("field");
+    let events = vec![
+        UiInputEvent::Text(TextInputEvent::CompositionStart),
+        UiInputEvent::Text(TextInputEvent::Composition {
+            text: "あ".to_owned(),
+            selection: None,
+        }),
+        ordered_key(
+            Key::Character("あ".to_owned()),
+            Some("あ"),
+            Modifiers::default(),
+            false,
+        ),
+        UiInputEvent::Text(TextInputEvent::CompositionEnd),
+        UiInputEvent::Text(TextInputEvent::Commit("あ".to_owned())),
+    ];
+    let mut state = TextEditState::new("");
+
+    let _ = state.apply_ordered_input(&events, target, TextEditMode::SingleLine);
+
+    assert_eq!(state.text, "あ");
+    assert_eq!(state.composition, None);
+}
+
+#[test]
+fn ordered_multiline_enter_inserts_once_at_key_position_and_ignores_carriage_text() {
+    let target = WidgetId::from_key("field");
+    let events = vec![
+        ordered_key(
+            Key::Character("a".to_owned()),
+            Some("a"),
+            Modifiers::default(),
+            false,
+        ),
+        ordered_key(Key::Enter, Some("\r"), Modifiers::default(), false),
+        ordered_key(
+            Key::Character("b".to_owned()),
+            Some("b"),
+            Modifiers::default(),
+            false,
+        ),
+    ];
+    let mut multiline = TextEditState::new("");
+    let mut single_line = TextEditState::new("");
+
+    let _ = multiline.apply_ordered_input(&events, target, TextEditMode::MultiLine);
+    let _ = single_line.apply_ordered_input(&events, target, TextEditMode::SingleLine);
+
+    assert_eq!(multiline.text, "a\nb");
+    assert_eq!(single_line.text, "ab");
+}
+
+#[test]
+fn ordered_focus_loss_keeps_earlier_text_ends_composition_and_ignores_later_input() {
+    let target = WidgetId::from_key("field");
+    let events = vec![
+        UiInputEvent::Text(TextInputEvent::CompositionStart),
+        UiInputEvent::Text(TextInputEvent::Composition {
+            text: "preedit".to_owned(),
+            selection: None,
+        }),
+        UiInputEvent::Text(TextInputEvent::Commit("before".to_owned())),
+        UiInputEvent::WindowFocusChanged(false),
+        ordered_key(
+            Key::Character("later".to_owned()),
+            Some("later"),
+            Modifiers::default(),
+            false,
+        ),
+        UiInputEvent::WindowFocusChanged(true),
+        UiInputEvent::Text(TextInputEvent::Commit("after".to_owned())),
+    ];
+    let mut state = TextEditState::new("");
+
+    let _ = state.apply_ordered_input(&events, target, TextEditMode::SingleLine);
+
+    assert_eq!(state.text, "before");
+    assert_eq!(state.composition, None);
+}
+
+#[test]
+fn ordered_clipboard_shortcuts_and_targeted_results_stay_at_stream_positions() {
+    let target = WidgetId::from_key("field");
+    let ctrl = Modifiers::new(false, true, false, false);
+    let mut state = TextEditState::new("abcd");
+    state.set_selection(TextSelection::new(1, 3));
+    let events = vec![
+        ordered_key(Key::Character("x".to_owned()), None, ctrl, false),
+        ordered_key(
+            Key::Character("!".to_owned()),
+            Some("!"),
+            Modifiers::default(),
+            false,
+        ),
+        ordered_key(Key::Character("v".to_owned()), None, ctrl, false),
+        UiInputEvent::ClipboardText(ClipboardText::new(target, "XY")),
+    ];
+
+    let requests = state.apply_ordered_input(&events, target, TextEditMode::SingleLine);
+
+    assert_eq!(state.text, "a!XYd");
+    assert_eq!(
+        requests,
+        vec![
+            PlatformRequest::CopyToClipboard("bc".to_owned()),
+            PlatformRequest::RequestClipboardText { target },
+        ]
+    );
 }
 
 fn query_font_bytes<'a>(

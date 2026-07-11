@@ -6,10 +6,10 @@ use crate::{
     viewport_from_winit,
 };
 use kinetik_ui_core::{
-    ClipboardText, CursorShape, FrameOutput, Key, KeyState, Modifiers,
+    ClipboardText, CursorShape, FrameOutput, InputWheelDelta, Key, KeyState, Modifiers,
     MouseButton as CoreMouseButton, PhysicalKey, PlatformRequest, Point, Rect, RepaintRequest,
     ScaleFactor, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, SemanticTreeError,
-    SemanticValue, TextInputEvent, TextRange, TimeInfo, UiInput, Vec2, WidgetId,
+    SemanticValue, TextInputEvent, TextRange, TimeInfo, UiInput, UiInputEvent, Vec2, WidgetId,
 };
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, Ime, MouseButton as WinitMouseButton, MouseScrollDelta};
@@ -188,6 +188,7 @@ fn begin_frame_clears_transient_input() {
     assert!(adapter.input().pointer.primary.down);
     assert!(!adapter.input().pointer.primary.pressed);
     assert!(adapter.input().text_events.is_empty());
+    assert!(!adapter.ime_enabled());
 }
 
 #[test]
@@ -269,6 +270,7 @@ fn keyboard_conversion_preserves_physical_key() {
 #[test]
 fn ime_events_preserve_lifecycle_and_selection() {
     let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+    adapter.set_window_focused(true);
 
     adapter.ime_event(Ime::Enabled);
     adapter.ime_event(Ime::Preedit("compose".to_owned(), Some((1, 4))));
@@ -288,12 +290,196 @@ fn ime_events_preserve_lifecycle_and_selection() {
     );
     assert_eq!(
         adapter.input().text_events[2],
-        TextInputEvent::Commit("done".to_owned())
+        TextInputEvent::CompositionEnd
     );
     assert_eq!(
         adapter.input().text_events[3],
-        TextInputEvent::CompositionEnd
+        TextInputEvent::Commit("done".to_owned())
     );
+    assert_eq!(adapter.input().validate_event_stream(), Ok(()));
+}
+
+#[test]
+fn ime_availability_is_distinct_from_preedit_composition() {
+    let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+
+    adapter.ime_event(Ime::Enabled);
+    adapter.ime_event(Ime::Enabled);
+    adapter.ime_event(Ime::Disabled);
+    adapter.ime_event(Ime::Disabled);
+
+    assert!(adapter.input().text_events.is_empty());
+    assert_eq!(
+        adapter.input().events,
+        vec![
+            UiInputEvent::ImeEnabled(true),
+            UiInputEvent::ImeEnabled(true),
+            UiInputEvent::ImeEnabled(false),
+            UiInputEvent::ImeEnabled(false),
+        ]
+    );
+}
+
+#[test]
+fn preedit_drives_one_composition_and_commit_ends_before_inserting() {
+    let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+
+    adapter.ime_event(Ime::Preedit("first".to_owned(), None));
+    adapter.ime_event(Ime::Preedit("second".to_owned(), Some((1, 3))));
+    adapter.ime_event(Ime::Preedit(String::new(), None));
+    adapter.ime_event(Ime::Preedit(String::new(), None));
+    adapter.ime_event(Ime::Commit("plain".to_owned()));
+    adapter.ime_event(Ime::Preedit("committed".to_owned(), None));
+    adapter.ime_event(Ime::Commit("committed".to_owned()));
+
+    assert_eq!(
+        adapter.input().text_events,
+        vec![
+            TextInputEvent::CompositionStart,
+            TextInputEvent::Composition {
+                text: "first".to_owned(),
+                selection: None,
+            },
+            TextInputEvent::Composition {
+                text: "second".to_owned(),
+                selection: Some(TextRange::new(1, 3)),
+            },
+            TextInputEvent::CompositionEnd,
+            TextInputEvent::Commit("plain".to_owned()),
+            TextInputEvent::CompositionStart,
+            TextInputEvent::Composition {
+                text: "committed".to_owned(),
+                selection: None,
+            },
+            TextInputEvent::CompositionEnd,
+            TextInputEvent::Commit("committed".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn hardware_key_text_is_source_aware_and_suppressed_only_during_preedit() {
+    let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+
+    adapter.keyboard_event_with_text(
+        &WinitKey::Character("a".into()),
+        ElementState::Pressed,
+        ModifiersState::empty(),
+        false,
+        Some("a"),
+    );
+    adapter.ime_event(Ime::Enabled);
+    adapter.keyboard_event_with_text(
+        &WinitKey::Character("b".into()),
+        ElementState::Pressed,
+        ModifiersState::empty(),
+        false,
+        Some("b"),
+    );
+    adapter.ime_event(Ime::Preedit("preedit".to_owned(), None));
+    adapter.keyboard_event_with_text(
+        &WinitKey::Character("c".into()),
+        ElementState::Pressed,
+        ModifiersState::empty(),
+        false,
+        Some("c"),
+    );
+    adapter.ime_event(Ime::Preedit(String::new(), None));
+    adapter.keyboard_event_with_text(
+        &WinitKey::Character("d".into()),
+        ElementState::Pressed,
+        ModifiersState::empty(),
+        true,
+        Some("dead-key-output"),
+    );
+    adapter.keyboard_event_with_text(
+        &WinitKey::Character("e".into()),
+        ElementState::Released,
+        ModifiersState::empty(),
+        false,
+        Some("e"),
+    );
+
+    let keys = &adapter.input().keyboard.events;
+    assert_eq!(keys[0].text.as_deref(), Some("a"));
+    assert_eq!(keys[1].text.as_deref(), Some("b"));
+    assert_eq!(keys[2].text, None);
+    assert_eq!(keys[3].text.as_deref(), Some("dead-key-output"));
+    assert!(keys[3].repeat);
+    assert_eq!(keys[4].text, None);
+}
+
+#[test]
+fn focus_loss_orders_composition_end_pointer_cleanup_and_focus_before_later_keys() {
+    let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+    adapter.set_window_focused(true);
+    adapter.pointer_moved(PhysicalPosition::new(12.0, 18.0));
+    adapter.mouse_button(WinitMouseButton::Left, ElementState::Pressed, 1);
+    adapter.ime_event(Ime::Preedit("active".to_owned(), None));
+
+    adapter.set_window_focused(false);
+    adapter.keyboard_event_with_text(
+        &WinitKey::Character("later".into()),
+        ElementState::Pressed,
+        ModifiersState::empty(),
+        false,
+        Some("later"),
+    );
+
+    let events = &adapter.input().events;
+    let loss = events
+        .iter()
+        .position(|event| matches!(event, UiInputEvent::WindowFocusChanged(false)))
+        .expect("focus loss");
+    assert!(matches!(
+        events[loss - 3],
+        UiInputEvent::Text(TextInputEvent::CompositionEnd)
+    ));
+    assert!(matches!(
+        events[loss - 2],
+        UiInputEvent::PointerReleaseAll {
+            position: Some(Point { x: 12.0, y: 18.0 })
+        }
+    ));
+    assert_eq!(events[loss - 1], UiInputEvent::PointerLeft);
+    assert!(matches!(events[loss + 1], UiInputEvent::Key(_)));
+    assert_eq!(adapter.input().validate_event_stream(), Ok(()));
+}
+
+#[test]
+fn line_and_pixel_wheel_events_keep_event_time_positions() {
+    let mut adapter = WinitInputAdapter::new(ScaleFactor::new(2.0));
+    adapter.set_window_focused(true);
+    adapter.pointer_moved(PhysicalPosition::new(10.0, 20.0));
+    adapter.mouse_wheel(MouseScrollDelta::LineDelta(1.0, -2.0));
+    adapter.pointer_moved(PhysicalPosition::new(30.0, 40.0));
+    adapter.mouse_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(
+        8.0, -12.0,
+    )));
+
+    let wheels = adapter
+        .input()
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            UiInputEvent::Wheel { delta, position } => Some((*delta, *position)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        wheels,
+        vec![
+            (
+                InputWheelDelta::Lines(Vec2::new(1.0, -2.0)),
+                Some(Point::new(5.0, 10.0)),
+            ),
+            (
+                InputWheelDelta::Pixels(Vec2::new(4.0, -6.0)),
+                Some(Point::new(15.0, 20.0)),
+            ),
+        ]
+    );
+    assert_eq!(adapter.input().validate_event_stream(), Ok(()));
 }
 
 #[test]

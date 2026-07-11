@@ -4,9 +4,10 @@ use std::time::Duration;
 
 use crate::{
     ActionInvocation, ActionQueue, ActionRouter, ActionRoutingContext, ClipboardText, FrameContext,
-    FrameOutput, FrameWarning, Key, KeyEvent, KeyState, Modifiers, MouseButton, PhysicalKey,
-    PlatformRequest, Point, Primitive, RepaintRequest, ScaleFactor, SemanticTree, Size,
-    TextInputEvent, TextRange, TimeInfo, Ui, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId,
+    FrameOutput, FrameWarning, InputWheelDelta, Key, KeyEvent, KeyState, Modifiers, MouseButton,
+    PhysicalKey, PlatformRequest, Point, Primitive, RepaintRequest, ScaleFactor, SemanticTree,
+    Size, TextInputEvent, TextRange, TimeInfo, Ui, UiInput, UiInputEvent, UiMemory, Vec2,
+    ViewportInfo, WidgetId,
 };
 
 /// Deterministic harness-visible phases recorded by frame trace helpers.
@@ -142,6 +143,10 @@ pub enum ScriptedInput {
     PointerUp(MouseButton),
     /// Add a scroll-wheel delta.
     Wheel(Vec2),
+    /// Add a line-wheel delta with explicit provenance.
+    WheelLines(Vec2),
+    /// Add a logical pixel-wheel delta with explicit provenance.
+    WheelPixels(Vec2),
     /// Queue a keyboard event.
     Key(ScriptedKeyEvent),
     /// Commit text input.
@@ -629,11 +634,13 @@ impl UiTestHarness {
             ScriptedInput::PointerMove(position) => self.set_pointer_position(position),
             ScriptedInput::PointerDown(button) => self.pointer_press(button),
             ScriptedInput::PointerUp(button) => self.pointer_release(button),
-            ScriptedInput::Wheel(delta) => self.wheel(delta),
+            ScriptedInput::Wheel(delta) | ScriptedInput::WheelLines(delta) => {
+                self.wheel_lines(delta);
+            }
+            ScriptedInput::WheelPixels(delta) => self.wheel_pixels(delta),
             ScriptedInput::Key(event) => {
-                let modifiers = event.modifiers;
-                self.input.keyboard.modifiers = modifiers;
-                self.input.keyboard.events.push(event.into_key_event());
+                self.input
+                    .push_event(UiInputEvent::Key(event.into_key_event()));
             }
             ScriptedInput::TextCommit(text) => self.text_commit(text),
             ScriptedInput::TextCompositionStart => self.text_composition_start(),
@@ -657,44 +664,80 @@ impl UiTestHarness {
     /// When the previous position is known, pointer delta is updated by the
     /// movement between the previous and new positions.
     pub fn set_pointer_position(&mut self, position: Point) {
-        self.input.pointer.delta = self.input.pointer.position.map_or(Vec2::ZERO, |previous| {
+        let delta = self.input.pointer.position.map_or(Vec2::ZERO, |previous| {
             Vec2::new(position.x - previous.x, position.y - previous.y)
         });
-        self.input.pointer.position = Some(position);
+        self.input
+            .push_event(UiInputEvent::PointerMoved { position, delta });
     }
 
     /// Clears the pointer position for the next frame.
     pub fn clear_pointer_position(&mut self) {
-        self.input.pointer.position = None;
-        self.input.pointer.delta = Vec2::ZERO;
+        self.input.push_event(UiInputEvent::PointerLeft);
     }
 
     /// Queues a pointer button press for the next frame.
     pub fn pointer_press(&mut self, button: MouseButton) {
-        self.input.pointer.apply_button_transition(button, true);
+        self.input.push_event(UiInputEvent::PointerButton {
+            button,
+            down: true,
+            click_count: self.input.pointer.click_count,
+            position: self.input.pointer.position,
+        });
     }
 
     /// Queues a pointer button release for the next frame.
     pub fn pointer_release(&mut self, button: MouseButton) {
-        self.input.pointer.apply_button_transition(button, false);
+        self.input.push_event(UiInputEvent::PointerButton {
+            button,
+            down: false,
+            click_count: self.input.pointer.click_count,
+            position: self.input.pointer.position,
+        });
     }
 
     /// Adds a wheel delta to the next frame.
     pub fn wheel(&mut self, delta: Vec2) {
-        self.input.pointer.wheel_delta = Vec2::new(
-            self.input.pointer.wheel_delta.x + delta.x,
-            self.input.pointer.wheel_delta.y + delta.y,
-        );
+        self.wheel_lines(delta);
+    }
+
+    /// Adds a line-wheel delta to the next frame.
+    pub fn wheel_lines(&mut self, delta: Vec2) {
+        self.input.push_event(UiInputEvent::Wheel {
+            delta: InputWheelDelta::Lines(delta),
+            position: self.input.pointer.position,
+        });
+    }
+
+    /// Adds a logical pixel-wheel delta to the next frame.
+    pub fn wheel_pixels(&mut self, delta: Vec2) {
+        self.input.push_event(UiInputEvent::Wheel {
+            delta: InputWheelDelta::Pixels(delta),
+            position: self.input.pointer.position,
+        });
     }
 
     /// Sets the click count reported for the next pointer activation.
-    pub const fn set_click_count(&mut self, click_count: u8) {
+    pub fn set_click_count(&mut self, click_count: u8) {
         self.input.pointer.click_count = click_count;
+        if let Some(UiInputEvent::PointerButton {
+            click_count: event_click_count,
+            ..
+        }) = self
+            .input
+            .events
+            .iter_mut()
+            .rev()
+            .find(|event| matches!(event, UiInputEvent::PointerButton { .. }))
+        {
+            *event_click_count = click_count;
+        }
     }
 
     /// Sets keyboard modifiers retained by the input snapshot.
-    pub const fn set_modifiers(&mut self, modifiers: Modifiers) {
-        self.input.keyboard.modifiers = modifiers;
+    pub fn set_modifiers(&mut self, modifiers: Modifiers) {
+        self.input
+            .push_event(UiInputEvent::ModifiersChanged(modifiers));
     }
 
     /// Queues a logical key press for the next frame.
@@ -715,52 +758,81 @@ impl UiTestHarness {
         state: KeyState,
         repeat: bool,
     ) {
-        self.input.keyboard.events.push(KeyEvent::with_physical_key(
+        self.input
+            .push_event(UiInputEvent::Key(KeyEvent::with_physical_key(
+                key,
+                physical_key,
+                state,
+                self.input.keyboard.modifiers,
+                repeat,
+            )));
+    }
+
+    /// Queues a keyboard event with layout-produced hardware text.
+    pub fn key_event_with_text(
+        &mut self,
+        key: Key,
+        physical_key: PhysicalKey,
+        state: KeyState,
+        repeat: bool,
+        text: impl Into<String>,
+    ) {
+        let mut event = KeyEvent::with_physical_key(
             key,
             physical_key,
             state,
             self.input.keyboard.modifiers,
             repeat,
-        ));
+        );
+        if state == KeyState::Pressed {
+            event = event.with_text(text);
+        }
+        self.input.push_event(UiInputEvent::Key(event));
     }
 
     /// Queues a committed text input event for the next frame.
     pub fn text_commit(&mut self, text: impl Into<String>) {
         self.input
-            .text_events
-            .push(TextInputEvent::Commit(text.into()));
+            .push_event(UiInputEvent::Text(TextInputEvent::Commit(text.into())));
     }
 
     /// Queues a text composition start event for the next frame.
     pub fn text_composition_start(&mut self) {
         self.input
-            .text_events
-            .push(TextInputEvent::CompositionStart);
+            .push_event(UiInputEvent::Text(TextInputEvent::CompositionStart));
     }
 
     /// Queues a text composition update for the next frame.
     pub fn text_composition(&mut self, text: impl Into<String>, selection: Option<TextRange>) {
-        self.input.text_events.push(TextInputEvent::Composition {
-            text: text.into(),
-            selection,
-        });
+        self.input
+            .push_event(UiInputEvent::Text(TextInputEvent::Composition {
+                text: text.into(),
+                selection,
+            }));
     }
 
     /// Queues a text composition end event for the next frame.
     pub fn text_composition_end(&mut self) {
-        self.input.text_events.push(TextInputEvent::CompositionEnd);
+        self.input
+            .push_event(UiInputEvent::Text(TextInputEvent::CompositionEnd));
     }
 
     /// Queues clipboard text returned for a text-editing widget.
     pub fn clipboard_text(&mut self, target: WidgetId, text: impl Into<String>) {
         self.input
-            .clipboard_text
-            .push(ClipboardText::new(target, text));
+            .push_event(UiInputEvent::ClipboardText(ClipboardText::new(
+                target, text,
+            )));
     }
 
     /// Sets whether the synthetic window is focused.
-    pub const fn set_window_focused(&mut self, focused: bool) {
-        self.input.window_focused = focused;
+    pub fn set_window_focused(&mut self, focused: bool) {
+        if !focused {
+            self.input.release_pointer_buttons();
+            self.input.push_event(UiInputEvent::PointerLeft);
+        }
+        self.input
+            .push_event(UiInputEvent::WindowFocusChanged(focused));
     }
 }
 

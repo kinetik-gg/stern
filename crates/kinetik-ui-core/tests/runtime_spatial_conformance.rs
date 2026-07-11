@@ -1,8 +1,9 @@
 //! Scoped runtime coordinate and clipping conformance coverage.
 
 use kinetik_ui_core::{
-    ClipId, CursorShape, MouseButton, PlatformRequest, Point, PointerButtonState, Primitive, Rect,
-    SemanticActionKind, SemanticNode, SemanticRole, Transform, UiTestHarness, Vec2, WidgetId,
+    ClipId, CursorShape, InputWheelDelta, Key, KeyEvent, KeyState, Modifiers, MouseButton,
+    PlatformRequest, Point, PointerButtonState, Primitive, Rect, SemanticActionKind, SemanticNode,
+    SemanticRole, TextInputEvent, Transform, UiInput, UiInputEvent, UiTestHarness, Vec2, WidgetId,
     draggable, pressable,
 };
 
@@ -86,6 +87,7 @@ fn transformed_clip_uses_exact_region_instead_of_its_screen_aabb() {
     outside.input_mut().pointer.other_buttons =
         vec![(8, PointerButtonState::new(true, true, false))];
     outside.input_mut().pointer.click_count = 2;
+    outside.input_mut().events.clear();
     let ((), output) = outside.run_frame(|ui| {
         ui.push_primitive(Primitive::TransformBegin(rotated));
         ui.push_primitive(Primitive::ClipBegin {
@@ -395,6 +397,7 @@ fn invisible_secondary_release_only_cleans_up_existing_owner() {
     harness.set_pointer_position(Point::new(50.0, 50.0));
     harness.input_mut().pointer.primary = PointerButtonState::new(true, true, true);
     harness.input_mut().pointer.secondary = PointerButtonState::new(false, false, true);
+    harness.input_mut().events.clear();
 
     let (response, output) = harness.run_frame(|ui| {
         ui.register_id(owner);
@@ -414,4 +417,171 @@ fn invisible_secondary_release_only_cleans_up_existing_owner() {
     assert!(!response.secondary_clicked);
     assert_eq!(harness.memory().secondary_pressed(), None);
     assert!(output.platform_requests.is_empty());
+}
+
+fn ordered_spatial_input() -> UiInput {
+    let mut input = UiInput::default();
+    for event in [
+        UiInputEvent::PointerMoved {
+            position: Point::new(12.0, 24.0),
+            delta: Vec2::new(2.0, 4.0),
+        },
+        UiInputEvent::PointerButton {
+            button: MouseButton::Primary,
+            down: true,
+            click_count: 1,
+            position: Some(Point::new(12.0, 24.0)),
+        },
+        UiInputEvent::PointerMoved {
+            position: Point::new(50.0, 80.0),
+            delta: Vec2::new(38.0, 56.0),
+        },
+        UiInputEvent::Wheel {
+            delta: InputWheelDelta::Lines(Vec2::new(1.0, -1.0)),
+            position: Some(Point::new(14.0, 28.0)),
+        },
+        UiInputEvent::Wheel {
+            delta: InputWheelDelta::Pixels(Vec2::new(4.0, 8.0)),
+            position: Some(Point::new(14.0, 28.0)),
+        },
+        UiInputEvent::PointerButton {
+            button: MouseButton::Primary,
+            down: false,
+            click_count: 1,
+            position: Some(Point::new(50.0, 80.0)),
+        },
+        UiInputEvent::PointerReleaseAll {
+            position: Some(Point::new(50.0, 80.0)),
+        },
+        UiInputEvent::Key(KeyEvent::new(
+            Key::Character("a".to_owned()),
+            KeyState::Pressed,
+            Modifiers::default(),
+            false,
+        )),
+        UiInputEvent::Text(TextInputEvent::Commit("text".to_owned())),
+    ] {
+        input.push_event(event);
+    }
+    input
+}
+
+#[test]
+fn ordered_pointer_events_localize_individually_and_clips_keep_only_release_cleanup() {
+    let owner = WidgetId::from_key("ordered-capture");
+    let clip = ClipId::from_raw(51);
+    let input = ordered_spatial_input();
+    assert_eq!(input.validate_event_stream(), Ok(()));
+
+    let mut harness = UiTestHarness::new();
+    *harness.input_mut() = input;
+    harness.memory_mut().capture_pointer(owner);
+    let (localized, output) = harness.run_frame(|ui| {
+        ui.register_id(owner);
+        ui.memory_mut().capture_pointer(owner);
+        ui.push_primitive(Primitive::TransformBegin(Transform::translation(
+            Vec2::new(10.0, 20.0),
+        )));
+        ui.push_primitive(Primitive::TransformBegin(Transform::scale(Vec2::new(
+            2.0, 4.0,
+        ))));
+        ui.push_primitive(Primitive::ClipBegin {
+            id: clip,
+            rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+        });
+        let localized = ui.input().clone();
+        ui.push_primitive(Primitive::ClipEnd { id: clip });
+        ui.push_primitive(Primitive::TransformEnd);
+        ui.push_primitive(Primitive::TransformEnd);
+        localized
+    });
+
+    assert_eq!(
+        localized.validate_event_stream(),
+        Err(kinetik_ui_core::InputStreamConflict::Pointer),
+        "localized input: {localized:#?}"
+    );
+    assert_eq!(localized.pointer.position, None);
+    assert_vec_close(localized.pointer.delta, Vec2::new(1.0, 1.0));
+    assert_vec_close(localized.pointer.wheel_delta, Vec2::new(3.0, 1.0));
+    assert!(localized.pointer.primary.pressed);
+    assert!(localized.pointer.primary.released);
+    assert!(localized
+        .events
+        .iter()
+        .all(|event| !matches!(event, UiInputEvent::PointerMoved { position, .. } if *position == Point::new(20.0, 15.0))));
+
+    let wheels = localized
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            UiInputEvent::Wheel { delta, position } => Some((*delta, *position)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        wheels,
+        vec![
+            (
+                InputWheelDelta::Lines(Vec2::new(1.0, -1.0)),
+                Some(Point::new(2.0, 2.0)),
+            ),
+            (
+                InputWheelDelta::Pixels(Vec2::new(2.0, 2.0)),
+                Some(Point::new(2.0, 2.0)),
+            ),
+        ]
+    );
+    assert!(localized.events.iter().any(|event| matches!(
+        event,
+        UiInputEvent::PointerButton {
+            down: false,
+            position: Some(Point { x: 20.0, y: 15.0 }),
+            ..
+        }
+    )));
+    assert!(
+        localized
+            .events
+            .iter()
+            .any(|event| matches!(event, UiInputEvent::PointerReleaseAll { .. }))
+    );
+    let non_pointer = localized
+        .events
+        .iter()
+        .filter(|event| matches!(event, UiInputEvent::Key(_) | UiInputEvent::Text(_)))
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(matches!(non_pointer[0], UiInputEvent::Key(_)));
+    assert!(matches!(non_pointer[1], UiInputEvent::Text(_)));
+    assert!(output.warnings.is_empty());
+}
+
+#[test]
+fn spatial_localization_never_heals_a_root_pointer_projection_conflict() {
+    let mut harness = UiTestHarness::new();
+    harness.set_pointer_position(Point::new(8.0, 12.0));
+    harness.input_mut().pointer.delta = Vec2::new(99.0, 99.0);
+    harness.input_mut().pointer.click_count = 7;
+
+    let ((localized, conflict), output) = harness.run_frame(|ui| {
+        ui.push_primitive(Primitive::TransformBegin(Transform::scale(Vec2::new(
+            2.0, 2.0,
+        ))));
+        let localized = ui.input().clone();
+        let conflict = localized.validate_event_stream();
+        ui.push_primitive(Primitive::TransformEnd);
+        (localized, conflict)
+    });
+
+    assert_eq!(conflict, Err(kinetik_ui_core::InputStreamConflict::Pointer));
+    assert_eq!(localized.pointer.position, Some(Point::new(4.0, 6.0)));
+    assert_vec_close(localized.pointer.delta, Vec2::new(49.5, 49.5));
+    assert_eq!(localized.pointer.click_count, 7);
+    assert!(matches!(
+        output.warnings.as_slice(),
+        [kinetik_ui_core::FrameWarning::InputStreamConflict {
+            conflict: kinetik_ui_core::InputStreamConflict::Pointer
+        }]
+    ));
 }

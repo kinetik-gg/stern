@@ -90,11 +90,11 @@ fn input_events_are_visible_only_in_the_intended_frame() {
 
     let (pressed_frame, _) = harness.run_frame(|ui| ui.input().clone());
 
-    assert_eq!(pressed_frame.pointer.position, Some(Point::new(10.0, 20.0)));
+    assert_eq!(pressed_frame.pointer.position, None);
     assert_eq!(pressed_frame.pointer.click_count, 2);
-    assert!(pressed_frame.pointer.primary.down);
+    assert!(!pressed_frame.pointer.primary.down);
     assert!(pressed_frame.pointer.primary.pressed);
-    assert!(!pressed_frame.pointer.primary.released);
+    assert!(pressed_frame.pointer.primary.released);
     assert_eq!(pressed_frame.pointer.wheel_delta, Vec2::new(1.0, -2.0));
     assert_eq!(pressed_frame.keyboard.events.len(), 1);
     assert_eq!(pressed_frame.keyboard.events[0].state, KeyState::Pressed);
@@ -111,7 +111,7 @@ fn input_events_are_visible_only_in_the_intended_frame() {
 
     let (held_frame, _) = harness.run_frame(|ui| ui.input().clone());
 
-    assert!(held_frame.pointer.primary.down);
+    assert!(!held_frame.pointer.primary.down);
     assert_eq!(held_frame.pointer.click_count, 0);
     assert!(!held_frame.pointer.primary.pressed);
     assert!(!held_frame.pointer.primary.released);

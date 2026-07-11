@@ -38,16 +38,23 @@ impl<'a> Ui<'a> {
     #[must_use]
     pub fn begin_frame(context: FrameContext, memory: &'a mut UiMemory) -> Self {
         memory.begin_frame();
+        let input_validation = context.input.validate_event_stream();
+        let input_conflict = input_validation.as_ref().err().copied();
+        memory.set_root_input_validation(input_validation);
         if !context.input.window_focused || pointer_release_all_cancelled(&context.input) {
             memory.cancel_pointer_interaction();
         }
         let root_input = context.input.clone();
+        let mut output = FrameOutput::new();
+        if let Some(conflict) = input_conflict {
+            output.push_warning(FrameWarning::InputStreamConflict { conflict });
+        }
         Self {
             context,
             root_input,
             memory,
             ids: IdStack::new(),
-            output: FrameOutput::new(),
+            output,
             spatial: SpatialStack::default(),
             pointer_plan_installed: false,
         }
@@ -394,6 +401,7 @@ impl<'a> Ui<'a> {
             &self.root_input,
             self.memory.pointer_capture().is_some(),
             self.memory.secondary_pressed().is_some(),
+            self.memory.root_input_conflict().is_some(),
         );
     }
 }

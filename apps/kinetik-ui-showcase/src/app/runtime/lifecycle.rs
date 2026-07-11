@@ -202,6 +202,7 @@ impl ShowcaseApp {
         };
 
         UiInput {
+            events: Vec::new(),
             pointer: PointerInput {
                 position: mouse,
                 delta,
