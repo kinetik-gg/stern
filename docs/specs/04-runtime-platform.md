@@ -186,6 +186,23 @@ absent), applies an optional final title, preserves ordered Start/Update/Stop
 IME operations, and returns ordered shell work plus the authoritative repaint
 request.
 
+Logical text ownership and active native IME are separate runtime states.
+Editable and ReadOnly fields may retain logical ownership and claim ordered
+input; only Editable may emit native `StartTextInput` or
+`UpdateTextInputRect`. Transitioning an active owner to ReadOnly stops native
+IME without discarding logical selection ownership, while returning to Editable
+starts it once. Disabled, removed, clipped, or replaced owners retire logical
+ownership and emit at most one required stop. Owner replacement remains ordered
+Stop then Start.
+
+`UpdateTextInputRect` carries the visible clipped caret rectangle in
+screen-logical coordinates. The platform boundary must not substitute the
+field rectangle or recompute layout. When frame-frozen viewport geometry hides
+the caret, the UI retains the previous native rectangle, stages caret reveal,
+requests repaint, and sends the newly visible rectangle from the following
+frame. ReadOnly never publishes a native rectangle because it never activates
+IME.
+
 Clipboard writes, targeted reads, and URL opens share one ordered shell vector.
 Injected services execute every operation once and continue after individual
 failure. Outcomes contain targeted clipboard responses and structured,

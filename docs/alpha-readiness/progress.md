@@ -923,10 +923,11 @@ because it edits the same memory/runtime and evidence files.
 
 ### `ASYNC-01`: durable presence and incarnation
 
-Status: Implementation candidate for Issue #526 on base `00b944f`. The exact
-task and dependency gates passed after correcting presence/active semantics,
-cancellation replacement precedence, tombstone epochs, observational equality,
-observer migration, and the direct `UiTestHarness` Clone dependency.
+Status: Complete. Issue #526 closed through PR #527 and squash-merged as
+`9d026c5`. The exact task and dependency gates passed after correcting
+presence/active semantics, cancellation replacement precedence, tombstone
+epochs, observational equality, observer migration, and the direct
+`UiTestHarness` Clone dependency.
 
 #### Changed files
 
@@ -988,9 +989,10 @@ skips, and require a new subscription after restart/reentry.
 - Complete core all-feature tests passed: 160 unit tests, every integration
   suite, and four compile-fail doctests for token opacity and non-cloneable
   authority.
-- Warning-denied workspace Clippy, the complete six-command workspace gate,
-  exact-SHA critics, three-OS CI, and PR-context checks remain pending for the
-  implementation candidate.
+- Warning-denied workspace Clippy and the complete six-command workspace gate
+  passed at exact candidate `0299c15`. Three independent exact-SHA critics
+  passed with P0=0, P1=0, P2=0. Ubuntu, Windows, and macOS passed workflow run
+  29146185811; PR-context run 29146379516 passed before PR #527 squash-merged.
 
 #### Remaining risks and deferred findings
 
@@ -999,6 +1001,93 @@ resources. `apply_update` intentionally does not deduplicate caller-owned
 result identities. Tombstones are bounded by time, not a hard count, and tokens
 are process-local. `TEXT-01` depends only on serialized file ownership and the
 non-cloneable memory migration; it does not semantically depend on liveness.
+
+### `TEXT-01`: integrated desktop text behavior
+
+Status: Complete / Accepted at implementation merge `93d6a5f` after the
+documentation-only Issue #548 closure. Audit §6.10 is closed on canonical
+retained `Ui` paths. Stage 4 remains Current: `REND-01B` and the accepted 4A
+checkpoint precede `TEXT-02`.
+
+Implementation ledger:
+
+| Packet | Issue / PR | Squash merge | Result |
+| --- | --- | --- | --- |
+| `TEXT-01-PRE` | #522 / #523 | `f2fd2d0` | Event-time selection modifiers |
+| `TEXT-01-PRE2` | #524 / #525 | `00b944f` | Causal DomainDrag actions |
+| `TEXT-01A` | #528 / #529 | `f448c40` | Scalar word move/extend/delete/select |
+| `TEXT-01B1` | #530 / #532 | `4d25a2b` | Pure single-line/wrapped viewport math |
+| `TEXT-01B2` | #531 / #533 | `c191516` | Logical owner mode separate from native IME |
+| `TEXT-01B3-PRE` | #534 / #535 | `288657a` | Read-only ordered-input policy |
+| `TEXT-01B3-PRE2` | #536 / #537 | `6df12e8` | Final root primary-press ordinal |
+| `TEXT-01B3-PRE3` | #539 / #540 | `1b29284` | Completed same-frame pointer routing |
+| `TEXT-01B3-PRE4` | #541 / #542 | `ec24e96` | Retained selection gesture anchor |
+| `TEXT-01B3` | #538 / #543 | `9102293` | Canonical text-field kernel |
+| `TEXT-01B4-PRE5` | #545 / #546 | `9d09d3c` | Exact ordered preview/claim provenance |
+| `TEXT-01B4` | #544 / #547 | `93d6a5f` | Canonical numeric/search/path/vector `Ui` wrappers |
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `docs/specs/01-foundations.md`
+- `docs/specs/03-rendering-text-components.md`
+- `docs/specs/04-runtime-platform.md`
+- `docs/alpha-readiness/04-text-renderer-lifetime.md`
+- `docs/alpha-readiness/progress.md`
+
+The implementation subpackets changed bounded core input/memory/runtime, text
+editing/viewport, widget text/wrapper, facade, and conformance-test paths. Their
+exact changed-file inventories remain in their issue-linked PRs and Runway
+records; this integrated closure changes documentation only.
+
+#### Reasoning and contract decisions
+
+Desktop word behavior is UTF-8 scalar safe and deliberately uses whitespace,
+ASCII alphanumeric-plus-underscore, and other-scalar runs until `TEXT-02`.
+Pointer selection and editable numeric scrub consume the canonical Selection or
+DomainDrag response with original root ordinals; they do not reparse pointer
+events. Editable scrub resolves DomainDrag once, previews cloned editing state
+only for an authoritative accepted transaction, consumes its exact cached claim,
+and commits once. A below-threshold exact clicked release places the caret.
+
+`TextFieldAccess` separates Editable, ReadOnly, and Disabled capabilities.
+ReadOnly remains focusable, navigable, selectable, scrollable, and copyable
+without mutation or native IME. Logical owner mode is separate from native IME
+state. Each field freezes one retained viewport offset, uses entry geometry for
+event-time pointer hits and post-edit geometry for paint/caret/selection/preedit/
+IME, and stages wheel/caret reveal for the following frame. IME uses only the
+visible clipped caret rectangle. Canonical retained `Ui` methods share the
+crate-private runtime kernel; public free components remain compatible legacy
+paths. Bool APIs remain compatible (`false = Editable`, `true = Disabled`).
+
+#### Tests run and results
+
+- Every implementation subpacket passed its focused deterministic suites, the
+  complete six-command workspace gate, independent exact-SHA criticism,
+  exact-SHA Ubuntu/Windows/macOS, and PR-context CI before squash merge.
+- The final wrapper candidate passed text-field conformance 116/116, runtime
+  spatial conformance 7/7, public API surface 7/7, widget unit tests 215/215,
+  all six workspace gates, three exact-SHA critics with P0=0/P1=0/P2=0,
+  three-OS run 29161566898, and PR run 29161777837 before PR #547 merged.
+- Integrated closure verification passed on the documentation candidate: text
+  crate 65 unit + 9 read-only + 14 viewport tests; core owner mode 18/18,
+  staged scroll 4/4, and the complete core suite; widget text-field 116/116,
+  runtime spatial 7/7, public API 7/7, and the complete widget suite including
+  215 unit tests; facade public API 7/7. Formatting, warning-denied workspace
+  Clippy, workspace tests, workspace build, all-feature example checks, and
+  warning-denied workspace docs all passed with the isolated
+  `.target-text01-close` cache.
+
+#### Remaining risks and deferred findings
+
+Grapheme clusters, Unicode words, emoji, ligatures, and mixed bidi remain
+`TEXT-02`. Undo coalescing and text-layout/resource generation and byte budgets
+remain `TEXT-03`. One authoritative fractional-DPI layout for paint, hit,
+caret, and selection remains `REND-02`. Viewport motion is intentionally staged
+to the next frame. There is no dedicated read-only semantic bit. Public free
+components remain compatibility paths, and future retained `Ui` wrappers must
+use the canonical transaction kernel rather than reintroduce split ownership or
+aggregate-pointer authority.
 
 ## Packet Completion Template
 
