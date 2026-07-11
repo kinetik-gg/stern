@@ -631,3 +631,36 @@ Owner reconciliation clears only runtime ownership handles. It must not prune
 application documents, values, selections, domain drag state, scroll offsets,
 popover state, caches, or async incarnation/liveness state. Reusing a removed
 widget ID later does not restore ownership that cleanup already cleared.
+
+Async liveness has two separate truths. Presence records that an owner was seen
+in the current frame; an incarnation remains active across continuously present
+frames and authorizes external results through an opaque registry-scoped token.
+Beginning a frame clears presence evidence without invalidating the active
+incarnation. Omission retires only at frame finalization, so a result arriving
+before that boundary may still apply.
+
+First activation, same-ID reentry after retirement, and explicit restart each
+allocate a checked registry-wide monotonic `LivenessIncarnation`. Repeated
+presence marks allocate nothing and return the identical token. Validation
+rejects foreign registry scopes as stale targets, reports a different latest
+incarnation as `StaleIncarnation`, accepts the exact active incarnation, and
+preserves an exact `Cancelled` result only while that cancelled incarnation is
+still the latest retained record. A replacement incarnation therefore takes
+precedence over an older cancellation and cannot be cancelled by the old token.
+
+Cancellation, explicit removal, and omission create typed tombstones at the
+current checked frame epoch. A tombstone survives the retirement frame plus one
+complete following frame and prunes at that following frame's finalization;
+repeated cancellation does not extend it. Pruning never resets the private
+registry scope or incarnation allocator, preventing same-ID ABA after cleanup.
+Tombstone storage is temporally bounded by this policy rather than by a hard
+count cap.
+
+`UiMemory`, `LivenessRegistry`, `ObserverRegistry`, and the test harness that
+owns memory are non-cloneable authority holders. Their retained state remains
+observationally comparable: private registry scope is ignored by state
+`PartialEq`, while direct token equality and hashing include it. Equal state
+does not make tokens interchangeable. Observer subscriptions retain one token
+for one incarnation and validate on drain; cancellation, stale target, and
+stale incarnation are observable skip reasons. Replacement work requires a new
+subscription instead of per-frame token refresh.

@@ -1,6 +1,10 @@
 //! Deterministic liveness tokens for retained UI targets.
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fmt,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use crate::WidgetId;
 
@@ -29,37 +33,75 @@ impl From<WidgetId> for LivenessTargetId {
     }
 }
 
-/// Monotonic generation assigned whenever a liveness target is renewed.
+/// Registry-wide incarnation assigned when async ownership begins or restarts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct LivenessGeneration(u64);
+pub struct LivenessIncarnation(u64);
 
-impl LivenessGeneration {
-    /// First generation assigned to a newly seen target.
+impl LivenessIncarnation {
+    /// First incarnation assigned by a registry.
     pub const FIRST: Self = Self(1);
 
-    /// Returns the numeric generation value.
+    /// Returns the numeric incarnation value.
     #[must_use]
     pub const fn value(self) -> u64 {
         self.0
     }
-
-    fn next(self) -> Self {
-        Self(self.0.checked_add(1).expect("liveness generation overflow"))
-    }
 }
 
-/// Opaque proof that an external update was issued for a target generation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Deprecated name for [`LivenessIncarnation`].
+#[deprecated(note = "renamed to LivenessIncarnation")]
+pub type LivenessGeneration = LivenessIncarnation;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct RegistryScope(u64);
+
+static NEXT_REGISTRY_SCOPE: AtomicU64 = AtomicU64::new(1);
+
+fn checked_successor(value: u64) -> Option<u64> {
+    value.checked_add(1)
+}
+
+fn allocate_registry_scope() -> RegistryScope {
+    let value = NEXT_REGISTRY_SCOPE
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, checked_successor)
+        .expect("liveness registry scope overflow");
+    RegistryScope(value)
+}
+
+/// Opaque proof that an external update was issued for one registry-owned
+/// target incarnation.
+///
+/// Tokens can only be minted by [`LivenessRegistry`]. Their private registry
+/// scope prevents a token from one registry from authorizing another.
+///
+/// ```compile_fail
+/// use kinetik_ui_core::{
+///     LivenessIncarnation, LivenessTargetId, LivenessToken, WidgetId,
+/// };
+///
+/// let _token = LivenessToken::new(
+///     LivenessTargetId::new(WidgetId::from_key("preview")),
+///     LivenessIncarnation::FIRST,
+/// );
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LivenessToken {
+    registry_scope: RegistryScope,
     target: LivenessTargetId,
-    generation: LivenessGeneration,
+    incarnation: LivenessIncarnation,
 }
 
 impl LivenessToken {
-    /// Creates a liveness token from explicit parts.
-    #[must_use]
-    pub const fn new(target: LivenessTargetId, generation: LivenessGeneration) -> Self {
-        Self { target, generation }
+    fn new(
+        registry_scope: RegistryScope,
+        target: LivenessTargetId,
+        incarnation: LivenessIncarnation,
+    ) -> Self {
+        Self {
+            registry_scope,
+            target,
+            incarnation,
+        }
     }
 
     /// Returns the target identity carried by this token.
@@ -68,161 +110,396 @@ impl LivenessToken {
         self.target
     }
 
-    /// Returns the generation carried by this token.
+    /// Returns the incarnation carried by this token.
+    #[must_use]
+    pub const fn incarnation(self) -> LivenessIncarnation {
+        self.incarnation
+    }
+
+    /// Returns the incarnation using the previous generation terminology.
+    #[allow(deprecated)]
+    #[deprecated(note = "use incarnation")]
     #[must_use]
     pub const fn generation(self) -> LivenessGeneration {
-        self.generation
+        self.incarnation
+    }
+
+    pub(crate) fn observational_eq(self, other: Self) -> bool {
+        self.target == other.target && self.incarnation == other.incarnation
     }
 }
 
-/// Result of validating a liveness-gated update attempt.
+impl fmt::Debug for LivenessToken {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("LivenessToken")
+            .field("target", &self.target)
+            .field("incarnation", &self.incarnation)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Result of validating or applying a liveness-gated update attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LivenessUpdateStatus {
-    /// The token matched the currently live target generation.
+    /// The token matched the active target incarnation.
     Applied,
-    /// The token target is not live in the retained registry.
+    /// The exact incarnation was explicitly cancelled.
+    Cancelled {
+        /// Target carried by the cancelled token.
+        target: LivenessTargetId,
+        /// Cancelled incarnation.
+        incarnation: LivenessIncarnation,
+    },
+    /// The token belongs to another registry or the target has no retained
+    /// incarnation record.
     StaleTarget {
         /// Target carried by the stale token.
         target: LivenessTargetId,
     },
-    /// The target is live, but the token carries an older generation.
-    StaleGeneration {
+    /// The target has a newer retained incarnation than the token.
+    StaleIncarnation {
         /// Target carried by the stale token.
         target: LivenessTargetId,
-        /// Generation carried by the stale token.
-        token_generation: LivenessGeneration,
-        /// Current retained generation for the target.
-        current_generation: LivenessGeneration,
+        /// Incarnation carried by the stale token.
+        token_incarnation: LivenessIncarnation,
+        /// Latest active or tombstoned incarnation retained for the target.
+        current_incarnation: LivenessIncarnation,
     },
 }
 
+/// Result of explicitly removing an async owner target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct LivenessEntry {
-    generation: LivenessGeneration,
-    seen_this_frame: bool,
+pub enum LivenessRemovalStatus {
+    /// An active incarnation was removed.
+    Removed,
+    /// The target had no active incarnation.
+    AlreadyAbsent,
 }
 
-/// Retained target registry owned by [`crate::UiMemory`].
-///
-/// The registry keeps tombstoned generation entries for targets that disappeared
-/// so a later same-ID re-entry cannot make old tokens valid again.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct LivenessRegistry {
-    targets: HashMap<LivenessTargetId, LivenessEntry>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ActiveEntry {
+    incarnation: LivenessIncarnation,
+    present_this_frame: bool,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TombstoneReason {
+    Cancelled,
+    Removed,
+    Omitted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TombstoneEntry {
+    incarnation: LivenessIncarnation,
+    reason: TombstoneReason,
+    retired_epoch: u64,
+}
+
+/// Retained async-owner registry owned by [`crate::UiMemory`].
+///
+/// Presence is frame-local, while an active incarnation remains valid until
+/// omission is finalized. Retired incarnations remain as bounded tombstones
+/// through one complete following frame.
+///
+/// Registry equality is observational and deliberately ignores the private
+/// authority scope. Equal registries do not accept one another's tokens.
+///
+/// ```compile_fail
+/// use kinetik_ui_core::LivenessRegistry;
+///
+/// let registry = LivenessRegistry::new();
+/// let _authority_copy = registry.clone();
+/// ```
+pub struct LivenessRegistry {
+    registry_scope: RegistryScope,
+    last_incarnation: u64,
+    epoch: u64,
+    active: HashMap<LivenessTargetId, ActiveEntry>,
+    tombstones: HashMap<LivenessTargetId, TombstoneEntry>,
+}
+
+impl Default for LivenessRegistry {
+    fn default() -> Self {
+        Self {
+            registry_scope: allocate_registry_scope(),
+            last_incarnation: 0,
+            epoch: 0,
+            active: HashMap::new(),
+            tombstones: HashMap::new(),
+        }
+    }
+}
+
+impl fmt::Debug for LivenessRegistry {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("LivenessRegistry")
+            .field("last_incarnation", &self.last_incarnation)
+            .field("epoch", &self.epoch)
+            .field("active", &self.active)
+            .field("tombstones", &self.tombstones)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for LivenessRegistry {
+    fn eq(&self, other: &Self) -> bool {
+        self.last_incarnation == other.last_incarnation
+            && self.epoch == other.epoch
+            && self.active == other.active
+            && self.tombstones == other.tombstones
+    }
+}
+
+impl Eq for LivenessRegistry {}
 
 impl LivenessRegistry {
-    /// Creates an empty liveness registry.
+    /// Creates an empty registry with a unique private authority scope.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Returns true when no target generations have been retained.
+    /// Returns true when no active incarnations or tombstones remain.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.targets.is_empty()
+        self.active.is_empty() && self.tombstones.is_empty()
     }
 
-    /// Returns the number of retained target generation records.
+    /// Returns the total retained active and tombstone record count.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.targets.len()
+        self.active_count() + self.tombstone_count()
     }
 
-    /// Marks all retained targets unseen before a new frame is built.
+    /// Returns the number of active owner incarnations.
+    #[must_use]
+    pub fn active_count(&self) -> usize {
+        self.active.len()
+    }
+
+    /// Returns the number of retained tombstones.
+    #[must_use]
+    pub fn tombstone_count(&self) -> usize {
+        self.tombstones.len()
+    }
+
+    /// Starts a new presence epoch without invalidating active incarnations.
     pub(crate) fn begin_frame(&mut self) {
-        for entry in self.targets.values_mut() {
-            entry.seen_this_frame = false;
+        self.epoch = checked_successor(self.epoch).expect("liveness frame epoch overflow");
+        for entry in self.active.values_mut() {
+            entry.present_this_frame = false;
         }
     }
 
-    /// Preserves unseen target generations as tombstones at frame end.
-    #[allow(clippy::unused_self)]
+    /// Retires omitted incarnations and prunes tombstones after one complete
+    /// following frame.
     pub(crate) fn end_frame(&mut self) {
-        // Absence must validate as `StaleTarget`, but the generation record
-        // must survive so same-ID re-entry renews past previously issued tokens.
-    }
+        let omitted = self
+            .active
+            .iter()
+            .filter_map(|(target, entry)| {
+                (!entry.present_this_frame).then_some((*target, entry.incarnation))
+            })
+            .collect::<Vec<_>>();
 
-    /// Marks a target live and returns a token for its renewed generation.
-    ///
-    /// Re-marking the same target renews its generation. Older tokens for that
-    /// target then validate as [`LivenessUpdateStatus::StaleGeneration`].
-    pub fn mark_live(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
-        let target = target.into();
-        let generation = if let Some(entry) = self.targets.get_mut(&target) {
-            entry.generation = entry.generation.next();
-            entry.seen_this_frame = true;
-            entry.generation
-        } else {
-            self.targets.insert(
+        for (target, incarnation) in omitted {
+            self.active.remove(&target);
+            self.tombstones.insert(
                 target,
-                LivenessEntry {
-                    generation: LivenessGeneration::FIRST,
-                    seen_this_frame: true,
+                TombstoneEntry {
+                    incarnation,
+                    reason: TombstoneReason::Omitted,
+                    retired_epoch: self.epoch,
                 },
             );
-            LivenessGeneration::FIRST
-        };
+        }
 
-        LivenessToken::new(target, generation)
+        self.tombstones
+            .retain(|_, entry| entry.retired_epoch >= self.epoch);
     }
 
-    /// Marks a target absent while preserving its generation history.
-    pub fn remove(&mut self, target: impl Into<LivenessTargetId>) -> bool {
+    /// Marks an owner present in the current frame.
+    ///
+    /// Repeated marks in one or many continuously present frames return the
+    /// same token. A missing or retired target starts a new incarnation.
+    pub fn mark_present(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
         let target = target.into();
-        let Some(entry) = self.targets.get_mut(&target) else {
-            return false;
-        };
+        if let Some(entry) = self.active.get_mut(&target) {
+            entry.present_this_frame = true;
+            return LivenessToken::new(self.registry_scope, target, entry.incarnation);
+        }
 
-        entry.seen_this_frame = false;
-        true
+        let incarnation = self.allocate_incarnation();
+        self.active.insert(
+            target,
+            ActiveEntry {
+                incarnation,
+                present_this_frame: true,
+            },
+        );
+        LivenessToken::new(self.registry_scope, target, incarnation)
     }
 
-    /// Returns the current generation for a live target.
+    /// Starts a replacement incarnation and marks it present.
+    pub fn restart(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
+        let target = target.into();
+        let incarnation = self.allocate_incarnation();
+        self.active.insert(
+            target,
+            ActiveEntry {
+                incarnation,
+                present_this_frame: true,
+            },
+        );
+        LivenessToken::new(self.registry_scope, target, incarnation)
+    }
+
+    /// Cancels the exact active token incarnation.
+    ///
+    /// Repeating cancellation for the latest cancelled tombstone is
+    /// idempotent and does not extend its retention epoch.
+    pub fn cancel(&mut self, token: LivenessToken) -> LivenessUpdateStatus {
+        let status = self.validate(token);
+        if status != LivenessUpdateStatus::Applied {
+            return status;
+        }
+
+        self.active.remove(&token.target);
+        self.tombstones.insert(
+            token.target,
+            TombstoneEntry {
+                incarnation: token.incarnation,
+                reason: TombstoneReason::Cancelled,
+                retired_epoch: self.epoch,
+            },
+        );
+        LivenessUpdateStatus::Cancelled {
+            target: token.target,
+            incarnation: token.incarnation,
+        }
+    }
+
+    /// Explicitly removes the target's active incarnation.
+    pub fn remove(&mut self, target: impl Into<LivenessTargetId>) -> LivenessRemovalStatus {
+        let target = target.into();
+        let Some(entry) = self.active.remove(&target) else {
+            return LivenessRemovalStatus::AlreadyAbsent;
+        };
+
+        self.tombstones.insert(
+            target,
+            TombstoneEntry {
+                incarnation: entry.incarnation,
+                reason: TombstoneReason::Removed,
+                retired_epoch: self.epoch,
+            },
+        );
+        LivenessRemovalStatus::Removed
+    }
+
+    /// Returns true when the target was explicitly marked in the current
+    /// frame.
+    #[must_use]
+    pub fn is_present(&self, target: impl Into<LivenessTargetId>) -> bool {
+        self.active
+            .get(&target.into())
+            .is_some_and(|entry| entry.present_this_frame)
+    }
+
+    /// Returns true while the target has an active incarnation, including
+    /// between frame begin and omission finalization.
+    #[must_use]
+    pub fn is_active(&self, target: impl Into<LivenessTargetId>) -> bool {
+        self.active.contains_key(&target.into())
+    }
+
+    /// Returns the target's active incarnation.
+    #[must_use]
+    pub fn current_incarnation(
+        &self,
+        target: impl Into<LivenessTargetId>,
+    ) -> Option<LivenessIncarnation> {
+        self.active
+            .get(&target.into())
+            .map(|entry| entry.incarnation)
+    }
+
+    /// Marks presence using the previous live terminology.
+    #[deprecated(note = "use mark_present")]
+    pub fn mark_live(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
+        self.mark_present(target)
+    }
+
+    /// Tests active-incarnation state using the previous live terminology.
+    #[deprecated(note = "use is_active")]
+    #[must_use]
+    pub fn is_live(&self, target: impl Into<LivenessTargetId>) -> bool {
+        self.is_active(target)
+    }
+
+    /// Returns the active incarnation using the previous generation
+    /// terminology.
+    #[allow(deprecated)]
+    #[deprecated(note = "use current_incarnation")]
     #[must_use]
     pub fn current_generation(
         &self,
         target: impl Into<LivenessTargetId>,
     ) -> Option<LivenessGeneration> {
-        let target = target.into();
-        self.targets
-            .get(&target)
-            .filter(|entry| entry.seen_this_frame)
-            .map(|entry| entry.generation)
+        self.current_incarnation(target)
     }
 
-    /// Returns true when a target is currently live.
-    #[must_use]
-    pub fn is_live(&self, target: impl Into<LivenessTargetId>) -> bool {
-        self.current_generation(target).is_some()
-    }
-
-    /// Validates a token against the retained registry without running work.
+    /// Validates a token against the latest active or tombstoned target
+    /// incarnation without running work.
     #[must_use]
     pub fn validate(&self, token: LivenessToken) -> LivenessUpdateStatus {
-        let Some(entry) = self
-            .targets
-            .get(&token.target)
-            .filter(|entry| entry.seen_this_frame)
-        else {
+        if token.registry_scope != self.registry_scope {
+            return LivenessUpdateStatus::StaleTarget {
+                target: token.target,
+            };
+        }
+
+        let active = self.active.get(&token.target);
+        let tombstone = self.tombstones.get(&token.target);
+        let current_incarnation = active
+            .map(|entry| entry.incarnation)
+            .or_else(|| tombstone.map(|entry| entry.incarnation));
+        let Some(current_incarnation) = current_incarnation else {
             return LivenessUpdateStatus::StaleTarget {
                 target: token.target,
             };
         };
 
-        if entry.generation == token.generation {
-            LivenessUpdateStatus::Applied
-        } else {
-            LivenessUpdateStatus::StaleGeneration {
+        if token.incarnation != current_incarnation {
+            return LivenessUpdateStatus::StaleIncarnation {
                 target: token.target,
-                token_generation: token.generation,
-                current_generation: entry.generation,
+                token_incarnation: token.incarnation,
+                current_incarnation,
+            };
+        }
+
+        if active.is_some() {
+            return LivenessUpdateStatus::Applied;
+        }
+
+        match tombstone.map(|entry| entry.reason) {
+            Some(TombstoneReason::Cancelled) => LivenessUpdateStatus::Cancelled {
+                target: token.target,
+                incarnation: token.incarnation,
+            },
+            Some(TombstoneReason::Removed | TombstoneReason::Omitted) | None => {
+                LivenessUpdateStatus::StaleTarget {
+                    target: token.target,
+                }
             }
         }
     }
 
-    /// Runs `update` only when the token still matches the live target.
+    /// Runs `update` once for this call only when the token matches the active
+    /// incarnation.
     pub fn apply_update(
         &self,
         token: LivenessToken,
@@ -233,5 +510,38 @@ impl LivenessRegistry {
             update();
         }
         status
+    }
+
+    fn allocate_incarnation(&mut self) -> LivenessIncarnation {
+        self.last_incarnation =
+            checked_successor(self.last_incarnation).expect("liveness incarnation overflow");
+        LivenessIncarnation(self.last_incarnation)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checked_counter_successor_never_wraps() {
+        assert_eq!(checked_successor(0), Some(1));
+        assert_eq!(checked_successor(u64::MAX), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "liveness incarnation overflow")]
+    fn incarnation_overflow_panics_before_wrapping() {
+        let mut registry = LivenessRegistry::new();
+        registry.last_incarnation = u64::MAX;
+        registry.restart(WidgetId::from_key("overflow"));
+    }
+
+    #[test]
+    #[should_panic(expected = "liveness frame epoch overflow")]
+    fn epoch_overflow_panics_before_wrapping() {
+        let mut registry = LivenessRegistry::new();
+        registry.epoch = u64::MAX;
+        registry.begin_frame();
     }
 }

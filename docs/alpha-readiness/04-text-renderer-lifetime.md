@@ -16,7 +16,7 @@
 
 | Lane | ID | Goal | Dependency | Impact / confidence | Ownership |
 | --- | --- | --- | --- | --- | --- |
-| 4A | `ASYNC-01` | Separate presence, incarnation, cancellation, ID reuse, and tombstone cleanup | `RT-03` | High / High | Isolated only after ownership freezes |
+| 4A | `ASYNC-01` | Separate presence, incarnation, cancellation, ID reuse, and tombstone cleanup | `RT-03`, accepted `TEXT-01-PRE2` merge | High / High | Root-owned shared foundation; read-only critics |
 | 4A | `TEXT-01` | Desktop word movement/deletion, drag/double-click selection, caret scroll, multiline retention, true read-only | Stage 3, `RT-01`, `RT-03` | Critical / High | Root-owned text contract |
 | 4A | `REND-01` | Balance invalid transform scopes; define premultiplied tint and cross-layer color-space semantics | Stage 3; root color-policy decision | High / High for transform; Medium confidence for color | Root policy; mechanical transform subset may isolate |
 | 4B | `TEXT-02` | Grapheme, Unicode word, emoji, ligature, and mixed-bidi editing from authoritative clusters | `TEXT-01` | Critical / Medium-high | Root-owned text contract |
@@ -33,12 +33,20 @@ desktop editing finding by itself.
 single-pass DomainDrag response as causal root-ordinal actions, including the
 exact release that clicked, while keeping action metadata separate from
 canonical drop authority. `ASYNC-01` and `TEXT-01` remain serialized behind its
-accepted merge because all three touch shared memory/runtime and campaign
-evidence files.
+accepted merge at `00b944f` because all three touch shared memory/runtime and
+campaign evidence files. `ASYNC-01` follows that merge and must squash before
+`TEXT-01`; the dependency is file serialization, not a semantic text-liveness
+requirement.
 
 ## Ownership And Overlap
 
-`ASYNC-01` shares Z1 with runtime ownership and cannot precede `RT-03`. `TEXT-01/02/03` and `REND-02` share Z4 and must not edit the same text files concurrently. `REND-01/02` share Z5. Color space and premultiplication are one root-owned cross-layer policy; no Vello leaf task may choose local semantics. Halt if Unicode work requires an unplanned shaping-engine replacement.
+`ASYNC-01` shares Z1 with runtime ownership and cannot precede `RT-03` or the
+accepted DomainDrag prerequisite. It also removes authority-bearing memory
+Clone, so its runtime/harness/facade integration must finish before `TEXT-01`.
+`TEXT-01/02/03` and `REND-02` share Z4 and must not edit the same text files
+concurrently. `REND-01/02` share Z5. Color space and premultiplication are one
+root-owned cross-layer policy; no Vello leaf task may choose local semantics.
+Halt if Unicode work requires an unplanned shaping-engine replacement.
 
 ## Acceptance Gate And Verification Expectations
 

@@ -56,8 +56,11 @@ pub use layout::{
     Alignment, Axis, Insets, LayoutItem, Measurement, SeparatorKind, SizeRule, column_layout,
     fit_box, pad_rect, rect_from_size, row_layout, split_leading, split_trailing, stack_layout,
 };
+#[allow(deprecated)]
+pub use liveness::LivenessGeneration;
 pub use liveness::{
-    LivenessGeneration, LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus,
+    LivenessIncarnation, LivenessRegistry, LivenessRemovalStatus, LivenessTargetId, LivenessToken,
+    LivenessUpdateStatus,
 };
 pub use memory::{PointerRoute, PointerRoutes, UiMemory};
 pub use observers::{

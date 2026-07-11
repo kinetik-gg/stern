@@ -51,6 +51,21 @@ The toolkit should support UI patterns for:
 
 The UI must not wait synchronously for heavy processing to complete.
 
+External results delivered back to the UI coordinator use durable liveness
+tokens. Marking an async owner present in each frame does not renew its token;
+the token remains valid for the continuously active incarnation. Applications
+explicitly restart an owner when same-ID work is replaced, cancel the exact
+token when delivery should stop, or remove the owner when it is no longer
+active. Widget-registration presence is not async-owner authority.
+
+The coordinator, not a worker, owns validation and mutation. Applying a valid
+token invokes that call's mutation once; this contract does not deduplicate
+application result identities or reclaim worker resources. Apply-before-cancel
+may commit once, while cancel-before-apply rejects the mutation. Tokens are
+process-local and safe to transfer to workers, but registry mutation remains on
+the UI coordinator. Observer queues preserve FIFO snapshot and reentrant
+deferral semantics while validating the retained incarnation at drain time.
+
 ## 24. Redraw Scheduling
 
 Rendering should be event-driven.

@@ -297,7 +297,7 @@ impl ScriptedKeyEvent {
 /// viewport metadata, normalized input, retained UI memory, and controlled
 /// frame time. It never creates a window, renderer, GPU resource, OS service,
 /// or accessibility adapter.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct UiTestHarness {
     viewport: ViewportInfo,
     input: UiInput,

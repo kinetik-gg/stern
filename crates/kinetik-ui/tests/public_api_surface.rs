@@ -101,6 +101,11 @@ fn facade_root_and_feature_qualified_paths_compile() {
         std::any::type_name::<core::CapturedSelectionGesture>(),
         std::any::type_name::<core::DomainDragGestureAction>(),
         std::any::type_name::<core::DomainDragGesturePhase>(),
+        std::any::type_name::<core::LivenessIncarnation>(),
+        std::any::type_name::<core::LivenessRegistry>(),
+        std::any::type_name::<core::LivenessRemovalStatus>(),
+        std::any::type_name::<core::LivenessToken>(),
+        std::any::type_name::<core::LivenessUpdateStatus>(),
         std::any::type_name::<core::OrderedTextInputEvent>(),
         std::any::type_name::<core::SelectionGestureAction>(),
         std::any::type_name::<core::SelectionGesturePhase>(),
@@ -143,6 +148,64 @@ fn facade_root_and_feature_qualified_paths_compile() {
         let _ = kinetik_ui::render_vello::VelloRenderer::new();
         let _ = kinetik_ui::render_vello::translate_primitives;
     }
+}
+
+#[test]
+fn canonical_liveness_incarnation_surface_compiles_and_reports_typed_statuses() {
+    use kinetik_ui::core::{
+        LivenessRegistry, LivenessRemovalStatus, LivenessTargetId, LivenessUpdateStatus, WidgetId,
+    };
+
+    let widget = WidgetId::from_key("preview");
+    let target = LivenessTargetId::new(widget);
+    let mut registry = LivenessRegistry::new();
+    let first = registry.mark_present(target);
+    assert_eq!(first.target(), target);
+    assert!(registry.is_present(target));
+    assert!(registry.is_active(target));
+    assert_eq!(
+        registry.current_incarnation(target),
+        Some(first.incarnation())
+    );
+
+    assert!(matches!(
+        registry.cancel(first),
+        LivenessUpdateStatus::Cancelled {
+            target: cancelled_target,
+            incarnation,
+        } if cancelled_target == target && incarnation == first.incarnation()
+    ));
+
+    let replacement = registry.restart(target);
+    assert!(matches!(
+        registry.validate(first),
+        LivenessUpdateStatus::StaleIncarnation {
+            target: stale_target,
+            token_incarnation,
+            current_incarnation,
+        } if stale_target == target
+            && token_incarnation == first.incarnation()
+            && current_incarnation == replacement.incarnation()
+    ));
+    assert_eq!(registry.remove(target), LivenessRemovalStatus::Removed);
+    assert_eq!(
+        registry.remove(target),
+        LivenessRemovalStatus::AlreadyAbsent
+    );
+}
+
+#[allow(deprecated)]
+#[test]
+fn deprecated_liveness_generation_aliases_remain_importable() {
+    use kinetik_ui::core::{LivenessGeneration, LivenessRegistry, WidgetId};
+
+    let target = WidgetId::from_key("compatibility");
+    let mut registry = LivenessRegistry::new();
+    let token = registry.mark_live(target);
+    let generation: LivenessGeneration = token.generation();
+
+    assert!(registry.is_live(target));
+    assert_eq!(registry.current_generation(target), Some(generation));
 }
 
 #[test]

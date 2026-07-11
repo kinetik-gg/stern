@@ -856,10 +856,11 @@ remain `TEXT-01` or later Stage 4 work.
 
 ### `TEXT-01-PRE2`: causal DomainDrag actions
 
-Status: Implementation candidate for Issue #524. This is the second
-shared-foundation prerequisite discovered by the `TEXT-01` task gate, not a new
-audit roadmap ID. `ASYNC-01` and `TEXT-01` remain gated until it passes exact-SHA
-review, remote CI, PR checks, and squash merge.
+Status: Complete. Issue #524 closed through PR #525, squash-merged as
+`00b944f`. This is the second shared-foundation prerequisite discovered by the
+`TEXT-01` task gate, not a new audit roadmap ID. `ASYNC-01` is now serialized
+next; `TEXT-01` remains gated on its merge because the packets share runtime,
+memory, facade, and evidence files.
 
 #### Changed files
 
@@ -906,8 +907,10 @@ ordinal namespace was added.
 - Existing selection modifier, drag threshold, pointer, and runtime spatial
   conformance passed at 11/11, 46/46, 28/28, and 12/12 respectively.
 - Facade public API surface passed 5/5; warning-denied core Clippy passed.
-- The complete six-command workspace gate passed. Independent exact-SHA audit,
-  three-OS CI, and PR checks remain pending on this implementation candidate.
+- The complete six-command workspace gate and three independent exact-SHA
+  implementation/API/evidence audits passed with P0=0, P1=0, P2=0. Ubuntu,
+  Windows, and macOS passed in run 29144941082; PR-context checks passed in run
+  29145087602 before PR #525 squash-merged as `00b944f`.
 
 #### Remaining risks and deferred findings
 
@@ -915,8 +918,87 @@ The action seam deliberately remains runtime-only; low-level standalone
 `draggable` callers receive the existing aggregate response without ordered
 actions. `TEXT-01` must consume the captured response once and still owns actual
 numeric caret arbitration, desktop selection, word behavior, read-only modes,
-viewports, and IME geometry. `ASYNC-01` remains serialized next because it edits
-the same memory/runtime and evidence files.
+viewports, and IME geometry. `ASYNC-01` is the next root-owned shared foundation
+because it edits the same memory/runtime and evidence files.
+
+### `ASYNC-01`: durable presence and incarnation
+
+Status: Implementation candidate for Issue #526 on base `00b944f`. The exact
+task and dependency gates passed after correcting presence/active semantics,
+cancellation replacement precedence, tombstone epochs, observational equality,
+observer migration, and the direct `UiTestHarness` Clone dependency.
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `crates/kinetik-ui-core/src/liveness.rs`
+- `crates/kinetik-ui-core/src/memory.rs`
+- `crates/kinetik-ui-core/src/observers.rs`
+- `crates/kinetik-ui-core/src/runtime/ui.rs`
+- `crates/kinetik-ui-core/src/lib.rs`
+- `crates/kinetik-ui-core/src/test_harness.rs`
+- `crates/kinetik-ui-core/tests/async_liveness_conformance.rs`
+- `crates/kinetik-ui-core/tests/observer_conformance.rs`
+- `crates/kinetik-ui-core/tests/domain_drag_action_conformance.rs`
+- `crates/kinetik-ui/tests/public_api_surface.rs`
+- `docs/specs/01-foundations.md`
+- `docs/specs/04-runtime-platform.md`
+- `docs/alpha-readiness/04-text-renderer-lifetime.md`
+- `docs/alpha-readiness/progress.md`
+
+#### Reasoning and contract decisions
+
+Frame-local presence and durable active incarnation are separate. Repeated
+marks across continuously present frames return one opaque registry-scoped
+token. First activation, reentry, and explicit restart allocate checked
+registry-wide monotonic incarnations. Beginning a frame clears only presence;
+the token remains applicable until omission finalizes.
+
+Validation rejects foreign scopes, reports a different latest incarnation
+before interpreting its active/tombstone reason, accepts the exact active
+incarnation, preserves exact cancellation evidence for the latest cancelled
+tombstone, and treats removed/omitted tombstones as stale targets. Thus an old
+cancelled token becomes `StaleIncarnation` after same-ID replacement and cannot
+cancel the replacement. Tombstones survive one full following frame without
+repeated cancellation extending their epoch, then prune without resetting the
+scope or allocator.
+
+Authority-bearing `UiMemory`, `LivenessRegistry`, `ObserverRegistry`, and the
+`UiTestHarness` wrapper are non-cloneable. Observational equality ignores only
+private registry scope and compares all behavior-bearing state; token equality
+still includes scope. Observer subscriptions retain one token for one
+incarnation, validate during FIFO drain, expose cancelled/stale-incarnation
+skips, and require a new subscription after restart/reentry.
+
+#### Tests run and results
+
+- Durable liveness conformance: 15/15 passed, including repeated marks and
+  1,000 frames, pre-finalization applicability, both result/remove and
+  result/cancel orders, replacement/reentry, foreign registries, equality,
+  tombstone grace/pruning, ABA, widget-presence independence, compatibility,
+  Send+Sync, and zero unrelated output.
+- Observer conformance: 10/10 passed, including 1,000-frame stable
+  subscriptions without refresh, FIFO, inactive precedence, cancellation/drain
+  order, reincarnation, pruned reason degradation, scope-neutral equality, and
+  reentrant deferral.
+- PRE2 DomainDrag regression: 16/16 passed after replacing the three memory
+  Clone assertions with deterministic Debug snapshots.
+- Facade public API surface: 7/7 passed for canonical incarnation/removal/status
+  APIs and deprecated generation aliases.
+- Complete core all-feature tests passed: 160 unit tests, every integration
+  suite, and four compile-fail doctests for token opacity and non-cloneable
+  authority.
+- Warning-denied workspace Clippy, the complete six-command workspace gate,
+  exact-SHA critics, three-OS CI, and PR-context checks remain pending for the
+  implementation candidate.
+
+#### Remaining risks and deferred findings
+
+Cancellation prevents UI delivery but does not reclaim arbitrary worker
+resources. `apply_update` intentionally does not deduplicate caller-owned
+result identities. Tombstones are bounded by time, not a hard count, and tokens
+are process-local. `TEXT-01` depends only on serialized file ownership and the
+non-cloneable memory migration; it does not semantically depend on liveness.
 
 ## Packet Completion Template
 
