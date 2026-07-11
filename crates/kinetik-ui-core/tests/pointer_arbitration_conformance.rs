@@ -334,11 +334,10 @@ fn ordinary_press_wheel_viewport_and_drop_destination_have_independent_routes() 
         ui.register_id(upper_drop);
         let routes = ui
             .resolve_pointer_targets(|plan| {
-                plan.target(PointerTarget::new(
-                    source,
-                    source_rect,
-                    PointerOrder::new(50),
-                ));
+                plan.target(
+                    PointerTarget::new(source, source_rect, PointerOrder::new(50))
+                        .domain_drag_source(),
+                );
                 plan.target(
                     PointerTarget::new(lower_drop, FULL, PointerOrder::new(10))
                         .ordinary_owner(None)

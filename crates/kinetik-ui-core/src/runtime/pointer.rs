@@ -11,8 +11,7 @@ use crate::{
 };
 
 use super::spatial::SpatialStack;
-
-const DRAG_THRESHOLD_SQUARED: f32 = 16.0;
+use crate::interaction::crosses_drag_threshold;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum PointerDropProbe {
@@ -249,7 +248,7 @@ impl PointerTargetPlan {
             && !matches!(self.drop_probe, PointerDropProbe::Cancelled)
             && self.spatial.hit_test_rect(self.drop_pointer(), target.rect);
         let drop_event_allowed = match self.drop_probe {
-            PointerDropProbe::Snapshot => true,
+            PointerDropProbe::Snapshot => self.spatial.ordinary_event_allowed(self.pointer),
             PointerDropProbe::Release { position, .. } => {
                 self.spatial.ordinary_event_allowed(position)
             }
@@ -396,7 +395,11 @@ impl PointerTargetPlan {
         } else {
             None
         };
-        let release_source_valid = !matches!(self.drop_probe, PointerDropProbe::Release { .. })
+        let source_probe_requires_validation = matches!(
+            self.drop_probe,
+            PointerDropProbe::Release { .. } | PointerDropProbe::Snapshot
+        ) && transaction_source_target.is_some();
+        let drop_source_valid = !source_probe_requires_validation
             || transaction_source_target.is_some_and(|target| {
                 target.domain_drag_source
                     && target.drop_event_allowed
@@ -407,7 +410,7 @@ impl PointerTargetPlan {
                         captured,
                     )
             });
-        let drop = if release_source_valid {
+        let drop = if drop_source_valid {
             match top_drop_visual {
                 TopVisual::Target(target) => target
                     .drop_owner
@@ -420,6 +423,18 @@ impl PointerTargetPlan {
         let planned_drag_release = match drop {
             PointerRoute::Target(_) => transaction_source_target.and_then(|target| {
                 planned_drag_release(
+                    target,
+                    self.press_probe,
+                    self.retained_drag,
+                    self.drop_probe,
+                    &self.root_events,
+                )
+            }),
+            PointerRoute::Unplanned | PointerRoute::Blocked => None,
+        };
+        let planned_drag_source = match drop {
+            PointerRoute::Target(_) => transaction_source_target.and_then(|target| {
+                planned_active_drag_source(
                     target,
                     self.press_probe,
                     self.retained_drag,
@@ -466,6 +481,7 @@ impl PointerTargetPlan {
                 .unwrap_or_default(),
             capture_valid: captured.is_none() || captured_target.is_some(),
             planned_drag_release,
+            planned_drag_source,
         })
     }
 
@@ -589,11 +605,64 @@ fn planned_drag_release(
     None
 }
 
-fn crosses_drag_threshold(origin: Point, position: Point) -> bool {
-    let x = position.x - origin.x;
-    let y = position.y - origin.y;
-    let displacement_squared = x.mul_add(x, y * y);
-    displacement_squared.is_finite() && displacement_squared >= DRAG_THRESHOLD_SQUARED
+fn planned_active_drag_source(
+    target: &ResolvedTarget,
+    press_probe: Option<PointerPressProbe>,
+    retained_drag: Option<RetainedDragProbe>,
+    drop_probe: PointerDropProbe,
+    root_events: &[UiInputEvent],
+) -> Option<WidgetId> {
+    if !target.domain_drag_source
+        || !target.drop_event_allowed
+        || drop_probe != PointerDropProbe::Snapshot
+    {
+        return None;
+    }
+
+    let (source, origin, mut threshold_crossed, first_motion_ordinal) =
+        if let Some(retained) = retained_drag {
+            (
+                retained.source,
+                retained.origin,
+                retained.threshold_crossed,
+                0,
+            )
+        } else {
+            let press = press_probe?;
+            let source = target.ordinary_owner?;
+            let origin = press
+                .position
+                .and_then(|position| target.spatial.transform_screen_point(position));
+            (source, origin, false, press.ordinal.saturating_add(1))
+        };
+    if target.ordinary_owner != Some(source) {
+        return None;
+    }
+
+    for (ordinal, event) in root_events.iter().enumerate() {
+        if ordinal < first_motion_ordinal {
+            continue;
+        }
+        match event {
+            UiInputEvent::PointerMoved { position, .. } => {
+                if let Some(origin) = origin
+                    && target.spatial.ordinary_event_allowed(Some(*position))
+                    && let Some(position) = target.spatial.transform_screen_point(*position)
+                {
+                    threshold_crossed |= crosses_drag_threshold(origin, position);
+                }
+            }
+            UiInputEvent::PointerButton {
+                button: MouseButton::Primary,
+                down: false,
+                ..
+            }
+            | UiInputEvent::PointerReleaseAll { .. }
+            | UiInputEvent::WindowFocusChanged(false) => return None,
+            _ => {}
+        }
+    }
+    threshold_crossed.then_some(source)
 }
 
 pub(crate) struct ResolvedPointerPlan {
@@ -601,6 +670,7 @@ pub(crate) struct ResolvedPointerPlan {
     pub(crate) cursor_equivalents: Vec<WidgetId>,
     pub(crate) capture_valid: bool,
     pub(crate) planned_drag_release: Option<PlannedDragRelease>,
+    pub(crate) planned_drag_source: Option<WidgetId>,
 }
 
 #[derive(Debug)]

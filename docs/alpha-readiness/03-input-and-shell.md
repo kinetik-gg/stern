@@ -68,9 +68,12 @@ same fence. Closed plans declare domain-drag source intent, select same-frame
 ordinary ownership from the first causal press, and validate threshold/release
 evidence in the source transform and clip before routing the first causal
 release. Canonical unplanned commits fail closed while empty-stream legacy drop
-behavior remains compatible. Thirty-eight focused core adversarial tests and
-forty-four widget taxonomy tests pass; exact-SHA audit and the complete gate
-remain pending.
+behavior remains compatible. Planned active drags and release commits are
+source/target evaluation-order invariant, split button owners preserve
+pre-fence output without stale hover/cursor publication, and selection
+cancellation cannot replay on a second same-frame claim. Forty-six focused
+core adversarial tests and forty-four widget taxonomy tests pass; the complete
+six-command workspace gate passes on the final evidence candidate.
 
 ## Ownership And Overlap
 

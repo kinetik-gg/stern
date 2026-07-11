@@ -33,9 +33,11 @@ published, or accepted as an alpha release.
   editing stream so text fields need not parse pointer events again. Text
   composite numeric scrub fields resolve one domain-drag response without a
   second press pass. Global cancellation fences preserve earlier owner and
-  wheel output, and planned drops use declared source intent plus the first
-  causal press/release geometry. Canonical unplanned drop commits now fail
-  closed; empty-stream legacy behavior remains compatible.
+  wheel output even when primary and secondary owners differ, and planned drops
+  use declared source intent plus immutable first-causal press/release geometry.
+  Owner-mismatched plans and canonical unplanned drop commits now fail closed;
+  passive hover also observes canonical focus-loss fences while pre-fence wheel
+  deltas remain usable. Empty-stream legacy behavior remains compatible.
 
 ### Documentation
 

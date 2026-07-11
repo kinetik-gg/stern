@@ -1,12 +1,12 @@
 use super::drag_select::{SelectionGestureAction, SelectionGesturePhase};
-use super::{HitTarget, InteractionState, Response};
+use super::{
+    HitTarget, InteractionState, Response, canonical_pointer_fenced, crosses_drag_threshold,
+};
 use crate::memory::PointerGestureKind;
 use crate::{
     Key, KeyState, MouseButton, Point, Rect, Transform, UiInput, UiInputEvent, UiMemory, Vec2,
     WidgetId,
 };
-
-pub(super) const DRAG_THRESHOLD_SQUARED: f32 = 16.0;
 
 pub(super) struct PressResolution {
     pub response: Response,
@@ -137,7 +137,8 @@ pub(super) fn resolve_pressable_with_hit_target(
         }
     }
 
-    let pointer_cancelled = memory.pointer_interaction_cancelled();
+    let pointer_cancelled =
+        memory.pointer_interaction_cancelled() || canonical_pointer_fenced(input);
     let hovered = !pointer_cancelled
         && !conflicted
         && !disabled
@@ -308,7 +309,10 @@ fn resolve_canonical_pointer(
                         click_count,
                     );
                 }
-                resolve_pointer_fence(memory, owns_primary || owns_secondary);
+                resolve_pointer_fence(memory, id, owns_primary, owns_secondary);
+                if owns_primary && kind == PointerGestureKind::Selection {
+                    let _ = memory.take_cancelled_pointer_gesture(id);
+                }
                 break;
             }
             UiInputEvent::WindowFocusChanged(false) => {
@@ -326,7 +330,10 @@ fn resolve_canonical_pointer(
                         click_count,
                     );
                 }
-                resolve_pointer_fence(memory, owns_primary || owns_secondary);
+                resolve_pointer_fence(memory, id, owns_primary, owns_secondary);
+                if owns_primary && kind == PointerGestureKind::Selection {
+                    let _ = memory.take_cancelled_pointer_gesture(id);
+                }
                 break;
             }
             _ => {}
@@ -334,10 +341,19 @@ fn resolve_canonical_pointer(
     }
 }
 
-fn resolve_pointer_fence(memory: &mut UiMemory, owns_pointer_transaction: bool) {
-    if owns_pointer_transaction {
-        memory.cancel_pointer_stream();
-    } else if !memory.has_pointer_transaction() {
+fn resolve_pointer_fence(
+    memory: &mut UiMemory,
+    id: WidgetId,
+    owns_primary: bool,
+    owns_secondary: bool,
+) {
+    if owns_primary {
+        memory.cancel_primary_pointer_interaction();
+    }
+    if owns_secondary {
+        memory.cancel_secondary_pointer_interaction(id);
+    }
+    if !memory.has_pointer_transaction() {
         memory.fence_pointer_stream();
     }
 }
@@ -432,12 +448,7 @@ fn resolve_motion(
         return;
     };
     let displacement = Vec2::new(position.x - origin.x, position.y - origin.y);
-    let displacement_squared = displacement
-        .x
-        .mul_add(displacement.x, displacement.y * displacement.y);
-    let crosses_now = !was_crossed
-        && displacement_squared.is_finite()
-        && displacement_squared >= DRAG_THRESHOLD_SQUARED;
+    let crosses_now = !was_crossed && crosses_drag_threshold(origin, position);
 
     if crosses_now {
         memory.mark_pointer_threshold_crossed(id);
@@ -518,14 +529,14 @@ fn resolve_primary_release(
     let exact_domain_gesture = kind == PointerGestureKind::DomainDrag
         && memory.pointer_gesture_kind(id) == Some(PointerGestureKind::DomainDrag);
     if cleanup_only || conflicted || !exact_domain_gesture {
-        memory.clear_drag();
+        memory.clear_active_drag();
     } else {
         memory.finish_drag_at(id, release_ordinal);
     }
     if cleanup_only || !released_inside {
         outcome.suppress_drag_output = true;
     }
-    memory.clear_interaction();
+    memory.clear_primary_interaction();
 }
 
 #[allow(clippy::too_many_arguments)]

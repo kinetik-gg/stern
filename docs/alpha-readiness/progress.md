@@ -750,11 +750,19 @@ output. Closed plans require declared domain-drag source intent, derive
 same-frame ownership from the first causal press, latch threshold evidence in
 the source transform, validate source clipping, and route the matching causal
 release. Canonical unplanned commits fail closed; empty-stream legacy drops
-remain compatible.
+remain compatible. Final audit remedies keep first-release evidence immutable
+across later same-frame transactions, cancel split primary/secondary ownership
+per channel before raising a global fence, block planned releases after owner
+mismatch, share one planner/primitive threshold predicate, and suppress passive
+hover/cursor output after canonical focus loss without discarding pre-fence
+wheel or drag input. Closed plans also expose threshold-crossed active sources
+before release, ignore non-causal earlier releases, and prevent repeated
+selection calls from replaying a direct cancellation. Active previews enforce
+the same captured-source effective clip as release commits.
 
 #### Tests run and results
 
-- New drag-threshold conformance: 38/38 passed, covering boundaries, accumulated
+- New drag-threshold conformance: 46/46 passed, covering boundaries, accumulated
   and subsequent deltas, move-back latch, same-frame release, pressable
   suppression, double-click, conflict cleanup, drop order, selection ordinals,
   spatial gaps and cleanup provenance, release-all cancellation, canonical drop
@@ -762,11 +770,15 @@ remain compatible.
   cleanup, plus legacy relocation, exact gesture modes, same-frame clipped
   ownership, unrelated-first cancellation, global fences, pre-fence wheel
   input, unplanned fail-closed drops, transformed target-first probes,
-  same-frame press/release planning, multiple releases, and release-time plans.
+  same-frame press/release planning, immutable first-release authority,
+  below-threshold first transactions, split button owners, owner-mismatch
+  fail-closed routing, no-owner focus loss, active target-first drag hover,
+  non-causal earlier releases, captured-source active clipping, no-replay
+  cancellation, and release-time plans.
 - Widget component-taxonomy conformance: 44/44 passed, including canonical
   accumulated scrub crossing, release publication, pre-press movement rejection,
   and below-threshold focus preservation without a second pointer pass.
-- Core all-feature suite: passed, including 157 unit tests, 38 drag-threshold
+- Core all-feature suite: passed, including 157 unit tests, 46 drag-threshold
   cases, 28 pointer-conformance cases, and the remaining integration/doc tests.
 - Widget all-feature suite: passed after updating superseded legacy scrub
   fixtures to use origin-to-position crossing geometry.
@@ -775,8 +787,8 @@ remain compatible.
 - Facade public API surface with all features: 5/5 passed.
 - Warning-denied all-target/all-feature Clippy across core, widgets, facade, and
   Showcase passed; formatting and diff checks passed.
-- Independent audit and the complete six-command workspace gate remain pending
-  on the implementation candidate.
+- The complete six-command workspace gate passed on the final evidence
+  candidate; independent exact-SHA re-audit is the remaining pre-PR gate.
 
 #### Remaining risks and deferred findings
 

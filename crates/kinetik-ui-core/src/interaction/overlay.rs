@@ -1,7 +1,11 @@
 use super::hit::HitTarget;
-use super::{DropTargetResponse, InteractionState, Response, pressable, pressable_transformed};
+use super::{
+    DropTargetResponse, InteractionState, Response, canonical_pointer_fenced, pressable,
+    pressable_transformed,
+};
 use crate::{
-    Key, KeyState, MouseButton, Rect, Transform, UiInput, UiInputEvent, UiMemory, WidgetId,
+    Key, KeyState, MouseButton, PointerRoute, Rect, Transform, UiInput, UiInputEvent, UiMemory,
+    WidgetId,
 };
 
 /// Resolves neutral context-menu trigger behavior.
@@ -73,6 +77,7 @@ fn tooltip_trigger_with_hit_target(
 ) -> Response {
     let hovered = !disabled
         && !memory.pointer_input_conflicted(input)
+        && !canonical_pointer_fenced(input)
         && hit_target.routed_hit_test(id, rect, input, memory);
     if hovered {
         memory.set_hovered(id);
@@ -136,11 +141,20 @@ fn drop_target_with_hit_target(
     disabled: bool,
 ) -> DropTargetResponse {
     let drag_release = drag_release(input, memory);
-    let termination = drag_termination(input, drag_release);
+    let planned_drag_source = (!input.events.is_empty()
+        && matches!(memory.pointer_drop_route(), PointerRoute::Target(_)))
+    .then(|| memory.planned_drag_source())
+    .flatten();
+    let termination = if drag_release.is_none() && planned_drag_source.is_some() {
+        DragTermination::Pending
+    } else {
+        drag_termination(input, drag_release)
+    };
     let input_conflicted = memory.pointer_input_conflicted(input);
     let source_candidate = drag_release
         .map(|release| release.source)
         .or_else(|| memory.drag_source())
+        .or(planned_drag_source)
         .filter(|source| *source != id);
     let target_hit = hit_target.hit_test(rect, input);
     let (release_seen, source_hit) = match termination {
@@ -227,16 +241,19 @@ fn drag_release(input: &UiInput, memory: &UiMemory) -> Option<DragRelease> {
         });
     }
 
-    if let (Some(source), Some(release_ordinal)) = (
-        memory.released_drag_source(),
-        memory.released_drag_ordinal(),
-    ) {
-        return canonical_drag_release(input, memory, source, release_ordinal);
+    match memory.pointer_drop_route() {
+        PointerRoute::Target(_) => memory.planned_drag_release().and_then(|release| {
+            canonical_drag_release(input, memory, release.source, release.ordinal)
+        }),
+        PointerRoute::Blocked => None,
+        PointerRoute::Unplanned => {
+            let (source, release_ordinal) = (
+                memory.released_drag_source()?,
+                memory.released_drag_ordinal()?,
+            );
+            canonical_drag_release(input, memory, source, release_ordinal)
+        }
     }
-
-    memory
-        .planned_drag_release()
-        .and_then(|release| canonical_drag_release(input, memory, release.source, release.ordinal))
 }
 
 fn canonical_drag_release(

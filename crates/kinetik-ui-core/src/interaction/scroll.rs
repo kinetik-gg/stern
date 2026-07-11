@@ -1,4 +1,4 @@
-use super::{HitTarget, InteractionState, Response, ScrollResponse};
+use super::{HitTarget, InteractionState, Response, ScrollResponse, canonical_pointer_fenced};
 use crate::{
     InputWheelDelta, PointerRoute, Rect, Size, Transform, UiInput, UiInputEvent, UiMemory, Vec2,
     WidgetId,
@@ -68,7 +68,11 @@ fn scrollable_with_hit_target(
 ) -> ScrollResponse {
     let conflicted = memory.pointer_input_conflicted(input);
     let target_hit = hit_target.hit_test(rect, input);
-    let hovered = !conflicted && !disabled && target_hit && memory.pointer_route_allows(id);
+    let hovered = !conflicted
+        && !disabled
+        && !canonical_pointer_fenced(input)
+        && target_hit
+        && memory.pointer_route_allows(id);
     if hovered {
         memory.set_hovered(id);
     }

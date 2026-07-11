@@ -26,3 +26,23 @@ pub use response::{DropTargetResponse, InteractionState, Response, ScrollRespons
 pub use scroll::{clamp_scroll_offset, max_scroll_offset, scrollable, scrollable_transformed};
 
 use hit::HitTarget;
+
+const DRAG_THRESHOLD_SQUARED: f32 = 16.0;
+
+pub(crate) fn crosses_drag_threshold(origin: crate::Point, position: crate::Point) -> bool {
+    let x = position.x - origin.x;
+    let y = position.y - origin.y;
+    let displacement_squared = x.mul_add(x, y * y);
+    displacement_squared.is_finite() && displacement_squared >= DRAG_THRESHOLD_SQUARED
+}
+
+pub(crate) fn canonical_pointer_fenced(input: &crate::UiInput) -> bool {
+    !input.events.is_empty()
+        && input.events.iter().any(|event| {
+            matches!(
+                event,
+                crate::UiInputEvent::PointerReleaseAll { .. }
+                    | crate::UiInputEvent::WindowFocusChanged(false)
+            )
+        })
+}

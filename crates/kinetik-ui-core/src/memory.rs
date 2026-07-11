@@ -109,6 +109,7 @@ pub struct UiMemory {
     cancelled_pointer_gesture: Option<CancelledPointerGesture>,
     pointer_routes: PointerRoutes,
     planned_drag_release: Option<PlannedDragRelease>,
+    planned_drag_source: Option<WidgetId>,
     pointer_cursor_equivalents: HashSet<WidgetId>,
     scoped_pointer_cleanup_events: HashSet<usize>,
     scoped_pointer_event_ordinals: Vec<usize>,
@@ -153,6 +154,7 @@ impl UiMemory {
         self.cancelled_pointer_gesture = None;
         self.pointer_routes = PointerRoutes::default();
         self.planned_drag_release = None;
+        self.planned_drag_source = None;
         self.pointer_cursor_equivalents.clear();
         self.scoped_pointer_cleanup_events.clear();
         self.scoped_pointer_event_ordinals.clear();
@@ -238,9 +240,11 @@ impl UiMemory {
         routes: PointerRoutes,
         cursor_equivalents: impl IntoIterator<Item = WidgetId>,
         planned_drag_release: Option<PlannedDragRelease>,
+        planned_drag_source: Option<WidgetId>,
     ) {
         self.pointer_routes = routes;
         self.planned_drag_release = planned_drag_release;
+        self.planned_drag_source = planned_drag_source;
         self.pointer_cursor_equivalents.clear();
         self.pointer_cursor_equivalents.extend(cursor_equivalents);
     }
@@ -265,6 +269,10 @@ impl UiMemory {
 
     pub(crate) const fn planned_drag_release(&self) -> Option<PlannedDragRelease> {
         self.planned_drag_release
+    }
+
+    pub(crate) const fn planned_drag_source(&self) -> Option<WidgetId> {
+        self.planned_drag_source
     }
 
     pub(crate) fn pointer_wheel_route_allows(&self, id: WidgetId) -> bool {
@@ -578,9 +586,15 @@ impl UiMemory {
     pub(crate) fn finish_drag_at(&mut self, id: WidgetId, ordinal: Option<usize>) {
         if self.drag_source == Some(id) {
             self.drag_source = None;
-            self.released_drag_source = Some(id);
-            self.released_drag_ordinal = ordinal;
+            if self.released_drag_source.is_none() {
+                self.released_drag_source = Some(id);
+                self.released_drag_ordinal = ordinal;
+            }
         }
+    }
+
+    pub(crate) fn clear_active_drag(&mut self) {
+        self.drag_source = None;
     }
 
     /// Clears active and released drag source state.
@@ -592,6 +606,16 @@ impl UiMemory {
 
     /// Cancels active pointer interaction while preserving unrelated retained state.
     pub fn cancel_pointer_interaction(&mut self) -> bool {
+        let cancelled_primary = self.cancel_primary_pointer_interaction();
+        let cancelled_secondary = self.secondary_pressed.take().is_some();
+        let cancelled = cancelled_primary || cancelled_secondary;
+        if cancelled {
+            self.pointer_interaction_cancelled = true;
+        }
+        cancelled
+    }
+
+    pub(crate) fn cancel_primary_pointer_interaction(&mut self) -> bool {
         let cancelled_owner = self
             .pointer_gesture_owner()
             .or(self.pointer_capture)
@@ -601,7 +625,6 @@ impl UiMemory {
             .unwrap_or(0);
         let cancelled = self.active.is_some()
             || self.pressed.is_some()
-            || self.secondary_pressed.is_some()
             || self.pointer_capture.is_some()
             || self.drag_source.is_some()
             || self.pointer_gesture.is_some();
@@ -610,23 +633,20 @@ impl UiMemory {
                 owner,
                 click_count: cancelled_click_count,
             });
-            self.pointer_gesture = None;
-            self.clear_drag();
-            self.clear_interaction();
+            self.clear_active_drag();
+            self.clear_primary_interaction();
             self.pointer_capture_released = None;
-            self.pointer_interaction_cancelled = true;
         }
         cancelled
     }
 
-    pub(crate) fn cancel_pointer_stream(&mut self) -> bool {
-        let released_drag_source = self.released_drag_source;
-        let released_drag_ordinal = self.released_drag_ordinal;
-        let cancelled = self.cancel_pointer_interaction();
-        self.released_drag_source = released_drag_source;
-        self.released_drag_ordinal = released_drag_ordinal;
-        self.pointer_interaction_cancelled = true;
-        cancelled
+    pub(crate) fn cancel_secondary_pointer_interaction(&mut self, id: WidgetId) -> bool {
+        if self.secondary_pressed == Some(id) {
+            self.secondary_pressed = None;
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) const fn has_pointer_transaction(&self) -> bool {
@@ -690,10 +710,14 @@ impl UiMemory {
 
     /// Clears interaction capture state at the end of an interaction.
     pub fn clear_interaction(&mut self) {
+        self.clear_primary_interaction();
+        self.secondary_pressed = None;
+    }
+
+    pub(crate) fn clear_primary_interaction(&mut self) {
         self.pointer_capture_released = self.pointer_capture;
         self.active = None;
         self.pressed = None;
-        self.secondary_pressed = None;
         self.pointer_capture = None;
         self.pointer_gesture = None;
     }

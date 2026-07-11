@@ -212,7 +212,7 @@ impl<'a> Ui<'a> {
         if self.pointer_plan_installed {
             self.memory.cancel_pointer_interaction();
             self.memory
-                .install_pointer_routes(crate::PointerRoutes::BLOCKED, [], None);
+                .install_pointer_routes(crate::PointerRoutes::BLOCKED, [], None, None);
             return Err(PointerPlanError::AlreadyInstalled);
         }
         self.pointer_plan_installed = true;
@@ -251,7 +251,7 @@ impl<'a> Ui<'a> {
             Err(error) => {
                 self.memory.cancel_pointer_interaction();
                 self.memory
-                    .install_pointer_routes(crate::PointerRoutes::BLOCKED, [], None);
+                    .install_pointer_routes(crate::PointerRoutes::BLOCKED, [], None, None);
                 return Err(error);
             }
         };
@@ -271,15 +271,21 @@ impl<'a> Ui<'a> {
             .into_iter()
             .flatten()
             .any(|owner| Some(owner) != selected_owner);
-        if owner_mismatch {
+        let mut routes = resolved.routes;
+        let (planned_drag_release, planned_drag_source) = if owner_mismatch {
             self.memory.cancel_pointer_interaction();
-        }
+            routes.drop = crate::PointerRoute::Blocked;
+            (None, None)
+        } else {
+            (resolved.planned_drag_release, resolved.planned_drag_source)
+        };
         self.memory.install_pointer_routes(
-            resolved.routes,
+            routes,
             resolved.cursor_equivalents,
-            resolved.planned_drag_release,
+            planned_drag_release,
+            planned_drag_source,
         );
-        Ok(resolved.routes)
+        Ok(routes)
     }
 
     /// Registers an externally derived widget ID as present and checks duplicates.
@@ -400,6 +406,7 @@ impl<'a> Ui<'a> {
     /// output until a later frame establishes fresh hover or capture state.
     pub fn request_cursor_for(&mut self, owner: WidgetId, cursor: CursorShape) -> bool {
         if self.memory.pointer_interaction_cancelled()
+            || crate::interaction::canonical_pointer_fenced(&self.context.input)
             || self.context.input.pointer.position.is_none()
         {
             return false;
