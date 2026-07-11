@@ -42,6 +42,7 @@ pub(crate) struct ResolvedTextPointerAction {
     pub(crate) model_offset: Option<usize>,
     pub(crate) click_count: u8,
     pub(crate) modifiers: kinetik_ui_core::Modifiers,
+    pub(crate) release_clicked: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

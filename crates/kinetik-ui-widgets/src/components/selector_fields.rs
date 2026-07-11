@@ -4,7 +4,7 @@ use super::{
     SemanticNode, SemanticRole, SemanticValue, TextEditState, TextFieldAccess, TextFieldOutput,
     TextLayoutStore, Theme, UiInput, UiMemory, WidgetId, WidgetOutput, drop_target,
     field_text_primitive, finite_widget_extent, pressable, suppress_disabled_interaction_reporting,
-    text_field_with_access_runtime, text_field_with_text_layouts_and_caret_visibility,
+    text_field_with_access_runtime_metadata, text_field_with_text_layouts_and_caret_visibility,
     with_hover_cursor, with_response_state,
 };
 use kinetik_ui_core::Ui as CoreUi;
@@ -647,7 +647,7 @@ pub(crate) fn path_field_with_access_runtime(
     let field_width = (rect.width - browse_width - gap).max(0.0);
     let field_rect = Rect::new(rect.x, rect.y, field_width, rect.height);
     let button_rect = Rect::new(field_rect.max_x() + gap, rect.y, browse_width, rect.height);
-    let (mut field, _) = text_field_with_access_runtime(
+    let (mut field, _, pointer) = text_field_with_access_runtime_metadata(
         runtime,
         id.child("text"),
         field_rect,
@@ -705,13 +705,9 @@ pub(crate) fn path_field_with_access_runtime(
 
     let open_requested = config.open
         && !browse_disabled
+        && !browse_requested
         && !state.text.is_empty()
-        && field
-            .widget
-            .response
-            .as_ref()
-            .is_some_and(|response| response.double_clicked);
-
+        && pointer.accepted_double_click;
     PathFieldOutput {
         widget,
         changed: field.changed,

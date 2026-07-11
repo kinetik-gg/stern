@@ -224,3 +224,196 @@ fn text_wrapper_signatures_and_output_shapes_remain_source_compatible() {
     ));
     let _ = ui.finish_output();
 }
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn affected_wrapper_root_prelude_and_layout_paths_compile_call() {
+    use kinetik_ui_text::{TextEditState, TextLayoutStore};
+
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let rect = Rect::new(0.0, 0.0, 320.0, 24.0);
+    let mut memory = UiMemory::new();
+    let mut layouts = TextLayoutStore::new();
+
+    let mut numeric = TextEditState::new("1");
+    let _: widgets::NumericInputOutput = widgets::numeric_input_with_text_layouts(
+        WidgetId::from_key("root-numeric-layout"),
+        rect,
+        &mut numeric,
+        &input,
+        &mut memory,
+        &theme,
+        false,
+        Some(&mut layouts),
+    );
+    let mut scrub_value = 1.0;
+    let mut scrub = TextEditState::new("1");
+    let _: widgets::NumericScrubInputOutput = widgets::numeric_scrub_input_with_text_layouts(
+        WidgetId::from_key("root-scrub-layout"),
+        rect,
+        &mut scrub_value,
+        &mut scrub,
+        widgets::NumericScrubInputConfig::default(),
+        &input,
+        &mut memory,
+        &theme,
+        Some(&mut layouts),
+    );
+    let mut search = TextEditState::new("find");
+    let _: widgets::SearchFieldOutput = widgets::search_field_with_text_layouts(
+        WidgetId::from_key("root-search-layout"),
+        rect,
+        &mut search,
+        &input,
+        &mut memory,
+        &theme,
+        false,
+        Some(&mut layouts),
+    );
+    let mut path = TextEditState::new("src/lib.rs");
+    let _: widgets::PathFieldOutput = widgets::path_field_with_text_layouts(
+        WidgetId::from_key("root-path-layout"),
+        rect,
+        "Source",
+        &mut path,
+        widgets::PathFieldConfig::default(),
+        &input,
+        &mut memory,
+        &theme,
+        Some(&mut layouts),
+    );
+
+    let mut values3 = [1.0, 2.0, 3.0];
+    let mut states3 = [
+        TextEditState::new("1"),
+        TextEditState::new("2"),
+        TextEditState::new("3"),
+    ];
+    let _: widgets::VectorScrubInputOutput<3> = widgets::vector3_scrub_input(
+        WidgetId::from_key("root-vector3"),
+        rect,
+        "Position",
+        &mut values3,
+        &mut states3,
+        widgets::VectorScrubInputConfig::default(),
+        &input,
+        &mut memory,
+        &theme,
+    );
+    let mut values4 = [1.0, 2.0, 3.0, 4.0];
+    let mut states4 = [
+        TextEditState::new("1"),
+        TextEditState::new("2"),
+        TextEditState::new("3"),
+        TextEditState::new("4"),
+    ];
+    let _: widgets::VectorScrubInputOutput<4> = prelude::vector4_scrub_input(
+        WidgetId::from_key("prelude-vector4"),
+        rect,
+        "Color",
+        &mut values4,
+        &mut states4,
+        widgets::VectorScrubInputConfig::default(),
+        &input,
+        &mut memory,
+        &theme,
+    );
+
+    let mut prelude_numeric = TextEditState::new("2");
+    let _: widgets::NumericInputOutput = prelude::numeric_input(
+        WidgetId::from_key("prelude-numeric"),
+        rect,
+        &mut prelude_numeric,
+        &input,
+        &mut memory,
+        &theme,
+        false,
+    );
+    let mut prelude_path = TextEditState::new("Cargo.toml");
+    let _: widgets::PathFieldOutput = prelude::path_field(
+        WidgetId::from_key("prelude-path"),
+        rect,
+        "Manifest",
+        &mut prelude_path,
+        widgets::PathFieldConfig::default(),
+        &input,
+        &mut memory,
+        &theme,
+    );
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn affected_ui_methods_compile_with_attached_text_layouts() {
+    use kinetik_ui_text::{TextEditState, TextLayoutStore};
+
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let rect = Rect::new(0.0, 0.0, 320.0, 24.0);
+    let mut memory = UiMemory::new();
+    let mut layouts = TextLayoutStore::new();
+    let mut numeric = TextEditState::new("1");
+    let mut search = TextEditState::new("find");
+    let mut path = TextEditState::new("src/lib.rs");
+    let mut scrub_value = 1.0;
+    let mut scrub = TextEditState::new("1");
+    let mut values2 = [1.0, 2.0];
+    let mut states2 = [TextEditState::new("1"), TextEditState::new("2")];
+    let mut values3 = [1.0, 2.0, 3.0];
+    let mut states3 = [
+        TextEditState::new("1"),
+        TextEditState::new("2"),
+        TextEditState::new("3"),
+    ];
+    let mut values4 = [1.0, 2.0, 3.0, 4.0];
+    let mut states4 = [
+        TextEditState::new("1"),
+        TextEditState::new("2"),
+        TextEditState::new("3"),
+        TextEditState::new("4"),
+    ];
+
+    let mut ui = widgets::Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut layouts);
+    let _: widgets::NumericInputOutput = ui.numeric_input("numeric", rect, &mut numeric, false);
+    let _: widgets::SearchFieldOutput = ui.search_field("search", rect, &mut search, false);
+    let _: widgets::PathFieldOutput = ui.path_field(
+        "path",
+        rect,
+        "Source",
+        &mut path,
+        widgets::PathFieldConfig::default(),
+    );
+    let _: widgets::NumericScrubInputOutput = ui.numeric_scrub_input(
+        "scrub",
+        rect,
+        &mut scrub_value,
+        &mut scrub,
+        widgets::NumericScrubInputConfig::default(),
+    );
+    let _: widgets::VectorScrubInputOutput<2> = ui.vector2_scrub_input(
+        "vector2",
+        rect,
+        "Offset",
+        &mut values2,
+        &mut states2,
+        widgets::VectorScrubInputConfig::default(),
+    );
+    let _: widgets::VectorScrubInputOutput<3> = ui.vector3_scrub_input(
+        "vector3",
+        rect,
+        "Position",
+        &mut values3,
+        &mut states3,
+        widgets::VectorScrubInputConfig::default(),
+    );
+    let _: widgets::VectorScrubInputOutput<4> = ui.vector4_scrub_input(
+        "vector4",
+        rect,
+        "Color",
+        &mut values4,
+        &mut states4,
+        widgets::VectorScrubInputConfig::default(),
+    );
+    let _ = ui.finish_output();
+}

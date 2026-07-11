@@ -707,6 +707,7 @@ fn canonical_replay_resolves_impossible_equal_ordinals_pointer_first() {
             model_offset: Some(1),
             click_count: 1,
             modifiers: Modifiers::default(),
+            release_clicked: false,
         }],
         vec![OrderedTextInputEvent {
             ordinal: Some(7),
@@ -743,6 +744,7 @@ fn canonical_replay_retains_one_outer_focus_loss_fence() {
             model_offset: Some(0),
             click_count: 1,
             modifiers: Modifiers::default(),
+            release_clicked: false,
         }],
         vec![
             OrderedTextInputEvent {
@@ -795,6 +797,7 @@ fn canonical_replay_retains_press_anchor_across_an_interleaved_edit() {
                 model_offset: Some(1),
                 click_count: 1,
                 modifiers: Modifiers::default(),
+                release_clicked: false,
             },
             ResolvedTextPointerAction {
                 ordinal: Some(3),
@@ -802,6 +805,7 @@ fn canonical_replay_retains_press_anchor_across_an_interleaved_edit() {
                 model_offset: Some(4),
                 click_count: 0,
                 modifiers: Modifiers::default(),
+                release_clicked: false,
             },
         ],
         vec![OrderedTextInputEvent {
@@ -840,6 +844,7 @@ fn canonical_place_caret_is_release_ordered_pointer_first_without_press_activati
                 model_offset: Some(0),
                 click_count: 1,
                 modifiers: Modifiers::default(),
+                release_clicked: false,
             },
             ResolvedTextPointerAction {
                 ordinal: Some(7),
@@ -847,6 +852,7 @@ fn canonical_place_caret_is_release_ordered_pointer_first_without_press_activati
                 model_offset: Some(1),
                 click_count: 1,
                 modifiers: Modifiers::default(),
+                release_clicked: true,
             },
         ],
         vec![
@@ -890,6 +896,7 @@ fn focus_loss_fences_place_caret_and_release_metadata_drives_selection() {
             model_offset: Some(7),
             click_count: 2,
             modifiers: Modifiers::new(true, false, false, false),
+            release_clicked: true,
         }],
         vec![
             OrderedTextInputEvent {
@@ -921,6 +928,7 @@ fn focus_loss_fences_place_caret_and_release_metadata_drives_selection() {
             model_offset: Some(7),
             click_count: 2,
             modifiers: Modifiers::new(true, false, false, false),
+            release_clicked: true,
         }],
         Vec::new(),
     );
@@ -943,6 +951,7 @@ fn focus_loss_fences_place_caret_and_release_metadata_drives_selection() {
             model_offset: Some(5),
             click_count: 1,
             modifiers: Modifiers::new(true, false, false, false),
+            release_clicked: true,
         }],
         Vec::new(),
     );
@@ -1066,4 +1075,110 @@ fn preedit_model_selection_keeps_insertion_leading_affinity() {
 
     assert_approx(selection_width(TextSelection::new(0, 1)), char_width);
     assert_approx(selection_width(TextSelection::new(2, 1)), char_width * 3.0);
+}
+
+#[test]
+fn vector_runtime_final_press_is_independent_of_component_helper_order() {
+    use crate::{
+        VectorComponentLayout, VectorScrubInputConfig, vector_scrub_input_with_runtime,
+        vector2_component_rects,
+    };
+    use kinetik_ui_core::{
+        FrameContext, MouseButton, PhysicalSize, ScaleFactor, Size, TextInputEvent, TimeInfo,
+        Ui as CoreUi, UiInputEvent, ViewportInfo,
+    };
+
+    fn run(reversed: bool) -> ([f32; 2], [TextEditState; 2], Option<WidgetId>, usize, bool) {
+        let theme = default_dark_theme();
+        let rect = Rect::new(0.0, 0.0, 220.0, 24.0);
+        let mut component_rects = vector2_component_rects(rect, VectorComponentLayout::default());
+        let x = component_rects[0].value_rect.center();
+        let y = component_rects[1].value_rect.center();
+        if reversed {
+            component_rects.reverse();
+        }
+        let mut input = UiInput::default();
+        for event in [
+            UiInputEvent::PointerButton {
+                button: MouseButton::Primary,
+                down: true,
+                click_count: 1,
+                position: Some(x),
+            },
+            UiInputEvent::PointerButton {
+                button: MouseButton::Primary,
+                down: false,
+                click_count: 1,
+                position: Some(Point::new(x.x + 1.0, x.y)),
+            },
+            UiInputEvent::PointerButton {
+                button: MouseButton::Primary,
+                down: true,
+                click_count: 1,
+                position: Some(y),
+            },
+            UiInputEvent::PointerButton {
+                button: MouseButton::Primary,
+                down: false,
+                click_count: 1,
+                position: Some(Point::new(y.x + 1.0, y.y)),
+            },
+            UiInputEvent::Text(TextInputEvent::Commit("Z".to_owned())),
+        ] {
+            input.push_event(event);
+        }
+        let context = FrameContext::new(
+            ViewportInfo::new(
+                Size::new(220.0, 24.0),
+                PhysicalSize::new(220, 24),
+                ScaleFactor::ONE,
+            ),
+            input,
+            TimeInfo::default(),
+        );
+        let mut memory = UiMemory::new();
+        let mut values = [1.0, 2.0];
+        let mut states = [TextEditState::new("1"), TextEditState::new("2")];
+        let vector_id = WidgetId::from_key("vector");
+        let y_id = vector_id.child("Y");
+        let mut runtime = CoreUi::begin_frame(context, &mut memory);
+        let output = vector_scrub_input_with_runtime(
+            &mut runtime,
+            vector_id,
+            "Offset",
+            &mut values,
+            &mut states,
+            VectorScrubInputConfig::default(),
+            &theme,
+            None,
+            true,
+            component_rects,
+        );
+        assert_eq!(output.components.len(), 2);
+        let frame = runtime.end_frame();
+        let starts = frame
+            .platform_requests
+            .iter()
+            .filter(|request| matches!(request, PlatformRequest::StartTextInput { rect: Some(_) }))
+            .count();
+        let claim_consumed = !memory.claim_text_input_events(y_id);
+        (values, states, memory.focused(), starts, claim_consumed)
+    }
+
+    let normal = run(false);
+    let reversed = run(true);
+    for index in 0..2 {
+        assert_approx(normal.0[index], reversed.0[index]);
+    }
+    assert_eq!(normal.1, reversed.1);
+    assert_eq!(normal.2, reversed.2);
+    assert_eq!(normal.3, reversed.3);
+    assert_eq!(normal.4, reversed.4);
+    assert_approx(normal.0[0], 1.0);
+    assert_approx(normal.0[1], 2.0);
+    assert_eq!(normal.1[0].text, "1");
+    assert!(normal.1[1].text.contains('Z'));
+    assert_eq!(normal.2, Some(WidgetId::from_key("vector").child("Y")));
+    assert_eq!(normal.3, 1);
+    assert!(normal.4);
 }

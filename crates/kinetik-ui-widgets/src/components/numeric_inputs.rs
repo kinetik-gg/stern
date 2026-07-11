@@ -8,7 +8,7 @@ use super::{
     text_field_with_resolved_response_and_ordered_result,
     text_field_with_text_layouts_and_caret_visibility_and_ordered_result,
 };
-use kinetik_ui_core::{DomainDragGestureAction, DomainDragGesturePhase, Modifiers, Ui as CoreUi};
+use kinetik_ui_core::Ui as CoreUi;
 
 /// Output emitted by numeric input.
 #[derive(Debug, Clone, PartialEq)]
@@ -406,53 +406,55 @@ pub(crate) fn numeric_scrub_input_with_runtime(
     let access = numeric_scrub_access(config);
     let final_modifiers = runtime.input().keyboard.modifiers;
 
-    let (mut numeric, mut scrub_response, causal_modifiers, drag_ambiguous) =
-        if access == TextFieldAccess::Editable {
-            let gesture = runtime.captured_domain_drag_gesture(id, rect, false);
-            let scrub_response = gesture.response;
-            let causal_modifiers = domain_drag_causal_modifiers(&gesture.actions, scrub_response);
-            let drag_ambiguous = scrub_response.dragged
-                && (domain_drag_transaction_count(&gesture.actions) > 1
-                    || !domain_drag_has_root_press_authority(runtime, &gesture.actions));
-            let (field, ordered_result) = text_field_with_pointer_runtime(
-                runtime,
-                id,
-                rect,
-                state,
-                theme,
-                access,
-                text_layouts,
-                caret_visible,
-                TextFieldPointerSource::DomainDrag(gesture),
-            );
-            (
-                numeric_output_from_field(state, field, &ordered_result, true),
-                scrub_response,
-                causal_modifiers,
-                drag_ambiguous,
-            )
-        } else {
-            let (field, ordered_result) = text_field_with_access_runtime(
-                runtime,
-                id,
-                rect,
-                state,
-                theme,
-                access,
-                text_layouts,
-                caret_visible,
-            );
-            let scrub_response = field
-                .widget
-                .response
-                .expect("canonical text fields always emit a response");
-            (
-                numeric_output_from_field(state, field, &ordered_result, false),
-                scrub_response,
-                None,
-                false,
-            )
-        };
+    let (mut numeric, mut scrub_response, causal_modifiers) = if access == TextFieldAccess::Editable
+    {
+        let gesture = runtime.captured_domain_drag_gesture(id, rect, false);
+        let scrub_response = gesture.response;
+        let (field, ordered_result, pointer) = text_field_with_pointer_runtime(
+            runtime,
+            id,
+            rect,
+            state,
+            theme,
+            access,
+            text_layouts,
+            caret_visible,
+            TextFieldPointerSource::DomainDrag(gesture),
+            |pointer, preview_state| {
+                scrub_arithmetic_allows_text_replay(
+                    scrub_response,
+                    &resolved,
+                    preview_state,
+                    pointer.domain_drag_modifiers,
+                )
+            },
+        );
+        (
+            numeric_output_from_field(state, field, &ordered_result, true),
+            scrub_response,
+            pointer.domain_drag_modifiers,
+        )
+    } else {
+        let (field, ordered_result) = text_field_with_access_runtime(
+            runtime,
+            id,
+            rect,
+            state,
+            theme,
+            access,
+            text_layouts,
+            caret_visible,
+        );
+        let scrub_response = field
+            .widget
+            .response
+            .expect("canonical text fields always emit a response");
+        (
+            numeric_output_from_field(state, field, &ordered_result, false),
+            scrub_response,
+            None,
+        )
+    };
 
     scrub_response.state.focused = runtime.memory().is_focused(id);
     let selected_step =
@@ -461,7 +463,6 @@ pub(crate) fn numeric_scrub_input_with_runtime(
 
     if access == TextFieldAccess::Editable
         && scrub_response.dragged
-        && !drag_ambiguous
         && causal_modifiers.is_some()
         && scrub_response.drag_delta.x.is_finite()
         && selected_step.is_finite()
@@ -530,66 +531,27 @@ const fn numeric_scrub_access(config: NumericScrubInputConfig) -> TextFieldAcces
     }
 }
 
-fn domain_drag_causal_modifiers(
-    actions: &[DomainDragGestureAction],
+fn scrub_arithmetic_allows_text_replay(
     response: Response,
-) -> Option<Modifiers> {
-    if !response.dragged {
-        return None;
-    }
-    actions
-        .iter()
-        .rev()
-        .find(|action| action.phase == DomainDragGesturePhase::Move)
-        .or_else(|| {
-            actions
-                .iter()
-                .rev()
-                .find(|action| action.phase == DomainDragGesturePhase::Release)
-        })
-        .map(|action| action.modifiers)
-}
-
-fn domain_drag_transaction_count(actions: &[DomainDragGestureAction]) -> usize {
-    let retained_transaction = usize::from(
-        actions
-            .first()
-            .is_some_and(|action| action.phase != DomainDragGesturePhase::Press),
-    );
-    retained_transaction
-        + actions
-            .iter()
-            .filter(|action| action.phase == DomainDragGesturePhase::Press)
-            .count()
-}
-
-fn domain_drag_has_root_press_authority(
-    runtime: &CoreUi<'_>,
-    actions: &[DomainDragGestureAction],
+    config: &ResolvedNumericScrubConfig,
+    state: &TextEditState,
+    causal_modifiers: Option<kinetik_ui_core::Modifiers>,
 ) -> bool {
-    if let Some(final_ordinal) = runtime.last_root_primary_press_ordinal() {
-        return actions
-            .iter()
-            .filter(|action| {
-                action.phase == DomainDragGesturePhase::Press
-                    && action.ordinal == Some(final_ordinal)
-                    && action.position.is_some()
-            })
-            .count()
-            == 1;
+    if !response.dragged || causal_modifiers.is_none() {
+        return true;
     }
-    if runtime.input().events.is_empty() && runtime.input().pointer.primary.pressed {
-        return actions
-            .iter()
-            .filter(|action| {
-                action.phase == DomainDragGesturePhase::Press
-                    && action.ordinal.is_none()
-                    && action.position.is_some()
-            })
-            .count()
-            == 1;
+    let delta = response.drag_delta.x;
+    if !delta.is_finite() {
+        return false;
     }
-    true
+    let current = match classify_numeric_input_draft(&state.text) {
+        NumericInputDraft::Valid(current) if current.is_finite() => Some(current),
+        NumericInputDraft::Valid(_) => return false,
+        NumericInputDraft::Empty | NumericInputDraft::Invalid => None,
+    };
+    let step = numeric_scrub_step_for_modifiers(config, causal_modifiers.unwrap_or_default());
+    let weighted = delta * step;
+    weighted.is_finite() && current.is_none_or(|current| (current + weighted).is_finite())
 }
 
 fn numeric_input_keyboard_policy(
