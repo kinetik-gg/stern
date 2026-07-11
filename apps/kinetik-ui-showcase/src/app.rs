@@ -13,11 +13,11 @@ use kinetik_ui::core::{
     ActionBinding, ActionContext, ActionDescriptor, ActionInvocation, ActionPriority, ActionQueue,
     ActionRouter, ActionRoutingContext, ActionSource, Axis, Brush, ClipId, Color, CornerRadius,
     FrameContext, FrameOutput, ImageId, Insets, Key, KeyEvent, KeyState, LayoutItem, LinePrimitive,
-    Measurement, Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput, Primitive, Rect,
-    RectPrimitive, RepaintRequest, ScaleFactor, SemanticNode, SemanticRole, Shortcut, Size,
-    SizeRule, Stroke, TextInputEvent, TextPrimitive, TextureId, TexturePrimitive, TimeInfo,
-    UiInput, UiMemory, Vec2, ViewportInfo, column_layout, default_dark_theme, inspect_primitives,
-    rect_from_size, row_layout, split_leading,
+    Measurement, Modifiers, PhysicalSize, PlatformRequest, Point, PointerButtonState, PointerInput,
+    Primitive, Rect, RectPrimitive, RepaintRequest, ScaleFactor, SemanticNode, SemanticRole,
+    Shortcut, Size, SizeRule, Stroke, TextInputEvent, TextPrimitive, TextureId, TexturePrimitive,
+    TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, column_layout, default_dark_theme,
+    inspect_primitives, rect_from_size, row_layout, split_leading,
 };
 use kinetik_ui::render::{
     ImageResource, RenderImage, RenderImageSampling, RenderResources, TextureResource,
@@ -178,6 +178,7 @@ pub struct ShowcaseApp {
     search: TextEditState,
     notes: TextEditState,
     status: String,
+    pending_platform_requests: Vec<PlatformRequest>,
     output: FrameOutput,
     editor: EditorShowcase,
     static_resources: RenderResources,
@@ -211,6 +212,7 @@ impl Default for ShowcaseApp {
             search: TextEditState::new("layout"),
             notes: TextEditState::new("First line\nSecond line"),
             status: "Ready".to_owned(),
+            pending_platform_requests: Vec::new(),
             output: FrameOutput::new(),
             editor: EditorShowcase::new(),
             static_resources: static_render_resources(),
@@ -249,7 +251,11 @@ fn showcase_action_router(play_enabled: bool) -> ActionRouter {
     ));
 
     let mut router = ActionRouter::new();
-    for action in [play, grid] {
+    let mut documentation =
+        ActionDescriptor::new(editor_showcase::ACTION_DOCS, "Open Online Documentation");
+    documentation.shortcut = Some(Shortcut::new(Modifiers::default(), Key::Function(1)));
+
+    for action in [play, grid, documentation] {
         router.bind(ActionBinding::new(
             action,
             ActionContext::Global,

@@ -37,6 +37,10 @@ impl EditorShowcase {
                 status.clone_into(&mut self.status);
                 true
             }
+            ACTION_DOCS => {
+                "Online documentation requested".clone_into(&mut self.status);
+                true
+            }
             ACTION_ABOUT => self.open_about_modal(),
             ACTION_ABOUT_CLOSE => self.close_about_modal(),
             ACTION_TOOL_SELECT => self.select_tool(EditorTool::Select),
@@ -96,6 +100,7 @@ impl EditorShowcase {
         if self.about_modal_open {
             let overlay = self.about_modal_overlay_model(viewport);
             let surface = ui.make_id("editor.about-modal.surface");
+            let docs = ui.make_id("editor.about-modal.documentation");
             let close = ui.make_id("editor.about-modal.close");
             ui.resolve_pointer_targets(|plan| {
                 plan.capture_lower_layers(PointerOrder::new(1_000));
@@ -105,9 +110,14 @@ impl EditorShowcase {
                     PointerOrder::new(2_000),
                 ));
                 plan.target(PointerTarget::new(
+                    docs,
+                    about_modal_docs_rect(overlay.entry.rect),
+                    PointerOrder::new(3_000),
+                ));
+                plan.target(PointerTarget::new(
                     close,
                     about_modal_close_rect(overlay.entry.rect),
-                    PointerOrder::new(3_000),
+                    PointerOrder::new(4_000),
                 ));
             })
             .expect("About modal pointer orders and IDs are static and unique");
@@ -409,7 +419,7 @@ impl EditorShowcase {
             .with_body(format!("{ABOUT_MODAL_VERSION}\n{ABOUT_MODAL_READINESS}"))
             .with_actions([
                 ModalAction::new(
-                    modal_action(ACTION_DOCS, "Documentation (Experimental)", false),
+                    modal_action(ACTION_DOCS, "Documentation", self.about_modal_open),
                     ModalActionRole::Primary,
                 ),
                 ModalAction::new(
@@ -438,6 +448,11 @@ impl EditorShowcase {
         about_modal_close_rect(self.about_modal_overlay_model(viewport).entry.rect)
     }
 
+    #[cfg(test)]
+    pub(crate) fn about_modal_documentation_rect(&self, viewport: Rect) -> Rect {
+        about_modal_docs_rect(self.about_modal_overlay_model(viewport).entry.rect)
+    }
+
     fn about_modal_input(
         &mut self,
         ui: &mut Ui<'_>,
@@ -445,6 +460,11 @@ impl EditorShowcase {
         invocations: &mut Vec<EditorInvocation>,
     ) {
         let overlay = self.about_modal_overlay_model(viewport);
+        let docs = ui.pressable(
+            "editor.about-modal.documentation",
+            about_modal_docs_rect(overlay.entry.rect),
+            false,
+        );
         let close = ui.pressable(
             "editor.about-modal.close",
             about_modal_close_rect(overlay.entry.rect),
@@ -469,7 +489,10 @@ impl EditorShowcase {
         let mut stack = OverlayStack::new();
         overlay.open_in(&mut stack);
 
-        if close.clicked {
+        if docs.clicked {
+            self.trigger(invocations, ACTION_DOCS, ActionSource::Button);
+            ui.request_repaint(RepaintRequest::NextFrame);
+        } else if close.clicked {
             self.trigger(invocations, ACTION_ABOUT_CLOSE, ActionSource::Button);
             ui.request_repaint(RepaintRequest::NextFrame);
         } else if overlay
@@ -563,7 +586,7 @@ impl EditorShowcase {
             docs.y + 18.0,
             &documentation.action.label,
             10.0,
-            rgb(104, 110, 121),
+            rgb(204, 210, 220),
         );
 
         let cancel = overlay

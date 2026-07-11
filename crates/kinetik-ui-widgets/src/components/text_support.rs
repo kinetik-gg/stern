@@ -13,7 +13,7 @@ pub(super) fn text_input_platform_requests(
     if response.state.focused && !response.state.disabled {
         let previous_owner = memory.text_input_owner();
         if previous_owner == Some(id) {
-            return Vec::new();
+            return vec![PlatformRequest::UpdateTextInputRect { rect }];
         }
         let stopped_owner = memory.take_pending_text_input_stop();
         memory.set_text_input_owner(id);

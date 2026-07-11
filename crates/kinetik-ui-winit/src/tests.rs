@@ -1,9 +1,9 @@
 #![allow(clippy::float_cmp)]
 use crate::{
     WinitAccessibilityUpdate, WinitFrameClock, WinitInputAdapter, WinitPlatformRequests,
-    WinitTextInputRequest, WinitWindowOps, cursor_to_winit, frame_context_from_winit,
-    key_from_winit, modifiers_from_winit, physical_key_from_winit, scale_factor_from_winit,
-    viewport_from_winit,
+    WinitShellRequest, WinitTextInputRequest, WinitWindowOps, cursor_to_winit,
+    frame_context_from_winit, key_from_winit, modifiers_from_winit, physical_key_from_winit,
+    scale_factor_from_winit, viewport_from_winit,
 };
 use kinetik_ui_core::{
     ClipboardText, CursorShape, FrameOutput, InputWheelDelta, Key, KeyState, Modifiers,
@@ -18,9 +18,17 @@ use winit::keyboard::{
 };
 use winit::window::CursorIcon;
 
+#[derive(Debug, PartialEq)]
+enum WindowCall {
+    Cursor(CursorIcon),
+    Title(String),
+    ImeAllowed(bool),
+    ImeRect(Rect),
+}
+
 #[derive(Debug, Default, PartialEq)]
 struct FakeWindow {
-    redraws: usize,
+    calls: Vec<WindowCall>,
     cursor: Option<CursorIcon>,
     title: Option<String>,
     ime_allowed: Option<bool>,
@@ -28,23 +36,23 @@ struct FakeWindow {
 }
 
 impl WinitWindowOps for FakeWindow {
-    fn request_redraw(&mut self) {
-        self.redraws += 1;
-    }
-
     fn set_cursor(&mut self, cursor: CursorIcon) {
+        self.calls.push(WindowCall::Cursor(cursor));
         self.cursor = Some(cursor);
     }
 
     fn set_title(&mut self, title: &str) {
+        self.calls.push(WindowCall::Title(title.to_owned()));
         self.title = Some(title.to_owned());
     }
 
     fn set_ime_allowed(&mut self, allowed: bool) {
+        self.calls.push(WindowCall::ImeAllowed(allowed));
         self.ime_allowed = Some(allowed);
     }
 
     fn set_ime_cursor_area(&mut self, rect: Rect) {
+        self.calls.push(WindowCall::ImeRect(rect));
         self.ime_rect = Some(rect);
     }
 }
@@ -522,23 +530,20 @@ fn key_conversion_maps_arrows_and_functions() {
 
 #[test]
 fn cursor_and_redraw_requests_are_represented() {
-    let mut requests = WinitPlatformRequests {
-        cursor: CursorShape::Text,
-        repaint: RepaintRequest::After(core::time::Duration::from_secs(5)),
-        ..WinitPlatformRequests::default()
-    };
-
-    requests.request_repaint(RepaintRequest::NextFrame);
+    let mut output = FrameOutput::new();
+    output.push_platform_request(PlatformRequest::SetCursor(CursorShape::Text));
+    output.request_repaint(RepaintRequest::NextFrame);
+    let requests = WinitPlatformRequests::from_frame_output(&output);
 
     assert_eq!(
-        cursor_to_winit(requests.cursor),
+        cursor_to_winit(requests.cursor()),
         winit::window::CursorIcon::Text
     );
     assert_eq!(
         cursor_to_winit(CursorShape::PointingHand),
         winit::window::CursorIcon::Pointer
     );
-    assert_eq!(requests.repaint, RepaintRequest::NextFrame);
+    assert_eq!(requests.repaint(), RepaintRequest::NextFrame);
 }
 
 #[test]
@@ -560,21 +565,53 @@ fn frame_output_platform_requests_translate_to_winit_request_data() {
 
     let requests = WinitPlatformRequests::from_frame_output(&output);
 
-    assert_eq!(requests.cursor, CursorShape::Text);
+    assert_eq!(requests.cursor(), CursorShape::Text);
     assert_eq!(
-        requests.repaint,
+        requests.repaint(),
         RepaintRequest::After(core::time::Duration::from_millis(20))
     );
-    assert_eq!(requests.clipboard_text, Some("copy".to_owned()));
-    assert_eq!(requests.request_clipboard_text, Some(text_target));
     assert_eq!(
-        requests.text_input,
-        Some(WinitTextInputRequest::Start {
+        requests.text_input(),
+        &[WinitTextInputRequest::Start {
             rect: Some(text_rect)
-        })
+        }]
     );
-    assert_eq!(requests.window_title, Some("Kinetik".to_owned()));
-    assert_eq!(requests.open_urls, vec!["https://example.com".to_owned()]);
+    assert_eq!(requests.window_title(), Some("Kinetik"));
+    assert_eq!(
+        requests.shell().operations(),
+        &[
+            WinitShellRequest::CopyToClipboard("copy".to_owned()),
+            WinitShellRequest::RequestClipboardText {
+                target: text_target,
+            },
+            WinitShellRequest::OpenUrl("https://example.com".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn replacing_frame_output_discards_all_obsolete_work_and_resets_cursor() {
+    let target = WidgetId::from_key("field");
+    let mut rich = FrameOutput::new();
+    rich.request_repaint(RepaintRequest::Continuous);
+    rich.push_platform_request(PlatformRequest::SetCursor(CursorShape::Text));
+    rich.push_platform_request(PlatformRequest::CopyToClipboard("copy".to_owned()));
+    rich.push_platform_request(PlatformRequest::RequestClipboardText { target });
+    rich.push_platform_request(PlatformRequest::StartTextInput { rect: None });
+    rich.push_platform_request(PlatformRequest::SetWindowTitle("title".to_owned()));
+    rich.push_platform_request(PlatformRequest::OpenUrl("https://example.com".to_owned()));
+    let mut requests = WinitPlatformRequests::from_frame_output(&rich);
+
+    requests.replace_frame_output(&FrameOutput::new());
+
+    assert_eq!(requests, WinitPlatformRequests::default());
+    let mut window = FakeWindow::default();
+    let applied = requests.apply_to_window_ops(&mut window);
+    assert_eq!(window.cursor, Some(CursorIcon::Default));
+    assert_eq!(window.title, None);
+    assert_eq!(window.ime_allowed, None);
+    assert_eq!(applied.repaint(), RepaintRequest::None);
+    assert!(applied.shell().is_empty());
 }
 
 #[test]
@@ -670,44 +707,81 @@ fn frame_output_accessibility_update_reports_invalid_semantics_without_os_servic
 }
 
 #[test]
-fn stop_text_input_overrides_start_request() {
+fn text_input_requests_preserve_stop_start_and_update_order() {
     let mut output = FrameOutput::new();
-    output.push_platform_request(PlatformRequest::StartTextInput { rect: None });
     output.push_platform_request(PlatformRequest::StopTextInput);
+    output.push_platform_request(PlatformRequest::StartTextInput { rect: None });
+    output.push_platform_request(PlatformRequest::UpdateTextInputRect {
+        rect: Rect::new(3.0, 4.0, 1.0, 12.0),
+    });
 
     let requests = WinitPlatformRequests::from_frame_output(&output);
 
-    assert_eq!(requests.text_input, Some(WinitTextInputRequest::Stop));
+    assert_eq!(
+        requests.text_input(),
+        &[
+            WinitTextInputRequest::Stop,
+            WinitTextInputRequest::Start { rect: None },
+            WinitTextInputRequest::UpdateRect {
+                rect: Rect::new(3.0, 4.0, 1.0, 12.0),
+            },
+        ]
+    );
+    let mut window = FakeWindow::default();
+
+    let _ = requests.apply_to_window_ops(&mut window);
+
+    assert_eq!(
+        window.calls,
+        vec![
+            WindowCall::Cursor(CursorIcon::Default),
+            WindowCall::ImeAllowed(false),
+            WindowCall::ImeAllowed(true),
+            WindowCall::ImeRect(Rect::new(3.0, 4.0, 1.0, 12.0)),
+        ]
+    );
 }
 
 #[test]
 fn platform_requests_apply_window_effects_and_return_shell_work() {
     let text_rect = Rect::new(10.0, 20.0, 100.0, 24.0);
     let text_target = WidgetId::from_key("field");
-    let requests = WinitPlatformRequests {
-        cursor: CursorShape::Text,
-        repaint: RepaintRequest::Continuous,
-        clipboard_text: Some("copy".to_owned()),
-        request_clipboard_text: Some(text_target),
-        text_input: Some(WinitTextInputRequest::Start {
-            rect: Some(text_rect),
-        }),
-        window_title: Some("Kinetik".to_owned()),
-        open_urls: vec!["https://example.com".to_owned()],
-    };
+    let mut output = FrameOutput::new();
+    output.request_repaint(RepaintRequest::Continuous);
+    output.push_platform_request(PlatformRequest::SetCursor(CursorShape::Text));
+    output.push_platform_request(PlatformRequest::CopyToClipboard("copy".to_owned()));
+    output.push_platform_request(PlatformRequest::RequestClipboardText {
+        target: text_target,
+    });
+    output.push_platform_request(PlatformRequest::StartTextInput {
+        rect: Some(text_rect),
+    });
+    output.push_platform_request(PlatformRequest::SetWindowTitle("Kinetik".to_owned()));
+    output.push_platform_request(PlatformRequest::OpenUrl("https://example.com".to_owned()));
+    let requests = WinitPlatformRequests::from_frame_output(&output);
+    let request_debug = format!("{requests:?}");
+    assert!(!request_debug.contains("copy"));
+    assert!(!request_debug.contains("Kinetik"));
+    assert!(!request_debug.contains("example.com"));
     let mut window = FakeWindow::default();
 
-    let shell = requests.apply_to_window_ops(&mut window);
+    let applied = requests.apply_to_window_ops(&mut window);
 
-    assert_eq!(window.redraws, 1);
     assert_eq!(window.cursor, Some(CursorIcon::Text));
     assert_eq!(window.title, Some("Kinetik".to_owned()));
     assert_eq!(window.ime_allowed, Some(true));
     assert_eq!(window.ime_rect, Some(text_rect));
-    assert_eq!(shell.clipboard_text, Some("copy".to_owned()));
-    assert_eq!(shell.request_clipboard_text, Some(text_target));
-    assert_eq!(shell.open_urls, vec!["https://example.com".to_owned()]);
-    assert!(shell.continuous_repaint);
+    assert_eq!(applied.repaint(), RepaintRequest::Continuous);
+    assert_eq!(applied.shell().operations().len(), 3);
+    assert_eq!(
+        window.calls,
+        vec![
+            WindowCall::Cursor(CursorIcon::Text),
+            WindowCall::Title("Kinetik".to_owned()),
+            WindowCall::ImeAllowed(true),
+            WindowCall::ImeRect(text_rect),
+        ]
+    );
 }
 
 #[test]
@@ -727,12 +801,14 @@ fn adapter_feeds_targeted_clipboard_text_into_input() {
 
 #[test]
 fn platform_text_input_rects_are_sanitized_for_window_ops() {
-    let requests = WinitPlatformRequests {
-        text_input: Some(WinitTextInputRequest::Start {
-            rect: Some(Rect::new(f32::NAN, f32::INFINITY, -10.0, f32::NAN)),
-        }),
-        ..WinitPlatformRequests::default()
-    };
+    let mut output = FrameOutput::new();
+    output.push_platform_request(PlatformRequest::StartTextInput {
+        rect: Some(Rect::new(2.0, 3.0, 8.0, 12.0)),
+    });
+    output.push_platform_request(PlatformRequest::UpdateTextInputRect {
+        rect: Rect::new(f32::NAN, f32::INFINITY, -10.0, f32::NAN),
+    });
+    let requests = WinitPlatformRequests::from_frame_output(&output);
     let mut window = FakeWindow::default();
 
     let _ = requests.apply_to_window_ops(&mut window);
@@ -743,17 +819,15 @@ fn platform_text_input_rects_are_sanitized_for_window_ops() {
 
 #[test]
 fn delayed_repaint_is_returned_to_shell_without_immediate_redraw() {
-    let requests = WinitPlatformRequests {
-        repaint: RepaintRequest::After(core::time::Duration::from_millis(15)),
-        ..WinitPlatformRequests::default()
-    };
+    let mut output = FrameOutput::new();
+    output.request_repaint(RepaintRequest::After(core::time::Duration::from_millis(15)));
+    let requests = WinitPlatformRequests::from_frame_output(&output);
     let mut window = FakeWindow::default();
 
-    let shell = requests.apply_to_window_ops(&mut window);
+    let applied = requests.apply_to_window_ops(&mut window);
 
-    assert_eq!(window.redraws, 0);
     assert_eq!(
-        shell.repaint_after,
-        Some(core::time::Duration::from_millis(15))
+        applied.repaint(),
+        RepaintRequest::After(core::time::Duration::from_millis(15))
     );
 }

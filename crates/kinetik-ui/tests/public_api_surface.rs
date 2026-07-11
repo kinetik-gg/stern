@@ -51,6 +51,15 @@ fn facade_root_and_feature_qualified_paths_compile() {
     {
         let _ = kinetik_ui::platform_winit::WinitFrameClock::new();
         let _ = std::any::type_name::<kinetik_ui::platform_winit::WinitInputAdapter>();
+        let qualified = [
+            std::any::type_name::<kinetik_ui::platform_winit::WinitPlatformRequests>(),
+            std::any::type_name::<kinetik_ui::platform_winit::WinitShellRequests>(),
+            std::any::type_name::<kinetik_ui::platform_winit::WinitShellOutcome>(),
+            std::any::type_name::<kinetik_ui::platform_winit::WinitRepaintScheduler>(),
+            std::any::type_name::<kinetik_ui::platform_winit::NativeWinitShellServices>(),
+            std::any::type_name::<dyn kinetik_ui::platform_winit::WinitShellServices>(),
+        ];
+        assert!(qualified.iter().all(|path| !path.is_empty()));
     }
 
     #[cfg(feature = "render-vello")]

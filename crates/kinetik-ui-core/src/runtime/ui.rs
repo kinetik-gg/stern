@@ -261,6 +261,12 @@ impl<'a> Ui<'a> {
                 }
             }
             PlatformRequest::StartTextInput { rect: None } if !self.spatial.is_visible() => {}
+            PlatformRequest::UpdateTextInputRect { rect } => {
+                if let Some(rect) = self.spatial.project_rect(rect) {
+                    self.output
+                        .push_platform_request(PlatformRequest::UpdateTextInputRect { rect });
+                }
+            }
             request => self.output.push_platform_request(request),
         }
     }
@@ -320,6 +326,10 @@ impl<'a> Ui<'a> {
 
         let previous_owner = self.memory.text_input_owner();
         if previous_owner == Some(owner) {
+            if let Some(rect) = rect {
+                self.output
+                    .push_platform_request(PlatformRequest::UpdateTextInputRect { rect });
+            }
             return true;
         }
         let stopped_owner = self.memory.take_pending_text_input_stop();

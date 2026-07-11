@@ -1,9 +1,10 @@
 use super::super::{
     ACTION_COMPONENTS_RUN, ACTION_EDITOR_DOCK_JOIN, ACTION_EDITOR_DOCK_SWAP,
     ACTION_SYSTEMS_DISPATCH, ACTION_WORKSPACE_SAVE, ActionContext, ActionInvocation, ActionQueue,
-    ActionRoutingContext, ActionSource, EditorShowcase, ShowcaseApp, ShowcaseWorkspaceSnapshot,
-    showcase_action_router,
+    ActionRoutingContext, ActionSource, EditorShowcase, PlatformRequest, ShowcaseApp,
+    ShowcaseWorkspaceSnapshot, showcase_action_router,
 };
+use crate::editor::{ACTION_DOCS, DOCUMENTATION_URL};
 
 impl ShowcaseApp {
     pub(in crate::app) fn invoke_action(&mut self, id: &str, source: ActionSource) -> bool {
@@ -70,6 +71,10 @@ impl ShowcaseApp {
         handled: bool,
     ) -> bool {
         if handled {
+            if action_id == ACTION_DOCS {
+                self.pending_platform_requests
+                    .push(PlatformRequest::OpenUrl(DOCUMENTATION_URL.to_owned()));
+            }
             self.record_action(action_id, source);
             true
         } else {

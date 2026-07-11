@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::debug::FrameDiagnostic;
 use crate::render::Primitive;
 use crate::{
@@ -8,7 +10,7 @@ use crate::{
 use super::types::{CursorShape, FrameWarning, PlatformRequest, RepaintRequest};
 
 /// Output produced by a UI frame.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct FrameOutput {
     /// Backend-independent render primitives.
     pub primitives: Vec<Primitive>,
@@ -22,6 +24,20 @@ pub struct FrameOutput {
     pub platform_requests: Vec<PlatformRequest>,
     /// Diagnostics detected while building or finalizing the frame.
     pub warnings: Vec<FrameWarning>,
+}
+
+impl fmt::Debug for FrameOutput {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("FrameOutput")
+            .field("primitive_count", &self.primitives.len())
+            .field("semantic_node_count", &self.semantics.nodes().len())
+            .field("repaint", &self.repaint)
+            .field("action_count", &self.actions.len())
+            .field("platform_requests", &self.platform_requests)
+            .field("warnings", &self.warnings)
+            .finish()
+    }
 }
 
 impl FrameOutput {

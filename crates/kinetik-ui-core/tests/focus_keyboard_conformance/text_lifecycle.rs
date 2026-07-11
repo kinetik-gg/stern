@@ -338,7 +338,7 @@ fn focus_keyboard_starting_text_input_allows_missing_logical_rect() {
 }
 
 #[test]
-fn focus_keyboard_starting_current_text_owner_does_not_churn_platform_requests() {
+fn focus_keyboard_current_text_owner_updates_geometry_without_restart() {
     let field = WidgetId::from_key("field");
     let rect = Rect::new(12.0, 24.0, 160.0, 20.0);
     let mut harness = UiTestHarness::new();
@@ -349,7 +349,10 @@ fn focus_keyboard_starting_current_text_owner_does_not_churn_platform_requests()
 
     assert!(started);
     assert_eq!(harness.memory().text_input_owner(), Some(field));
-    assert!(output.platform_requests.is_empty());
+    assert_eq!(
+        output.platform_requests,
+        vec![PlatformRequest::UpdateTextInputRect { rect }]
+    );
 }
 
 #[test]

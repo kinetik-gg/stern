@@ -127,6 +127,41 @@ fn frame_output_accumulates_render_semantics_and_platform_requests() {
 }
 
 #[test]
+fn platform_request_and_frame_debug_redact_external_payloads() {
+    let clipboard = "private clipboard payload";
+    let title = "private title";
+    let url = "https://example.com/docs?secret=token#private-fragment";
+    let requests = vec![
+        PlatformRequest::CopyToClipboard(clipboard.to_owned()),
+        PlatformRequest::SetWindowTitle(title.to_owned()),
+        PlatformRequest::OpenUrl(url.to_owned()),
+    ];
+    let mut output = FrameOutput::new();
+    for request in requests.clone() {
+        output.push_platform_request(request);
+    }
+
+    let request_debug = format!("{requests:?}");
+    let output_debug = format!("{output:?}");
+
+    for debug in [request_debug, output_debug] {
+        assert!(!debug.contains(clipboard));
+        assert!(!debug.contains(title));
+        assert!(!debug.contains("secret"));
+        assert!(!debug.contains("private-fragment"));
+        assert!(debug.contains("https"));
+    }
+
+    let malformed = format!(
+        "{:?}",
+        PlatformRequest::OpenUrl("private-custom-scheme:secret".to_owned())
+    );
+    assert!(!malformed.contains("private-custom-scheme"));
+    assert!(!malformed.contains("secret"));
+    assert!(malformed.contains("unsupported"));
+}
+
+#[test]
 fn frame_output_exports_accessibility_snapshot_independent_from_painting() {
     let mut output = FrameOutput::new();
     let root = WidgetId::from_key("root");
@@ -336,6 +371,51 @@ fn ui_builder_starts_text_input_for_focused_widget() {
         output.platform_requests,
         vec![PlatformRequest::StartTextInput { rect: Some(rect) }]
     );
+}
+
+#[test]
+fn ui_builder_updates_text_input_rect_without_restarting_same_owner() {
+    let viewport = ViewportInfo::new(
+        Size::new(100.0, 50.0),
+        PhysicalSize::new(100, 50),
+        ScaleFactor::ONE,
+    );
+    let context = FrameContext::new(viewport, UiInput::default(), TimeInfo::default());
+    let field = WidgetId::from_key("field");
+    let rect = Rect::new(6.0, 9.0, 1.0, 18.0);
+    let mut memory = UiMemory::new();
+    memory.focus(field);
+    memory.set_text_input_owner(field);
+
+    let mut ui = Ui::begin_frame(context, &mut memory);
+    assert!(ui.start_text_input(field, Some(rect)));
+    let output = ui.end_frame();
+
+    assert_eq!(memory.text_input_owner(), Some(field));
+    assert_eq!(
+        output.platform_requests,
+        vec![PlatformRequest::UpdateTextInputRect { rect }]
+    );
+}
+
+#[test]
+fn ui_builder_same_text_input_owner_without_rect_emits_no_geometry_work() {
+    let viewport = ViewportInfo::new(
+        Size::new(100.0, 50.0),
+        PhysicalSize::new(100, 50),
+        ScaleFactor::ONE,
+    );
+    let context = FrameContext::new(viewport, UiInput::default(), TimeInfo::default());
+    let field = WidgetId::from_key("field");
+    let mut memory = UiMemory::new();
+    memory.focus(field);
+    memory.set_text_input_owner(field);
+
+    let mut ui = Ui::begin_frame(context, &mut memory);
+    assert!(ui.start_text_input(field, None));
+    let output = ui.end_frame();
+
+    assert!(output.platform_requests.is_empty());
 }
 
 #[test]

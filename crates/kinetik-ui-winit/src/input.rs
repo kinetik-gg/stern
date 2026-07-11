@@ -7,6 +7,7 @@ use winit::event::{ElementState, Ime, MouseButton as WinitMouseButton, MouseScro
 use winit::keyboard::{Key as WinitKey, ModifiersState, PhysicalKey as WinitPhysicalKey};
 
 use crate::conversions::{key_from_winit, modifiers_from_winit, physical_key_from_winit};
+use crate::shell::{WinitShellFailure, WinitShellOutcome, WinitShellResult};
 use crate::utils::{f64_to_f32, sanitize_scale_factor};
 /// Accumulates winit events into one Kinetik UI input frame.
 #[derive(Debug, Clone, PartialEq)]
@@ -218,6 +219,22 @@ impl WinitInputAdapter {
             .push_event(UiInputEvent::ClipboardText(ClipboardText::new(
                 target, text,
             )));
+    }
+
+    /// Appends targeted shell responses to the current ordered input frame and
+    /// returns redacted failures for application diagnostics.
+    pub fn apply_shell_outcome(&mut self, outcome: WinitShellOutcome) -> Vec<WinitShellFailure> {
+        let mut failures = Vec::new();
+        for result in outcome.into_results() {
+            match result {
+                WinitShellResult::ClipboardText(clipboard) => {
+                    self.input
+                        .push_event(UiInputEvent::ClipboardText(clipboard));
+                }
+                WinitShellResult::Failure(failure) => failures.push(failure),
+            }
+        }
+        failures
     }
 
     /// Applies a winit IME event.

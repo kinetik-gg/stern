@@ -486,10 +486,10 @@ execution remain Stage 3 work under the now-current authorization.
 
 ## Stage 3: Ordered Input And Shell
 
-Status: Current. `IN-01` implementation, bounded remedies, independent audit,
-and the complete local CI-equivalent gate are accepted on
-`agent/in01-ordered-platform-input`; PR CI and squash merge remain pending.
-`IN-02` and `IN-03` remain queued.
+Status: Current. `IN-01` is accepted and squash-merged at
+`ca3747b9e407259575508398f67304303a6539bd`. `IN-02` focused implementation
+gates pass on `agent/in02-shell-services`; independent audit, the complete
+workspace gate, PR CI, and squash merge remain pending. `IN-03` remains queued.
 
 ### `IN-01`: ordered platform input
 
@@ -557,6 +557,86 @@ line and pixel units, and press/drag/click primitives still consume final
 snapshots until `IN-03`. Shell request execution remains `IN-02`. Independent
 critic and the complete local gate are accepted; PR CI and squash merge are not
 yet claimed by this implementation record.
+
+### `IN-02`: one-frame shell services
+
+#### Changed files
+
+- `Cargo.lock` and `CHANGELOG.md`
+- `crates/kinetik-ui-core/src/runtime/{types,ui,tests}.rs`
+- `crates/kinetik-ui-core/tests/{ownership_reconciliation_conformance,runtime_spatial_conformance}.rs`
+- `crates/kinetik-ui-core/tests/focus_keyboard_conformance/text_lifecycle.rs`
+- `crates/kinetik-ui-widgets/src/components/text_support.rs`
+- `crates/kinetik-ui-widgets/src/ui/tests/text.rs`
+- `crates/kinetik-ui-winit/Cargo.toml`
+- `crates/kinetik-ui-winit/src/{input,lib,repaint,requests,shell,tests}.rs`
+- `crates/kinetik-ui-winit/tests/shell_services.rs`
+- `crates/kinetik-ui/tests/public_api_surface.rs`
+- `apps/kinetik-ui-showcase/src/{app,live}.rs`
+- `apps/kinetik-ui-showcase/src/app/runtime/{actions,lifecycle}.rs`
+- `apps/kinetik-ui-showcase/src/app/tests/actions.rs`
+- `apps/kinetik-ui-showcase/src/editor/root_state.rs`
+- `apps/kinetik-ui-showcase/src/editor/showcase/{core_chrome,menus}.rs`
+- `apps/kinetik-ui-showcase/src/editor/tests/chrome_fixtures.rs`
+- `docs/specs/{01-foundations,04-runtime-platform}.md`
+- `docs/{showcase-plan,alpha-readiness/03-input-and-shell,alpha-readiness/progress}.md`
+
+#### Reasoning and contract decisions
+
+Made `WinitPlatformRequests` a private-field, non-cloneable one-frame batch;
+translation replaces prior state and applying to a window consumes it. Cursor
+defaults actively, title is final/optional, IME Start/Update/Stop stays ordered,
+and window application returns ordered shell work plus the sole repaint intent.
+Clipboard and browser work uses injectable services with a retained native
+clipboard, hardened HTTP/HTTPS-only opening, continued failure processing, and
+payload-free diagnostics. Core `PlatformRequest` and `FrameOutput` debug output
+also redacts external payloads before Winit translation. URL validation requires
+a parseable HTTP(S) host and rejects malformed raw authorities. Targeted paste
+responses enter the IN-01 stream once.
+
+Repaint policy moved into a stateful Winit scheduler with replacement semantics,
+response promotion, overflow safety, one-shot deadlines, and bounded Continuous
+state. The live loop consumes external work before render, then always rolls
+input and responses before scheduling, including recoverable surface errors.
+Documentation is an application-owned fixed HTTPS action shared by Help, About,
+and F1; widgets do not open browsers. The About Documentation control owns an
+explicit pointer target and pressable route. Real Showcase frames traverse
+injectable Winit cursor, IME, clipboard, URL, and repaint boundaries in tests.
+
+#### Tests run and results
+
+- Core all-feature suite: 346 passed, 0 failed before audit; the depth-one
+  redaction-focused core run also passed.
+- Winit all-feature suite: 42 passed, 0 failed.
+- Widget all-feature suite: passed, including current-owner geometry updates.
+- Showcase: 126 library plus 25 binary tests passed; Documentation source/F1
+  tests and recoverable rollover passed.
+- Qualified facade public surface: 5/5 passed without prelude promotion.
+- Warning-denied focused Clippy across core, Winit, widgets, facade, and showcase:
+  passed.
+- Depth-zero independent audit: failed with 2 P1 and 2 P2 findings covering
+  pre-translation debug redaction, About-control interaction, malformed URL
+  authorities, and missing real Showcase-to-fake-Winit integration. All four
+  have deterministic depth-one remedies; focused core, Winit (42/42), Showcase
+  (128 library plus 25 binary), and warning-denied Clippy checks pass. Three
+  independent exact-SHA re-reviewers passed with no P0/P1/P2 findings.
+- `cargo package -p kinetik-ui-winit --allow-dirty --list`: passed and included
+  both new modules plus integration tests. The direct archive attempt reproduced
+  the accepted unpublished `kinetik-ui-core` registry bootstrap limitation.
+- Complete workspace gate: formatting, warning-denied Clippy, all-feature tests,
+  all-feature build, all-feature examples, and warning-denied documentation all
+  passed on the audited code candidate.
+
+#### Remaining risks and deferred findings
+
+Native clipboard ownership, real browser launch, candidate placement, and OS
+event-loop timing need desktop/three-OS smoke beyond deterministic fakes. Delayed
+clipboard target reuse remains subject to `ASYNC-01` incarnation policy. This is
+a provisional breaking Winit API change; migration is recorded in the
+changelog. Direct archive creation still requires the Stage 1 ephemeral local
+registry until internal crates are published. Independent audit and the local
+full gate are accepted; exact-SHA three-OS CI, PR checks, and merge are not yet
+claimed.
 
 ## Packet Completion Template
 

@@ -1,14 +1,11 @@
-use std::{
-    fmt,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{fmt, sync::Arc, time::Instant};
 
 use kinetik_ui::{
     core::{FrameOutput, RepaintRequest, ViewportInfo},
     platform_winit::{
-        WinitFrameClock, WinitInputAdapter, WinitPlatformRequests, frame_context_from_winit,
-        scale_factor_from_winit,
+        NativeWinitShellServices, WinitFrameClock, WinitInputAdapter, WinitPlatformRequests,
+        WinitRepaintSchedule, WinitRepaintScheduler, WinitShellFailure, WinitShellOutcome,
+        frame_context_from_winit, scale_factor_from_winit,
     },
     render::{RenderFrameInput, RenderResources},
     render_vello::VelloRenderer,
@@ -56,7 +53,8 @@ struct LiveShowcase {
     window: Option<Arc<Window>>,
     renderer: Option<LiveVelloRenderer>,
     accepting_input: bool,
-    next_redraw_at: Option<Instant>,
+    repaint: WinitRepaintScheduler,
+    shell: NativeWinitShellServices,
 }
 
 impl LiveShowcase {
@@ -71,7 +69,8 @@ impl LiveShowcase {
             window: None,
             renderer: None,
             accepting_input: false,
-            next_redraw_at: None,
+            repaint: WinitRepaintScheduler::new(),
+            shell: NativeWinitShellServices::new(),
         }
     }
 
@@ -82,8 +81,10 @@ impl LiveShowcase {
     }
 
     fn request_immediate_redraw(&mut self) {
-        self.next_redraw_at = Some(Instant::now());
-        self.request_redraw();
+        self.repaint.request_immediate();
+        if self.repaint.take_redraw_request(Instant::now()) {
+            self.request_redraw();
+        }
     }
 
     fn request_interactive_redraw(&mut self) {
@@ -121,43 +122,47 @@ impl LiveShowcase {
 
         self.app.update_with_context(context);
         let resources = self.app.render_resources();
-        let repaint = self.app.output().repaint;
-        let mut requests = WinitPlatformRequests::from_frame_output(self.app.output());
-        requests.repaint = RepaintRequest::None;
-        let shell = requests.apply_to_window(&window);
+        let requests = WinitPlatformRequests::from_frame_output(self.app.output());
+        let applied = requests.apply_to_window(&window);
+        let (shell_requests, frame_repaint) = applied.into_parts();
+        let shell_outcome = shell_requests.execute(&mut self.shell);
+        let has_shell_input = shell_outcome.has_input_response();
 
         window.pre_present_notify();
-        let Some(renderer) = self.renderer.as_mut() else {
-            return;
+        let retry_surface_redraw = if let Some(renderer) = self.renderer.as_mut() {
+            renderer.resize(size);
+            match renderer.render(self.app.output(), &resources, viewport) {
+                Ok(()) => false,
+                Err(LiveRenderError::Surface(status)) => {
+                    handle_surface_status(status, renderer, size);
+                    surface_status_requests_redraw(status)
+                }
+                Err(error) => {
+                    eprintln!("showcase render error: {error}");
+                    event_loop.exit();
+                    false
+                }
+            }
+        } else {
+            eprintln!("showcase render error: renderer unavailable");
+            event_loop.exit();
+            false
         };
-        renderer.resize(size);
-        let retry_surface_redraw = match renderer.render(self.app.output(), &resources, viewport) {
-            Ok(()) => {
-                self.next_redraw_at = schedule_shell_repaint(
-                    event_loop,
-                    &window,
-                    repaint,
-                    shell.repaint_after,
-                    shell.continuous_repaint,
-                );
-                false
-            }
-            Err(LiveRenderError::Surface(status)) => {
-                handle_surface_status(status, renderer, size);
-                surface_status_requests_redraw(status)
-            }
-            Err(error) => {
-                eprintln!("showcase render error: {error}");
-                event_loop.exit();
-                false
-            }
-        };
-        if retry_surface_redraw {
-            self.request_immediate_redraw();
-        }
 
-        self.input.begin_frame();
+        let failures = roll_platform_frame(&mut self.input, shell_outcome);
+        for failure in failures {
+            eprintln!("showcase shell error: {failure}");
+        }
         self.accepting_input = true;
+
+        let repaint = if retry_surface_redraw {
+            frame_repaint.merge(RepaintRequest::NextFrame)
+        } else {
+            frame_repaint
+        };
+        self.repaint
+            .replace_frame_request(repaint, has_shell_input, Instant::now());
+        drive_repaint_scheduler(&mut self.repaint, event_loop, &window, Instant::now());
     }
 }
 
@@ -268,17 +273,10 @@ impl ApplicationHandler for LiveShowcase {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        let Some(deadline) = self.next_redraw_at else {
+        let Some(window) = self.window.clone() else {
             return;
         };
-
-        if Instant::now() >= deadline {
-            self.next_redraw_at = None;
-            self.request_redraw();
-            event_loop.set_control_flow(immediate_redraw_control_flow());
-        } else {
-            event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
-        }
+        drive_repaint_scheduler(&mut self.repaint, event_loop, &window, Instant::now());
     }
 }
 
@@ -483,61 +481,33 @@ fn surface_status_requests_redraw(status: SurfaceStatus) -> bool {
     }
 }
 
-fn schedule_shell_repaint(
+fn drive_repaint_scheduler(
+    scheduler: &mut WinitRepaintScheduler,
     event_loop: &ActiveEventLoop,
     window: &Window,
-    repaint: RepaintRequest,
-    delay: Option<Duration>,
-    continuous: bool,
-) -> Option<Instant> {
-    let schedule = resolve_repaint_schedule(repaint, delay, continuous, Instant::now());
-    event_loop.set_control_flow(control_flow_for_repaint_schedule(schedule));
-    match schedule {
-        RepaintSchedule::Idle => None,
-        RepaintSchedule::Immediate => {
-            window.request_redraw();
-            Some(Instant::now())
-        }
-        RepaintSchedule::At(deadline) => Some(deadline),
-        RepaintSchedule::Continuous => {
-            window.request_redraw();
-            None
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RepaintSchedule {
-    Idle,
-    Immediate,
-    At(Instant),
-    Continuous,
-}
-
-fn resolve_repaint_schedule(
-    repaint: RepaintRequest,
-    delay: Option<Duration>,
-    continuous: bool,
     now: Instant,
-) -> RepaintSchedule {
-    let shell_repaint = delay.map_or(RepaintRequest::None, RepaintRequest::After);
-    let repaint = repaint.merge(shell_repaint);
-    if continuous || repaint == RepaintRequest::Continuous {
-        return RepaintSchedule::Continuous;
+) {
+    if scheduler.take_redraw_request(now) {
+        window.request_redraw();
     }
-    match repaint {
-        RepaintRequest::NextFrame => RepaintSchedule::Immediate,
-        RepaintRequest::After(delay) => RepaintSchedule::At(now + delay),
-        RepaintRequest::None => RepaintSchedule::Idle,
-        RepaintRequest::Continuous => RepaintSchedule::Continuous,
-    }
+    event_loop.set_control_flow(control_flow_for_repaint_schedule(scheduler.schedule()));
 }
 
-fn control_flow_for_repaint_schedule(schedule: RepaintSchedule) -> ControlFlow {
+fn roll_platform_frame(
+    input: &mut WinitInputAdapter,
+    outcome: WinitShellOutcome,
+) -> Vec<WinitShellFailure> {
+    input.begin_frame();
+    input.apply_shell_outcome(outcome)
+}
+
+fn control_flow_for_repaint_schedule(schedule: WinitRepaintSchedule) -> ControlFlow {
     match schedule {
-        RepaintSchedule::Idle => ControlFlow::Wait,
-        RepaintSchedule::Immediate | RepaintSchedule::Continuous => immediate_redraw_control_flow(),
-        RepaintSchedule::At(deadline) => ControlFlow::WaitUntil(deadline),
+        WinitRepaintSchedule::Idle => ControlFlow::Wait,
+        WinitRepaintSchedule::Immediate | WinitRepaintSchedule::Continuous => {
+            immediate_redraw_control_flow()
+        }
+        WinitRepaintSchedule::At(deadline) => ControlFlow::WaitUntil(deadline),
     }
 }
 
@@ -592,117 +562,43 @@ fn live_present_mode() -> PresentMode {
 #[cfg(test)]
 mod tests {
     use super::{
-        LiveShowcase, PresentMode, RepaintSchedule, SurfaceResizeMode, SurfaceStatus,
-        blit_extents_match, control_flow_for_repaint_schedule, immediate_redraw_control_flow,
-        live_antialiasing_method, live_present_mode, resolve_repaint_schedule,
-        surface_resize_required, surface_status_forces_reconfigure, surface_status_requests_redraw,
+        LiveShowcase, PresentMode, SurfaceResizeMode, SurfaceStatus, blit_extents_match,
+        control_flow_for_repaint_schedule, immediate_redraw_control_flow, live_antialiasing_method,
+        live_present_mode, roll_platform_frame, surface_resize_required,
+        surface_status_forces_reconfigure, surface_status_requests_redraw,
         viewport_surface_extents_match,
     };
-    use kinetik_ui::core::{RepaintRequest, ScaleFactor, Size, ViewportInfo};
-    use std::time::{Duration, Instant};
+    use kinetik_ui::{
+        core::{ClipboardText, ScaleFactor, Size, UiInputEvent, ViewportInfo, WidgetId},
+        platform_winit::{
+            WinitInputAdapter, WinitRepaintSchedule, WinitShellOutcome, WinitShellResult,
+        },
+    };
+    use std::time::Instant;
     use vello::AaConfig;
     use winit::dpi::PhysicalSize;
     use winit::event::{ElementState, MouseButton as WinitMouseButton};
     use winit::event_loop::ControlFlow;
 
     #[test]
-    fn next_frame_repaint_requests_immediate_redraw() {
-        let now = Instant::now();
-
-        assert_eq!(
-            resolve_repaint_schedule(RepaintRequest::NextFrame, None, false, now),
-            RepaintSchedule::Immediate
-        );
-    }
-
-    #[test]
-    fn delayed_shell_repaint_preserves_deadline() {
-        let now = Instant::now();
-
-        assert_eq!(
-            resolve_repaint_schedule(
-                RepaintRequest::None,
-                Some(Duration::from_millis(12)),
-                false,
-                now,
-            ),
-            RepaintSchedule::At(now + Duration::from_millis(12))
-        );
-    }
-
-    #[test]
-    fn app_next_frame_repaint_replaces_stale_shell_delay() {
-        let now = Instant::now();
-
-        assert_eq!(
-            resolve_repaint_schedule(
-                RepaintRequest::NextFrame,
-                Some(Duration::from_secs(1)),
-                false,
-                now,
-            ),
-            RepaintSchedule::Immediate
-        );
-    }
-
-    #[test]
-    fn app_and_shell_delayed_repaints_keep_earliest_deadline() {
-        let now = Instant::now();
-
-        assert_eq!(
-            resolve_repaint_schedule(
-                RepaintRequest::After(Duration::from_millis(40)),
-                Some(Duration::from_millis(12)),
-                false,
-                now,
-            ),
-            RepaintSchedule::At(now + Duration::from_millis(12))
-        );
-        assert_eq!(
-            resolve_repaint_schedule(
-                RepaintRequest::After(Duration::from_millis(8)),
-                Some(Duration::from_millis(12)),
-                false,
-                now,
-            ),
-            RepaintSchedule::At(now + Duration::from_millis(8))
-        );
-    }
-
-    #[test]
-    fn continuous_shell_repaint_polls() {
-        let now = Instant::now();
-
-        assert_eq!(
-            resolve_repaint_schedule(
-                RepaintRequest::After(Duration::from_secs(1)),
-                None,
-                true,
-                now
-            ),
-            RepaintSchedule::Continuous
-        );
-    }
-
-    #[test]
-    fn immediate_repaint_keeps_event_loop_polling_until_redraw() {
+    fn repaint_schedules_map_to_event_loop_control_flow() {
         let now = Instant::now();
 
         assert!(matches!(immediate_redraw_control_flow(), ControlFlow::Poll));
         assert!(matches!(
-            control_flow_for_repaint_schedule(RepaintSchedule::Immediate),
+            control_flow_for_repaint_schedule(WinitRepaintSchedule::Immediate),
             ControlFlow::Poll
         ));
         assert!(matches!(
-            control_flow_for_repaint_schedule(RepaintSchedule::Continuous),
+            control_flow_for_repaint_schedule(WinitRepaintSchedule::Continuous),
             ControlFlow::Poll
         ));
         assert!(matches!(
-            control_flow_for_repaint_schedule(RepaintSchedule::Idle),
+            control_flow_for_repaint_schedule(WinitRepaintSchedule::Idle),
             ControlFlow::Wait
         ));
         assert!(matches!(
-            control_flow_for_repaint_schedule(RepaintSchedule::At(now)),
+            control_flow_for_repaint_schedule(WinitRepaintSchedule::At(now)),
             ControlFlow::WaitUntil(deadline) if deadline == now
         ));
     }
@@ -794,32 +690,6 @@ mod tests {
     }
 
     #[test]
-    fn interactive_redraw_replaces_delayed_repaint_with_immediate_deadline() {
-        let mut app = LiveShowcase::new(None);
-        app.next_redraw_at = Some(Instant::now() + Duration::from_secs(1));
-
-        let before = Instant::now();
-        app.request_interactive_redraw();
-
-        let deadline = app.next_redraw_at.expect("interactive redraw deadline");
-        assert!(deadline >= before);
-        assert!(deadline <= Instant::now());
-    }
-
-    #[test]
-    fn immediate_redraw_replaces_delayed_repaint_with_fallback_deadline() {
-        let mut app = LiveShowcase::new(None);
-        app.next_redraw_at = Some(Instant::now() + Duration::from_secs(1));
-
-        let before = Instant::now();
-        app.request_immediate_redraw();
-
-        let deadline = app.next_redraw_at.expect("immediate redraw deadline");
-        assert!(deadline >= before);
-        assert!(deadline <= Instant::now());
-    }
-
-    #[test]
     fn resume_clears_stale_input_edges_before_new_window_events() {
         let mut app = LiveShowcase::new(None);
         app.input
@@ -843,5 +713,28 @@ mod tests {
 
         assert!(input.pointer.primary.pressed);
         assert!(input.pointer.primary.down);
+    }
+
+    #[test]
+    fn recoverable_frame_roll_clears_old_edges_and_preserves_shell_response() {
+        assert!(surface_status_requests_redraw(SurfaceStatus::Timeout));
+        let target = WidgetId::from_key("field");
+        let mut input = WinitInputAdapter::default();
+        input.mouse_button(WinitMouseButton::Left, ElementState::Pressed, 1);
+        let outcome = WinitShellOutcome::from_results([WinitShellResult::ClipboardText(
+            ClipboardText::new(target, "paste"),
+        )]);
+
+        let failures = roll_platform_frame(&mut input, outcome);
+
+        assert!(failures.is_empty());
+        assert!(!input.input().pointer.primary.pressed);
+        assert!(input.input().pointer.primary.down);
+        assert_eq!(
+            input.input().events,
+            vec![UiInputEvent::ClipboardText(ClipboardText::new(
+                target, "paste"
+            ))]
+        );
     }
 }

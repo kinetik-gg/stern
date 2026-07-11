@@ -307,10 +307,10 @@ impl EditorShowcase {
             EditorMenuKind::Help => menu([
                 menu_action(
                     ACTION_DOCS,
-                    "Online Docs (Experimental)",
+                    "Online Docs",
                     Some(shortcut(Key::Function(1))),
                     None,
-                    false,
+                    true,
                 ),
                 menu_action(
                     ACTION_KEYBOARD_SHORTCUTS,

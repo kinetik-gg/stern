@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | In progress; `IN-01` accepted pending PR CI and squash merge |
+| Status | In progress; `IN-01` merged, `IN-02` local audit and full gate passed pending exact-SHA three-OS CI |
 | Scope | Sequence-preserving input, platform request execution, and pointer normalization |
 | Impact / confidence | Critical / High (`IN-03` is High / High) |
 | Campaign prerequisite | Stage 2 gate; campaign authorization recorded |
@@ -26,6 +26,18 @@ claim, event-time pointer localization, and deterministic mixed-mode conflict
 diagnostics. Its depth-two remedy and independent re-review passed, as did the
 complete local CI-equivalent gate. Existing pointer primitives intentionally remain snapshot-driven;
 event-aware click, drag, and wheel policy stays in `IN-03`.
+
+`IN-02` now uses one consumed Winit batch, ordered injectable shell services,
+payload-free failures and debug output, targeted one-shot clipboard responses,
+same-owner IME rectangle updates, stateful repaint replacement, strict
+parseable-host HTTP(S) validation, and a live-loop rollover path that cannot
+replay shell work after a recoverable surface failure. Help, the interactive
+About control, and F1 route one fixed HTTPS Documentation action. Real Showcase
+output crosses fake Winit cursor, IME, clipboard, URL, and repaint boundaries in
+deterministic tests. Three independent depth-one re-reviewers closed the
+depth-zero audit's four findings with no P0/P1/P2 findings. The complete local
+CI-equivalent gate passes; exact-SHA three-OS CI, PR checks, and squash merge
+remain before acceptance.
 
 ## Ownership And Overlap
 

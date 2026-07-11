@@ -11,7 +11,10 @@ categories.workspace = true
 description = "Winit platform adapter for Kinetik UI"
 
 [dependencies]
+arboard = { version = "3.6.1", default-features = false, features = ["wayland-data-control"] }
 kinetik-ui-core = { version = "=0.1.0-alpha.1", path = "../kinetik-ui-core" }
+url = "2.5.8"
+webbrowser = { version = "1.2.1", default-features = false, features = ["hardened"] }
 winit = "0.30.12"
 
 [lints]

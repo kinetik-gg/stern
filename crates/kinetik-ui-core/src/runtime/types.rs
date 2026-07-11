@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 use crate::debug::{DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity, FrameDiagnostic};
 use crate::input::{InputStreamConflict, UiInput};
@@ -142,7 +142,7 @@ pub enum CursorShape {
 ///
 /// The core crate records intent only. Windowing, clipboard, IME, browser, and
 /// shell integration stay in platform/application adapters.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum PlatformRequest {
     /// Set the pointer cursor for the current frame.
     SetCursor(CursorShape),
@@ -158,12 +158,66 @@ pub enum PlatformRequest {
         /// Logical rectangle for caret/composition placement.
         rect: Option<Rect>,
     },
+    /// Update candidate-window geometry for the current text-input owner.
+    ///
+    /// Unlike [`Self::StartTextInput`], this does not restart platform text
+    /// input or composition.
+    UpdateTextInputRect {
+        /// Logical rectangle for caret/composition placement.
+        rect: Rect,
+    },
     /// Stop platform text input or IME.
     StopTextInput,
     /// Set the host window title.
     SetWindowTitle(String),
     /// Ask the application/platform shell to open a URL.
     OpenUrl(String),
+}
+
+impl fmt::Debug for PlatformRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SetCursor(cursor) => formatter.debug_tuple("SetCursor").field(cursor).finish(),
+            Self::CopyToClipboard(text) => formatter
+                .debug_struct("CopyToClipboard")
+                .field("bytes", &text.len())
+                .finish(),
+            Self::RequestClipboardText { target } => formatter
+                .debug_struct("RequestClipboardText")
+                .field("target", target)
+                .finish(),
+            Self::StartTextInput { rect } => formatter
+                .debug_struct("StartTextInput")
+                .field("rect", rect)
+                .finish(),
+            Self::UpdateTextInputRect { rect } => formatter
+                .debug_struct("UpdateTextInputRect")
+                .field("rect", rect)
+                .finish(),
+            Self::StopTextInput => formatter.write_str("StopTextInput"),
+            Self::SetWindowTitle(title) => formatter
+                .debug_struct("SetWindowTitle")
+                .field("bytes", &title.len())
+                .finish(),
+            Self::OpenUrl(url) => formatter
+                .debug_struct("OpenUrl")
+                .field("scheme", &redacted_url_scheme(url))
+                .finish(),
+        }
+    }
+}
+
+fn redacted_url_scheme(url: &str) -> &'static str {
+    let Some((scheme, _)) = url.split_once(':') else {
+        return "missing";
+    };
+    if scheme.eq_ignore_ascii_case("https") {
+        "https"
+    } else if scheme.eq_ignore_ascii_case("http") {
+        "http"
+    } else {
+        "unsupported"
+    }
 }
 
 /// Runtime warning detected while finalizing a UI frame.

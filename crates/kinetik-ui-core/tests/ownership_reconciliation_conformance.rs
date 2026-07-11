@@ -212,7 +212,10 @@ fn semantic_and_text_input_evidence_mark_presence_without_duplicate_warnings() {
     assert_eq!(harness.memory().focused(), Some(text_owner));
     assert_eq!(harness.memory().text_input_owner(), Some(text_owner));
     assert!(text_output.warnings.is_empty());
-    assert!(text_output.platform_requests.is_empty());
+    assert_eq!(
+        text_output.platform_requests,
+        vec![PlatformRequest::UpdateTextInputRect { rect: FULL }]
+    );
 }
 
 #[test]

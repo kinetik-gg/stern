@@ -297,6 +297,44 @@ fn helper_and_raw_ime_rectangles_share_transformed_partial_clip_projection() {
 }
 
 #[test]
+fn text_input_rect_updates_use_the_same_spatial_projection_without_restart() {
+    let owner = WidgetId::from_key("ime-update-field");
+    let clip = ClipId::from_raw(5);
+    let mut harness = UiTestHarness::new();
+    harness.memory_mut().focus(owner);
+    harness.memory_mut().set_text_input_owner(owner);
+
+    let (updated, output) = harness.run_frame(|ui| {
+        ui.push_primitive(Primitive::TransformBegin(Transform::translation(
+            Vec2::new(10.0, 20.0),
+        )));
+        ui.push_primitive(Primitive::ClipBegin {
+            id: clip,
+            rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+        });
+        let updated = ui.start_text_input(owner, Some(Rect::new(5.0, 5.0, 10.0, 10.0)));
+        ui.push_platform_request(PlatformRequest::UpdateTextInputRect {
+            rect: Rect::new(5.0, 5.0, 10.0, 10.0),
+        });
+        ui.push_primitive(Primitive::ClipEnd { id: clip });
+        ui.push_primitive(Primitive::TransformEnd);
+        updated
+    });
+
+    let expected = PlatformRequest::UpdateTextInputRect {
+        rect: Rect::new(15.0, 25.0, 5.0, 5.0),
+    };
+    assert!(updated);
+    assert_eq!(output.platform_requests, vec![expected.clone(), expected]);
+    assert!(
+        !output
+            .platform_requests
+            .iter()
+            .any(|request| matches!(request, PlatformRequest::StartTextInput { .. }))
+    );
+}
+
+#[test]
 fn singular_and_non_finite_scopes_are_inert_but_release_capture_and_restore_root_input() {
     let owner = WidgetId::from_key("captured-owner");
     let rect = Rect::new(0.0, 0.0, 20.0, 20.0);

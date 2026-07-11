@@ -38,7 +38,11 @@ const ACTION_RUN_PROFILER: &str = "editor.profiler.run";
 const ACTION_PROJECT_SETTINGS: &str = "editor.project-settings.open";
 /// Opens the editor command palette once the palette lifecycle is implemented.
 pub const ACTION_PALETTE: &str = "editor.palette";
-const ACTION_DOCS: &str = "editor.docs.open";
+/// Opens the fixed Kinetik UI documentation URL through the application shell.
+pub const ACTION_DOCS: &str = "editor.docs.open";
+/// Fixed HTTPS documentation target used by every showcase surface.
+pub const DOCUMENTATION_URL: &str =
+    "https://github.com/kinetik-gg/kinetik-ui/tree/main/docs";
 const ACTION_KEYBOARD_SHORTCUTS: &str = "editor.shortcuts.open";
 const ACTION_ABOUT: &str = "editor.about.open";
 const ACTION_ABOUT_CLOSE: &str = "editor.about.close";

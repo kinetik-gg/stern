@@ -34,6 +34,13 @@ fn ui_text_field_requests_platform_text_input_when_focused() {
     ui.text_field("field", Rect::new(0.0, 0.0, 120.0, 24.0), &mut state, false);
     let output = ui.finish_output();
 
+    assert!(
+        output
+            .platform_requests
+            .contains(&PlatformRequest::UpdateTextInputRect {
+                rect: Rect::new(0.0, 0.0, 120.0, 24.0),
+            })
+    );
     assert!(!output.platform_requests.iter().any(|request| matches!(
         request,
         PlatformRequest::StartTextInput { .. } | PlatformRequest::StopTextInput

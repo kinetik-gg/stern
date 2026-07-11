@@ -323,7 +323,6 @@ fn showcase_action_truth_apply_action_rejects_every_unfinished_outcome() {
         super::ACTION_PACKAGE_WINDOWS,
         super::ACTION_RUN_PROFILER,
         ACTION_PALETTE,
-        super::ACTION_DOCS,
         super::ACTION_KEYBOARD_SHORTCUTS,
     ] {
         let mut editor = EditorShowcase::new();
@@ -719,10 +718,14 @@ fn showcase_about_modal_action_truth_and_open_is_idempotent() {
     assert_eq!(about.label, ABOUT_MODAL_DIALOG_TITLE);
     assert!(about.can_invoke());
     assert_eq!(about.shortcut, None);
-    assert_eq!(documentation.label, "Online Docs (Experimental)");
-    assert!(!documentation.can_invoke());
-    assert_eq!(documentation.shortcut, None);
-    assert!(!editor.apply_action(ACTION_DOCS));
+    assert_eq!(documentation.label, "Online Docs");
+    assert!(documentation.can_invoke());
+    let documentation_shortcut = documentation.shortcut.as_ref().expect("F1 shortcut");
+    assert_eq!(documentation_shortcut.modifiers, Modifiers::default());
+    assert_eq!(documentation_shortcut.key, Key::Function(1));
+    assert_eq!(documentation_shortcut.physical_key, None);
+    assert!(editor.apply_action(ACTION_DOCS));
+    assert_eq!(editor.status, "Online documentation requested");
 
     assert!(editor.apply_action(ACTION_ABOUT));
     assert!(editor.about_modal_open);
@@ -754,17 +757,19 @@ fn showcase_about_modal_action_truth_and_open_is_idempotent() {
         .visible_action_by_role(ModalActionRole::Cancel)
         .expect("Close action");
     assert_eq!(modal_documentation.action.id.as_str(), ACTION_DOCS);
-    assert_eq!(modal_documentation.action.label, "Documentation (Experimental)");
-    assert!(!modal_documentation.can_invoke());
+    assert_eq!(modal_documentation.action.label, "Documentation");
+    assert!(modal_documentation.can_invoke());
     assert_eq!(modal_documentation.action.shortcut, None);
     assert_eq!(close.action.id.as_str(), ACTION_ABOUT_CLOSE);
     assert_eq!(close.action.label, "Close");
     assert!(close.can_invoke());
     assert_eq!(close.action.shortcut, None);
-    assert!(
+    assert_eq!(
         overlay
             .invocation_for_role(ModalActionRole::Primary)
-            .is_none()
+            .expect("Documentation invokes")
+            .action_id,
+        ActionId::new(ACTION_DOCS)
     );
     assert_eq!(
         overlay

@@ -113,9 +113,16 @@ OS/window events
   -> Kinetik UI frame
   -> application builds UI top-down
   -> layout + interaction + draw primitives + semantic nodes
+  -> consume one owned platform batch and execute ordered shell work once
   -> renderer draws 2D UI and composites texture surfaces
   -> platform presents frame
+  -> clear transient input, append targeted shell responses, schedule redraw
 ```
+
+External side effects are frame-owned. A recoverable render failure may request
+another frame, but it must not replay the already-consumed clipboard, URL,
+title, cursor, or IME batch. Shell responses are appended only after transient
+input is cleared so they become ordered input for exactly the next frame.
 
 ## 4. Crate Layout
 
@@ -458,6 +465,11 @@ remains inside the effective clip. Outside the effective clip, interaction is
 inert except that button-release edges remain available to clean up capture.
 
 Text input has priority when a text editor is focused. Keyboard shortcuts should not steal ordinary typing from focused text fields.
+
+Starting a text-input owner and moving its candidate area are distinct platform
+operations. Initial ownership emits `StartTextInput`; the same focused owner
+emits `UpdateTextInputRect` with the current screen-logical rectangle, without
+restarting IME or composition. Owner handoff remains ordered Stop then Start.
 
 ## 9. Widget Identity
 

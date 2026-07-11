@@ -12,6 +12,15 @@ published, or accepted as an alpha release.
 
 - Prepared package metadata and dependency constraints for the planned
   prerelease archives.
+- Made Winit platform batches owned and consuming, with ordered shell services,
+  same-owner IME rectangle updates, and stateful repaint replacement. This is a
+  provisional breaking API change: callers must use `WinitPlatformRequests`
+  getters and consume `apply_to_window`/`apply_to_window_ops`, then split the
+  returned `WinitAppliedRequests` with `into_parts`.
+- Added `PlatformRequest::UpdateTextInputRect`; exhaustive matches over the
+  provisional public enum must handle the new same-owner IME geometry request.
+- Added native text clipboard and hardened HTTP/HTTPS browser services to the
+  Winit adapter; image clipboard features remain disabled.
 
 ### Documentation
 

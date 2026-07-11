@@ -157,6 +157,9 @@ impl ShowcaseApp {
         if editor_handled {
             output.request_repaint(RepaintRequest::NextFrame);
         }
+        for request in self.pending_platform_requests.drain(..) {
+            output.push_platform_request(request);
+        }
         self.memory = memory;
         self.text_layouts = text_layouts;
         output

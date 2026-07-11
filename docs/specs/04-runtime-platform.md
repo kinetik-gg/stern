@@ -101,9 +101,16 @@ struct FrameOutput {
 ```text
 None
 NextFrame
-At(Instant)
-ContinuousUntil(condition)
+After(Duration)
+Continuous
 ```
+
+The Winit adapter resolves these into `Idle`, `Immediate`, a concrete deadline,
+or `Continuous`. Each completed frame replaces the previous schedule instead
+of accumulating it. A targeted shell response promotes the schedule to at
+least Immediate; an expired deadline fires and clears once; Continuous remains
+only until a later frame replaces it. Unrepresentable deadlines fail closed to
+Idle rather than panicking.
 
 ## 25. Platform Adapter
 
@@ -138,10 +145,27 @@ read clipboard
 request redraw
 set window title
 start text input
+update text input rectangle
 stop text input
+open HTTP/HTTPS URL
 ```
 
 Platform-specific behavior should be isolated behind adapter traits.
+
+The first Winit boundary uses an owned, non-cloneable one-frame request batch.
+`from_frame_output` or replacement translation starts from an empty batch;
+applying it consumes the value, actively sets the final cursor (Default when
+absent), applies an optional final title, preserves ordered Start/Update/Stop
+IME operations, and returns ordered shell work plus the authoritative repaint
+request.
+
+Clipboard writes, targeted reads, and URL opens share one ordered shell vector.
+Injected services execute every operation once and continue after individual
+failure. Outcomes contain targeted clipboard responses and structured,
+payload-free failures. Debug and display diagnostics must not include clipboard
+contents or URL path, query, or fragment. Native services retain one clipboard
+object for their lifetime, disable clipboard image support, and accept only
+HTTP/HTTPS browser targets.
 
 ## 26. Accessibility And Semantic Nodes
 

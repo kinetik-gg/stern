@@ -50,9 +50,11 @@ explicit non-goals. Fixture reachability alone remains metadata-only evidence.
   ends in `(Experimental)`. They are disabled, have no shortcut, and cannot
   enter an invocation queue or handler.
 - The editor currently demonstrates play, stop, grid visibility, tool selection,
-  panel focus, and dock rearrangement outcomes. Pause, persistence, project/file
-  operations, build/export/package, preferences, documentation, and command
-  palette lifecycles remain Experimental.
+  panel focus, dock rearrangement, and one fixed online-documentation request.
+  Help-menu, About-modal, and F1 surfaces dispatch that same application-owned
+  action; only the Winit shell opens the URL. Pause, persistence, project/file
+  operations, build/export/package, preferences, and command palette lifecycles
+  remain Experimental.
 - The Components counter and Systems dispatch actions mutate dedicated demo
   counters. Systems `Save Workspace` captures a deterministic in-memory snapshot;
   it does not imply file persistence.
