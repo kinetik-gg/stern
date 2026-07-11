@@ -9,9 +9,9 @@ use kinetik_ui_core::{
     TextureId, TexturePrimitive, Transform, Vec2, ViewportInfo,
 };
 use kinetik_ui_vello::{
-    ImageAtlasRegion, ImageResource, RenderDiagnostic, RenderFrameInput, RenderImage,
-    RenderImageSampling, RenderResources, RendererBackend, TextureResource, VelloRenderer,
-    VelloRendererError, render_translation_snapshot, translate_primitives,
+    ImageAtlasRegion, ImageResource, RenderCommandKind, RenderDiagnostic, RenderFrameInput,
+    RenderImage, RenderImageSampling, RenderResources, RendererBackend, TextureResource,
+    VelloRenderer, VelloRendererError, render_translation_snapshot, translate_primitives,
 };
 use support::command_snapshots::{
     assert_command_snapshot, command_snapshot_artifact_paths, command_snapshot_root,
@@ -44,6 +44,120 @@ fn red_to_blue_gradient() -> Brush {
         )
         .expect("valid gradient"),
     )
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn translation_sanitizes_every_color_occurrence_in_diagnostic_order() {
+    let invalid = Color::rgba(-0.25, 1.25, f32::NAN, f32::INFINITY);
+    let gradient = LinearGradient::new(
+        Point::new(0.0, 0.0),
+        Point::new(10.0, 0.0),
+        &[
+            GradientStop::new(-0.5, invalid),
+            GradientStop::new(1.0, Color::rgba(f32::NEG_INFINITY, 0.25, 0.5, 0.75)),
+        ],
+    )
+    .expect("valid stored gradient");
+    let image = ImageId::from_raw(501);
+    let mut resources = RenderResources::new();
+    resources.register_image(kinetik_ui_vello::ImageResource {
+        id: image,
+        size: Size::new(1.0, 1.0),
+        sampling: RenderImageSampling::Pixelated,
+        pixels: Some(RenderImage::rgba8(1, 1, vec![1, 2, 3, 4]).expect("valid image")),
+        atlas_region: None,
+    });
+    let primitives = vec![
+        Primitive::Rect(RectPrimitive {
+            rect: Rect::new(0.0, 0.0, 4.0, 4.0),
+            fill: Some(Brush::Solid(invalid)),
+            stroke: Some(Stroke::new(1.0, Brush::Solid(invalid))),
+            radius: CornerRadius::all(0.0),
+        }),
+        Primitive::Path(PathPrimitive::new(
+            [
+                PathElement::MoveTo(Point::new(0.0, 0.0)),
+                PathElement::LineTo(Point::new(10.0, 0.0)),
+            ],
+            Some(Brush::LinearGradient(gradient)),
+            None,
+        )),
+        Primitive::Text(TextPrimitive {
+            layout: None,
+            origin: Point::new(0.0, 12.0),
+            text: "invalid".to_owned(),
+            family: "sans-serif".to_owned(),
+            size: 12.0,
+            line_height: 16.0,
+            brush: Brush::Solid(invalid),
+        }),
+        Primitive::Shadow(ShadowPrimitive::new(
+            Rect::new(0.0, 16.0, 4.0, 4.0),
+            Vec2::new(1.0, 1.0),
+            1.0,
+            0.0,
+            0.0,
+            invalid,
+        )),
+        Primitive::Image(ImagePrimitive {
+            image,
+            rect: Rect::new(8.0, 16.0, 4.0, 4.0),
+            tint: Some(invalid),
+        }),
+    ];
+
+    let translation = translate_primitives(&primitives, &resources);
+    assert_eq!(
+        translation.diagnostics,
+        vec![
+            RenderDiagnostic::InvalidGeometry("rect_fill"),
+            RenderDiagnostic::InvalidGeometry("rect_stroke"),
+            RenderDiagnostic::InvalidGeometry("path_fill"),
+            RenderDiagnostic::InvalidGeometry("path_fill"),
+            RenderDiagnostic::InvalidGeometry("path_fill"),
+            RenderDiagnostic::InvalidGeometry("text_brush"),
+            RenderDiagnostic::InvalidGeometry("shadow_color"),
+            RenderDiagnostic::InvalidGeometry("image_tint"),
+        ]
+    );
+    assert_eq!(translation.commands.len(), 5);
+
+    let sanitized = Color::rgba(0.0, 1.0, 0.0, 0.0);
+    let RenderCommandKind::Rect { fill, stroke, .. } = &translation.commands[0].kind else {
+        panic!("expected rect command");
+    };
+    assert_eq!(*fill, Some(Brush::Solid(sanitized)));
+    assert_eq!(
+        stroke.expect("sanitized stroke").brush,
+        Brush::Solid(sanitized)
+    );
+
+    let RenderCommandKind::Path {
+        fill: Some(Brush::LinearGradient(gradient)),
+        ..
+    } = &translation.commands[1].kind
+    else {
+        panic!("expected gradient path command");
+    };
+    assert_eq!(gradient.stops()[0], GradientStop::new(0.0, sanitized));
+    assert_eq!(
+        gradient.stops()[1],
+        GradientStop::new(1.0, Color::rgba(0.0, 0.25, 0.5, 0.75))
+    );
+
+    let RenderCommandKind::Text { color, .. } = &translation.commands[2].kind else {
+        panic!("expected text command");
+    };
+    assert_eq!(*color, sanitized);
+    let RenderCommandKind::Shadow { color, .. } = &translation.commands[3].kind else {
+        panic!("expected shadow command");
+    };
+    assert_eq!(*color, sanitized);
+    let RenderCommandKind::Image { tint, .. } = &translation.commands[4].kind else {
+        panic!("expected image command");
+    };
+    assert_eq!(*tint, Some(sanitized));
 }
 
 #[test]

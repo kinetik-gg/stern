@@ -4,10 +4,11 @@ use kinetik_ui_core::{
 use kinetik_ui_render::RenderImageSampling;
 use vello::{
     kurbo::{Affine, Rect as KurboRect, RoundedRect, RoundedRectRadii},
-    peniko::Gradient as PenikoGradient,
+    peniko::{
+        Gradient as PenikoGradient, InterpolationAlphaSpace,
+        color::{AlphaColor, ColorSpaceTag, Srgb},
+    },
 };
-
-use crate::sanitize::finite_unit;
 
 const VIEWPORT_SCALE_EPSILON: f64 = 0.001;
 
@@ -313,24 +314,21 @@ pub(crate) fn kurbo_radius(radius: CornerRadius) -> RoundedRectRadii {
     )
 }
 
-pub(crate) fn vello_color(color: Color) -> vello::peniko::Color {
-    vello::peniko::Color::new([
-        finite_unit(color.r),
-        finite_unit(color.g),
-        finite_unit(color.b),
-        finite_unit(color.a),
-    ])
+pub(crate) fn vello_color(color: Color) -> AlphaColor<Srgb> {
+    AlphaColor::<Srgb>::new([color.r, color.g, color.b, color.a])
 }
 
 pub(crate) fn vello_gradient(gradient: &LinearGradient) -> PenikoGradient {
     let stops: Vec<(f32, vello::peniko::Color)> = gradient
         .stops()
         .iter()
-        .map(|stop| (finite_unit(stop.offset), vello_color(stop.color)))
+        .map(|stop| (stop.offset, vello_color(stop.color)))
         .collect();
     PenikoGradient::new_linear(
         (f64::from(gradient.start().x), f64::from(gradient.start().y)),
         (f64::from(gradient.end().x), f64::from(gradient.end().y)),
     )
+    .with_interpolation_cs(ColorSpaceTag::Srgb)
+    .with_interpolation_alpha_space(InterpolationAlphaSpace::Premultiplied)
     .with_stops(stops.as_slice())
 }

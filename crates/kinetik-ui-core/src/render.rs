@@ -2,7 +2,11 @@
 
 use crate::{Point, Rect, Size, Vec2};
 
-/// RGBA color in linear toolkit space.
+/// Straight (unpremultiplied) sRGB color with straight alpha.
+///
+/// Valid renderer-bound channels are finite values in `0.0..=1.0`. The
+/// constructors intentionally preserve caller input; renderer translation is
+/// responsible for diagnosing and sanitizing invalid values.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Color {
     /// Red channel.
@@ -611,7 +615,10 @@ pub struct ImagePrimitive {
     pub image: ImageId,
     /// Destination rectangle.
     pub rect: Rect,
-    /// Optional color multiplied into the image payload at render time.
+    /// Optional straight-sRGB color multiplied into the image payload.
+    ///
+    /// Tint alpha also modulates premultiplied RGB payload channels so their
+    /// alpha representation remains valid.
     pub tint: Option<Color>,
 }
 

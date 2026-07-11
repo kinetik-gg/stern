@@ -298,11 +298,24 @@ Images:
 
 - Decoded bitmap resources.
 - Used for previews, thumbnails, static assets.
+- RGBA8/BGRA8 RGB bytes are sRGB encoded.
+- `Alpha` declares straight alpha; `Premultiplied` declares caller-supplied
+  already-premultiplied bytes. Renderers trust this metadata rather than
+  scanning every payload.
+- Convenience RGBA8/BGRA8 constructors default to straight alpha; the general
+  constructor preserves explicit format and alpha metadata.
 
 Textures:
 
 - GPU-resident surfaces.
 - Used for video, 3D, viewport previews, processed frames.
+- CPU snapshots use the same sRGB byte and alpha-representation contract as
+  images, without an implicit texture-tint API.
+
+Backend-neutral resource snapshots remain sorted, payload-free presence
+inventories. They intentionally do not expose pixel bytes, format/alpha
+metadata, or backend-native objects; byte order and alpha behavior are proved
+at the render-image/upload boundary instead.
 
 Missing resource policy:
 

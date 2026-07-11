@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Current / Authorized; `ASYNC-01`, `TEXT-01`, and `REND-01A` accepted; 4A waits on `REND-01B` |
+| Status | Current / Authorized; `ASYNC-01`, `TEXT-01`, and `REND-01A` accepted; `REND-01B` implemented under Issue #550; 4A waits on its merge and combined closure |
 | Scope | Async liveness, desktop/Unicode text, bounded caches, and renderer correctness |
 | Impact / confidence | Critical / Medium-high overall |
 | Campaign prerequisite | Stage 3 gate; campaign authorization recorded |
@@ -49,8 +49,69 @@ three-OS run 29146185811, and PR run 29146379516 passed.
 `REND-01A` is Complete / Accepted. Issue #518 closed through PR #520 and
 squash-merged as `1aee4f4`. Rejected non-finite and overflowing transform
 begins now retain balanced recovery frames. Its local gates, exact-SHA critic,
-three-OS run 29141679730, and PR checks passed. `REND-01B` still owns the
-cross-layer sRGB, alpha, tint, gradient, and image policy.
+three-OS run 29141679730, and PR checks passed. The `REND-01B` implementation
+record below owns the cross-layer sRGB, alpha, tint, gradient, and image policy.
+
+### `REND-01B`: sRGB, alpha, and tint contract
+
+Status: Implemented under Issue #550; acceptance remains pending its exact-SHA
+reviews, cross-platform/PR checks, squash merge, and the separate combined
+`REND-01-CLOSE` evidence packet. This record does not claim `REND-01`,
+checkpoint 4A, or Stage 4 complete.
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `crates/kinetik-ui-core/src/render.rs`
+- `crates/kinetik-ui-core/tests/render_color_conformance.rs`
+- `crates/kinetik-ui-render/src/lib.rs`
+- `crates/kinetik-ui-render/tests/color_alpha_conformance.rs`
+- `crates/kinetik-ui-vello/src/{geometry,image,sanitize,tests}.rs`
+- `crates/kinetik-ui-vello/src/tests/color_alpha.rs`
+- `crates/kinetik-ui-vello/tests/{render_color_conformance,render_translation_conformance}.rs`
+- `docs/specs/{03-rendering-text-components,04-runtime-platform}.md`
+- `docs/render-snapshots.md`
+- `docs/alpha-readiness/{04-text-renderer-lifetime,progress}.md`
+
+#### Reasoning and contract decisions
+
+Core color is straight sRGB plus straight alpha while its const constructors
+remain unchecked and source-compatible. Vello translation is the one
+sanitization authority and creates deterministic command values before Peniko
+mapping. Gradients explicitly select sRGB and premultiplied-alpha interpolation.
+Image bytes stay in sRGB byte space; straight tint uses one two-factor rounding,
+while premultiplied RGB uses one three-factor rounding that includes tint alpha.
+The existing image/tint cache key remains valid because its signature includes
+format, alpha, dimensions, and shared payload identity. Public resource
+snapshot structures and text grammar remain unchanged.
+
+#### Tests run and results
+
+- Core color conformance passed 2/2 and render image/resource conformance passed
+  3/3.
+- Private Vello color/alpha conformance passed 7/7, including exact RGBA/BGRA
+  byte goldens, the `64 * 64 * 135 -> 9` one-round witness, alpha-only cache
+  invalidation, and texture upload metadata.
+- Public submission conformance passed 1/1, including the premultiplied solid
+  draw word, raw sRGB gradient stops, fallback text, shadow, tinted image, and
+  texture resources. The exact all-occurrence sanitization/diagnostic-order
+  test passed 1/1.
+- Complete core, render, and Vello crate suites passed (including 180 core unit
+  tests, 12 unchanged resource-snapshot conformance tests, 94 Vello unit tests,
+  18 translation tests, and 5 retained transform-recovery tests). Formatting,
+  warning-denied workspace Clippy, workspace tests, workspace build, all-feature
+  example checks, and warning-denied workspace docs passed with the isolated
+  `.target-rend01b` cache.
+
+#### Remaining risks and deferred findings
+
+Vello 0.9 does not publicly expose its resolved 512-sample gradient ramp, so
+the executable fence covers explicit Peniko fields/interpolation and public raw
+encoded stops; resolved-ramp behavior remains source-verified dependency risk.
+Premultiplied payload correctness is caller-owned and deliberately not scanned.
+`InvalidGeometry` remains the alpha-cycle diagnostic name for invalid colors.
+HDR, wide gamut, ICC conversion, external GPU resources, presenter ownership,
+and CPU/GPU pixel goldens remain later work or explicit deferrals.
 
 `TEXT-01` is Complete / Accepted at `93d6a5f` after this integrated evidence
 closure. Its implementation was deliberately serialized into the following

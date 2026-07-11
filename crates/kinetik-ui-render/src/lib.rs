@@ -62,6 +62,10 @@ pub enum RenderImageSampling {
 }
 
 /// CPU image data accepted by renderer boundaries.
+///
+/// RGB bytes are sRGB-encoded values. [`RenderImageAlpha`] declares whether
+/// those bytes carry straight or already-premultiplied alpha; callers are
+/// responsible for supplying bytes that match the selected representation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderImage {
     /// Pixel width.
@@ -70,9 +74,9 @@ pub struct RenderImage {
     pub height: u32,
     /// Pixel bytes.
     pub data: Arc<[u8]>,
-    /// Pixel format.
+    /// Pixel byte order and channel format.
     pub format: RenderImageFormat,
-    /// Alpha representation.
+    /// Alpha representation of the supplied payload.
     pub alpha: RenderImageAlpha,
 }
 
@@ -121,12 +125,12 @@ impl RenderImage {
     }
 }
 
-/// CPU image pixel format.
+/// CPU sRGB image pixel format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RenderImageFormat {
-    /// 32-bit RGBA with 8-bit channels.
+    /// 32-bit RGBA byte order with 8-bit sRGB color channels.
     Rgba8,
-    /// 32-bit BGRA with 8-bit channels.
+    /// 32-bit BGRA byte order with 8-bit sRGB color channels.
     Bgra8,
 }
 
@@ -140,12 +144,15 @@ impl RenderImageFormat {
     }
 }
 
-/// CPU image alpha representation.
+/// CPU image alpha representation declared by the caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RenderImageAlpha {
-    /// Straight alpha.
+    /// Straight (unpremultiplied) alpha.
     Alpha,
-    /// Premultiplied alpha.
+    /// Already-premultiplied alpha.
+    ///
+    /// Renderers trust this metadata and do not scan payload bytes to validate
+    /// the premultiplication invariant.
     Premultiplied,
 }
 
@@ -593,7 +600,7 @@ pub enum RenderDiagnostic {
     MissingTextureSnapshot(TextureId),
     /// Primitive kind is intentionally represented but not yet translated.
     UnsupportedPrimitive(&'static str),
-    /// Primitive contained non-finite or non-positive geometry and was sanitized or skipped.
+    /// Primitive contained invalid geometry or color and was sanitized or skipped.
     InvalidGeometry(&'static str),
 }
 

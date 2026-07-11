@@ -81,6 +81,13 @@ published, or accepted as an alpha release.
   output shapes. Word classes remain the documented whitespace / ASCII
   alphanumeric-or-underscore / other-scalar baseline until Unicode editing is
   completed.
+- Defined renderer-bound `Color` as straight sRGB plus straight alpha and made
+  Vello translation diagnose and sanitize every invalid color occurrence before
+  command snapshots. Peniko gradients now explicitly select sRGB with
+  premultiplied-alpha interpolation. CPU image RGB bytes are documented as
+  sRGB, and premultiplied image tint now applies tint alpha to RGB with one
+  exact integer rounding. Public render-resource and snapshot APIs are
+  unchanged.
 
 ### Documentation
 

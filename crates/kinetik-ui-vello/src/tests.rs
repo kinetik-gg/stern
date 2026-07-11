@@ -1,3 +1,4 @@
+mod color_alpha;
 mod common;
 mod frame_encoding;
 mod geometry;

@@ -69,6 +69,14 @@ Primitive emission should preserve order unless explicit layers reorder output.
 
 Clipping and layering must be explicit enough for renderers to implement correctly.
 
+`Color` stores straight (unpremultiplied) sRGB numeric channels and straight
+alpha. Renderer-bound channels are finite values in `0.0..=1.0`. Public color
+constructors remain unchecked and preserve caller input; translation diagnoses
+each invalid color occurrence once, clamps finite out-of-range channels, maps
+non-finite channels to positive zero, and canonicalizes negative zero before a
+deterministic command is created. Theme color literals use this same contract
+without renderer-specific dependencies or retuning.
+
 ## 16. Renderer Boundary
 
 The renderer consumes frame output and draws it.
@@ -99,6 +107,17 @@ fatal renderer errors
 ```
 
 The first 2D backend should use Vello.
+
+Vello maps sanitized colors directly to Peniko `AlphaColor<Srgb>`. Linear
+gradients explicitly interpolate in sRGB with premultiplied alpha. This avoids
+color leakage from transparent stops and prevents dependency defaults from
+silently changing toolkit behavior.
+
+Image tint is byte-domain modulation of sRGB payloads. Straight-alpha payloads
+multiply RGB by tint RGB and alpha by tint alpha. Premultiplied payloads also
+multiply RGB by tint alpha, using one rounding of the three-factor product, so
+their representation remains premultiplied. Texture snapshots do not expose a
+tint operation.
 
 Vello should handle:
 
@@ -518,6 +537,11 @@ The domain renderer owns:
 - Effects rendering.
 - Render targets.
 - GPU texture production.
+
+Domain and viewport renderers must convert source material into the toolkit's
+sRGB image contract before registering CPU image or texture-snapshot bytes.
+HDR, wide-gamut, and ICC conversion remain domain responsibilities rather than
+implicit UI-renderer transforms.
 
 Viewport coordinate spaces:
 

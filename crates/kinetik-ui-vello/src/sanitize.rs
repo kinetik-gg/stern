@@ -34,11 +34,12 @@ pub(crate) fn finite_positive(value: f32) -> Option<f32> {
 }
 
 pub(crate) fn finite_unit(value: f32) -> f32 {
-    if value.is_finite() {
+    let value = if value.is_finite() {
         value.clamp(0.0, 1.0)
     } else {
         0.0
-    }
+    };
+    if value == 0.0 { 0.0 } else { value }
 }
 
 pub(crate) fn sanitize_point(
@@ -111,17 +112,18 @@ pub(crate) fn sanitize_color(
     diagnostics: &mut Vec<RenderDiagnostic>,
     context: &'static str,
 ) -> Color {
-    if color.r.is_finite() && color.g.is_finite() && color.b.is_finite() && color.a.is_finite() {
-        color
-    } else {
+    let invalid = [color.r, color.g, color.b, color.a]
+        .into_iter()
+        .any(|channel| !channel.is_finite() || !(0.0..=1.0).contains(&channel));
+    if invalid {
         diagnostics.push(RenderDiagnostic::InvalidGeometry(context));
-        Color::rgba(
-            finite_unit(color.r),
-            finite_unit(color.g),
-            finite_unit(color.b),
-            finite_unit(color.a),
-        )
     }
+    Color::rgba(
+        finite_unit(color.r),
+        finite_unit(color.g),
+        finite_unit(color.b),
+        finite_unit(color.a),
+    )
 }
 
 pub(crate) fn sanitize_brush(

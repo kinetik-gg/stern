@@ -1089,6 +1089,61 @@ components remain compatibility paths, and future retained `Ui` wrappers must
 use the canonical transaction kernel rather than reintroduce split ownership or
 aggregate-pointer authority.
 
+### `REND-01B`: sRGB, alpha, and tint contract
+
+Status: Implemented under Issue #550; acceptance is pending exact candidate
+criticism, remote checks, squash merge, and the combined `REND-01-CLOSE`
+packet. This does not close `REND-01`, checkpoint 4A, or Stage 4.
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `crates/kinetik-ui-core/src/render.rs`
+- `crates/kinetik-ui-core/tests/render_color_conformance.rs`
+- `crates/kinetik-ui-render/src/lib.rs`
+- `crates/kinetik-ui-render/tests/color_alpha_conformance.rs`
+- `crates/kinetik-ui-vello/src/{geometry,image,sanitize,tests}.rs`
+- `crates/kinetik-ui-vello/src/tests/color_alpha.rs`
+- `crates/kinetik-ui-vello/tests/{render_color_conformance,render_translation_conformance}.rs`
+- `docs/specs/{03-rendering-text-components,04-runtime-platform}.md`
+- `docs/render-snapshots.md`
+- `docs/alpha-readiness/{04-text-renderer-lifetime,progress}.md`
+
+#### Reasoning and contract decisions
+
+The public `Color` contract is straight sRGB with straight alpha and an
+unchecked, source-compatible constructor boundary. Translation diagnoses each
+invalid occurrence once, canonicalizes/clamps its channels before command
+snapshots, and passes the same values directly into `AlphaColor<Srgb>`.
+Gradients explicitly request sRGB/premultiplied interpolation. Image format and
+alpha metadata remain caller-owned; premultiplied tint applies tint alpha to RGB
+with the exact single-round integer formula. Existing public resource snapshots
+remain sorted payload-presence inventories without new format/alpha fields.
+
+#### Tests run and results
+
+- `cargo test -p kinetik-ui-core --test render_color_conformance --all-features`
+  passed 2/2.
+- `cargo test -p kinetik-ui-render --test color_alpha_conformance --all-features`
+  passed 3/3.
+- `cargo test -p kinetik-ui-vello --lib color_alpha --all-features` passed 7/7.
+- `cargo test -p kinetik-ui-vello --test render_color_conformance --all-features`
+  passed 1/1.
+- The focused all-occurrence translation sanitization test passed 1/1.
+- Complete core/render/Vello suites and all six workspace gates passed with the
+  isolated `.target-rend01b` cache: format check, warning-denied workspace
+  Clippy, workspace tests, workspace build, all-feature example checks, and
+  warning-denied workspace docs.
+
+#### Remaining risks and deferred findings
+
+Vello 0.9's resolved ramp is private, so direct Peniko field/interpolation and
+public raw-stop assertions are the executable upgrade fence; the resolved ramp
+is source-verified residual evidence. Premultiplied payload bytes are trusted.
+The public diagnostic retains the `InvalidGeometry` name for invalid colors.
+HDR/wide-gamut/ICC conversion, external textures, presentation, and pixel
+goldens are not introduced by this packet.
+
 ## Packet Completion Template
 
 Every packet review must use these exact headings and include commands plus concrete results:

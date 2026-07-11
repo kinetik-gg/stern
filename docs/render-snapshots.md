@@ -28,6 +28,12 @@ Do not snapshot raw pixel bytes, font bytes, or backend-native resource objects.
 Snapshot numbers are formatted to three decimals. Non-finite values and negative
 zero are normalized to `0.000` before text formatting.
 
+The resource snapshot grammar intentionally remains a payload-presence
+inventory: image/texture format and alpha metadata are not added to this public
+surface. Direct `RenderImage` assertions and private backend upload tests prove
+that metadata without exposing payload details or widening the stable snapshot
+API.
+
 Resource conformance tests keep expected text inline in the test source. The
 inline literal is the source of truth; tests do not bless, update, or rewrite
 source files. Matching comparisons do not write artifacts.
@@ -55,6 +61,10 @@ before Vello scene encoding. They include:
 
 Commands stay in translated primitive order, including when nested layer, clip,
 and transform scopes are active. Diagnostics are serialized as stable strings.
+Colors in command snapshots are the sanitized values that bind to the backend,
+not unchecked constructor input. Invalid gradient offsets are diagnosed before
+the corresponding stop color, and every invalid color-bearing occurrence emits
+one contextual diagnostic.
 
 Add or update a command snapshot when a primitive translation contract changes.
 Keep backend-neutral tests in `kinetik-ui-render` and Vello-specific snapshots in
@@ -81,6 +91,14 @@ no automatic bless/update workflow for command snapshots.
 Pixel tests should not be the default renderer regression strategy. Use them only
 when the test can remain stable without a GPU and when the assertion is about
 visible end-to-end output rather than primitive translation details.
+
+Color/alpha conformance uses exact CPU byte goldens for straight and
+premultiplied RGBA/BGRA tint, explicit Peniko gradient metadata and interpolation
+tests, raw encoded-stop assertions, and deterministic solid-color draw words.
+GPU pixels and CPU-raster dumps are not authoritative evidence for these
+contracts. Vello 0.9's resolved 512-sample gradient ramp is private; its current
+sRGB/premultiplied implementation is source-verified residual evidence, while
+the executable sentinels stop at public encoded stops.
 
 Showcase review dumps are manual inspection artifacts, not bless/update
 baselines. Generate them explicitly with the showcase CLI when a human needs CPU

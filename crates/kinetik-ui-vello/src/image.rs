@@ -222,19 +222,20 @@ pub(crate) fn tinted_image_data_from_render_image(
     tint: PackedTint,
 ) -> ImageData {
     let [red, green, blue, alpha] = tint.channels();
+    let premultiplied = image.alpha == RenderImageAlpha::Premultiplied;
     let mut data = image.data.to_vec();
     for pixel in data.chunks_exact_mut(4) {
         match image.format {
             RenderImageFormat::Rgba8 => {
-                pixel[0] = multiply_channel(pixel[0], red);
-                pixel[1] = multiply_channel(pixel[1], green);
-                pixel[2] = multiply_channel(pixel[2], blue);
+                pixel[0] = multiply_color_channel(pixel[0], red, alpha, premultiplied);
+                pixel[1] = multiply_color_channel(pixel[1], green, alpha, premultiplied);
+                pixel[2] = multiply_color_channel(pixel[2], blue, alpha, premultiplied);
                 pixel[3] = multiply_channel(pixel[3], alpha);
             }
             RenderImageFormat::Bgra8 => {
-                pixel[0] = multiply_channel(pixel[0], blue);
-                pixel[1] = multiply_channel(pixel[1], green);
-                pixel[2] = multiply_channel(pixel[2], red);
+                pixel[0] = multiply_color_channel(pixel[0], blue, alpha, premultiplied);
+                pixel[1] = multiply_color_channel(pixel[1], green, alpha, premultiplied);
+                pixel[2] = multiply_color_channel(pixel[2], red, alpha, premultiplied);
                 pixel[3] = multiply_channel(pixel[3], alpha);
             }
         }
@@ -276,6 +277,25 @@ pub(crate) fn unit_channel(value: f32) -> u32 {
 #[allow(clippy::cast_possible_truncation)]
 pub(crate) fn multiply_channel(source: u8, tint: u8) -> u8 {
     ((u16::from(source) * u16::from(tint) + 127) / 255) as u8
+}
+
+pub(crate) fn multiply_color_channel(
+    source: u8,
+    tint: u8,
+    tint_alpha: u8,
+    premultiplied: bool,
+) -> u8 {
+    if premultiplied {
+        multiply_premultiplied_channel(source, tint, tint_alpha)
+    } else {
+        multiply_channel(source, tint)
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub(crate) fn multiply_premultiplied_channel(source: u8, tint: u8, tint_alpha: u8) -> u8 {
+    let product = u32::from(source) * u32::from(tint) * u32::from(tint_alpha);
+    ((product + 32_512) / 65_025) as u8
 }
 
 #[allow(clippy::cast_precision_loss)]
