@@ -183,6 +183,7 @@ fn captured_domain_drag_gesture_with_hit_target(
         PointerGestureKind::DomainDrag,
         event_ordinals,
         true,
+        false,
     );
     memory.cache_domain_drag_response(id, resolution.response);
     let mut actions = resolution.domain_drag_actions;
@@ -204,7 +205,8 @@ pub(crate) fn captured_selection_gesture_with_ordinals(
     event_ordinals: &[usize],
     memory: &mut UiMemory,
     disabled: bool,
-) -> CapturedSelectionGesture {
+    capture_clicked_releases: bool,
+) -> (CapturedSelectionGesture, Vec<Option<usize>>) {
     let process_events = memory.claim_selection_gesture(id);
     let resolution = resolve_pressable_with_hit_target(
         id,
@@ -216,6 +218,7 @@ pub(crate) fn captured_selection_gesture_with_ordinals(
         PointerGestureKind::Selection,
         Some(event_ordinals),
         process_events,
+        capture_clicked_releases,
     );
     let mut actions = resolution.selection_actions;
     if input.events.is_empty() {
@@ -223,10 +226,13 @@ pub(crate) fn captured_selection_gesture_with_ordinals(
             action.modifiers = input.keyboard.modifiers;
         }
     }
-    CapturedSelectionGesture {
-        response: resolution.response,
-        actions,
-    }
+    (
+        CapturedSelectionGesture {
+            response: resolution.response,
+            actions,
+        },
+        resolution.selection_clicked_release_ordinals,
+    )
 }
 
 /// Resolves neutral selectable behavior.

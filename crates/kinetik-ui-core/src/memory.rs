@@ -104,6 +104,15 @@ pub(crate) struct PlannedDragRelease {
     pub ordinal: usize,
 }
 
+#[derive(Debug, Default, Clone, Copy, Eq)]
+struct TextInputOwnerEpoch(u64);
+
+impl PartialEq for TextInputOwnerEpoch {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
 /// Retained interaction and widget state owned by the UI runtime.
 ///
 /// Memory is deliberately non-cloneable because it contains authority-scoped
@@ -157,6 +166,8 @@ pub struct UiMemory {
     released_drag_ordinal: Option<usize>,
     /// Text-editing widget currently owning the ordered editing domain.
     text_input_owner: Option<WidgetId>,
+    /// Monotonic generation of logical text-owner identity changes.
+    text_input_owner_epoch: TextInputOwnerEpoch,
     /// Logical access mode for the ordered text-input owner.
     text_input_owner_mode: Option<TextInputOwnerMode>,
     /// Whether platform text input is active for the logical Editable owner.
@@ -457,6 +468,14 @@ impl UiMemory {
         }
         self.text_input_event_claim = Some(id);
         !matches!(self.root_input_validation, RootInputValidation::Conflict(_))
+    }
+
+    pub(crate) fn can_claim_text_input_events(&self, id: WidgetId) -> bool {
+        self.text_input_owner == Some(id) && self.text_input_event_claim.is_none()
+    }
+
+    pub(crate) const fn text_input_owner_epoch(&self) -> u64 {
+        self.text_input_owner_epoch.0
     }
 
     /// Resolves ordered text events using the validation authority for this frame.
@@ -922,6 +941,10 @@ impl UiMemory {
     /// This compatibility setter is primarily useful for retained setup and
     /// tests. Runtime code should prefer mode-aware preparation followed by an
     /// accepted caret rectangle.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal owner-identity epoch is exhausted.
     pub fn set_text_input_owner(&mut self, id: WidgetId) {
         if self.text_input_owner == Some(id)
             && self.text_input_owner_mode == Some(TextInputOwnerMode::Editable)
@@ -936,6 +959,13 @@ impl UiMemory {
 
         if self.pending_text_input_stop == Some(id) {
             self.pending_text_input_stop = None;
+        }
+        if self.text_input_owner != Some(id) {
+            self.text_input_owner_epoch.0 = self
+                .text_input_owner_epoch
+                .0
+                .checked_add(1)
+                .expect("text-input owner epoch overflowed");
         }
         self.text_input_owner = Some(id);
         self.text_input_owner_mode = Some(TextInputOwnerMode::Editable);
@@ -956,12 +986,23 @@ impl UiMemory {
         if self.platform_text_input_state == PlatformTextInputState::Active {
             self.retire_active_platform_text_input();
         }
+        if self.text_input_owner != Some(id) {
+            self.text_input_owner_epoch.0 = self
+                .text_input_owner_epoch
+                .0
+                .checked_add(1)
+                .expect("text-input owner epoch overflowed");
+        }
         self.text_input_owner = Some(id);
         self.text_input_owner_mode = Some(mode);
         self.platform_text_input_state = PlatformTextInputState::Inactive;
     }
 
     /// Clears the logical text-input owner and retires platform IME when active.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal owner-identity epoch is exhausted.
     pub fn clear_text_input_owner(&mut self) {
         if self.text_input_owner.is_none() {
             return;
@@ -969,6 +1010,11 @@ impl UiMemory {
         self.retire_active_platform_text_input();
         self.text_input_owner = None;
         self.text_input_owner_mode = None;
+        self.text_input_owner_epoch.0 = self
+            .text_input_owner_epoch
+            .0
+            .checked_add(1)
+            .expect("text-input owner epoch overflowed");
     }
 
     /// Takes the text input owner waiting for a platform stop request.
@@ -1159,7 +1205,7 @@ impl UiMemory {
 
 #[cfg(test)]
 mod tests {
-    use super::{PointerGestureKind, UiMemory};
+    use super::{PointerGestureKind, TextInputOwnerMode, UiMemory};
     use crate::interaction::captured_selection_gesture_with_ordinals;
     use crate::{
         MouseButton, Point, PointerRoute, PointerRoutes, Rect, UiInput, UiInputEvent, Vec2,
@@ -1189,6 +1235,7 @@ mod tests {
             &input,
             &[0],
             memory,
+            false,
             false,
         );
     }
@@ -1522,6 +1569,52 @@ mod tests {
 
         memory.clear_text_input_owner();
         assert_eq!(memory.text_input_owner(), None);
+    }
+
+    #[test]
+    fn text_input_owner_epoch_tracks_identity_not_mode() {
+        let first = WidgetId::from_key("first");
+        let second = WidgetId::from_key("second");
+        let mut memory = UiMemory::new();
+
+        assert_eq!(memory.text_input_owner_epoch(), 0);
+        memory.set_text_input_owner_mode(first, TextInputOwnerMode::Editable);
+        assert_eq!(memory.text_input_owner_epoch(), 1);
+        memory.set_text_input_owner_mode(first, TextInputOwnerMode::ReadOnly);
+        assert_eq!(memory.text_input_owner_epoch(), 1);
+        memory.set_text_input_owner_mode(second, TextInputOwnerMode::Editable);
+        assert_eq!(memory.text_input_owner_epoch(), 2);
+        memory.clear_text_input_owner();
+        assert_eq!(memory.text_input_owner_epoch(), 3);
+    }
+
+    #[test]
+    fn text_input_owner_epoch_is_private_to_runtime_cache_identity() {
+        let owner = WidgetId::from_key("owner");
+        let temporary = WidgetId::from_key("temporary");
+        let mut direct = UiMemory::new();
+        direct.set_text_input_owner_mode(owner, TextInputOwnerMode::Editable);
+        let mut handed_off = UiMemory::new();
+        handed_off.set_text_input_owner_mode(owner, TextInputOwnerMode::Editable);
+        handed_off.set_text_input_owner_mode(temporary, TextInputOwnerMode::Editable);
+        handed_off.set_text_input_owner_mode(owner, TextInputOwnerMode::Editable);
+
+        assert_ne!(
+            direct.text_input_owner_epoch(),
+            handed_off.text_input_owner_epoch()
+        );
+        assert_eq!(direct, handed_off);
+    }
+
+    #[test]
+    #[should_panic(expected = "text-input owner epoch overflowed")]
+    fn text_input_owner_epoch_never_wraps() {
+        let mut memory = UiMemory::new();
+        memory.text_input_owner_epoch.0 = u64::MAX;
+        memory.set_text_input_owner_mode(
+            WidgetId::from_key("overflow"),
+            TextInputOwnerMode::Editable,
+        );
     }
 
     #[test]

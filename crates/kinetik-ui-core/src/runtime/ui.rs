@@ -43,6 +43,15 @@ pub struct Ui<'a> {
     spatial: SpatialStack,
     pointer_plan_installed: bool,
     pointer_cancel_pending: bool,
+    ordered_text_input_preview: Option<OrderedTextInputPreview>,
+    #[cfg(test)]
+    ordered_text_input_materializations: usize,
+}
+
+struct OrderedTextInputPreview {
+    owner: WidgetId,
+    owner_epoch: u64,
+    events: Vec<OrderedTextInputEvent>,
 }
 
 impl<'a> Ui<'a> {
@@ -112,6 +121,9 @@ impl<'a> Ui<'a> {
             spatial: SpatialStack::default(),
             pointer_plan_installed: false,
             pointer_cancel_pending,
+            ordered_text_input_preview: None,
+            #[cfg(test)]
+            ordered_text_input_materializations: 0,
         }
     }
 
@@ -165,13 +177,35 @@ impl<'a> Ui<'a> {
         rect: Rect,
         disabled: bool,
     ) -> CapturedSelectionGesture {
-        let mut gesture = captured_selection_gesture_with_ordinals(
+        self.capture_selection_gesture(id, rect, disabled, false).0
+    }
+
+    /// Resolves selection and returns the exact ordinals of accepted click releases.
+    #[doc(hidden)]
+    pub fn captured_selection_gesture_with_clicked_releases(
+        &mut self,
+        id: WidgetId,
+        rect: Rect,
+        disabled: bool,
+    ) -> (CapturedSelectionGesture, Vec<Option<usize>>) {
+        self.capture_selection_gesture(id, rect, disabled, true)
+    }
+
+    fn capture_selection_gesture(
+        &mut self,
+        id: WidgetId,
+        rect: Rect,
+        disabled: bool,
+        capture_clicked_releases: bool,
+    ) -> (CapturedSelectionGesture, Vec<Option<usize>>) {
+        let (mut gesture, clicked_release_ordinals) = captured_selection_gesture_with_ordinals(
             id,
             rect,
             &self.context.input,
             &self.input_event_ordinals,
             self.memory,
             disabled,
+            capture_clicked_releases,
         );
         for action in &mut gesture.actions {
             if let Some(ordinal) = action.ordinal {
@@ -183,7 +217,7 @@ impl<'a> Ui<'a> {
                     .unwrap_or_default();
             }
         }
-        gesture
+        (gesture, clicked_release_ordinals)
     }
 
     /// Resolves one authoritative domain-drag response with ordered actions.
@@ -241,35 +275,90 @@ impl<'a> Ui<'a> {
             };
         }
 
+        let owner_epoch = self.memory.text_input_owner_epoch();
+        if self
+            .ordered_text_input_preview
+            .as_ref()
+            .is_some_and(|preview| preview.owner == id && preview.owner_epoch == owner_epoch)
+        {
+            return Ok(self
+                .ordered_text_input_preview
+                .take()
+                .map(|preview| preview.events));
+        }
+        self.ordered_text_input_preview = None;
+        self.materialize_ordered_text_input_events().map(Some)
+    }
+
+    /// Previews the exact ordered text-input stream without consuming its claim.
+    #[doc(hidden)]
+    pub fn preview_ordered_text_input_events(
+        &mut self,
+        id: WidgetId,
+    ) -> Result<Option<&[OrderedTextInputEvent]>, InputStreamConflict> {
+        if let Some(conflict) = self.memory.root_input_conflict() {
+            return Err(conflict);
+        }
+        if !self.memory.can_claim_text_input_events(id) {
+            return Ok(None);
+        }
+
+        let owner_epoch = self.memory.text_input_owner_epoch();
+        let cached = self
+            .ordered_text_input_preview
+            .as_ref()
+            .is_some_and(|preview| preview.owner == id && preview.owner_epoch == owner_epoch);
+        if !cached {
+            let events = self.materialize_ordered_text_input_events()?;
+            self.ordered_text_input_preview = Some(OrderedTextInputPreview {
+                owner: id,
+                owner_epoch,
+                events,
+            });
+        }
+        Ok(self
+            .ordered_text_input_preview
+            .as_ref()
+            .map(|preview| preview.events.as_slice()))
+    }
+
+    fn materialize_ordered_text_input_events(
+        &mut self,
+    ) -> Result<Vec<OrderedTextInputEvent>, InputStreamConflict> {
+        #[cfg(test)]
+        {
+            self.ordered_text_input_materializations += 1;
+        }
         let events = self
             .memory
             .effective_text_input_events(&self.context.input)?;
         if self.root_input.events.is_empty() {
-            return Ok(Some(
-                events
-                    .into_iter()
-                    .filter(is_editing_domain_event)
-                    .map(|event| OrderedTextInputEvent {
-                        ordinal: None,
-                        event,
-                    })
-                    .collect(),
-            ));
+            return Ok(events
+                .into_iter()
+                .filter(is_editing_domain_event)
+                .map(|event| OrderedTextInputEvent {
+                    ordinal: None,
+                    event,
+                })
+                .collect());
         }
 
         debug_assert_eq!(events.len(), self.input_event_ordinals.len());
-        Ok(Some(
-            events
-                .into_iter()
-                .zip(self.input_event_ordinals.iter().copied())
-                .filter_map(|(event, ordinal)| {
-                    is_editing_domain_event(&event).then_some(OrderedTextInputEvent {
-                        ordinal: Some(ordinal),
-                        event,
-                    })
+        Ok(events
+            .into_iter()
+            .zip(self.input_event_ordinals.iter().copied())
+            .filter_map(|(event, ordinal)| {
+                is_editing_domain_event(&event).then_some(OrderedTextInputEvent {
+                    ordinal: Some(ordinal),
+                    event,
                 })
-                .collect(),
-        ))
+            })
+            .collect())
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn ordered_text_input_materialization_count(&self) -> usize {
+        self.ordered_text_input_materializations
     }
 
     /// Prepares a focused text widget to own the ordered editing domain.

@@ -4,12 +4,43 @@ use super::{
     CursorShape, FrameContext, FrameOutput, FrameWarning, PlatformRequest, RepaintRequest,
     TimeInfo, Ui, ViewportInfo,
 };
-use crate::input::UiInput;
+use crate::input::{InputStreamConflict, UiInput};
 use crate::{
-    ActionContext, ActionId, ActionSource, Brush, ClipId, Color, CornerRadius, LayerId,
-    PhysicalSize, Primitive, Rect, RectPrimitive, ScaleFactor, SemanticNode, SemanticRole,
-    SemanticTreeError, Size, Transform, UiMemory, WidgetId,
+    ActionContext, ActionId, ActionSource, Brush, ClipId, Color, CornerRadius, InputWheelDelta,
+    Key, KeyEvent, KeyState, KeyboardInput, LayerId, Modifiers, MouseButton, PhysicalSize, Point,
+    PointerButtonState, PointerInput, Primitive, Rect, RectPrimitive, ScaleFactor, SemanticNode,
+    SemanticRole, SemanticTreeError, Size, TextInputEvent, TextInputOwnerMode, Transform,
+    UiInputEvent, UiMemory, Vec2, WidgetId,
 };
+
+fn runtime_test_context(input: UiInput) -> FrameContext {
+    FrameContext::new(
+        ViewportInfo::new(
+            Size::new(100.0, 50.0),
+            PhysicalSize::new(100, 50),
+            ScaleFactor::ONE,
+        ),
+        input,
+        TimeInfo::default(),
+    )
+}
+
+fn canonical_click_input(click_count: u8) -> UiInput {
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count,
+        position: Some(Point::new(5.0, 5.0)),
+    });
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count,
+        position: Some(Point::new(5.0, 5.0)),
+    });
+    input
+}
 
 #[test]
 fn creates_viewport_info() {
@@ -545,4 +576,479 @@ fn end_frame_warns_about_invalid_semantic_tree() {
             }
         }]
     );
+}
+
+#[test]
+fn ordered_text_preview_freezes_localized_ordinals_and_reuses_one_materialization() {
+    let owner = WidgetId::from_key("owner");
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::Wheel {
+        delta: InputWheelDelta::Pixels(Vec2::new(0.0, 4.0)),
+        position: Some(Point::new(90.0, 40.0)),
+    });
+    input.push_event(UiInputEvent::Text(TextInputEvent::Commit("A".to_owned())));
+    input.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(90.0, 40.0),
+        delta: Vec2::new(1.0, 0.0),
+    });
+    input.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::ArrowLeft,
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    )));
+    let mut memory = UiMemory::new();
+    memory.focus(owner);
+    memory.set_text_input_owner_mode(owner, TextInputOwnerMode::Editable);
+    let mut ui = Ui::begin_frame(runtime_test_context(input), &mut memory);
+    let clip = ClipId::from_raw(90);
+    ui.push_primitive(Primitive::ClipBegin {
+        id: clip,
+        rect: Rect::new(0.0, 0.0, 20.0, 20.0),
+    });
+
+    assert!(ui.memory().can_claim_text_input_events(owner));
+    let first = ui
+        .preview_ordered_text_input_events(owner)
+        .expect("valid preview")
+        .expect("owner preview")
+        .to_vec();
+    let repeated = ui
+        .preview_ordered_text_input_events(owner)
+        .expect("valid repeated preview")
+        .expect("owner repeated preview")
+        .to_vec();
+    assert_eq!(first, repeated);
+    assert_eq!(
+        first.iter().map(|event| event.ordinal).collect::<Vec<_>>(),
+        [Some(1), Some(3)]
+    );
+    assert_eq!(ui.ordered_text_input_materialization_count(), 1);
+    assert!(ui.memory().can_claim_text_input_events(owner));
+
+    ui.push_primitive(Primitive::ClipEnd { id: clip });
+    let claimed = ui
+        .claim_ordered_text_input_events(owner)
+        .expect("valid claim")
+        .expect("owner claim");
+    assert_eq!(claimed, first);
+    assert_eq!(ui.ordered_text_input_materialization_count(), 1);
+    assert!(
+        ui.preview_ordered_text_input_events(owner)
+            .expect("valid post-claim preview")
+            .is_none()
+    );
+}
+
+#[test]
+fn ordered_text_preview_preserves_legacy_none_ordinals_and_owner_arbitration() {
+    let owner = WidgetId::from_key("legacy-owner");
+    let other = WidgetId::from_key("legacy-other");
+    let input = UiInput {
+        keyboard: KeyboardInput {
+            modifiers: Modifiers::default(),
+            events: vec![KeyEvent::new(
+                Key::ArrowRight,
+                KeyState::Pressed,
+                Modifiers::default(),
+                false,
+            )],
+        },
+        text_events: vec![TextInputEvent::Commit("legacy".to_owned())],
+        ..UiInput::default()
+    };
+    let mut memory = UiMemory::new();
+    memory.set_text_input_owner_mode(owner, TextInputOwnerMode::ReadOnly);
+    let mut ui = Ui::begin_frame(runtime_test_context(input), &mut memory);
+
+    assert!(
+        ui.preview_ordered_text_input_events(other)
+            .expect("valid wrong-owner preview")
+            .is_none()
+    );
+    assert_eq!(ui.ordered_text_input_materialization_count(), 0);
+    assert!(ui.memory().can_claim_text_input_events(owner));
+    let preview = ui
+        .preview_ordered_text_input_events(owner)
+        .expect("valid legacy preview")
+        .expect("legacy owner preview")
+        .to_vec();
+    assert_eq!(preview.len(), 2);
+    assert!(preview.iter().all(|event| event.ordinal.is_none()));
+    assert!(ui.memory().can_claim_text_input_events(owner));
+    let claimed = ui
+        .claim_ordered_text_input_events(owner)
+        .expect("valid legacy claim")
+        .expect("legacy owner claim");
+    assert_eq!(claimed, preview);
+}
+
+#[test]
+fn ordered_text_preview_conflicts_dominate_without_consuming_claim() {
+    let owner = WidgetId::from_key("conflicted-owner");
+    let other = WidgetId::from_key("conflicted-other");
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::Text(TextInputEvent::Commit(
+        "canonical".to_owned(),
+    )));
+    input.text_events.clear();
+    let mut memory = UiMemory::new();
+    memory.set_text_input_owner_mode(owner, TextInputOwnerMode::Editable);
+    let mut ui = Ui::begin_frame(runtime_test_context(input), &mut memory);
+
+    assert_eq!(
+        ui.preview_ordered_text_input_events(other),
+        Err(InputStreamConflict::TextEvents)
+    );
+    assert_eq!(
+        ui.preview_ordered_text_input_events(owner),
+        Err(InputStreamConflict::TextEvents)
+    );
+    assert!(ui.memory().can_claim_text_input_events(owner));
+    assert_eq!(ui.ordered_text_input_materialization_count(), 0);
+    assert_eq!(
+        ui.claim_ordered_text_input_events(owner),
+        Err(InputStreamConflict::TextEvents)
+    );
+    assert!(!ui.memory().can_claim_text_input_events(owner));
+    assert_eq!(
+        ui.preview_ordered_text_input_events(owner),
+        Err(InputStreamConflict::TextEvents)
+    );
+}
+
+#[test]
+fn ordered_text_preview_invalidates_across_aba_owner_handoff() {
+    let owner = WidgetId::from_key("owner-a");
+    let other = WidgetId::from_key("owner-b");
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::Text(TextInputEvent::Commit("A".to_owned())));
+    let mut memory = UiMemory::new();
+    memory.set_text_input_owner_mode(owner, TextInputOwnerMode::Editable);
+    let mut ui = Ui::begin_frame(runtime_test_context(input), &mut memory);
+
+    let preview = ui
+        .preview_ordered_text_input_events(owner)
+        .expect("valid preview")
+        .expect("owner preview")
+        .to_vec();
+    assert_eq!(ui.ordered_text_input_materialization_count(), 1);
+    ui.memory_mut()
+        .set_text_input_owner_mode(other, TextInputOwnerMode::Editable);
+    ui.memory_mut()
+        .set_text_input_owner_mode(owner, TextInputOwnerMode::Editable);
+    let claimed = ui
+        .claim_ordered_text_input_events(owner)
+        .expect("valid claim after handoff")
+        .expect("owner reclaims after handoff");
+
+    assert_eq!(claimed, preview);
+    assert_eq!(ui.ordered_text_input_materialization_count(), 2);
+}
+
+#[test]
+fn selection_clicked_release_provenance_is_exact_and_ordered() {
+    let id = WidgetId::from_key("selection");
+    let rect = Rect::new(0.0, 0.0, 20.0, 20.0);
+    let mut input = canonical_click_input(1);
+    for event in canonical_click_input(2).events {
+        input.push_event(event);
+    }
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 2,
+        position: Some(Point::new(5.0, 5.0)),
+    });
+    input.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(30.0, 5.0),
+        delta: Vec2::new(25.0, 0.0),
+    });
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 2,
+        position: Some(Point::new(30.0, 5.0)),
+    });
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(input), &mut memory);
+    let (gesture, clicked_releases) =
+        ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+
+    assert!(gesture.response.clicked);
+    assert!(gesture.response.double_clicked);
+    assert_eq!(clicked_releases, [Some(1), Some(3)]);
+    assert_eq!(gesture.actions.len(), 7);
+}
+
+#[test]
+fn selection_clicked_release_provenance_rejects_inexact_completions() {
+    let id = WidgetId::from_key("selection");
+    let rect = Rect::new(0.0, 0.0, 20.0, 20.0);
+    let mut missing_position = UiInput::default();
+    missing_position.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 2,
+        position: Some(Point::new(5.0, 5.0)),
+    });
+    missing_position.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 2,
+        position: None,
+    });
+
+    let mut cancelled = UiInput::default();
+    cancelled.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 2,
+        position: Some(Point::new(5.0, 5.0)),
+    });
+    cancelled.push_event(UiInputEvent::PointerReleaseAll {
+        position: Some(Point::new(5.0, 5.0)),
+    });
+
+    let mut crossed = UiInput::default();
+    crossed.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 2,
+        position: Some(Point::new(5.0, 5.0)),
+    });
+    crossed.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(10.0, 5.0),
+        delta: Vec2::new(5.0, 0.0),
+    });
+    crossed.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 2,
+        position: Some(Point::new(10.0, 5.0)),
+    });
+
+    let mut outside_below_threshold = UiInput::default();
+    outside_below_threshold.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 2,
+        position: Some(Point::new(19.0, 5.0)),
+    });
+    outside_below_threshold.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 2,
+        position: Some(Point::new(20.5, 5.0)),
+    });
+
+    for input in [
+        missing_position,
+        cancelled,
+        crossed,
+        outside_below_threshold,
+    ] {
+        let mut memory = UiMemory::new();
+        let mut ui = Ui::begin_frame(runtime_test_context(input), &mut memory);
+        let (gesture, clicked_releases) =
+            ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+        assert!(!gesture.response.clicked);
+        assert!(clicked_releases.is_empty());
+    }
+}
+
+#[test]
+fn conflicted_retained_selection_release_has_no_clicked_provenance() {
+    let id = WidgetId::from_key("conflicted-retained-selection");
+    let rect = Rect::new(0.0, 0.0, 20.0, 20.0);
+    let mut memory = UiMemory::new();
+    let pressed = UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(5.0, 5.0)),
+            primary: PointerButtonState::new(true, true, false),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    };
+    let mut ui = Ui::begin_frame(runtime_test_context(pressed), &mut memory);
+    ui.register_id(id);
+    let _ = ui.captured_selection_gesture(id, rect, false);
+    let _ = ui.end_frame();
+
+    let mut conflicted_release = UiInput::default();
+    conflicted_release.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 2,
+        position: Some(Point::new(5.0, 5.0)),
+    });
+    conflicted_release.pointer.position = Some(Point::new(6.0, 5.0));
+    let mut ui = Ui::begin_frame(runtime_test_context(conflicted_release), &mut memory);
+    let (gesture, provenance) =
+        ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+
+    assert!(!gesture.response.clicked);
+    assert!(provenance.is_empty());
+    assert!(
+        gesture
+            .actions
+            .iter()
+            .all(|action| action.phase == crate::SelectionGesturePhase::Cancel)
+    );
+}
+
+#[test]
+fn clipped_cleanup_selection_release_has_no_clicked_provenance() {
+    let id = WidgetId::from_key("clipped-cleanup-selection");
+    let rect = Rect::new(0.0, 0.0, 20.0, 20.0);
+    let clip = ClipId::from_raw(91);
+    let clip_rect = Rect::new(0.0, 0.0, 10.0, 20.0);
+    let mut pressed = UiInput::default();
+    pressed.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 2,
+        position: Some(Point::new(9.0, 5.0)),
+    });
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(pressed), &mut memory);
+    ui.push_primitive(Primitive::ClipBegin {
+        id: clip,
+        rect: clip_rect,
+    });
+    ui.register_id(id);
+    let _ = ui.captured_selection_gesture(id, rect, false);
+    ui.push_primitive(Primitive::ClipEnd { id: clip });
+    let _ = ui.end_frame();
+
+    let mut released = UiInput::default();
+    released.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 2,
+        position: Some(Point::new(10.5, 5.0)),
+    });
+    let mut ui = Ui::begin_frame(runtime_test_context(released), &mut memory);
+    ui.push_primitive(Primitive::ClipBegin {
+        id: clip,
+        rect: clip_rect,
+    });
+    let (gesture, provenance) =
+        ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+
+    assert!(!gesture.response.clicked);
+    assert!(provenance.is_empty());
+    assert!(
+        gesture
+            .actions
+            .iter()
+            .all(|action| action.phase == crate::SelectionGesturePhase::Cancel)
+    );
+}
+
+#[test]
+fn selection_capture_old_and_new_methods_share_one_claim() {
+    let id = WidgetId::from_key("selection");
+    let rect = Rect::new(0.0, 0.0, 20.0, 20.0);
+
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(canonical_click_input(1)), &mut memory);
+    let old_first = ui.captured_selection_gesture(id, rect, false);
+    let (new_second, provenance) =
+        ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+    assert!(!old_first.actions.is_empty());
+    assert!(new_second.actions.is_empty());
+    assert!(provenance.is_empty());
+
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(canonical_click_input(1)), &mut memory);
+    let (new_first, provenance) =
+        ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+    let old_second = ui.captured_selection_gesture(id, rect, false);
+    assert!(!new_first.actions.is_empty());
+    assert_eq!(provenance, [Some(1)]);
+    assert!(old_second.actions.is_empty());
+    assert_eq!(new_first.response, old_first.response);
+    assert_eq!(new_first.actions, old_first.actions);
+
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(canonical_click_input(1)), &mut memory);
+    let (first, first_provenance) =
+        ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+    let (second, second_provenance) =
+        ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+    assert!(!first.actions.is_empty());
+    assert_eq!(first_provenance, [Some(1)]);
+    assert!(second.actions.is_empty());
+    assert!(second_provenance.is_empty());
+}
+
+#[test]
+fn selection_claim_blocks_recovered_cancel_after_mode_mismatch() {
+    let id = WidgetId::from_key("selection-mismatch");
+    let rect = Rect::new(0.0, 0.0, 20.0, 20.0);
+    let pressed = UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(5.0, 5.0)),
+            primary: PointerButtonState::new(true, true, false),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    };
+
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(pressed.clone()), &mut memory);
+    let (first, provenance) = ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+    assert!(!first.actions.is_empty());
+    assert!(provenance.is_empty());
+    let _ = ui.captured_domain_drag_gesture(id, rect, false);
+    let repeated = ui.captured_selection_gesture(id, rect, false);
+    assert!(repeated.actions.is_empty());
+
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(pressed), &mut memory);
+    let first = ui.captured_selection_gesture(id, rect, false);
+    assert!(!first.actions.is_empty());
+    let _ = ui.captured_domain_drag_gesture(id, rect, false);
+    let (repeated, provenance) =
+        ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+    assert!(repeated.actions.is_empty());
+    assert!(provenance.is_empty());
+}
+
+#[test]
+fn legacy_retained_selection_release_reports_none_provenance() {
+    let id = WidgetId::from_key("legacy-selection");
+    let rect = Rect::new(0.0, 0.0, 20.0, 20.0);
+    let mut memory = UiMemory::new();
+    let pressed = UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(5.0, 5.0)),
+            primary: PointerButtonState::new(true, true, false),
+            click_count: 2,
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    };
+    let mut ui = Ui::begin_frame(runtime_test_context(pressed), &mut memory);
+    ui.register_id(id);
+    let (_, provenance) = ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+    assert!(provenance.is_empty());
+    let _ = ui.end_frame();
+
+    let released = UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(5.0, 5.0)),
+            primary: PointerButtonState::new(false, false, true),
+            click_count: 2,
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    };
+    let mut ui = Ui::begin_frame(runtime_test_context(released), &mut memory);
+    ui.register_id(id);
+    let (gesture, provenance) =
+        ui.captured_selection_gesture_with_clicked_releases(id, rect, false);
+    assert!(gesture.response.double_clicked);
+    assert_eq!(provenance, [None]);
 }

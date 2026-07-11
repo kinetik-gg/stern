@@ -13,6 +13,7 @@ use crate::{
 pub(super) struct PressResolution {
     pub response: Response,
     pub selection_actions: Vec<SelectionGestureAction>,
+    pub selection_clicked_release_ordinals: Vec<Option<usize>>,
     pub domain_drag_actions: Vec<DomainDragGestureAction>,
 }
 
@@ -26,6 +27,8 @@ struct PointerOutcome {
     drag_delta: Vec2,
     suppress_drag_output: bool,
     selection_actions: Vec<SelectionGestureAction>,
+    selection_clicked_release_ordinals: Vec<Option<usize>>,
+    capture_selection_clicked_releases: bool,
     domain_drag_actions: Vec<DomainDragGestureAction>,
     capture_domain_drag_actions: bool,
 }
@@ -48,6 +51,7 @@ pub fn pressable(
         PointerGestureKind::Press,
         None,
         true,
+        false,
     )
     .response
 }
@@ -71,6 +75,7 @@ pub fn pressable_transformed(
         PointerGestureKind::Press,
         None,
         true,
+        false,
     )
     .response
 }
@@ -86,6 +91,7 @@ pub(super) fn resolve_pressable_with_hit_target(
     kind: PointerGestureKind,
     event_ordinals: Option<&[usize]>,
     process_events: bool,
+    capture_selection_clicked_releases: bool,
 ) -> PressResolution {
     let conflicted = memory.pointer_input_conflicted(input);
     let owns_primary = owns_primary_gesture(memory, id);
@@ -98,6 +104,7 @@ pub(super) fn resolve_pressable_with_hit_target(
     let mut outcome = PointerOutcome {
         capture_domain_drag_actions: kind == PointerGestureKind::DomainDrag
             && event_ordinals.is_some(),
+        capture_selection_clicked_releases,
         ..PointerOutcome::default()
     };
 
@@ -105,15 +112,17 @@ pub(super) fn resolve_pressable_with_hit_target(
         memory.cancel_pointer_interaction();
     }
 
-    recover_cancelled_gesture_action(
-        id,
-        input,
-        memory,
-        kind,
-        event_ordinals,
-        mode_mismatch && kind == PointerGestureKind::Selection,
-        &mut outcome,
-    );
+    if process_events || kind != PointerGestureKind::Selection {
+        recover_cancelled_gesture_action(
+            id,
+            input,
+            memory,
+            kind,
+            event_ordinals,
+            mode_mismatch && kind == PointerGestureKind::Selection,
+            &mut outcome,
+        );
+    }
 
     if process_events && !disabled && !memory.pointer_interaction_cancelled() {
         if input.events.is_empty() {
@@ -185,6 +194,7 @@ pub(super) fn resolve_pressable_with_hit_target(
             )
         },
         selection_actions: outcome.selection_actions,
+        selection_clicked_release_ordinals: outcome.selection_clicked_release_ordinals,
         domain_drag_actions: outcome.domain_drag_actions,
     }
 }
@@ -654,6 +664,9 @@ fn push_gesture_action(
 ) {
     match kind {
         PointerGestureKind::Selection => {
+            if release_clicked && outcome.capture_selection_clicked_releases {
+                outcome.selection_clicked_release_ordinals.push(ordinal);
+            }
             outcome.selection_actions.push(SelectionGestureAction {
                 ordinal,
                 phase,
