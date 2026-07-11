@@ -42,6 +42,15 @@ pub struct PointerRoutes {
     pub wheel: PointerRoute,
 }
 
+/// Logical access mode for the widget that owns ordered text input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextInputOwnerMode {
+    /// The owner may mutate text and activate platform IME.
+    Editable,
+    /// The owner may navigate, select, and copy without activating platform IME.
+    ReadOnly,
+}
+
 impl PointerRoutes {
     pub(crate) const BLOCKED: Self = Self {
         ordinary: PointerRoute::Blocked,
@@ -56,6 +65,13 @@ enum RootInputValidation {
     Unvalidated,
     Valid,
     Conflict(InputStreamConflict),
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum PlatformTextInputState {
+    #[default]
+    Inactive,
+    Active,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -135,8 +151,12 @@ pub struct UiMemory {
     released_drag_source: Option<WidgetId>,
     /// Canonical root event ordinal that released the drag source.
     released_drag_ordinal: Option<usize>,
-    /// Text-editing widget currently owning platform text input or IME.
+    /// Text-editing widget currently owning the ordered editing domain.
     text_input_owner: Option<WidgetId>,
+    /// Logical access mode for the ordered text-input owner.
+    text_input_owner_mode: Option<TextInputOwnerMode>,
+    /// Whether platform text input is active for the logical Editable owner.
+    platform_text_input_state: PlatformTextInputState,
     /// Text-input owner that claimed this frame's ordered editing stream.
     text_input_event_claim: Option<WidgetId>,
     /// Root stream validation recorded once by the frame runtime.
@@ -336,10 +356,16 @@ impl UiMemory {
         self.released_drag_ordinal
     }
 
-    /// Returns the widget currently owning platform text input or IME.
+    /// Returns the widget currently owning the ordered text-input domain.
     #[must_use]
     pub const fn text_input_owner(&self) -> Option<WidgetId> {
         self.text_input_owner
+    }
+
+    /// Returns the logical access mode of the ordered text-input owner.
+    #[must_use]
+    pub const fn text_input_owner_mode(&self) -> Option<TextInputOwnerMode> {
+        self.text_input_owner_mode
     }
 
     /// Returns true when the widget is hovered during the current frame.
@@ -384,7 +410,7 @@ impl UiMemory {
         self.drag_source == Some(id)
     }
 
-    /// Returns true when the widget owns platform text input or IME.
+    /// Returns true when the widget owns the ordered text-input domain.
     #[must_use]
     pub fn owns_text_input(&self, id: WidgetId) -> bool {
         self.text_input_owner == Some(id)
@@ -781,22 +807,58 @@ impl UiMemory {
         self.pointer_gesture = None;
     }
 
-    /// Records the widget that should receive platform text input or IME events.
+    /// Records an already platform-active Editable text-input owner.
+    ///
+    /// This compatibility setter is primarily useful for retained setup and
+    /// tests. Runtime code should prefer mode-aware preparation followed by an
+    /// accepted caret rectangle.
     pub fn set_text_input_owner(&mut self, id: WidgetId) {
-        if self.text_input_owner == Some(id) {
+        if self.text_input_owner == Some(id)
+            && self.text_input_owner_mode == Some(TextInputOwnerMode::Editable)
+            && self.platform_text_input_state == PlatformTextInputState::Active
+        {
             return;
         }
+
+        if self.platform_text_input_state == PlatformTextInputState::Active {
+            self.retire_active_platform_text_input();
+        }
+
         if self.pending_text_input_stop == Some(id) {
             self.pending_text_input_stop = None;
         }
         self.text_input_owner = Some(id);
+        self.text_input_owner_mode = Some(TextInputOwnerMode::Editable);
+        self.platform_text_input_state = if self.pending_text_input_stop.is_none() {
+            PlatformTextInputState::Active
+        } else {
+            PlatformTextInputState::Inactive
+        };
     }
 
-    /// Clears the active platform text input owner.
-    pub fn clear_text_input_owner(&mut self) {
-        if let Some(owner) = self.text_input_owner.take() {
-            self.pending_text_input_stop = Some(owner);
+    /// Records a logical text-input owner without activating platform IME.
+    #[doc(hidden)]
+    pub fn set_text_input_owner_mode(&mut self, id: WidgetId, mode: TextInputOwnerMode) {
+        if self.text_input_owner == Some(id) && self.text_input_owner_mode == Some(mode) {
+            return;
         }
+
+        if self.platform_text_input_state == PlatformTextInputState::Active {
+            self.retire_active_platform_text_input();
+        }
+        self.text_input_owner = Some(id);
+        self.text_input_owner_mode = Some(mode);
+        self.platform_text_input_state = PlatformTextInputState::Inactive;
+    }
+
+    /// Clears the logical text-input owner and retires platform IME when active.
+    pub fn clear_text_input_owner(&mut self) {
+        if self.text_input_owner.is_none() {
+            return;
+        }
+        self.retire_active_platform_text_input();
+        self.text_input_owner = None;
+        self.text_input_owner_mode = None;
     }
 
     /// Takes the text input owner waiting for a platform stop request.
@@ -805,13 +867,46 @@ impl UiMemory {
         self.pending_text_input_stop.take()
     }
 
+    pub(crate) fn platform_text_input_is_active_for(&self, id: WidgetId) -> bool {
+        self.platform_text_input_state == PlatformTextInputState::Active
+            && self.text_input_owner == Some(id)
+            && self.text_input_owner_mode == Some(TextInputOwnerMode::Editable)
+    }
+
+    pub(crate) fn activate_platform_text_input(&mut self, id: WidgetId) {
+        debug_assert_eq!(self.text_input_owner, Some(id));
+        debug_assert_eq!(
+            self.text_input_owner_mode,
+            Some(TextInputOwnerMode::Editable)
+        );
+        debug_assert!(self.pending_text_input_stop.is_none());
+        self.platform_text_input_state = PlatformTextInputState::Active;
+    }
+
+    pub(crate) fn acknowledge_platform_text_input_stop(&mut self) {
+        self.pending_text_input_stop = None;
+        self.platform_text_input_state = PlatformTextInputState::Inactive;
+    }
+
+    fn retire_active_platform_text_input(&mut self) {
+        if self.platform_text_input_state == PlatformTextInputState::Inactive {
+            return;
+        }
+        let owner = self
+            .text_input_owner
+            .expect("active platform text input has a logical owner");
+        if self.pending_text_input_stop.is_none() {
+            self.pending_text_input_stop = Some(owner);
+        }
+        self.platform_text_input_state = PlatformTextInputState::Inactive;
+    }
+
     fn clear_stale_text_input_owner(&mut self) {
         let Some(owner) = self.text_input_owner else {
             return;
         };
         if Some(owner) != self.focused {
-            self.text_input_owner = None;
-            self.pending_text_input_stop = Some(owner);
+            self.clear_text_input_owner();
         }
     }
 
@@ -827,7 +922,8 @@ impl UiMemory {
         self.scroll_offsets.insert(id, offset);
     }
 
-    pub(crate) fn stage_scroll_offset(&mut self, id: WidgetId, offset: Vec2) {
+    #[doc(hidden)]
+    pub fn stage_scroll_offset(&mut self, id: WidgetId, offset: Vec2) {
         self.pending_scroll_offsets.insert(id, offset);
     }
 

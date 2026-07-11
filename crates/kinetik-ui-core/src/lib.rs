@@ -62,7 +62,7 @@ pub use liveness::{
     LivenessIncarnation, LivenessRegistry, LivenessRemovalStatus, LivenessTargetId, LivenessToken,
     LivenessUpdateStatus,
 };
-pub use memory::{PointerRoute, PointerRoutes, UiMemory};
+pub use memory::{PointerRoute, PointerRoutes, TextInputOwnerMode, UiMemory};
 pub use observers::{
     ObserverDelivery, ObserverDeliverySkipReason, ObserverDeliveryStatus, ObserverDrain,
     ObserverNotification, ObserverNotificationId, ObserverPublishStatus, ObserverRegistry,

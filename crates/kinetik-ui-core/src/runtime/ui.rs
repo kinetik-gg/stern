@@ -4,7 +4,7 @@ use crate::input::{InputStreamConflict, UiInput, UiInputEvent};
 use crate::interaction::{
     captured_domain_drag_gesture_with_ordinals, captured_selection_gesture_with_ordinals,
 };
-use crate::memory::UiMemory;
+use crate::memory::{TextInputOwnerMode, UiMemory};
 use crate::render::Primitive;
 use crate::{
     ActionContext, ActionId, ActionInvocation, ActionSource, CapturedDomainDragGesture,
@@ -238,6 +238,54 @@ impl<'a> Ui<'a> {
         ))
     }
 
+    /// Prepares a focused text widget to own the ordered editing domain.
+    ///
+    /// Editable owners remain platform-inactive until they publish an accepted
+    /// caret rectangle. Read-only owners never activate platform text input.
+    pub fn prepare_text_input_owner(&mut self, owner: WidgetId, mode: TextInputOwnerMode) -> bool {
+        self.ids.mark_seen(owner);
+        if !self.memory.is_focused(owner) || !self.spatial.is_visible() {
+            return false;
+        }
+
+        self.memory.set_text_input_owner_mode(owner, mode);
+        true
+    }
+
+    /// Publishes visible caret geometry for the focused Editable text owner.
+    ///
+    /// Rejected geometry is side-effect-free so a clipped caret can retain the
+    /// platform's previous rectangle while its viewport stages a reveal.
+    pub fn publish_text_input_rect(&mut self, owner: WidgetId, rect: Rect) -> bool {
+        if !self.memory.is_focused(owner)
+            || self.memory.text_input_owner() != Some(owner)
+            || self.memory.text_input_owner_mode() != Some(TextInputOwnerMode::Editable)
+            || !self.spatial.is_visible()
+        {
+            return false;
+        }
+        let Some(rect) = self.spatial.project_rect(rect) else {
+            return false;
+        };
+
+        self.drain_pending_text_input_stop();
+        if self.memory.platform_text_input_is_active_for(owner) {
+            self.output
+                .push_platform_request(PlatformRequest::UpdateTextInputRect { rect });
+        } else {
+            self.memory.activate_platform_text_input(owner);
+            self.output
+                .push_platform_request(PlatformRequest::StartTextInput { rect: Some(rect) });
+        }
+        true
+    }
+
+    /// Stages a retained scroll offset for the following frame.
+    #[doc(hidden)]
+    pub fn stage_scroll_offset(&mut self, owner: WidgetId, offset: crate::Vec2) {
+        self.memory.stage_scroll_offset(owner, offset);
+    }
+
     /// Derives and registers a widget ID in the current scope.
     pub fn id(&mut self, key: impl Hash) -> WidgetId {
         self.ids.register_key(key)
@@ -435,22 +483,53 @@ impl<'a> Ui<'a> {
     }
 
     /// Appends one platform request.
+    ///
+    /// Raw text-input requests remain subject to the focused Editable owner and
+    /// tracked platform-state authority. Prefer [`Self::start_text_input`] or
+    /// [`Self::publish_text_input_rect`] for new text widgets.
     pub fn push_platform_request(&mut self, request: PlatformRequest) {
         match request {
             PlatformRequest::StartTextInput { rect: Some(rect) } => {
-                if let Some(rect) = self.spatial.project_rect(rect) {
-                    self.output
-                        .push_platform_request(PlatformRequest::StartTextInput {
-                            rect: Some(rect),
-                        });
-                }
+                let Some(owner) = self.focused_editable_text_owner() else {
+                    return;
+                };
+                let Some(rect) = self.spatial.project_rect(rect) else {
+                    return;
+                };
+                self.drain_pending_text_input_stop();
+                self.memory.activate_platform_text_input(owner);
+                self.output
+                    .push_platform_request(PlatformRequest::StartTextInput { rect: Some(rect) });
             }
-            PlatformRequest::StartTextInput { rect: None } if !self.spatial.is_visible() => {}
-            PlatformRequest::UpdateTextInputRect { rect } => {
-                if let Some(rect) = self.spatial.project_rect(rect) {
-                    self.output
-                        .push_platform_request(PlatformRequest::UpdateTextInputRect { rect });
+            PlatformRequest::StartTextInput { rect: None } => {
+                let Some(owner) = self.focused_editable_text_owner() else {
+                    return;
+                };
+                if !self.spatial.is_visible() {
+                    return;
                 }
+                self.drain_pending_text_input_stop();
+                self.memory.activate_platform_text_input(owner);
+                self.output
+                    .push_platform_request(PlatformRequest::StartTextInput { rect: None });
+            }
+            PlatformRequest::UpdateTextInputRect { rect } => {
+                let Some(owner) = self.focused_editable_text_owner() else {
+                    return;
+                };
+                if !self.memory.platform_text_input_is_active_for(owner) {
+                    return;
+                }
+                let Some(rect) = self.spatial.project_rect(rect) else {
+                    return;
+                };
+                self.output
+                    .push_platform_request(PlatformRequest::UpdateTextInputRect { rect });
+            }
+            PlatformRequest::StopTextInput => {
+                self.memory.acknowledge_platform_text_input_stop();
+                self.output
+                    .push_platform_request(PlatformRequest::StopTextInput);
             }
             request => self.output.push_platform_request(request),
         }
@@ -510,20 +589,18 @@ impl<'a> Ui<'a> {
             }
         };
 
-        let previous_owner = self.memory.text_input_owner();
-        if previous_owner == Some(owner) {
+        let was_active = self.memory.platform_text_input_is_active_for(owner);
+        self.memory
+            .set_text_input_owner_mode(owner, TextInputOwnerMode::Editable);
+        self.drain_pending_text_input_stop();
+        if was_active && self.memory.platform_text_input_is_active_for(owner) {
             if let Some(rect) = rect {
                 self.output
                     .push_platform_request(PlatformRequest::UpdateTextInputRect { rect });
             }
             return true;
         }
-        let stopped_owner = self.memory.take_pending_text_input_stop();
-        self.memory.set_text_input_owner(owner);
-        if stopped_owner.is_some_and(|stopped| stopped != owner) {
-            self.output
-                .push_platform_request(PlatformRequest::StopTextInput);
-        }
+        self.memory.activate_platform_text_input(owner);
         self.output
             .push_platform_request(PlatformRequest::StartTextInput { rect });
         true
@@ -618,6 +695,20 @@ impl<'a> Ui<'a> {
         let warnings = validate_primitive_stack(&self.output.primitives);
         self.output.warnings.extend(warnings);
         self.output
+    }
+
+    fn drain_pending_text_input_stop(&mut self) {
+        if self.memory.take_pending_text_input_stop().is_some() {
+            self.output
+                .push_platform_request(PlatformRequest::StopTextInput);
+        }
+    }
+
+    fn focused_editable_text_owner(&self) -> Option<WidgetId> {
+        let owner = self.memory.text_input_owner()?;
+        (self.memory.is_focused(owner)
+            && self.memory.text_input_owner_mode() == Some(TextInputOwnerMode::Editable))
+        .then_some(owner)
     }
 
     fn refresh_scoped_input(&mut self) {
