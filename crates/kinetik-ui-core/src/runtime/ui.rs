@@ -9,8 +9,8 @@ use crate::render::Primitive;
 use crate::{
     ActionContext, ActionId, ActionInvocation, ActionSource, CapturedDomainDragGesture,
     CapturedSelectionGesture, IdStack, LivenessRemovalStatus, LivenessTargetId, LivenessToken,
-    LivenessUpdateStatus, Modifiers, OrderedTextInputEvent, Rect, SemanticActionKind, SemanticNode,
-    WidgetId,
+    LivenessUpdateStatus, Modifiers, MouseButton, OrderedTextInputEvent, Rect, SemanticActionKind,
+    SemanticNode, WidgetId,
 };
 
 use super::focus::{
@@ -35,6 +35,7 @@ pub struct Ui<'a> {
     root_input: UiInput,
     input_event_ordinals: Vec<usize>,
     root_event_modifiers: Vec<Modifiers>,
+    last_root_primary_press_ordinal: Option<usize>,
     memory: &'a mut UiMemory,
     ids: IdStack,
     output: FrameOutput,
@@ -73,6 +74,16 @@ impl<'a> Ui<'a> {
             memory.cancel_pointer_interaction();
         }
         let root_input = context.input.clone();
+        let last_root_primary_press_ordinal = root_input.events.iter().rposition(|event| {
+            matches!(
+                event,
+                UiInputEvent::PointerButton {
+                    button: MouseButton::Primary,
+                    down: true,
+                    ..
+                }
+            )
+        });
         let input_event_ordinals = (0..root_input.events.len()).collect();
         let mut output = FrameOutput::new();
         if let Some(conflict) = input_conflict {
@@ -83,6 +94,7 @@ impl<'a> Ui<'a> {
             root_input,
             input_event_ordinals,
             root_event_modifiers: modifier_fold.by_ordinal,
+            last_root_primary_press_ordinal,
             memory,
             ids: IdStack::new(),
             output,
@@ -102,6 +114,17 @@ impl<'a> Ui<'a> {
     #[must_use]
     pub const fn input(&self) -> &UiInput {
         &self.context.input
+    }
+
+    /// Returns the final canonical root ordinal that pressed the primary button.
+    ///
+    /// Spatial localization never changes this root-input provenance. Legacy
+    /// empty streams and canonical streams without a primary Press return
+    /// `None`.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn last_root_primary_press_ordinal(&self) -> Option<usize> {
+        self.last_root_primary_press_ordinal
     }
 
     /// Returns retained UI memory.
