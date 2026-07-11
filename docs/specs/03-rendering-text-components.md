@@ -221,8 +221,30 @@ boundaries and `Before` at a non-empty buffer end. `TextEditState` stamps active
 affinity so direct mutation of public selection offsets falls back to that
 canonical rule rather than exposing stale hidden state; local undo/redo restores
 the effective affinity. Shaped mixed-direction visual traversal, ligature caret
-subdivision, and authoritative hit/caret/selection geometry remain the next
-serialized `TEXT-02` work rather than being approximated by this logical layer.
+subdivision, and hit/caret/selection geometry use the source-bound shaped
+authority below rather than byte interpolation.
+
+`ShapedTextLayout::navigation(source)` validates the complete public layout and
+returns one owned `ShapedTextNavigation`. It groups duplicate positioned glyphs
+by exact cluster range, divides each cluster by extended-grapheme count, and
+derives the coordinate nodes used by visual Left/Right, full-buffer visual word
+movement, hit testing, caret rectangles, and logical-selection visual spans.
+Same-coordinate `Before`/`After` edges are aliases of one node, while bidi and
+wrap seams at different positions remain distinct. Directional arrival fixes
+the active affinity; mixed-bidi selections may produce disjoint rectangles.
+Invalid line, run, glyph, derived geometry, overlap, or grapheme coverage rejects
+the entire map without exposing partial state.
+
+The constructor owns an exact source snapshot. Existing public shaped structs
+do not carry source provenance, so the caller remains responsible for pairing a
+layout with the source originally shaped; structural validation cannot prove
+that history. Direct `TextEditState` visual move/extend methods compare the
+current text with the owned snapshot before canonicalizing or mutating state.
+A mismatch is transactional and reports `SourceMismatch`; matching calls first
+canonicalize both public selection endpoints, preserve composition and local
+undo/redo, and report whether selection or effective affinity moved. Canonical
+retained widget, ReadOnly, pointer, ordered mutation/re-resolution, and IME
+integration remains the final serialized `TEXT-02C` step.
 
 Canonical fields expose `TextFieldAccess::{Editable, ReadOnly, Disabled}`.
 Editable fields navigate, select, copy, mutate, use cut/paste, and activate

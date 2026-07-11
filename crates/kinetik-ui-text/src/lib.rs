@@ -7,6 +7,7 @@ mod engine;
 /// Bundled font assets used by the default text engine.
 pub mod fonts;
 mod layout;
+mod navigation;
 mod selection;
 mod store;
 mod style;
@@ -17,6 +18,10 @@ pub use cache::TextLayoutCache;
 pub use edit::{OrderedTextInputResult, TextEditMode, TextEditState};
 pub use engine::CosmicTextEngine;
 pub use layout::{ShapedGlyph, ShapedGlyphRun, ShapedTextLayout, ShapedTextLine, TextLayout};
+pub use navigation::{
+    SHAPED_TEXT_GEOMETRY_EPSILON, ShapedCaretStop, ShapedTextNavigation, TextNavigationError,
+    TextNavigationOutcome,
+};
 pub use selection::{TextAffinity, TextCaret, TextComposition, TextSelection};
 pub use store::{StoredTextLayout, TextLayoutStore};
 pub use style::{TextLayoutKey, TextStyle};

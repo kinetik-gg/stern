@@ -250,6 +250,46 @@ fn additive_text_caret_api_is_qualified_and_legacy_offsets_remain_compatible() {
 }
 
 #[test]
+fn shaped_navigation_api_is_qualified_and_state_methods_are_typed() {
+    use kinetik_ui::text::{
+        CosmicTextEngine, SHAPED_TEXT_GEOMETRY_EPSILON, ShapedCaretStop, ShapedTextNavigation,
+        TextAffinity, TextCaret, TextEditState, TextLayoutKey, TextNavigationError,
+        TextNavigationOutcome, TextStyle,
+    };
+    type Operation = fn(&mut TextEditState, &ShapedTextNavigation) -> TextNavigationOutcome;
+
+    let mut engine = CosmicTextEngine::new();
+    let layout = engine.shape_text(&TextLayoutKey::new(
+        "ab",
+        TextStyle::new("Inter", 14.0, 20.0),
+        100.0,
+        false,
+    ));
+    let navigation: Result<ShapedTextNavigation, TextNavigationError> = layout.navigation("ab");
+    let navigation = navigation.expect("valid public shaped navigation");
+    let stops: &[ShapedCaretStop] = navigation.caret_stops();
+    assert_eq!(navigation.source(), "ab");
+    assert!(navigation.matches_source("ab"));
+    assert!(std::hint::black_box(SHAPED_TEXT_GEOMETRY_EPSILON) > 0.0);
+    assert!(!stops.is_empty());
+    let _ = navigation.caret_rect(TextCaret::new(0, TextAffinity::After));
+    let _ = navigation.hit_test_caret(0.0, 0.0);
+    let _ = navigation.selection_rects(0..1);
+
+    let operations: [Operation; 8] = [
+        TextEditState::move_visual_left,
+        TextEditState::move_visual_right,
+        TextEditState::extend_visual_left,
+        TextEditState::extend_visual_right,
+        TextEditState::move_visual_word_left,
+        TextEditState::move_visual_word_right,
+        TextEditState::extend_visual_word_left,
+        TextEditState::extend_visual_word_right,
+    ];
+    assert_eq!(operations.len(), 8);
+}
+
+#[test]
 fn root_widget_compatibility_exports_remain_source_compatible() {
     use kinetik_ui::widgets::{
         self, asset_browser, chrome, collection_actions, collections, dock, inline_edit, inspector,

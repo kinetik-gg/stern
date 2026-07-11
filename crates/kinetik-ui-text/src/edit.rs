@@ -6,7 +6,31 @@ use crate::boundary::{
     clamp_boundary, line_range_at_offset, next_boundary, next_word_boundary, previous_boundary,
     previous_word_boundary, vertical_line_target, word_segment_range_at,
 };
-use crate::{EditSnapshot, TextAffinity, TextCaret, TextComposition, TextSelection, TextUndoStack};
+use crate::navigation::{VisualDirection, default_affinity as visual_default_affinity};
+use crate::{
+    EditSnapshot, ShapedTextNavigation, TextAffinity, TextCaret, TextComposition,
+    TextNavigationOutcome, TextSelection, TextUndoStack,
+};
+
+#[derive(Debug, Clone, Copy)]
+enum VisualStep {
+    Adjacent,
+    Word,
+}
+
+fn visual_target(
+    navigation: &ShapedTextNavigation,
+    caret: TextCaret,
+    direction: VisualDirection,
+    step: VisualStep,
+) -> TextCaret {
+    match (direction, step) {
+        (VisualDirection::Left, VisualStep::Adjacent) => navigation.visual_left(caret),
+        (VisualDirection::Right, VisualStep::Adjacent) => navigation.visual_right(caret),
+        (VisualDirection::Left, VisualStep::Word) => navigation.visual_word_left(caret),
+        (VisualDirection::Right, VisualStep::Word) => navigation.visual_word_right(caret),
+    }
+}
 
 /// Editing policy used by ordered platform input application.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -276,6 +300,87 @@ impl TextEditState {
         if target != self.selection.active {
             self.set_active(target, TextAffinity::Before);
         }
+    }
+
+    /// Moves or collapses the selection toward shaped physical visual left.
+    pub fn move_visual_left(&mut self, navigation: &ShapedTextNavigation) -> TextNavigationOutcome {
+        self.apply_visual_navigation(
+            navigation,
+            VisualDirection::Left,
+            VisualStep::Adjacent,
+            false,
+        )
+    }
+
+    /// Moves or collapses the selection toward shaped physical visual right.
+    pub fn move_visual_right(
+        &mut self,
+        navigation: &ShapedTextNavigation,
+    ) -> TextNavigationOutcome {
+        self.apply_visual_navigation(
+            navigation,
+            VisualDirection::Right,
+            VisualStep::Adjacent,
+            false,
+        )
+    }
+
+    /// Extends the active endpoint toward shaped physical visual left.
+    pub fn extend_visual_left(
+        &mut self,
+        navigation: &ShapedTextNavigation,
+    ) -> TextNavigationOutcome {
+        self.apply_visual_navigation(
+            navigation,
+            VisualDirection::Left,
+            VisualStep::Adjacent,
+            true,
+        )
+    }
+
+    /// Extends the active endpoint toward shaped physical visual right.
+    pub fn extend_visual_right(
+        &mut self,
+        navigation: &ShapedTextNavigation,
+    ) -> TextNavigationOutcome {
+        self.apply_visual_navigation(
+            navigation,
+            VisualDirection::Right,
+            VisualStep::Adjacent,
+            true,
+        )
+    }
+
+    /// Moves or collapses to a full-buffer word target toward visual left.
+    pub fn move_visual_word_left(
+        &mut self,
+        navigation: &ShapedTextNavigation,
+    ) -> TextNavigationOutcome {
+        self.apply_visual_navigation(navigation, VisualDirection::Left, VisualStep::Word, false)
+    }
+
+    /// Moves or collapses to a full-buffer word target toward visual right.
+    pub fn move_visual_word_right(
+        &mut self,
+        navigation: &ShapedTextNavigation,
+    ) -> TextNavigationOutcome {
+        self.apply_visual_navigation(navigation, VisualDirection::Right, VisualStep::Word, false)
+    }
+
+    /// Extends to a full-buffer word target toward visual left.
+    pub fn extend_visual_word_left(
+        &mut self,
+        navigation: &ShapedTextNavigation,
+    ) -> TextNavigationOutcome {
+        self.apply_visual_navigation(navigation, VisualDirection::Left, VisualStep::Word, true)
+    }
+
+    /// Extends to a full-buffer word target toward visual right.
+    pub fn extend_visual_word_right(
+        &mut self,
+        navigation: &ShapedTextNavigation,
+    ) -> TextNavigationOutcome {
+        self.apply_visual_navigation(navigation, VisualDirection::Right, VisualStep::Word, true)
     }
 
     /// Deletes the current selection or the span to [`Self::move_word_left`]'s target.
@@ -679,6 +784,53 @@ impl TextEditState {
             &self.text,
             TextCaret::new(self.selection.active, caret.affinity),
         ));
+    }
+
+    fn apply_visual_navigation(
+        &mut self,
+        navigation: &ShapedTextNavigation,
+        direction: VisualDirection,
+        step: VisualStep,
+        extend: bool,
+    ) -> TextNavigationOutcome {
+        if !navigation.matches_source(&self.text) {
+            return TextNavigationOutcome::SourceMismatch;
+        }
+
+        let original_selection = self.selection;
+        let original_affinity = self.caret_position().affinity;
+        self.canonicalize_selection();
+
+        if extend {
+            let active = self.caret_position();
+            let target = visual_target(navigation, active, direction, step);
+            self.set_active(target.offset, target.affinity);
+        } else if self.selection.is_caret() {
+            let target = visual_target(navigation, self.caret_position(), direction, step);
+            self.set_caret_position(target);
+        } else {
+            let anchor = TextCaret::new(
+                self.selection.anchor,
+                visual_default_affinity(&self.text, self.selection.anchor),
+            );
+            let active = self.caret_position();
+            let (anchor_rank, anchor) = navigation.resolve_caret_with_rank(anchor);
+            let (active_rank, active) = navigation.resolve_caret_with_rank(active);
+            let target = match direction {
+                VisualDirection::Left if anchor_rank < active_rank => anchor,
+                VisualDirection::Right if anchor_rank > active_rank => anchor,
+                _ => active,
+            };
+            self.set_caret_position(target);
+        }
+
+        if self.selection != original_selection
+            || self.caret_position().affinity != original_affinity
+        {
+            TextNavigationOutcome::Moved
+        } else {
+            TextNavigationOutcome::Unchanged
+        }
     }
 
     fn set_active(&mut self, active: usize, affinity: TextAffinity) {

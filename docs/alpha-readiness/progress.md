@@ -2,7 +2,7 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Stages 0-3 are Complete. Stage 4A is Complete / Accepted; Stage 4B is Current / Authorized with `TEXT-02` next. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-3 are Complete. Stage 4A is Complete / Accepted; Stage 4B is Current / Authorized with `TEXT-02A` accepted and `TEXT-02B` the current local candidate. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
@@ -1091,9 +1091,10 @@ aggregate-pointer authority.
 
 ### `TEXT-02A`: Unicode editing and caret-affinity foundation
 
-Status: Locally verified implementation candidate for Issue #554. This is the
-first serialized foundation of `TEXT-02`; exact-SHA review, PR, CI, and squash
-evidence are pending. It does not close audit §6.9 or roadmap `TEXT-02`.
+Status: Complete / Accepted. Issue #554 closed through PR #555 and squash merge
+`ac9a1e2` after candidate `44c16d1`, exact-SHA review, three-OS CI, and PR CI
+passed. This is the first serialized foundation of `TEXT-02`; it does not close
+audit §6.9 or roadmap `TEXT-02`.
 
 #### Changed files
 
@@ -1138,7 +1139,9 @@ path and true no-ops preserve redo.
 - All six workspace gates passed in ignored `target/runway/text02a`: formatting,
   warning-denied workspace Clippy, all-feature workspace tests, all-feature
   workspace build, all-feature examples, and warning-denied workspace docs.
-- Exact-SHA candidate critics, three-OS CI, PR CI, and squash merge: **PENDING**.
+- Three exact-SHA candidate critics reported P0/P1/P2=`0/0/0` on candidate
+  `44c16d1`. Ubuntu, Windows, and macOS passed run 29168078196; PR-context run
+  29168249096 passed before PR #555 squash-merged as `ac9a1e2`.
 
 #### Remaining risks and deferred findings
 
@@ -1150,6 +1153,69 @@ ReadOnly, pointer, ordered re-resolution, and IME integration remain
 Undo coalescing and layout/resource generation and byte budgets remain
 `TEXT-03`. Locale-tailored segmentation, normalization, color emoji, and an
 engine replacement remain out of scope.
+
+### `TEXT-02B`: source-bound shaped navigation authority
+
+Status: Locally verified implementation candidate for Issue #556. This is the
+second serialized foundation of `TEXT-02`; exact-SHA review, PR, CI, and squash
+evidence are pending. It does not close audit §6.9 or roadmap `TEXT-02`.
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `crates/kinetik-ui-text/src/{edit,lib,navigation}.rs`
+- `crates/kinetik-ui-text/tests/unicode_layout_conformance.rs`
+- `crates/kinetik-ui/tests/public_api_surface.rs`
+- `docs/specs/03-rendering-text-components.md`
+- `docs/alpha-readiness/{04-text-renderer-lifetime,progress}.md`
+
+#### Reasoning and contract decisions
+
+`ShapedTextLayout::navigation` now derives one owned, exact-source-bound map
+from existing cosmic-text positioned cluster ranges. Duplicate glyphs for one
+cluster form a union, multi-EGC clusters divide by grapheme count, and private
+coordinate nodes retain same-position Before/After aliases without collapsing
+bidi or wrap seams at different coordinates. One map owns visual character and
+full-buffer word motion, hit testing, caret rectangles, and logical-selection
+visual spans. Construction rejects malformed public line/run/glyph geometry,
+  derived overflow (including cross-cluster visual unions), out-of-sequence
+  visual lines, overlap, direction disagreement, and incomplete EGC coverage
+  all-or-nothing. Finite extreme hit distances are compared in f64 before the
+  selected public coordinate is returned as f32 geometry.
+
+The public shaped structs carry no historical source provenance, so callers
+must still pair a layout with the exact source originally shaped. The map owns
+the supplied snapshot and later `TextEditState` calls reject unequal text
+before any canonicalization or mutation. Matching calls canonicalize both
+public endpoints before branching, preserve composition and undo/redo, and
+report `Moved`, `Unchanged`, or `SourceMismatch`. Existing public struct
+literals and byte-only geometry methods remain source-compatible.
+
+#### Tests run and results
+
+- Dedicated shaped Unicode conformance passed 15/15, covering combining and
+  emoji clusters, real and synthetic multi-EGC clusters, pure RTL and mixed
+  bidi, wrapped seams, empty-line aliases, full-buffer visual words,
+  transactional stale-map rejection, physical selection collapse, all error
+  variants, public epsilon thresholds, finite extreme hit distances, and
+  derived geometry overflow.
+- Complete text verification passed 66 unit, 9 ReadOnly ordered-input, 14 text
+  viewport, 12 Unicode editing, and 15 Unicode layout tests; doc tests passed.
+- Facade public API conformance passed 9/9 and widget text-field conformance
+  passed 116/116. Formatting, warning-denied workspace Clippy, all-feature
+  workspace tests, all-feature workspace build, all-feature example checks,
+  and warning-denied workspace docs passed with isolated
+  `target/runway/text02b`.
+- Exact-SHA candidate critics, three-OS CI, PR CI, and squash merge: **PENDING**.
+
+#### Remaining risks and deferred findings
+
+The constructor can prove structural consistency with its caller-supplied
+source but not historical shaping provenance. Pinned bundled Inter supplies a
+real `->` multi-EGC cluster; future font/shaper upgrades must deliberately
+revalidate that witness. Canonical widget/ReadOnly/pointer/ordered
+re-resolution/IME integration remains `TEXT-02C`; fractional-DPI paint parity
+remains `REND-02`; undo/layout/resource budgets remain `TEXT-03`.
 
 ### `REND-01B`: sRGB, alpha, and tint contract
 

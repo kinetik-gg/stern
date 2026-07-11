@@ -86,8 +86,16 @@ published, or accepted as an alpha release.
   ranges clamp to grapheme boundaries. Added qualified `TextCaret` and
   `TextAffinity` APIs with deterministic before/after association, stale-public-
   selection fallback, and undo/redo restoration. Existing byte-only setters
-  remain compatible. Shaped mixed-bidi/ligature geometry remains in the next
-  serialized Unicode text packet.
+  remain compatible.
+- Added source-bound `ShapedTextNavigation` derived from existing cosmic-text
+  cluster ranges. It validates public shaped layouts all-or-nothing, subdivides
+  multi-grapheme clusters by EGC count, preserves bidi/wrap affinity aliases,
+  and supplies one authority for visual caret/word motion, hit testing, caret
+  rectangles, and disjoint selection spans. New `TextEditState` visual
+  move/extend methods reject stale maps transactionally and leave text,
+  composition, and local undo/redo untouched. Existing shaped struct literals
+  and byte-only geometry APIs remain compatible; retained widget wiring remains
+  the following serialized text packet.
 - Defined renderer-bound `Color` as straight sRGB plus straight alpha and made
   Vello translation diagnose and sanitize every invalid color occurrence before
   command snapshots. Peniko gradients now explicitly select sRGB with

@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Current / Authorized; checkpoint 4A is Complete / Accepted; Stage 4B is current and `TEXT-02` is next |
+| Status | Current / Authorized; checkpoint 4A is Complete / Accepted; Stage 4B is current, `TEXT-02A` is accepted, and `TEXT-02B` is the local candidate |
 | Scope | Async liveness, desktop/Unicode text, bounded caches, and renderer correctness |
 | Impact / confidence | Critical / Medium-high overall |
 | Campaign prerequisite | Stage 3 gate; campaign authorization recorded |
@@ -28,9 +28,21 @@ UAX #29 grapheme/word editing plus explicit caret affinity; `TEXT-02B` derives
 authoritative shaped visual stops for ligatures and bidi hit/caret/selection;
 `TEXT-02C` integrates that authority through canonical retained widgets,
 ReadOnly, ordered mutation/re-resolution, pointer selection, and IME before the
-roadmap ID closes. The subpackets never run concurrently. Issue #554 tracks
-`TEXT-02A`; its implementation is under acceptance and does not close audit
-§6.9 by itself.
+roadmap ID closes. The subpackets never run concurrently. `TEXT-02A` closed
+Issue #554 through PR #555 and squash merge `ac9a1e2`. Issue #556 tracks the
+current `TEXT-02B` implementation candidate; it does not close audit §6.9 or
+roadmap `TEXT-02` by itself.
+
+`TEXT-02B` adds one owned, exact-source-bound `ShapedTextNavigation` derived
+from the positioned cluster ranges already stored by cosmic-text. Construction
+is all-or-nothing for line/run/glyph geometry, cluster overlap/direction, and
+EGC coverage. Coordinate nodes retain same-position affinity aliases, while
+physical bidi/wrap seams remain distinct. The same map owns visual character
+and word motion, hit testing, caret rectangles, and selection spans. Existing
+public shaped struct literals and byte-only geometry methods remain compatible.
+The current candidate is not accepted until exact-SHA critics, three-OS CI, PR
+CI, and squash merge pass; widget/ReadOnly/pointer/IME integration remains
+`TEXT-02C`.
 
 `TEXT-01-PRE` is a root-owned shared-foundation prerequisite discovered by the
 `TEXT-01` task gate. It adds event-time modifier state to the already accepted
@@ -175,7 +187,8 @@ remains `REND-02`.
 
 The `TEXT-01` semantic prerequisites of `TEXT-02`, `TEXT-03`, and dependent
 editor packets are satisfied, and accepted `REND-01` unblocks the renderer side
-of 4B. `TEXT-02A` is the current first serialized `TEXT-02` foundation.
+of 4B. `TEXT-02A` is the accepted first serialized `TEXT-02` foundation, and
+`TEXT-02B` is the current second candidate.
 `TEXT-03` remains behind the text-store API
 freeze, and `REND-02` remains behind both `TEXT-02` and accepted `REND-01`;
 inspector/outliner still wait for their Stage 5 composition and collection
@@ -193,7 +206,7 @@ Halt if Unicode work requires an unplanned shaping-engine replacement.
 
 ## Acceptance Gate And Verification Expectations
 
-The 4A checkpoint is Complete / Accepted with deterministic desktop editing/read-only behavior, async incarnation cleanup, balanced invalid-transform recovery, and a documented/tested color/tint contract. `TEXT-02` begins 4B; continue without intermediate approval only while packet gates pass and no stop condition triggers.
+The 4A checkpoint is Complete / Accepted with deterministic desktop editing/read-only behavior, async incarnation cleanup, balanced invalid-transform recovery, and a documented/tested color/tint contract. `TEXT-02A` is accepted and `TEXT-02B` continues 4B; continue without intermediate approval only while packet gates pass and no stop condition triggers.
 
 The Stage 4 gate requires Unicode/grapheme/bidi fixtures; paint/hit/caret/selection agreement at scales 1.25, 1.5, and 1.75; asserted long-session text/undo/cache budgets; and proof that read-only differs from disabled. Packet tasks define exact deterministic checks. Passing the gate advances to the already Authorized / Queued Stage 5; a failed checkpoint halts the campaign.
 
