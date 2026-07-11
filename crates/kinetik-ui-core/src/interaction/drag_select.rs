@@ -2,7 +2,7 @@ use super::hit::HitTarget;
 use super::press::resolve_pressable_with_hit_target;
 use super::{Response, pressable, pressable_transformed};
 use crate::memory::PointerGestureKind;
-use crate::{Point, Rect, Transform, UiInput, UiInputEvent, UiMemory, Vec2, WidgetId};
+use crate::{Modifiers, Point, Rect, Transform, UiInput, UiInputEvent, UiMemory, Vec2, WidgetId};
 
 /// One claimed editing-domain event paired with its original canonical ordinal.
 #[derive(Debug, Clone, PartialEq)]
@@ -39,6 +39,8 @@ pub struct SelectionGestureAction {
     pub delta: Vec2,
     /// Click sequence count carried by the transition.
     pub click_count: u8,
+    /// Modifier state effective at the original root event ordinal.
+    pub modifiers: Modifiers,
 }
 
 /// Common response plus ordered actions for neutral captured text selection.
@@ -122,9 +124,15 @@ pub(crate) fn captured_selection_gesture_with_ordinals(
         Some(event_ordinals),
         process_events,
     );
+    let mut actions = resolution.selection_actions;
+    if input.events.is_empty() {
+        for action in &mut actions {
+            action.modifiers = input.keyboard.modifiers;
+        }
+    }
     CapturedSelectionGesture {
         response: resolution.response,
-        actions: resolution.selection_actions,
+        actions,
     }
 }
 

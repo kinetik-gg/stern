@@ -483,6 +483,19 @@ cleanup, without adding metadata to public `UiInput`. Ordered focus-loss and
 release-all cancellation is deferred until behaviors can observe preceding
 transitions; `end_frame` performs the same cleanup if no owner participates.
 
+Captured selection actions also carry the modifier state effective at their
+original root ordinal. The runtime folds the root stream once from a retained
+cross-frame baseline: modifier changes and key-carried modifiers replace the
+running state, spatial filtering keeps the root association, and the final
+compatibility snapshot is never guessed backward onto earlier pointer events.
+An empty-stream focused frame uses and retains its modifier snapshot. Focus loss
+reports the pre-loss state, clears the baseline, and suspends later modifier/key
+updates until a valid focus-gain event. The official release-all, pointer-leave,
+focus-loss sequence therefore emits one selection cancellation at release-all
+while the independent modifier fold still reaches the focus-loss reset. A
+conflicted stream cannot apply modifier/key changes, though its focus-loss fence
+still performs the safety reset.
+
 The input model must support pointer capture. During a drag, the active widget
 continues receiving drag updates after leaving its original rectangle while it
 remains inside the effective clip. Outside the effective clip, interaction is

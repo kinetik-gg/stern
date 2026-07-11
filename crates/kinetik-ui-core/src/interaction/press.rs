@@ -4,8 +4,8 @@ use super::{
 };
 use crate::memory::PointerGestureKind;
 use crate::{
-    Key, KeyState, MouseButton, Point, Rect, Transform, UiInput, UiInputEvent, UiMemory, Vec2,
-    WidgetId,
+    Key, KeyState, Modifiers, MouseButton, Point, Rect, Transform, UiInput, UiInputEvent, UiMemory,
+    Vec2, WidgetId,
 };
 
 pub(super) struct PressResolution {
@@ -107,6 +107,7 @@ pub(super) fn resolve_pressable_with_hit_target(
             position,
             delta: Vec2::ZERO,
             click_count: event_click_count.unwrap_or(cancelled_click_count),
+            modifiers: Modifiers::default(),
         });
     }
 
@@ -582,6 +583,7 @@ fn push_selection_action(
             position,
             delta,
             click_count,
+            modifiers: Modifiers::default(),
         });
     }
 }

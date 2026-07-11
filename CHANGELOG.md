@@ -38,6 +38,12 @@ published, or accepted as an alpha release.
   Owner-mismatched plans and canonical unplanned drop commits now fail closed;
   passive hover also observes canonical focus-loss fences while pre-fence wheel
   deltas remain usable. Empty-stream legacy behavior remains compatible.
+- Added event-time `modifiers` to the provisional public
+  `SelectionGestureAction`. This is a source-breaking alpha API change:
+  external struct literals must initialize `modifiers`, and patterns that do
+  not name every field must use `..`. Canonical actions now report the modifier
+  state at their original root ordinal; legacy snapshot actions use the
+  snapshot modifier state.
 
 ### Documentation
 

@@ -6,8 +6,8 @@ use crate::memory::UiMemory;
 use crate::render::Primitive;
 use crate::{
     ActionContext, ActionId, ActionInvocation, ActionSource, CapturedSelectionGesture, IdStack,
-    LivenessTargetId, LivenessToken, OrderedTextInputEvent, Rect, SemanticActionKind, SemanticNode,
-    WidgetId,
+    LivenessTargetId, LivenessToken, Modifiers, OrderedTextInputEvent, Rect, SemanticActionKind,
+    SemanticNode, WidgetId,
 };
 
 use super::focus::{
@@ -31,6 +31,7 @@ pub struct Ui<'a> {
     context: FrameContext,
     root_input: UiInput,
     input_event_ordinals: Vec<usize>,
+    root_event_modifiers: Vec<Modifiers>,
     memory: &'a mut UiMemory,
     ids: IdStack,
     output: FrameOutput,
@@ -47,6 +48,14 @@ impl<'a> Ui<'a> {
         let input_validation = context.input.validate_event_stream();
         let input_conflict = input_validation.as_ref().err().copied();
         memory.set_root_input_validation(input_validation);
+        let (entry_modifiers, suspended) = memory.ordered_modifier_state();
+        let modifier_fold = fold_root_event_modifiers(
+            &context.input,
+            input_conflict.is_some(),
+            entry_modifiers,
+            suspended,
+        );
+        memory.set_ordered_modifier_state(modifier_fold.retained, modifier_fold.suspended);
         let pointer_cancel_pending = !context.input.events.is_empty()
             && context.input.events.iter().any(|event| {
                 matches!(
@@ -70,6 +79,7 @@ impl<'a> Ui<'a> {
             context,
             root_input,
             input_event_ordinals,
+            root_event_modifiers: modifier_fold.by_ordinal,
             memory,
             ids: IdStack::new(),
             output,
@@ -118,14 +128,25 @@ impl<'a> Ui<'a> {
         rect: Rect,
         disabled: bool,
     ) -> CapturedSelectionGesture {
-        captured_selection_gesture_with_ordinals(
+        let mut gesture = captured_selection_gesture_with_ordinals(
             id,
             rect,
             &self.context.input,
             &self.input_event_ordinals,
             self.memory,
             disabled,
-        )
+        );
+        for action in &mut gesture.actions {
+            if let Some(ordinal) = action.ordinal {
+                debug_assert!(ordinal < self.root_event_modifiers.len());
+                action.modifiers = self
+                    .root_event_modifiers
+                    .get(ordinal)
+                    .copied()
+                    .unwrap_or_default();
+            }
+        }
+        gesture
     }
 
     /// Claims editing-domain input with original root event ordinals.
@@ -560,6 +581,68 @@ impl<'a> Ui<'a> {
 
 fn pointer_release_all_cancelled(input: &UiInput) -> bool {
     input.pointer.release_all_cancelled()
+}
+
+struct ModifierFold {
+    by_ordinal: Vec<Modifiers>,
+    retained: Modifiers,
+    suspended: bool,
+}
+
+fn fold_root_event_modifiers(
+    input: &UiInput,
+    conflicted: bool,
+    entry: Modifiers,
+    suspended: bool,
+) -> ModifierFold {
+    if input.events.is_empty() {
+        return if input.window_focused {
+            ModifierFold {
+                by_ordinal: Vec::new(),
+                retained: input.keyboard.modifiers,
+                suspended: false,
+            }
+        } else {
+            ModifierFold {
+                by_ordinal: Vec::new(),
+                retained: Modifiers::default(),
+                suspended: true,
+            }
+        };
+    }
+
+    let mut current = entry;
+    let mut tracking = !suspended;
+    let mut by_ordinal = Vec::with_capacity(input.events.len());
+    for event in &input.events {
+        match event {
+            UiInputEvent::WindowFocusChanged(false) => {
+                by_ordinal.push(current);
+                current = Modifiers::default();
+                tracking = false;
+            }
+            UiInputEvent::WindowFocusChanged(true) => {
+                by_ordinal.push(current);
+                if !conflicted {
+                    tracking = true;
+                }
+            }
+            UiInputEvent::ModifiersChanged(modifiers) if tracking && !conflicted => {
+                current = *modifiers;
+                by_ordinal.push(current);
+            }
+            UiInputEvent::Key(event) if tracking && !conflicted => {
+                current = event.modifiers;
+                by_ordinal.push(current);
+            }
+            _ => by_ordinal.push(current),
+        }
+    }
+    ModifierFold {
+        by_ordinal,
+        retained: current,
+        suspended: !tracking,
+    }
 }
 
 fn pointer_transaction_probe(

@@ -804,6 +804,54 @@ multipointer input, momentum, gesture phases, per-widget adapter click identity,
 and drag payload semantics remain deferred. `TEXT-01` owns actual caret/word/
 selection editing and must consume this seam without reparsing pointer events.
 
+### `TEXT-01-PRE`: event-time selection modifiers
+
+Status: Implementation candidate for Issue #522. This is a shared-foundation
+prerequisite, not a new audit roadmap ID. `ASYNC-01` and `TEXT-01` remain gated
+until it passes independent/local/remote review and squash-merges.
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `crates/kinetik-ui-core/src/interaction/drag_select.rs`
+- `crates/kinetik-ui-core/src/interaction/press.rs`
+- `crates/kinetik-ui-core/src/memory.rs`
+- `crates/kinetik-ui-core/src/runtime/ui.rs`
+- `crates/kinetik-ui-core/tests/selection_modifier_conformance.rs`
+- `crates/kinetik-ui/tests/public_api_surface.rs`
+- `docs/specs/01-foundations.md`
+- `docs/specs/02-layout-and-interaction.md`
+- `docs/alpha-readiness/04-text-renderer-lifetime.md`
+- `docs/alpha-readiness/progress.md`
+
+#### Reasoning and contract decisions
+
+Captured selection actions retain the modifier state from their original root
+event ordinal without adding metadata to `UiInput` or replaying pointer events.
+A private cross-frame baseline handles pointer events before same-frame modifier
+changes, while spatially filtered actions still resolve through root ordinals.
+Legacy empty streams use and retain their snapshot. Conflicted streams ignore
+modifier/key mutations, and focus loss clears and suspends the baseline until a
+valid focus gain. Same-owner claims remain no-replay. Adding the public field is
+an accepted provisional alpha source break with a changelog migration note.
+
+#### Tests run and results
+
+- New selection-modifier conformance: 10/10 passed.
+- Existing drag-threshold conformance: 46/46 passed.
+- Facade public API surface: 5/5 passed.
+- The complete six-command workspace gate passed; independent exact-SHA audit,
+  remote three-OS CI, and PR checks remain pending on this candidate.
+
+#### Remaining risks and deferred findings
+
+`TEXT-01` still needs one separately gated ordinal-bearing DomainDrag seam for
+canonical editable numeric scrub; expanding this modifiers-only packet after
+its accepted task gate would mix contracts. `TEXT-01-PRE2` will own that shared
+prerequisite before `ASYNC-01`. Actual word movement/deletion, selection,
+read-only, multiline, caret-scroll, IME-owner, and text rendering behavior
+remain `TEXT-01` or later Stage 4 work.
+
 ## Packet Completion Template
 
 Every packet review must use these exact headings and include commands plus concrete results:

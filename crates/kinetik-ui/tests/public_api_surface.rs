@@ -43,6 +43,12 @@ fn captured_selection_method(
     ui.captured_selection_gesture(id, rect, disabled)
 }
 
+fn captured_selection_modifiers(
+    action: &kinetik_ui::core::SelectionGestureAction,
+) -> kinetik_ui::core::Modifiers {
+    action.modifiers
+}
+
 fn ordered_text_input_method(
     ui: &mut kinetik_ui::core::Ui<'_>,
     id: kinetik_ui::core::WidgetId,
@@ -71,6 +77,7 @@ fn facade_root_and_feature_qualified_paths_compile() {
     assert!(paths.iter().all(|path| !path.is_empty()));
 
     let _ = captured_selection_method;
+    let _ = captured_selection_modifiers;
     let _ = ordered_text_input_method;
 
     #[cfg(feature = "platform-winit")]

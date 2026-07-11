@@ -23,6 +23,12 @@
 | 4B | `TEXT-03` | Bound/coalesce undo and impose generation/byte budgets on text layouts/resources | `TEXT-01`; ordered input frozen | High / Medium-high | Isolated only after text-store API freezes |
 | 4B | `REND-02` | Use one authoritative text layout for paint, hit, caret, and selection at fractional DPI | `TEXT-02`, `REND-01` | Critical / Medium | Root integration |
 
+`TEXT-01-PRE` is a root-owned shared-foundation prerequisite discovered by the
+`TEXT-01` task gate. It adds event-time modifier state to the already accepted
+ordered selection seam before either `ASYNC-01` or `TEXT-01` edits the shared
+memory/runtime files. It is not a new audit roadmap ID and does not close any
+desktop editing finding by itself.
+
 ## Ownership And Overlap
 
 `ASYNC-01` shares Z1 with runtime ownership and cannot precede `RT-03`. `TEXT-01/02/03` and `REND-02` share Z4 and must not edit the same text files concurrently. `REND-01/02` share Z5. Color space and premultiplication are one root-owned cross-layer policy; no Vello leaf task may choose local semantics. Halt if Unicode work requires an unplanned shaping-engine replacement.

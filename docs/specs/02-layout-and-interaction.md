@@ -283,7 +283,8 @@ reinterpret that frame's aggregate pointer delta as post-press movement.
 Text selection uses `Ui::captured_selection_gesture`, a visually neutral
 capture seam that returns the common `Response` plus ordered Press, Move,
 Release, and Cancel actions. Canonical actions retain their original root event
-ordinal through transforms and clips; legacy snapshot actions have no ordinal.
+ordinal and event-time modifiers through transforms and clips; legacy snapshot
+actions have no ordinal and use the compatibility modifier snapshot.
 Selection reports movement below the domain threshold and never publishes a
 drag source. `Ui::claim_ordered_text_input_events` returns the single claimed
 key, text, clipboard, modifier, IME, and focus stream with the same root
@@ -299,6 +300,9 @@ ReleaseAll and focus loss preserve earlier movement, wheel input, or a completed
 drop while making later pointer transitions inert. An unrelated behavior defers
 retained-owner cleanup so it cannot erase the owner's pre-fence output, and
 focus cancellation never borrows a future event's position or click count.
+Repeated claims by the same owner in one frame do not replay actions. A root
+input conflict may expose only causal retained-owner cleanup, using the
+pre-frame modifier baseline rather than applying inconsistent modifier events.
 
 Overlapping interaction uses a predeclared `PointerTargetPlan`. Each visual
 target has one canonical identity, at most one ordinary event owner, at most

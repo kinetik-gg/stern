@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     InputStreamConflict, LivenessRegistry, LivenessTargetId, LivenessToken, LivenessUpdateStatus,
-    ObserverDelivery, ObserverDrain, ObserverNotification, ObserverNotificationId,
+    Modifiers, ObserverDelivery, ObserverDrain, ObserverNotification, ObserverNotificationId,
     ObserverPublishStatus, ObserverRegistry, ObserverSubscriptionHandle, ObserverSubscriptionId,
     Point, UiInput, UiInputEvent, Vec2, WidgetId,
 };
@@ -128,6 +128,10 @@ pub struct UiMemory {
     text_input_event_claim: Option<WidgetId>,
     /// Root stream validation recorded once by the frame runtime.
     root_input_validation: RootInputValidation,
+    /// Modifier state retained before the next canonical root event.
+    ordered_modifiers: Modifiers,
+    /// Whether modifier/key changes are ignored until focus returns.
+    ordered_modifiers_suspended: bool,
     /// Text-editing widget whose platform text input should be stopped.
     pending_text_input_stop: Option<WidgetId>,
     scroll_offsets: HashMap<WidgetId, Vec2>,
@@ -414,6 +418,15 @@ impl UiMemory {
             RootInputValidation::Conflict(conflict) => Some(conflict),
             RootInputValidation::Unvalidated | RootInputValidation::Valid => None,
         }
+    }
+
+    pub(crate) const fn ordered_modifier_state(&self) -> (Modifiers, bool) {
+        (self.ordered_modifiers, self.ordered_modifiers_suspended)
+    }
+
+    pub(crate) fn set_ordered_modifier_state(&mut self, modifiers: Modifiers, suspended: bool) {
+        self.ordered_modifiers = modifiers;
+        self.ordered_modifiers_suspended = suspended;
     }
 
     pub(crate) fn pointer_input_conflicted(&self, input: &UiInput) -> bool {
