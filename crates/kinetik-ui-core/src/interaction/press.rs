@@ -255,6 +255,7 @@ fn resolve_canonical_pointer(
         );
     }
 
+    let mut primary_transaction_open = memory.has_primary_pointer_transaction();
     for (event_index, event) in input.events.iter().enumerate() {
         let release_authority_ordinal = memory.scoped_pointer_event_ordinal(event_index);
         let action_ordinal = event_ordinals.map(|ordinals| ordinals[event_index]);
@@ -282,9 +283,13 @@ fn resolve_canonical_pointer(
                 click_count,
                 position,
             } => {
-                if !conflicted
+                let transaction_was_open = memory
+                    .scoped_primary_transaction_was_open(event_index)
+                    .unwrap_or(primary_transaction_open);
+                if !transaction_was_open
+                    && !conflicted
                     && !owns_primary_gesture(memory, id)
-                    && memory.pointer_route_allows(id)
+                    && memory.canonical_primary_route_allows(id, release_authority_ordinal)
                     && hit_target.hit_test_position(rect, *position)
                     && let Some(press_position) = *position
                 {
@@ -303,6 +308,7 @@ fn resolve_canonical_pointer(
                         false,
                     );
                 }
+                primary_transaction_open = true;
             }
             UiInputEvent::PointerButton {
                 button: MouseButton::Primary,
@@ -326,6 +332,7 @@ fn resolve_canonical_pointer(
                         outcome,
                     );
                 }
+                primary_transaction_open = false;
             }
             UiInputEvent::PointerButton {
                 button: MouseButton::Secondary,
@@ -599,7 +606,13 @@ fn resolve_primary_release(
     if cleanup_only || !released_inside {
         outcome.suppress_drag_output = true;
     }
-    memory.clear_primary_interaction();
+    if conflicted {
+        memory.discard_primary_interaction();
+    } else if let Some(release_ordinal) = release_authority_ordinal {
+        memory.clear_primary_interaction_at(release_ordinal);
+    } else {
+        memory.clear_primary_interaction();
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

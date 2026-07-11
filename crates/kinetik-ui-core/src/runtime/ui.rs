@@ -34,6 +34,7 @@ pub struct Ui<'a> {
     context: FrameContext,
     root_input: UiInput,
     input_event_ordinals: Vec<usize>,
+    root_primary_transaction_open: Vec<bool>,
     root_event_modifiers: Vec<Modifiers>,
     last_root_primary_press_ordinal: Option<usize>,
     memory: &'a mut UiMemory,
@@ -74,6 +75,15 @@ impl<'a> Ui<'a> {
             memory.cancel_pointer_interaction();
         }
         let root_input = context.input.clone();
+        let root_primary_transaction_open = primary_transaction_open_before_events(
+            &root_input,
+            memory.has_primary_pointer_transaction(),
+        );
+        memory.install_scoped_pointer_events(
+            0..root_input.events.len(),
+            [],
+            root_primary_transaction_open.iter().copied(),
+        );
         let last_root_primary_press_ordinal = root_input.events.iter().rposition(|event| {
             matches!(
                 event,
@@ -93,6 +103,7 @@ impl<'a> Ui<'a> {
             context,
             root_input,
             input_event_ordinals,
+            root_primary_transaction_open,
             root_event_modifiers: modifier_fold.by_ordinal,
             last_root_primary_press_ordinal,
             memory,
@@ -741,6 +752,11 @@ impl<'a> Ui<'a> {
             self.memory.secondary_pressed().is_some(),
             self.memory.root_input_conflict().is_some(),
         );
+        let scoped_primary_transaction_open = localized
+            .event_ordinals
+            .iter()
+            .map(|ordinal| self.root_primary_transaction_open[*ordinal])
+            .collect::<Vec<_>>();
         self.memory.install_scoped_pointer_events(
             localized.event_ordinals.iter().copied(),
             localized
@@ -748,6 +764,7 @@ impl<'a> Ui<'a> {
                 .iter()
                 .enumerate()
                 .filter_map(|(index, cleanup_only)| cleanup_only.then_some(index)),
+            scoped_primary_transaction_open,
         );
         self.context.input = localized.input;
         self.input_event_ordinals = localized.event_ordinals;
@@ -756,6 +773,30 @@ impl<'a> Ui<'a> {
 
 fn pointer_release_all_cancelled(input: &UiInput) -> bool {
     input.pointer.release_all_cancelled()
+}
+
+fn primary_transaction_open_before_events(
+    input: &UiInput,
+    mut transaction_open: bool,
+) -> Vec<bool> {
+    input
+        .events
+        .iter()
+        .map(|event| {
+            let was_open = transaction_open;
+            match event {
+                UiInputEvent::PointerButton {
+                    button: MouseButton::Primary,
+                    down,
+                    ..
+                } => transaction_open = *down,
+                UiInputEvent::PointerReleaseAll { .. }
+                | UiInputEvent::WindowFocusChanged(false) => transaction_open = false,
+                _ => {}
+            }
+            was_open
+        })
+        .collect()
 }
 
 struct ModifierFold {
