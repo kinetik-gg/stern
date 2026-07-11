@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Current / Authorized after the accepted Stage 3 gate at `1f99111` |
+| Status | Current / Authorized; `ASYNC-01`, `TEXT-01`, and `REND-01A` accepted; 4A waits on `REND-01B` |
 | Scope | Async liveness, desktop/Unicode text, bounded caches, and renderer correctness |
 | Impact / confidence | Critical / Medium-high overall |
 | Campaign prerequisite | Stage 3 gate; campaign authorization recorded |
@@ -37,6 +37,55 @@ accepted merge at `00b944f` because all three touch shared memory/runtime and
 campaign evidence files. `ASYNC-01` follows that merge and must squash before
 `TEXT-01`; the dependency is file serialization, not a semantic text-liveness
 requirement.
+
+## Accepted 4A Evidence
+
+`ASYNC-01` is Complete / Accepted. Issue #526 closed through PR #527 and
+squash-merged as `9d026c5`. Durable presence/incarnation, cancellation,
+same-ID replacement, observer validation, tombstone cleanup, non-cloneable
+authority, focused tests, all six workspace gates, three exact-SHA critics,
+three-OS run 29146185811, and PR run 29146379516 passed.
+
+`REND-01A` is Complete / Accepted. Issue #518 closed through PR #520 and
+squash-merged as `1aee4f4`. Rejected non-finite and overflowing transform
+begins now retain balanced recovery frames. Its local gates, exact-SHA critic,
+three-OS run 29141679730, and PR checks passed. `REND-01B` still owns the
+cross-layer sRGB, alpha, tint, gradient, and image policy.
+
+`TEXT-01` is Complete / Accepted at `93d6a5f` after this integrated evidence
+closure. Its implementation was deliberately serialized into the following
+root-owned packets:
+
+| Packet | Issue / PR | Squash merge | Accepted responsibility |
+| --- | --- | --- | --- |
+| `TEXT-01-PRE` | #522 / #523 | `f2fd2d0` | Event-time selection modifiers |
+| `TEXT-01-PRE2` | #524 / #525 | `00b944f` | Causal DomainDrag actions |
+| `TEXT-01A` | #528 / #529 | `f448c40` | Scalar desktop word editing |
+| `TEXT-01B1` | #530 / #532 | `4d25a2b` | Pure retained text viewport math |
+| `TEXT-01B2` | #531 / #533 | `c191516` | Logical text-owner mode separate from IME |
+| `TEXT-01B3-PRE` | #534 / #535 | `288657a` | Read-only ordered-input policy |
+| `TEXT-01B3-PRE2` | #536 / #537 | `6df12e8` | Final root primary-press ordinal |
+| `TEXT-01B3-PRE3` | #539 / #540 | `1b29284` | Completed same-frame pointer routing |
+| `TEXT-01B3-PRE4` | #541 / #542 | `ec24e96` | Retained selection gesture anchor |
+| `TEXT-01B3` | #538 / #543 | `9102293` | Canonical text-field kernel |
+| `TEXT-01B4-PRE5` | #545 / #546 | `9d09d3c` | Ordered-input preview/claim provenance |
+| `TEXT-01B4` | #544 / #547 | `93d6a5f` | Numeric/search/path/vector wrapper integration |
+
+This closes audit §6.10: scalar word movement/deletion, drag and double-click
+selection, caret-following horizontal scroll, retained wrapped-multiline
+vertical scroll, true focusable/selectable/copyable ReadOnly behavior, and
+visible caret-derived IME geometry are deterministic on canonical retained
+`Ui` paths. Public free components remain compatibility paths. Unicode cluster
+authority remains `TEXT-02`; bounded undo/layout/resource budgets remain
+`TEXT-03`; authoritative fractional-DPI paint/hit/caret/selection agreement
+remains `REND-02`.
+
+The `TEXT-01` semantic prerequisites of `TEXT-02`, `TEXT-03`, and dependent
+editor packets are satisfied. Campaign execution remains serialized: `REND-01B`
+and the 4A checkpoint precede `TEXT-02`; `TEXT-03` also waits for the text-store
+API freeze; inspector/outliner still wait for their Stage 5 composition and
+collection prerequisites. The 4A checkpoint and Stage 4 are therefore not yet
+complete.
 
 ## Ownership And Overlap
 
