@@ -137,6 +137,14 @@ wgpu interop should support:
 - 3D render targets.
 - Processed image previews.
 
+The alpha Vello/Winit presentation boundary follows
+[ADR 0001](../adr/0001-gpu-presenter-contract.md). A concrete integration
+presenter owns the live device/queue, one window surface, Vello GPU renderer,
+submission, recovery, and backend-native texture registry. `VelloRenderer`
+remains the scene translator/encoder, and backend-native handles do not enter
+the UI runtime or backend-neutral renderer contract. The supported external
+path is a same-device GPU atlas copy without CPU readback, not zero-copy.
+
 The renderer backend should be replaceable. Alternative backends may use Skia, Cairo, tiny-skia, raw wgpu, or another renderer.
 
 ## 17. Text Subsystem
@@ -765,6 +773,22 @@ Texture handling:
 - UI repaint should not force texture re-upload.
 - Video frames should upload only when frame content changes.
 - 3D/render previews should render to GPU targets and pass handles to UI.
+- Native Vello registrations resolve before compatible CPU snapshots. An
+  absent registration, stale presenter/device scope, or metadata-invalid entry
+  falls back to a CPU snapshot and then a visible placeholder with a typed
+  diagnostic. A foreign-device texture follows the explicit scoped wgpu
+  validation-failure path because portable ownership pre-validation is not
+  available.
+- Native registrations are scoped to one presenter/device/registration
+  generation and retain no authority after removal or device recovery.
+
+For the exact alpha format, ownership, synchronization, lifetime, surface
+recovery, offscreen, and multi-window limits, see
+[ADR 0001](../adr/0001-gpu-presenter-contract.md). The first implementation
+accepts only the full base subresource of same-device
+`Rgba8Unorm + COPY_SRC` textures whose numeric RGB payload is sRGB encoded and
+whose alpha is straight. Vello copies the source into its GPU atlas; no CPU
+readback is required, but zero-copy is not promised.
 
 Overlay examples:
 

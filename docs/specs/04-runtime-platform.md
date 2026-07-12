@@ -312,6 +312,21 @@ Textures:
 - CPU snapshots use the same sRGB byte and alpha-representation contract as
   images, without an implicit texture-tint API.
 
+The supported alpha live-resource boundary is specified by
+[ADR 0001](../adr/0001-gpu-presenter-contract.md). Stable `TextureId` values
+remain neutral; the concrete Vello/Winit presenter privately maps them to
+same-device native registrations. Native registration has priority over a
+compatible CPU snapshot, then the missing-resource placeholder policy applies.
+The registry and its device/registration generations are not serialized or
+included in neutral resource snapshots.
+
+Presenter-owned device loss or a changed compatible device slot invalidates
+all native registrations and requires domain renderers to recreate and
+re-register resources. Surface recovery may request another frame, but it must
+not re-execute a consumed platform-request batch. The alpha synchronization
+contract is same-queue submission order; cross-device/shared-handle imports and
+explicit native synchronization are unsupported.
+
 Backend-neutral resource snapshots remain sorted, payload-free presence
 inventories. They intentionally do not expose pixel bytes, format/alpha
 metadata, or backend-native objects; byte order and alpha behavior are proved

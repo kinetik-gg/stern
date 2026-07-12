@@ -97,7 +97,8 @@ appropriate to their owned paths. Event reordering, stale requests, Z2/Z3
 overlap, and shell behavior with no recorded owner would have stopped the
 campaign. Those checks passed; at the Stage 3 gate, the campaign advanced Stage
 4 to Current / Authorized without requiring new approval. Stage 4 subsequently
-passed, and Stage 5 is now Current / Authorized with `REND-ADR-01` next.
+passed, and Stage 5 is now Current / Authorized with `REND-ADR-01` accepted and
+`REND-03` next.
 
 ## Deferrals
 
