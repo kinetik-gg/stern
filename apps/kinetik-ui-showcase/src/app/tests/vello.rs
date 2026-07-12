@@ -1,6 +1,6 @@
 use super::helpers::{
-    Point, RenderFrameInput, ShowcaseApp, ShowcasePage, Size, VelloRenderer, click, test_viewport,
-    test_viewport_scaled,
+    Point, Primitive, RenderFrameInput, ShowcaseApp, ShowcasePage, Size, VelloRenderer, click,
+    test_viewport, test_viewport_scaled,
 };
 
 #[test]
@@ -81,6 +81,59 @@ fn showcase_pages_snap_text_origins_and_baselines_at_fractional_dpi() {
                 "{page:?} at {size:?} emitted fractional glyph baselines"
             );
         }
+    }
+}
+
+#[test]
+fn showcase_registered_text_resolves_at_exact_one_point_seven_five_scale() {
+    let size = Size::new(800.0, 600.0);
+    let viewport = test_viewport_scaled(size, 1.75);
+    assert_eq!(viewport.physical_size.width, 1_400);
+    assert_eq!(viewport.physical_size.height, 1_050);
+
+    for page in [
+        ShowcasePage::Editor,
+        ShowcasePage::Components,
+        ShowcasePage::Layout,
+        ShowcasePage::Viewport,
+        ShowcasePage::Systems,
+    ] {
+        let mut app = ShowcaseApp::new();
+        app.set_viewport_size(size);
+        app.set_page(page);
+        let resources = app.render_resources();
+        let text = app
+            .output()
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                Primitive::Text(text) => Some(text),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert!(!text.is_empty(), "{page:?} emitted no text primitives");
+        assert!(text.iter().all(|text| {
+            text.layout
+                .is_some_and(|layout| resources.has_text_layout(layout))
+        }));
+
+        let mut renderer = VelloRenderer::new();
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport,
+            primitives: &app.output().primitives,
+            resources,
+        });
+
+        assert!(
+            output.diagnostics.is_empty(),
+            "{page:?} at 800x600 logical / 1400x1050 physical: {:?}",
+            output.diagnostics
+        );
+        assert!(
+            !renderer.scene().encoding().resources.glyph_runs.is_empty(),
+            "{page:?} emitted no registered Vello glyph run"
+        );
     }
 }
 

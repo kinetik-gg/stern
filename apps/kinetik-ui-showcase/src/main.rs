@@ -484,6 +484,7 @@ mod tests {
         logical_size_from_pixels, page_arg, render_once_target, render_once_viewport,
         showcase_antialiasing_method, showcase_page_list, submit_render_once_to_vello, usize_arg,
     };
+    use kinetik_ui::core::Primitive;
     use kinetik_ui_showcase::app::ShowcaseApp;
     use vello::AaConfig;
 
@@ -717,6 +718,21 @@ mod tests {
         let target = render_once_target(&args).expect("render-once target");
         let mut app = ShowcaseApp::new();
         app.set_viewport_size(target.logical_size);
+        let first_text = app
+            .output()
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Text(text) => Some(text),
+                _ => None,
+            })
+            .expect("showcase text primitive");
+        let layout = first_text.layout.expect("registered showcase text layout");
+        let registered_run = app
+            .render_resources()
+            .text_layout_resource(layout)
+            .and_then(|resource| resource.layout.runs.first())
+            .expect("registered showcase glyph run");
 
         let (renderer, viewport) = submit_render_once_to_vello(
             &app,
@@ -726,13 +742,39 @@ mod tests {
         )
         .expect("vello submission");
         let encoding = renderer.scene().encoding();
-        let first_run = encoding.resources.glyph_runs.first().expect("glyph run");
+        let encoded_run = encoding.resources.glyph_runs.first().expect("glyph run");
+        let encoded_glyphs = &encoding.resources.glyphs[encoded_run.glyphs.clone()];
 
         assert_eq!(viewport.logical_size, Size::new(1440.0, 900.0));
         assert_eq!(viewport.physical_size.width, 1800);
         assert_eq!(viewport.physical_size.height, 1125);
-        assert!(first_run.hint);
-        assert_approx_f32(first_run.font_size.round(), first_run.font_size);
+        let physical_width =
+            u16::try_from(viewport.physical_size.width).expect("physical width fits u16");
+        let physical_height =
+            u16::try_from(viewport.physical_size.height).expect("physical height fits u16");
+        let scale_x = f32::from(physical_width) / viewport.logical_size.width;
+        let scale_y = f32::from(physical_height) / viewport.logical_size.height;
+        assert_eq!(scale_x.to_bits(), scale_y.to_bits());
+
+        assert!(encoded_run.hint);
+        assert_eq!(encoded_run.glyphs.start, 0);
+        assert_eq!(encoded_run.glyphs.end, registered_run.glyphs.len());
+        assert_eq!(
+            encoded_run.font.data.as_ref(),
+            registered_run.font.data.data()
+        );
+        assert_eq!(encoded_run.font.index, registered_run.font.index);
+        assert_eq!(encoded_glyphs.len(), registered_run.glyphs.len());
+        assert!(
+            encoded_glyphs
+                .iter()
+                .zip(&registered_run.glyphs)
+                .all(|(encoded, registered)| encoded.id == registered.id)
+        );
+        assert_eq!(
+            encoded_run.font_size.to_bits(),
+            (registered_run.font_size * scale_x).to_bits()
+        );
     }
 
     #[test]
@@ -741,10 +783,6 @@ mod tests {
         assert_eq!(align_to(4, 256), 256);
         assert_eq!(align_to(1024, 256), 1024);
         assert_eq!(align_to(1025, 256), 1280);
-    }
-
-    fn assert_approx_f32(actual: f32, expected: f32) {
-        assert!((actual - expected).abs() <= f32::EPSILON);
     }
 
     fn assert_approx_f64(actual: f64, expected: f64) {

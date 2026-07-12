@@ -1,17 +1,16 @@
 use kinetik_ui_render::{RenderFrameInput, RenderFrameOutput, RendererBackend};
-use kinetik_ui_text::CosmicTextEngine;
+use kinetik_ui_text::TextLayoutStore;
 use vello::Scene;
 
 use crate::{
     encoding::encode_scene, geometry::viewport_device_scale, image::ImageDataCache,
-    text::ShapedTextCache, translation::translate_primitives,
+    translation::translate_primitives,
 };
 
 /// Vello renderer boundary.
 pub struct VelloRenderer {
     scene: Scene,
-    text_engine: CosmicTextEngine,
-    text_cache: ShapedTextCache,
+    fallback_text_layouts: TextLayoutStore,
     image_cache: ImageDataCache,
 }
 
@@ -42,8 +41,7 @@ impl VelloRenderer {
     pub fn new() -> Self {
         Self {
             scene: Scene::new(),
-            text_engine: CosmicTextEngine::new(),
-            text_cache: ShapedTextCache::default(),
+            fallback_text_layouts: TextLayoutStore::new(),
             image_cache: ImageDataCache::default(),
         }
     }
@@ -66,19 +64,29 @@ impl VelloRenderer {
 
     #[cfg(test)]
     pub(crate) fn cached_text_layout_count(&self) -> usize {
-        self.text_cache.len()
+        self.fallback_text_layouts.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn cached_text_layout_payload_bytes(&self) -> usize {
+        self.fallback_text_layouts.retained_payload_bytes()
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn cached_text_layout_generation(&self) -> u64 {
+        self.fallback_text_layouts.generation()
     }
 
     /// Submits a frame for translation.
     pub fn submit_frame(&mut self, input: RenderFrameInput<'_>) -> RenderFrameOutput {
+        self.fallback_text_layouts.advance_generation();
         let translated = translate_primitives(input.primitives, input.resources);
         self.scene.reset();
         encode_scene(
             &mut self.scene,
             &translated.commands,
             input.resources,
-            &mut self.text_engine,
-            &mut self.text_cache,
+            &mut self.fallback_text_layouts,
             &mut self.image_cache,
             viewport_device_scale(input.viewport),
         );

@@ -40,10 +40,8 @@ use image::{
 };
 #[cfg(test)]
 use text::{
-    MAX_CACHED_TEXT_LAYOUTS, ShapedTextCache, physical_text_layout, physical_text_layout_for_key,
-    quantize_physical_text_extent, snap_text_glyph_baseline_to_device,
-    snap_text_glyph_position_to_device, snap_text_origin_to_device,
-    snap_text_transform_origin_to_device, transform_point,
+    encode_forced_transient_text, exact_positive_axis_aligned_scale, project_text_point_to_device,
+    transform_point,
 };
 
 #[cfg(test)]

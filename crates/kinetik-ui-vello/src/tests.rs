@@ -7,6 +7,7 @@ mod primitives;
 mod renderer_api;
 mod scene_reset;
 mod scopes_resources;
+mod text_authority;
 mod text_cache;
 mod text_layouts;
 mod text_paths;

@@ -2,7 +2,7 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Stages 0-3 are Complete. Stage 4A, `TEXT-02`, and `TEXT-03A/B` are Complete / Accepted; Stage 4B is Current / Authorized with `TEXT-03C` the current implementation candidate. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-3 are Complete. Stage 4A, `TEXT-02`, and `TEXT-03` are Complete / Accepted; Stage 4B is Current / Authorized with `REND-02` the current Implementation Candidate. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
@@ -1453,15 +1453,19 @@ duplicate contract until final `API-01` curation in Stage 7.
 
 ### `TEXT-03C`: incremental text resource reconciliation
 
-Status: Implementation candidate for Issue #566. The amended task SHA-256
+Status: Complete / Accepted through Issue #566 and PR #567 at squash merge
+`3b5af7b0341520781e1d286605aaf3e3e7dd9bbe`. Candidate
+`61baa82693957bbb5b71e716c33ab0a133a6eb5f` and the
+amended task SHA-256
 `41e7ebec3c3cfc638f62361d39be0016b8293cb36346e169dee24f136601f5d0`
 passed three independent read-only task critics at P0/P1/P2=`0/0/0` after one
 bounded task remedy. Focused renderer, facade, and persistent-showcase tests and
 warning-denied touched-surface Clippy pass. All six workspace gates pass in the
 isolated `target/runway/text03c` cache with `RUSTDOCFLAGS` restored. Exact-
-candidate critics, PR/three-OS CI, squash merge, and main-push CI remain required.
-This packet may close roadmap `TEXT-03` and the text-resource portions of audit
-§§8.4, 10.2, and 11.5, but not Stage 4 or duplicate-cache §11.7.
+candidate critics passed at P0/P1/P2=`0/0/0`; PR CI 29180858792, three-OS run
+29180863795, and main-push CI 29181022198 passed. This closes roadmap `TEXT-03`
+and the text-resource portions of audit §§8.4, 10.2, and 11.5, but not Stage 4
+or duplicate-cache §11.7.
 
 #### Changed files
 
@@ -1650,6 +1654,88 @@ Fractional-DPI authoritative text layout remains `REND-02`; Unicode clusters
 remain `TEXT-02`; bounded/coalesced undo and text layout/resource budgets remain
 `TEXT-03`. Checkpoint 4A is accepted, but Stage 4 and the campaign are not
 complete.
+
+### `REND-02`: authoritative fractional-DPI text projection
+
+Status: Implementation Candidate for Issue #568. Its complete prescribed
+12-command focused gate passes. This status does not accept `REND-02` or Stage
+4, and no candidate SHA is recorded because this evidence edit replaces the
+rejected candidate. Acceptance still requires three exact-SHA candidate critics,
+PR CI, exact-SHA Ubuntu/Windows/macOS CI, the authorized squash merge, and
+resulting main-push CI.
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `apps/kinetik-ui-showcase/src/app/tests/vello.rs`
+- `apps/kinetik-ui-showcase/src/main.rs`
+- `crates/kinetik-ui-vello/src/encoding.rs`
+- `crates/kinetik-ui-vello/src/lib.rs`
+- `crates/kinetik-ui-vello/src/renderer.rs`
+- `crates/kinetik-ui-vello/src/tests.rs`
+- `crates/kinetik-ui-vello/src/tests/common.rs`
+- `crates/kinetik-ui-vello/src/tests/text_authority.rs`
+- `crates/kinetik-ui-vello/src/tests/text_cache.rs`
+- `crates/kinetik-ui-vello/src/tests/text_layouts.rs`
+- `crates/kinetik-ui-vello/src/tests/text_paths.rs`
+- `crates/kinetik-ui-vello/src/tests/text_snapping.rs`
+- `crates/kinetik-ui-vello/src/text.rs`
+- `crates/kinetik-ui-vello/src/translation.rs`
+- `docs/alpha-readiness/04-text-renderer-lifetime.md`
+- `docs/alpha-readiness/progress.md`
+- `docs/specs/03-rendering-text-components.md`
+
+#### Reasoning and contract decisions
+
+Resolved registered `TextLayoutResource` layouts are the sole Vello shaping
+and glyph-topology authority. Primitive text/family/size/line-height metadata
+remains compatibility input and cannot reshape or override a resolved layout.
+Exactly positive axis-aligned transforms use the shared snapped translation,
+exact scaled font size, exact non-uniform outline ratio, and one full-f64
+projection and rounding of each absolute glyph point before f32 storage. Every
+nonzero-skew, rotated, reflected, negative, singular, or otherwise general
+affine remains on the raw unhinted path.
+
+Layoutless and unresolved-resource compatibility paint shapes logical keys
+through a renderer-private `TextLayoutStore`. It advances once per submitted
+frame, retains at most 32 MiB, expires after 120 idle generations, shapes
+transiently on rejection, and is independent of framebuffer scale. Registered
+resources never enter that fallback store.
+
+Three authorized correction packets align the evidence with this frozen
+contract. `REND-02-PC1` replaced the stale Showcase integer-font assertion with
+registered-resource and exact scaled-size evidence. `REND-02-PC2` keeps affine
+projection and rounding in f64 until final f32 storage, adds the literal
+`2.8_f32` at 1.25 witness that encodes physical x=3, and requires strict
+identity-transform selection/caret/glyph-anchor parity at 1.25, 1.5, and 1.75.
+`REND-02-PC3` resolves registered resources before validating compatibility
+metrics, substitutes a private deterministic finite-positive placeholder only
+for ignored invalid registered command fields, preserves strict validation and
+deterministic diagnostics for layoutless/missing-resource fallback, and proves
+registered layouts leave the fallback store empty.
+
+#### Tests run and results
+
+- Vello focused results passed: authority 6/6; fallback cache 6/6; registered layouts
+  4/4; transform paths 4/4; text snapping 7/7.
+- Complete Vello verification passed 95 unit and 24 integration tests.
+- Render passed 9 unit, 23 integration, and 1 compile-fail documentation test.
+- Text passed 102 unit and 80 integration tests.
+- Widget text-field conformance passed 125/125.
+- Facade passed 14 unit and 11 public-API tests.
+- Showcase passed 132 library and 25 binary tests.
+- Warning-denied all-target/all-feature Clippy for Vello and Showcase passed.
+
+#### Remaining risks and deferred findings
+
+The authoritative guarantee applies only to canonical registered layouts.
+Layoutless and missing-resource fail-soft paint remains non-authoritative and
+cannot reconstruct retained wrap or Unicode navigation state. Fractional
+command translations retain the generic rectangle quantization band of at most
+1.0001 physical pixels. CPU scene encoding proves submitted topology and
+coordinates, not final GPU raster coverage or cross-GPU pixel identity. The
+duplicate public `TextLayoutCache` remains Stage 7 `API-01`; presenter
+ownership, external textures, and public composition remain Stage 5.
 
 ## Packet Completion Template
 

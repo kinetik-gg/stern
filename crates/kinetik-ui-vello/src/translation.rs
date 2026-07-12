@@ -16,6 +16,10 @@ use crate::{
     },
 };
 
+/// Finite-positive command-schema value used only when a registered layout
+/// makes invalid primitive compatibility metrics irrelevant to paint.
+pub(crate) const REGISTERED_TEXT_COMPATIBILITY_METRIC_PLACEHOLDER: f32 = 1.0;
+
 /// Translates primitives into deterministic renderer commands.
 #[must_use]
 #[allow(clippy::too_many_lines)]
@@ -118,20 +122,32 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                 let Some(origin) = sanitize_point(text.origin, &mut diagnostics, "text") else {
                     continue;
                 };
-                let Some(size) = finite_positive(text.size) else {
-                    diagnostics.push(RenderDiagnostic::InvalidGeometry("text_size"));
-                    continue;
-                };
-                let Some(line_height) = finite_positive(text.line_height) else {
-                    diagnostics.push(RenderDiagnostic::InvalidGeometry("text_line_height"));
-                    continue;
-                };
-                match text.layout {
-                    Some(layout) if !resources.has_text_layout(layout) => {
+                let has_registered_layout = match text.layout {
+                    Some(layout) if resources.has_text_layout(layout) => true,
+                    Some(layout) => {
                         diagnostics.push(RenderDiagnostic::MissingTextLayout(layout));
+                        false
                     }
-                    Some(_) | None => {}
-                }
+                    None => false,
+                };
+                let (size, line_height) = if has_registered_layout {
+                    (
+                        finite_positive(text.size)
+                            .unwrap_or(REGISTERED_TEXT_COMPATIBILITY_METRIC_PLACEHOLDER),
+                        finite_positive(text.line_height)
+                            .unwrap_or(REGISTERED_TEXT_COMPATIBILITY_METRIC_PLACEHOLDER),
+                    )
+                } else {
+                    let Some(size) = finite_positive(text.size) else {
+                        diagnostics.push(RenderDiagnostic::InvalidGeometry("text_size"));
+                        continue;
+                    };
+                    let Some(line_height) = finite_positive(text.line_height) else {
+                        diagnostics.push(RenderDiagnostic::InvalidGeometry("text_line_height"));
+                        continue;
+                    };
+                    (size, line_height)
+                };
                 commands.push(render_command(
                     &layers,
                     &clips,

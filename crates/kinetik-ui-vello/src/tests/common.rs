@@ -3,7 +3,7 @@ use crate::{
     RenderResources, TextLayoutResource, TextureResource,
 };
 use kinetik_ui_core::{ImageId, Rect, Size, TextLayoutId, TextureId, Transform};
-use kinetik_ui_text::{CosmicTextEngine, ShapedTextLayout, TextLayoutKey, TextStyle};
+use kinetik_ui_text::{CosmicTextEngine, TextLayoutKey, TextStyle};
 
 pub(crate) fn resources() -> RenderResources {
     let mut resources = RenderResources::new();
@@ -97,19 +97,6 @@ pub(crate) fn text_layout_resource(id: TextLayoutId, text: &str) -> TextLayoutRe
         key,
         layout: std::sync::Arc::new(layout),
     }
-}
-
-pub(crate) fn shaped_glyph_x_positions(
-    layout: &ShapedTextLayout,
-    snapped_origin_x: f32,
-    scale: f32,
-) -> Vec<f32> {
-    layout
-        .runs
-        .iter()
-        .flat_map(|run| run.glyphs.iter())
-        .map(|glyph| snapped_origin_x + glyph.x * scale)
-        .collect()
 }
 
 pub(crate) fn clip_rects(command: &RenderCommand) -> Vec<Rect> {

@@ -172,6 +172,42 @@ Text rendering responsibilities:
 - Cache glyph resources where possible.
 - Invalidate cache on text/font/size/width/style changes.
 
+For a resolved `TextPrimitive::layout`, the registered `ShapedTextLayout` is
+the sole shaping and topology authority. Renderers preserve its run order,
+font bytes and collection index, glyph identifiers and order, logical
+positions, baselines, clusters, line count, and wrap decisions. Compatibility
+metadata carried by the primitive cannot trigger a second shaping pass or
+override that resource.
+
+Vello classifies text from the exact raw composed framebuffer-root and command
+transform. An exactly positive axis-aligned transform uses the shared snapped
+translation, exact `font_size * scale_y`, exact `scale_x / scale_y` outline
+ratio when non-uniform, and one full-f64 affine projection of each absolute
+point `origin + glyph_offset`. Each device coordinate rounds exactly once in
+f64 before narrowing to f32 Vello storage. Any nonzero skew, rotation,
+reflection, negative scale, singular transform, or other general affine uses
+the raw full affine without text hinting or text-specific snapping.
+Classification does not use an epsilon or average near-uniform axes.
+
+Layoutless text and unresolved layout handles remain non-authoritative,
+unwrapped, paint-only compatibility paths shaped from primitive metadata in
+logical units. Vello retains those logical fallback keys in a private
+`TextLayoutStore`, advances it once per submitted frame, and inherits the
+strict 32 MiB retained-payload and 120-idle-generation policy. Rejected
+retention shapes transiently so fail-soft paint does not exceed the budget;
+registered resources never enter that store.
+
+Navigation caret and selection rectangles use the same logical shaped
+authority and the renderer's production rectangle preparation. At identity
+command transform and framebuffer scales 1.25, 1.5, and 1.75, decoded
+selection minimum/maximum edges, corresponding caret edges, and encoded glyph
+anchors agree within the renderer position epsilon. Fractional command
+translations retain the existing generic rectangle quantization band of at
+most 1.0001 physical pixels; this renderer contract does not change general
+shape snapping. CPU scene-encoding conformance proves submitted topology and
+coordinates, not raster coverage, cross-GPU antialiasing, hinted outline
+bounds, or color-emoji rendering.
+
 Text field variants:
 
 ```text

@@ -134,6 +134,19 @@ published, or accepted as an alpha release.
   incrementally reconciles text after each completed frame instead of cloning
   and rebuilding resources on access. Existing manual/full-snapshot
   registration APIs remain compatible.
+- Made resolved `TextLayoutResource` layouts the sole Vello shaping and glyph-
+  topology authority. Exact positive axis-aligned transforms now project each
+  absolute logical glyph position through the full f64 affine, round once in
+  f64, and only then narrow it to f32 while preserving exact scaled font size
+  and non-uniform outline ratio. At identity command transforms, encoded glyph
+  anchors and corresponding caret/selection edges now have strict positional
+  parity at 1.25, 1.5, and 1.75 scale; the existing generic-rectangle band of
+  at most 1.0001 physical pixels remains limited to fractional command
+  translations. Every skewed, rotated, reflected, negative, or otherwise
+  general affine stays on the raw transform path without hinting. Layoutless
+  and missing-resource compatibility paint now uses a private logical-key
+  `TextLayoutStore` with the accepted 32 MiB and 120-idle-generation bounds
+  instead of a scale-keyed entry-count cache.
 - Defined renderer-bound `Color` as straight sRGB plus straight alpha and made
   Vello translation diagnose and sanitize every invalid color occurrence before
   command snapshots. Peniko gradients now explicitly select sRGB with

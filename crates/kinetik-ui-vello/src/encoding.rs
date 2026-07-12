@@ -3,7 +3,7 @@ use kinetik_ui_core::{
     TextLayoutId, TextureId,
 };
 use kinetik_ui_render::{RenderImage, RenderImageSampling, RenderResources};
-use kinetik_ui_text::CosmicTextEngine;
+use kinetik_ui_text::TextLayoutStore;
 use vello::{
     Scene,
     kurbo::{Affine, BezPath, Line as KurboLine, Shape},
@@ -24,18 +24,14 @@ use crate::{
         full_image_source, image_quality, image_resource_size_matches_atlas_source,
         image_resource_size_matches_pixels, source_size_matches_snapshot,
     },
-    text::{
-        ShapedTextCache, encode_text_layout, physical_text_layout, physical_text_layout_for_key,
-        shape_fallback_text,
-    },
+    text::{encode_text_layout, shape_fallback_text},
 };
 
 pub(crate) fn encode_scene(
     scene: &mut Scene,
     commands: &[RenderCommand],
     resources: &RenderResources,
-    text_engine: &mut CosmicTextEngine,
-    text_cache: &mut ShapedTextCache,
+    fallback_text_layouts: &mut TextLayoutStore,
     image_cache: &mut ImageDataCache,
     device_scale: f64,
 ) {
@@ -53,8 +49,7 @@ pub(crate) fn encode_scene(
             scene,
             command,
             resources,
-            text_engine,
-            text_cache,
+            fallback_text_layouts,
             image_cache,
             device_scale,
         );
@@ -69,14 +64,12 @@ pub(crate) fn encode_command(
     scene: &mut Scene,
     command: &RenderCommand,
     resources: &RenderResources,
-    text_engine: &mut CosmicTextEngine,
-    text_cache: &mut ShapedTextCache,
+    fallback_text_layouts: &mut TextLayoutStore,
     image_cache: &mut ImageDataCache,
     device_scale: f64,
 ) {
-    let transform = snap_axis_aligned_translation(
-        root_transform(device_scale) * transform_to_affine(command.transform),
-    );
+    let raw_transform = root_transform(device_scale) * transform_to_affine(command.transform);
+    let transform = snap_axis_aligned_translation(raw_transform);
     match &command.kind {
         RenderCommandKind::Rect {
             rect,
@@ -133,10 +126,10 @@ pub(crate) fn encode_command(
             color,
         } => encode_text_command(
             scene,
+            raw_transform,
             transform,
             resources,
-            text_engine,
-            text_cache,
+            fallback_text_layouts,
             *layout,
             *origin,
             text,
@@ -144,7 +137,6 @@ pub(crate) fn encode_command(
             *size,
             *line_height,
             *color,
-            device_scale,
         ),
         RenderCommandKind::Image { image, rect, tint } => encode_image_command(
             scene,
@@ -238,10 +230,10 @@ pub(crate) fn encode_crisp_rect_border(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn encode_text_command(
     scene: &mut Scene,
-    transform: Affine,
+    raw_transform: Affine,
+    effective_transform: Affine,
     resources: &RenderResources,
-    text_engine: &mut CosmicTextEngine,
-    text_cache: &mut ShapedTextCache,
+    fallback_text_layouts: &mut TextLayoutStore,
     layout: Option<TextLayoutId>,
     origin: Point,
     text: &str,
@@ -249,48 +241,25 @@ pub(crate) fn encode_text_command(
     size: f32,
     line_height: f32,
     color: Color,
-    device_scale: f64,
 ) {
     if let Some(resource) = layout.and_then(|id| resources.text_layout_resource(id)) {
-        let physical_layout =
-            physical_text_layout_for_key(text_engine, text_cache, transform, &resource.key);
         encode_text_layout(
             scene,
-            transform,
+            raw_transform,
+            effective_transform,
             origin,
             &resource.layout,
-            physical_layout.as_deref(),
             color,
-            device_scale,
-        );
-    } else if let Some(physical_layout) = physical_text_layout(
-        text_engine,
-        text_cache,
-        transform,
-        text,
-        family,
-        size,
-        line_height,
-    ) {
-        encode_text_layout(
-            scene,
-            transform,
-            origin,
-            physical_layout.as_ref(),
-            Some(physical_layout.as_ref()),
-            color,
-            device_scale,
         );
     } else {
-        let layout = shape_fallback_text(text_engine, text_cache, text, family, size, line_height);
+        let layout = shape_fallback_text(fallback_text_layouts, text, family, size, line_height);
         encode_text_layout(
             scene,
-            transform,
+            raw_transform,
+            effective_transform,
             origin,
             layout.as_ref(),
-            None,
             color,
-            device_scale,
         );
     }
 }
