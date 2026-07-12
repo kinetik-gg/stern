@@ -4,13 +4,15 @@
 
 ## Execution Contract
 
+Campaign status: REND-03 is **Complete / Accepted**; REND-04 is **next**.
+
 | Field | Decision |
 | --- | --- |
 | Status | Complete / Accepted through `REND-02` squash merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de` and passing main-push CI |
 | Scope | Async liveness, desktop/Unicode text, bounded caches, and renderer correctness |
 | Impact / confidence | Critical / Medium-high overall |
 | Campaign prerequisite | Stage 3 gate; campaign authorization recorded |
-| Token checkpoint | Stage 4 gate passed; Stage 5 is Current / Authorized with `REND-ADR-01` accepted and `REND-03` next |
+| Token checkpoint | Stage 4 gate passed; Stage 5 is Current / Authorized with `REND-ADR-01` and `REND-03` accepted and `REND-04` next |
 
 ## Packets
 
@@ -306,7 +308,8 @@ recovery and cross-layer sRGB/alpha/tint behavior; and registered paint/hit/
 caret/selection geometry agreement at scale factors 1.25, 1.5, and 1.75.
 
 At this gate, Stage 5 advanced to Current / Authorized with `REND-ADR-01`
-next. ADR 0001 subsequently accepted that decision, and `REND-03` is now next.
+next. ADR 0001 subsequently accepted that decision, `REND-03` is now Complete /
+Accepted, and `REND-04` is next.
 Every Stage 5 packet still requires its own deterministic task gate; a failed
 checkpoint or unresolved ownership decision halts the campaign.
 

@@ -4,9 +4,11 @@
 
 ## Execution Contract
 
+Campaign status: REND-03 is **Complete / Accepted**; REND-04 is **next**.
+
 | Field | Decision |
 | --- | --- |
-| Status | Complete / Accepted at `5cf07b8`; Stages 3-4 subsequently passed and Stage 5 is Current / Authorized with `REND-ADR-01` accepted and `REND-03` next |
+| Status | Complete / Accepted at `5cf07b8`; Stages 3-4 subsequently passed and Stage 5 is Current / Authorized with `REND-ADR-01` and `REND-03` accepted and `REND-04` next |
 | Scope | Shared coordinate, arbitration, and interaction-ownership invariants |
 | Impact / confidence | Critical / High |
 | Campaign prerequisite | Stage 1 gate; campaign authorization recorded |
@@ -46,7 +48,7 @@ approval.
 duplicate registration, to cancel removed interaction owners at `end_frame`.
 Its independent critic and the integrated Stage 2 gate passed after one
 fixture-only depth-one remedy. Stages 3-4 subsequently passed, and Stage 5 is
-Current / Authorized with `REND-ADR-01` accepted and `REND-03` next under the continuous campaign
+Current / Authorized with `REND-ADR-01` and `REND-03` accepted and `REND-04` next under the continuous campaign
 authorization.
 
 ## Deferrals

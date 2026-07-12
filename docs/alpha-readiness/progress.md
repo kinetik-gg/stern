@@ -2043,6 +2043,78 @@ production device recovery remain deliberately unsupported or deferred. The
 repository remains foundation / developer preview: no tag, publication,
 deployment, release, or alpha acceptance occurred.
 
+### `REND-03B`: Showcase adoption and independent offscreen proof
+
+Status: **Complete / Accepted**.
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `apps/kinetik-ui-showcase/src/live.rs`
+- `apps/kinetik-ui-showcase/src/main.rs`
+- `apps/kinetik-ui-showcase/src/offscreen.rs`
+- `docs/adr/0001-gpu-presenter-contract.md`
+- `docs/public-api-policy.md`
+- `docs/alpha-readiness.md`
+- `docs/alpha-readiness/00-plan-and-baseline.md`
+- `docs/alpha-readiness/01-truth-and-release.md`
+- `docs/alpha-readiness/02-runtime-foundation.md`
+- `docs/alpha-readiness/03-input-and-shell.md`
+- `docs/alpha-readiness/04-text-renderer-lifetime.md`
+- `docs/alpha-readiness/05-composition-foundations.md`
+- `docs/alpha-readiness/progress.md`
+
+#### Reasoning and contract decisions
+
+The live Showcase now owns one detached, explicitly configured
+`kinetik_ui::vello_winit::VelloWindowPresenter` reached through the facade.
+The application continues to own Winit lifecycle callbacks, normalized input,
+frame construction, shell execution, and repaint scheduling. Resume reuses the
+retained window when present, suspension drops presenter attachment before the
+application window clone, window events use the presenter's exact identity,
+and raw zero extents reach presenter resize unchanged.
+
+Each redraw consumes and executes one platform/shell batch before one public
+present call. A production-used settlement driver then rolls transient input
+and shell responses exactly once before scheduling, one explicit recovery
+attempt, or fatal exit. Presenter retry guidance is suppressed for the three
+recovery-required statuses; completed recovery adds one next frame, while
+detached, zero-sized, deferred, ordinary, and unknown outcomes fail closed
+without an invented retry.
+
+The existing lower-level render-once implementation moved into private
+`offscreen.rs`. Its production entry constructs the real two-operation driver,
+which renders to a texture before GPU readback and short-circuits before
+readback on render failure. Dimensions, fractional-DPI Vello submission,
+MSAA16, straight-sRGB base color, texture/readback format, row alignment, and
+BMP output remain unchanged; no reusable offscreen presenter was introduced.
+
+#### Tests run and results
+
+- `cargo fmt --all -- --check` passed.
+- `cargo clippy -p kinetik-ui-showcase --all-targets --all-features -- -D warnings`
+  passed with no warnings.
+- `cargo test -p kinetik-ui-showcase --all-features` passed: 132 library tests,
+  28 binary tests, and 0 documentation tests failed. The binary set includes
+  all seven frozen live settlement/lifecycle/configuration tests, both frozen
+  offscreen driver tests, retained CLI/page tests, and retained fractional-DPI
+  scene evidence.
+- The frozen clean-candidate verifier, six workspace gates, exact-candidate
+  critics, and remote CI remain control-plane gates and are not claimed here.
+
+#### Remaining risks and deferred findings
+
+`REND-04` still owns native texture registration, resolution precedence,
+straight-sRGB/straight-alpha composition evidence, generation invalidation,
+and the no-readback proof. Vello atlas-copy bandwidth and duplicate GPU memory
+remain unmeasured. Zero-copy, arbitrary texture views, foreign/shared-device
+import, HDR/wide-gamut/ICC handling, reusable offscreen presentation, general
+multi-window coordination, additional backends, and transparent production
+recovery remain deferred. The pre-existing root-lock `swash 0.2.8` warning
+remains a Stage 7 release risk.
+
+Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**. This packet does not declare alpha readiness, create a tag, publish packages, deploy, or release.
+
 ## Packet Completion Template
 
 Every packet review must use these exact headings and include commands plus concrete results:

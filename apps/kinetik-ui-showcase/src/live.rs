@@ -1,22 +1,23 @@
-use std::{fmt, sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
+use kinetik_ui::vello_winit::wgpu::PresentMode;
 use kinetik_ui::{
-    core::{FrameOutput, RepaintRequest, ViewportInfo},
+    core::{Color, RepaintRequest},
     platform_winit::{
         NativeWinitShellServices, WinitFrameClock, WinitInputAdapter, WinitPlatformRequests,
         WinitRepaintSchedule, WinitRepaintScheduler, WinitShellFailure, WinitShellOutcome,
         frame_context_from_winit, scale_factor_from_winit,
     },
-    render::{RenderFrameInput, RenderResources},
-    render_vello::VelloRenderer,
+    render::RenderFrameInput,
+    vello_winit::{
+        AaConfig, VelloPresentStatus, VelloPresenterConfig, VelloPresenterError,
+        VelloRecoveryOutcome, VelloRedrawGuidance, VelloWindowPresenter,
+    },
 };
 use kinetik_ui_showcase::app::{ShowcaseApp, ShowcasePage};
-use vello::{
-    AaConfig, RenderParams, Renderer, RendererOptions,
-    peniko::Color as VelloColor,
-    util::{RenderContext, RenderSurface},
-    wgpu::{CommandEncoderDescriptor, CurrentSurfaceTexture, PresentMode, TextureViewDescriptor},
-};
 use winit::{
     application::ApplicationHandler,
     dpi::{LogicalSize, PhysicalSize},
@@ -28,10 +29,8 @@ use winit::{
 
 const DEFAULT_WIDTH: f64 = 1440.0;
 const DEFAULT_HEIGHT: f64 = 900.0;
-const MIN_WIDTH: u32 = 1;
-const MIN_HEIGHT: u32 = 1;
 
-pub(crate) fn run(page: Option<ShowcasePage>) -> Result<(), winit::error::EventLoopError> {
+pub(crate) fn run(page: Option<ShowcasePage>) -> Result<(), Box<dyn std::error::Error>> {
     let mut event_loop_builder = EventLoop::builder();
     #[cfg(target_os = "windows")]
     {
@@ -39,8 +38,9 @@ pub(crate) fn run(page: Option<ShowcasePage>) -> Result<(), winit::error::EventL
         event_loop_builder.with_dpi_aware(true);
     }
     let event_loop = event_loop_builder.build()?;
-    let mut app = LiveShowcase::new(page);
-    event_loop.run_app(&mut app)
+    let mut app = LiveShowcase::new(page)?;
+    event_loop.run_app(&mut app)?;
+    Ok(())
 }
 
 struct LiveShowcase {
@@ -51,15 +51,16 @@ struct LiveShowcase {
     started: Instant,
     modifiers: ModifiersState,
     window: Option<Arc<Window>>,
-    renderer: Option<LiveVelloRenderer>,
+    presenter: VelloWindowPresenter,
     accepting_input: bool,
     repaint: WinitRepaintScheduler,
     shell: NativeWinitShellServices,
 }
 
 impl LiveShowcase {
-    fn new(page: Option<ShowcasePage>) -> Self {
-        Self {
+    fn new(page: Option<ShowcasePage>) -> Result<Self, VelloPresenterError> {
+        let presenter = VelloWindowPresenter::new(live_presenter_config()?)?;
+        Ok(Self {
             app: ShowcaseApp::new(),
             page,
             input: WinitInputAdapter::default(),
@@ -67,11 +68,11 @@ impl LiveShowcase {
             started: Instant::now(),
             modifiers: ModifiersState::empty(),
             window: None,
-            renderer: None,
+            presenter,
             accepting_input: false,
             repaint: WinitRepaintScheduler::new(),
             shell: NativeWinitShellServices::new(),
-        }
+        })
     }
 
     fn request_redraw(&self) {
@@ -91,10 +92,9 @@ impl LiveShowcase {
         self.request_immediate_redraw();
     }
 
-    fn resize_renderer(&mut self, size: PhysicalSize<u32>) {
-        if let Some(renderer) = self.renderer.as_mut() {
-            renderer.resize(sanitize_physical_size(size));
-        }
+    fn resize_presenter(&mut self, size: PhysicalSize<u32>) -> Result<(), VelloPresenterError> {
+        let _ = self.presenter.resize(raw_presenter_size(size))?;
+        Ok(())
     }
 
     fn reset_resume_input_state(&mut self) {
@@ -113,7 +113,7 @@ impl LiveShowcase {
         let Some(window) = self.window.clone() else {
             return;
         };
-        let size = sanitize_physical_size(window.inner_size());
+        let size = window.inner_size();
         let scale_factor = window.scale_factor();
         let time = self.clock.tick(self.started.elapsed());
         let input = self.frame_input_snapshot(scale_factor);
@@ -121,65 +121,77 @@ impl LiveShowcase {
         let viewport = context.viewport;
 
         self.app.update_with_context(context);
-        let resources = self.app.render_resources();
         let requests = WinitPlatformRequests::from_frame_output(self.app.output());
         let applied = requests.apply_to_window(&window);
-        let (shell_requests, frame_repaint) = applied.into_parts();
+        let (shell_requests, application_repaint) = applied.into_parts();
         let shell_outcome = shell_requests.execute(&mut self.shell);
         let has_shell_input = shell_outcome.has_input_response();
 
-        window.pre_present_notify();
-        let retry_surface_redraw = if let Some(renderer) = self.renderer.as_mut() {
-            renderer.resize(size);
-            match renderer.render(self.app.output(), resources, viewport) {
-                Ok(()) => false,
-                Err(LiveRenderError::Surface(status)) => {
-                    handle_surface_status(status, renderer, size);
-                    surface_status_requests_redraw(status)
+        let present_result = {
+            let resources = self.app.render_resources();
+            self.presenter.present(RenderFrameInput {
+                viewport,
+                primitives: &self.app.output().primitives,
+                resources,
+            })
+        };
+        let decision = match present_result {
+            Ok(report) => {
+                if let Some(output) = report.frame_output()
+                    && !output.diagnostics.is_empty()
+                {
+                    eprintln!("showcase renderer diagnostics: {:?}", output.diagnostics);
                 }
-                Err(error) => {
-                    eprintln!("showcase render error: {error}");
-                    event_loop.exit();
-                    false
+                if present_status_requires_recovery(report.status()) {
+                    SettlementDecision::Recover
+                } else {
+                    SettlementDecision::Schedule(application_repaint.merge(
+                        repaint_for_presenter_guidance(report.status(), report.redraw()),
+                    ))
                 }
             }
-        } else {
-            eprintln!("showcase render error: renderer unavailable");
-            event_loop.exit();
-            false
+            Err(error) => {
+                eprintln!("showcase presenter error: {error}");
+                SettlementDecision::Exit
+            }
         };
 
-        let failures = roll_platform_frame(&mut self.input, shell_outcome);
-        for failure in failures {
-            eprintln!("showcase shell error: {failure}");
-        }
-        self.accepting_input = true;
-
-        let repaint = if retry_surface_redraw {
-            frame_repaint.merge(RepaintRequest::NextFrame)
-        } else {
-            frame_repaint
+        let mut settlement = LiveFrameSettlement {
+            input: &mut self.input,
+            shell_outcome,
+            presenter: &mut self.presenter,
+            repaint: &mut self.repaint,
+            event_loop,
+            window: &window,
+            accepting_input: &mut self.accepting_input,
+            application_repaint,
+            has_shell_input,
+            now: Instant::now(),
         };
-        self.repaint
-            .replace_frame_request(repaint, has_shell_input, Instant::now());
-        drive_repaint_scheduler(&mut self.repaint, event_loop, &window, Instant::now());
+        settle_live_frame(&mut settlement, decision);
     }
 }
 
 impl ApplicationHandler for LiveShowcase {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.reset_resume_input_state();
-        let attributes = Window::default_attributes()
-            .with_title("Kinetik Forge - Kinetik UI")
-            .with_inner_size(LogicalSize::new(DEFAULT_WIDTH, DEFAULT_HEIGHT))
-            .with_min_inner_size(LogicalSize::new(720.0, 480.0));
-        let window = match event_loop.create_window(attributes) {
-            Ok(window) => Arc::new(window),
-            Err(error) => {
-                eprintln!("failed to create showcase window: {error}");
-                event_loop.exit();
-                return;
-            }
+        let window = if let Some(window) = self.window.clone() {
+            window
+        } else {
+            self.reset_resume_input_state();
+            let attributes = Window::default_attributes()
+                .with_title("Kinetik Forge - Kinetik UI")
+                .with_inner_size(LogicalSize::new(DEFAULT_WIDTH, DEFAULT_HEIGHT))
+                .with_min_inner_size(LogicalSize::new(720.0, 480.0));
+            let window = match event_loop.create_window(attributes) {
+                Ok(window) => Arc::new(window),
+                Err(error) => {
+                    eprintln!("failed to create showcase window: {error}");
+                    event_loop.exit();
+                    return;
+                }
+            };
+            self.window = Some(Arc::clone(&window));
+            window
         };
 
         if let Some(page) = self.page.take() {
@@ -187,19 +199,18 @@ impl ApplicationHandler for LiveShowcase {
         }
         self.input
             .set_scale_factor(scale_factor_from_winit(window.scale_factor()));
-        let size = sanitize_physical_size(window.inner_size());
-        let renderer = match pollster::block_on(LiveVelloRenderer::new(Arc::clone(&window), size)) {
-            Ok(renderer) => renderer,
-            Err(error) => {
-                eprintln!("failed to initialize Vello renderer: {error}");
-                event_loop.exit();
-                return;
-            }
-        };
-
-        self.renderer = Some(renderer);
-        self.window = Some(window);
+        if let Err(error) = pollster::block_on(self.presenter.resume(Arc::clone(&window))) {
+            eprintln!("failed to resume Vello presenter: {error}");
+            event_loop.exit();
+            return;
+        }
         self.request_redraw();
+    }
+
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        let _ = self.presenter.suspend();
+        self.window = None;
+        self.reset_resume_input_state();
     }
 
     fn window_event(
@@ -208,11 +219,7 @@ impl ApplicationHandler for LiveShowcase {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        if self
-            .window
-            .as_ref()
-            .is_some_and(|window| window.id() != window_id)
-        {
+        if !self.presenter.accepts_window(window_id) {
             return;
         }
 
@@ -223,7 +230,11 @@ impl ApplicationHandler for LiveShowcase {
                 self.request_interactive_redraw();
             }
             WindowEvent::Resized(size) => {
-                self.resize_renderer(size);
+                if let Err(error) = self.resize_presenter(size) {
+                    eprintln!("showcase presenter resize error: {error}");
+                    event_loop.exit();
+                    return;
+                }
                 self.request_interactive_redraw();
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
@@ -280,205 +291,149 @@ impl ApplicationHandler for LiveShowcase {
     }
 }
 
-struct LiveVelloRenderer {
-    context: RenderContext,
-    surface: RenderSurface<'static>,
-    toolkit: VelloRenderer,
-    renderer: Renderer,
+trait LiveFrameSettlementOperations {
+    fn roll_platform_frame(&mut self);
+    fn recover(&mut self) -> Result<RepaintRequest, ()>;
+    fn schedule(&mut self, repaint: RepaintRequest);
+    fn exit(&mut self);
 }
 
-impl LiveVelloRenderer {
-    async fn new(window: Arc<Window>, size: PhysicalSize<u32>) -> Result<Self, vello::Error> {
-        let size = sanitize_physical_size(size);
-        let mut context = RenderContext::new();
-        let surface = context
-            .create_surface(window, size.width, size.height, live_present_mode())
-            .await?;
-        let device = &context.devices[surface.dev_id].device;
-        let renderer = Renderer::new(device, RendererOptions::default())?;
-        Ok(Self {
-            context,
-            surface,
-            toolkit: VelloRenderer::new(),
-            renderer,
-        })
-    }
-
-    fn resize(&mut self, size: PhysicalSize<u32>) {
-        self.resize_surface(size, SurfaceResizeMode::IfChanged);
-    }
-
-    fn reconfigure(&mut self, size: PhysicalSize<u32>) {
-        self.resize_surface(size, SurfaceResizeMode::Force);
-    }
-
-    fn resize_surface(&mut self, size: PhysicalSize<u32>, mode: SurfaceResizeMode) {
-        let size = sanitize_physical_size(size);
-        let current = PhysicalSize::new(self.surface.config.width, self.surface.config.height);
-        if !surface_resize_required(current, size, mode) {
-            return;
-        }
-        self.context
-            .resize_surface(&mut self.surface, size.width, size.height);
-    }
-
-    fn render(
-        &mut self,
-        frame: &FrameOutput,
-        resources: &RenderResources,
-        viewport: ViewportInfo,
-    ) -> Result<(), LiveRenderError> {
-        self.resize(PhysicalSize::new(
-            viewport.physical_size.width,
-            viewport.physical_size.height,
-        ));
-        let output = self.toolkit.submit_frame(RenderFrameInput {
-            viewport,
-            primitives: &frame.primitives,
-            resources,
-        });
-        if !output.diagnostics.is_empty() {
-            eprintln!("showcase renderer diagnostics: {:?}", output.diagnostics);
-        }
-
-        let device_handle = &self.context.devices[self.surface.dev_id];
-        let surface_extent =
-            PhysicalSize::new(self.surface.config.width, self.surface.config.height);
-        if !viewport_surface_extents_match(viewport, surface_extent) {
-            eprintln!(
-                "showcase surface extent drift: viewport={}x{} surface={}x{}",
-                viewport.physical_size.width,
-                viewport.physical_size.height,
-                surface_extent.width,
-                surface_extent.height
-            );
-            return Err(LiveRenderError::Surface(SurfaceStatus::Outdated));
-        }
-        let width = surface_extent.width;
-        let height = surface_extent.height;
-        self.renderer.render_to_texture(
-            &device_handle.device,
-            &device_handle.queue,
-            self.toolkit.scene(),
-            &self.surface.target_view,
-            &RenderParams {
-                base_color: VelloColor::from_rgb8(11, 12, 13),
-                width,
-                height,
-                antialiasing_method: live_antialiasing_method(),
-            },
-        )?;
-
-        let mut surface_is_suboptimal = false;
-        let surface_texture = match self.surface.surface.get_current_texture() {
-            CurrentSurfaceTexture::Success(texture) => texture,
-            CurrentSurfaceTexture::Suboptimal(texture) => {
-                surface_is_suboptimal = true;
-                texture
-            }
-            CurrentSurfaceTexture::Timeout => {
-                return Err(LiveRenderError::Surface(SurfaceStatus::Timeout));
-            }
-            CurrentSurfaceTexture::Occluded => {
-                return Err(LiveRenderError::Surface(SurfaceStatus::Occluded));
-            }
-            CurrentSurfaceTexture::Outdated => {
-                return Err(LiveRenderError::Surface(SurfaceStatus::Outdated));
-            }
-            CurrentSurfaceTexture::Lost => {
-                return Err(LiveRenderError::Surface(SurfaceStatus::Lost));
-            }
-            CurrentSurfaceTexture::Validation => {
-                return Err(LiveRenderError::Surface(SurfaceStatus::Validation));
-            }
-        };
-
-        if !blit_extents_match(
-            PhysicalSize::new(width, height),
-            PhysicalSize::new(
-                surface_texture.texture.width(),
-                surface_texture.texture.height(),
-            ),
-        ) {
-            return Err(LiveRenderError::Surface(SurfaceStatus::Outdated));
-        }
-
-        let view = surface_texture
-            .texture
-            .create_view(&TextureViewDescriptor::default());
-        let mut encoder = device_handle
-            .device
-            .create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("kinetik-ui-showcase-blit"),
-            });
-        self.surface.blitter.copy(
-            &device_handle.device,
-            &mut encoder,
-            &self.surface.target_view,
-            &view,
-        );
-        device_handle.queue.submit([encoder.finish()]);
-        surface_texture.present();
-        if surface_is_suboptimal {
-            return Err(LiveRenderError::Surface(SurfaceStatus::Outdated));
-        }
-        Ok(())
-    }
+struct LiveFrameSettlement<'a> {
+    input: &'a mut WinitInputAdapter,
+    shell_outcome: WinitShellOutcome,
+    presenter: &'a mut VelloWindowPresenter,
+    repaint: &'a mut WinitRepaintScheduler,
+    event_loop: &'a ActiveEventLoop,
+    window: &'a Window,
+    accepting_input: &'a mut bool,
+    application_repaint: RepaintRequest,
+    has_shell_input: bool,
+    now: Instant,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum SurfaceStatus {
-    Timeout,
-    Occluded,
-    Outdated,
-    Lost,
-    Validation,
-}
+impl LiveFrameSettlementOperations for LiveFrameSettlement<'_> {
+    fn roll_platform_frame(&mut self) {
+        let outcome = std::mem::take(&mut self.shell_outcome);
+        let failures = roll_platform_frame(self.input, outcome);
+        for failure in failures {
+            eprintln!("showcase shell error: {failure}");
+        }
+        *self.accepting_input = true;
+    }
 
-#[derive(Debug)]
-enum LiveRenderError {
-    Render(vello::Error),
-    Surface(SurfaceStatus),
-}
-
-impl fmt::Display for LiveRenderError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Render(error) => write!(formatter, "{error}"),
-            Self::Surface(status) => write!(formatter, "surface status: {status:?}"),
+    fn recover(&mut self) -> Result<RepaintRequest, ()> {
+        match pollster::block_on(self.presenter.recover()) {
+            Ok(outcome) => Ok(self
+                .application_repaint
+                .merge(repaint_for_recovery_disposition(recovery_disposition(
+                    &outcome,
+                )))),
+            Err(error) => {
+                eprintln!("showcase presenter recovery error: {error}");
+                Err(())
+            }
         }
     }
-}
 
-impl std::error::Error for LiveRenderError {}
+    fn schedule(&mut self, repaint: RepaintRequest) {
+        self.repaint
+            .replace_frame_request(repaint, self.has_shell_input, self.now);
+        drive_repaint_scheduler(self.repaint, self.event_loop, self.window, Instant::now());
+    }
 
-impl From<vello::Error> for LiveRenderError {
-    fn from(error: vello::Error) -> Self {
-        Self::Render(error)
+    fn exit(&mut self) {
+        self.event_loop.exit();
     }
 }
 
-fn handle_surface_status(
-    status: SurfaceStatus,
-    renderer: &mut LiveVelloRenderer,
-    size: PhysicalSize<u32>,
-) {
-    if surface_status_forces_reconfigure(status) {
-        renderer.reconfigure(size);
-    }
-    if matches!(status, SurfaceStatus::Validation) {
-        eprintln!("surface validation error while acquiring the next frame");
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SettlementDecision {
+    Schedule(RepaintRequest),
+    Recover,
+    Exit,
+}
+
+fn settle_live_frame<Operations>(operations: &mut Operations, decision: SettlementDecision)
+where
+    Operations: LiveFrameSettlementOperations,
+{
+    operations.roll_platform_frame();
+    match decision {
+        SettlementDecision::Schedule(repaint) => operations.schedule(repaint),
+        SettlementDecision::Recover => match operations.recover() {
+            Ok(repaint) => operations.schedule(repaint),
+            Err(()) => operations.exit(),
+        },
+        SettlementDecision::Exit => operations.exit(),
     }
 }
 
-fn surface_status_requests_redraw(status: SurfaceStatus) -> bool {
+#[allow(clippy::match_like_matches_macro)]
+fn present_status_requires_recovery(status: VelloPresentStatus) -> bool {
     match status {
-        SurfaceStatus::Timeout
-        | SurfaceStatus::Outdated
-        | SurfaceStatus::Lost
-        | SurfaceStatus::Validation => true,
-        SurfaceStatus::Occluded => false,
+        VelloPresentStatus::SurfaceLost
+        | VelloPresentStatus::SurfaceRecoveryRequired
+        | VelloPresentStatus::DeviceRecoveryRequired => true,
+        _ => false,
     }
+}
+
+#[allow(clippy::match_same_arms)]
+fn repaint_for_presenter_guidance(
+    status: VelloPresentStatus,
+    guidance: VelloRedrawGuidance,
+) -> RepaintRequest {
+    if present_status_requires_recovery(status) {
+        return RepaintRequest::None;
+    }
+    match guidance {
+        VelloRedrawGuidance::UseApplicationRequest
+        | VelloRedrawGuidance::ExternalEvent
+        | VelloRedrawGuidance::NonZeroResize
+        | VelloRedrawGuidance::None => RepaintRequest::None,
+        VelloRedrawGuidance::NextFrame => RepaintRequest::NextFrame,
+        VelloRedrawGuidance::Later(delay) => RepaintRequest::After(delay),
+        _ => RepaintRequest::None,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RecoveryDisposition {
+    Completed,
+    Deferred,
+}
+
+#[allow(clippy::match_same_arms)]
+fn recovery_disposition(outcome: &VelloRecoveryOutcome) -> RecoveryDisposition {
+    match outcome {
+        VelloRecoveryOutcome::SurfaceReady { .. } | VelloRecoveryOutcome::DeviceRebuilt { .. } => {
+            RecoveryDisposition::Completed
+        }
+        VelloRecoveryOutcome::NotNeeded
+        | VelloRecoveryOutcome::DeferredDetached(_)
+        | VelloRecoveryOutcome::DeferredZeroSized(_) => RecoveryDisposition::Deferred,
+        _ => RecoveryDisposition::Deferred,
+    }
+}
+
+fn repaint_for_recovery_disposition(disposition: RecoveryDisposition) -> RepaintRequest {
+    match disposition {
+        RecoveryDisposition::Completed => RepaintRequest::NextFrame,
+        RecoveryDisposition::Deferred => RepaintRequest::None,
+    }
+}
+
+fn live_presenter_config() -> Result<VelloPresenterConfig, VelloPresenterError> {
+    let config = VelloPresenterConfig::new()
+        .with_present_mode(PresentMode::AutoNoVsync)?
+        .with_antialiasing_method(AaConfig::Msaa16)
+        .with_base_color(Color::rgb(11.0 / 255.0, 12.0 / 255.0, 13.0 / 255.0))?
+        .with_timeout_retry(Duration::from_millis(16))?;
+    Ok(config)
+}
+
+fn raw_presenter_size(size: PhysicalSize<u32>) -> PhysicalSize<u32> {
+    size
 }
 
 fn drive_repaint_scheduler(
@@ -515,70 +470,269 @@ fn immediate_redraw_control_flow() -> ControlFlow {
     ControlFlow::Poll
 }
 
-fn sanitize_physical_size(size: PhysicalSize<u32>) -> PhysicalSize<u32> {
-    PhysicalSize::new(size.width.max(MIN_WIDTH), size.height.max(MIN_HEIGHT))
-}
-
-fn blit_extents_match(target: PhysicalSize<u32>, surface: PhysicalSize<u32>) -> bool {
-    target.width == surface.width && target.height == surface.height
-}
-
-fn viewport_surface_extents_match(viewport: ViewportInfo, surface: PhysicalSize<u32>) -> bool {
-    let expected = sanitize_physical_size(PhysicalSize::new(
-        viewport.physical_size.width,
-        viewport.physical_size.height,
-    ));
-    blit_extents_match(expected, surface)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SurfaceResizeMode {
-    IfChanged,
-    Force,
-}
-
-fn surface_resize_required(
-    current: PhysicalSize<u32>,
-    requested: PhysicalSize<u32>,
-    mode: SurfaceResizeMode,
-) -> bool {
-    mode == SurfaceResizeMode::Force
-        || current.width != requested.width
-        || current.height != requested.height
-}
-
-fn surface_status_forces_reconfigure(status: SurfaceStatus) -> bool {
-    matches!(status, SurfaceStatus::Outdated | SurfaceStatus::Lost)
-}
-
-pub(crate) fn live_antialiasing_method() -> AaConfig {
-    crate::showcase_antialiasing_method()
-}
-
-fn live_present_mode() -> PresentMode {
-    PresentMode::AutoNoVsync
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        LiveShowcase, PresentMode, SurfaceResizeMode, SurfaceStatus, blit_extents_match,
-        control_flow_for_repaint_schedule, immediate_redraw_control_flow, live_antialiasing_method,
-        live_present_mode, roll_platform_frame, surface_resize_required,
-        surface_status_forces_reconfigure, surface_status_requests_redraw,
-        viewport_surface_extents_match,
+        LiveFrameSettlementOperations, LiveShowcase, RecoveryDisposition, SettlementDecision,
+        control_flow_for_repaint_schedule, immediate_redraw_control_flow,
+        present_status_requires_recovery, raw_presenter_size, recovery_disposition,
+        repaint_for_presenter_guidance, repaint_for_recovery_disposition, roll_platform_frame,
+        settle_live_frame,
     };
+    use kinetik_ui::vello_winit::wgpu::PresentMode;
     use kinetik_ui::{
-        core::{ClipboardText, ScaleFactor, Size, UiInputEvent, ViewportInfo, WidgetId},
+        core::{ClipboardText, Color, RepaintRequest, UiInputEvent, WidgetId},
         platform_winit::{
             WinitInputAdapter, WinitRepaintSchedule, WinitShellOutcome, WinitShellResult,
         },
+        vello_winit::{
+            AaConfig, VelloAttachmentStatus, VelloPresentStatus, VelloRecoveryKind,
+            VelloRecoveryOutcome, VelloRedrawGuidance,
+        },
     };
-    use std::time::Instant;
-    use vello::AaConfig;
+    use std::time::{Duration, Instant};
     use winit::dpi::PhysicalSize;
     use winit::event::{ElementState, MouseButton as WinitMouseButton};
     use winit::event_loop::ControlFlow;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum SettlementTrace {
+        Present,
+        RollPlatformFrame,
+        Recover,
+        Schedule,
+        Exit,
+    }
+
+    struct RecordingSettlementOperations {
+        trace: Vec<SettlementTrace>,
+        recovery_result: Option<Result<RepaintRequest, ()>>,
+    }
+
+    impl LiveFrameSettlementOperations for RecordingSettlementOperations {
+        fn roll_platform_frame(&mut self) {
+            self.trace.push(SettlementTrace::RollPlatformFrame);
+        }
+
+        fn recover(&mut self) -> Result<RepaintRequest, ()> {
+            self.trace.push(SettlementTrace::Recover);
+            self.recovery_result.take().unwrap_or(Err(()))
+        }
+
+        fn schedule(&mut self, _repaint: RepaintRequest) {
+            self.trace.push(SettlementTrace::Schedule);
+        }
+
+        fn exit(&mut self) {
+            self.trace.push(SettlementTrace::Exit);
+        }
+    }
+
+    fn record_settlement(
+        decision: SettlementDecision,
+        recovery_result: Result<RepaintRequest, ()>,
+    ) -> Vec<SettlementTrace> {
+        let mut recorder = RecordingSettlementOperations {
+            trace: Vec::new(),
+            recovery_result: Some(recovery_result),
+        };
+        recorder.trace.push(SettlementTrace::Present);
+        settle_live_frame(&mut recorder, decision);
+        recorder.trace
+    }
+
+    #[test]
+    fn live_showcase_starts_with_public_detached_presenter() {
+        let app = LiveShowcase::new(None).expect("detached presenter");
+        let config = app.presenter.config();
+
+        assert!(app.window.is_none());
+        assert_eq!(
+            app.presenter.status().attachment(),
+            VelloAttachmentStatus::Detached
+        );
+        assert_eq!(config.present_mode(), PresentMode::AutoNoVsync);
+        assert_eq!(config.antialiasing_method(), AaConfig::Msaa16);
+        assert_eq!(
+            config.base_color(),
+            Color::rgb(11.0 / 255.0, 12.0 / 255.0, 13.0 / 255.0)
+        );
+        assert_eq!(config.timeout_retry(), Duration::from_millis(16));
+    }
+
+    #[test]
+    fn presenter_guidance_maps_into_application_repaint_policy() {
+        let status = VelloPresentStatus::Presented;
+        let delay = Duration::from_millis(16);
+
+        assert_eq!(
+            repaint_for_presenter_guidance(status, VelloRedrawGuidance::UseApplicationRequest),
+            RepaintRequest::None
+        );
+        assert_eq!(
+            repaint_for_presenter_guidance(status, VelloRedrawGuidance::ExternalEvent),
+            RepaintRequest::None
+        );
+        assert_eq!(
+            repaint_for_presenter_guidance(status, VelloRedrawGuidance::NonZeroResize),
+            RepaintRequest::None
+        );
+        assert_eq!(
+            repaint_for_presenter_guidance(status, VelloRedrawGuidance::None),
+            RepaintRequest::None
+        );
+        assert_eq!(
+            repaint_for_presenter_guidance(status, VelloRedrawGuidance::NextFrame),
+            RepaintRequest::NextFrame
+        );
+        assert_eq!(
+            repaint_for_presenter_guidance(status, VelloRedrawGuidance::Later(delay)),
+            RepaintRequest::After(delay)
+        );
+        assert_eq!(
+            repaint_for_presenter_guidance(
+                VelloPresentStatus::SurfaceLost,
+                VelloRedrawGuidance::NextFrame
+            ),
+            RepaintRequest::None
+        );
+        let timeout = repaint_for_presenter_guidance(
+            VelloPresentStatus::Timeout,
+            VelloRedrawGuidance::Later(delay),
+        );
+        assert_eq!(
+            RepaintRequest::None.merge(timeout),
+            RepaintRequest::After(delay)
+        );
+        assert_eq!(
+            RepaintRequest::After(Duration::from_millis(32)).merge(timeout),
+            RepaintRequest::After(delay)
+        );
+        assert_eq!(
+            RepaintRequest::NextFrame.merge(timeout),
+            RepaintRequest::NextFrame
+        );
+        assert_eq!(
+            RepaintRequest::Continuous.merge(timeout),
+            RepaintRequest::Continuous
+        );
+    }
+
+    #[test]
+    fn only_recovery_required_statuses_request_recovery() {
+        assert!(present_status_requires_recovery(
+            VelloPresentStatus::SurfaceLost
+        ));
+        assert!(present_status_requires_recovery(
+            VelloPresentStatus::SurfaceRecoveryRequired
+        ));
+        assert!(present_status_requires_recovery(
+            VelloPresentStatus::DeviceRecoveryRequired
+        ));
+        for status in [
+            VelloPresentStatus::Presented,
+            VelloPresentStatus::PresentedSuboptimal,
+            VelloPresentStatus::FrameExtentOutdated,
+            VelloPresentStatus::AcquiredExtentOutdated,
+            VelloPresentStatus::Timeout,
+            VelloPresentStatus::Occluded,
+            VelloPresentStatus::Outdated,
+            VelloPresentStatus::Detached,
+            VelloPresentStatus::ZeroSized,
+        ] {
+            assert!(!present_status_requires_recovery(status));
+        }
+    }
+
+    #[test]
+    fn presenter_outcomes_roll_shell_once_before_recovery_or_exit() {
+        assert_eq!(
+            record_settlement(
+                SettlementDecision::Schedule(RepaintRequest::None),
+                Ok(RepaintRequest::None)
+            ),
+            vec![
+                SettlementTrace::Present,
+                SettlementTrace::RollPlatformFrame,
+                SettlementTrace::Schedule
+            ]
+        );
+        assert_eq!(
+            record_settlement(SettlementDecision::Recover, Ok(RepaintRequest::NextFrame)),
+            vec![
+                SettlementTrace::Present,
+                SettlementTrace::RollPlatformFrame,
+                SettlementTrace::Recover,
+                SettlementTrace::Schedule
+            ]
+        );
+        assert_eq!(
+            record_settlement(SettlementDecision::Recover, Err(())),
+            vec![
+                SettlementTrace::Present,
+                SettlementTrace::RollPlatformFrame,
+                SettlementTrace::Recover,
+                SettlementTrace::Exit
+            ]
+        );
+        assert_eq!(
+            record_settlement(SettlementDecision::Exit, Ok(RepaintRequest::None)),
+            vec![
+                SettlementTrace::Present,
+                SettlementTrace::RollPlatformFrame,
+                SettlementTrace::Exit
+            ]
+        );
+    }
+
+    #[test]
+    fn recovery_outcomes_fail_closed_without_busy_retry() {
+        assert_eq!(
+            repaint_for_recovery_disposition(RecoveryDisposition::Completed),
+            RepaintRequest::NextFrame
+        );
+        assert_eq!(
+            repaint_for_recovery_disposition(RecoveryDisposition::Deferred),
+            RepaintRequest::None
+        );
+        for outcome in [
+            VelloRecoveryOutcome::NotNeeded,
+            VelloRecoveryOutcome::DeferredDetached(VelloRecoveryKind::CreateSurface),
+            VelloRecoveryOutcome::DeferredZeroSized(VelloRecoveryKind::RebuildDevice),
+        ] {
+            assert_eq!(
+                recovery_disposition(&outcome),
+                RecoveryDisposition::Deferred
+            );
+            assert_eq!(
+                repaint_for_recovery_disposition(recovery_disposition(&outcome)),
+                RepaintRequest::None
+            );
+        }
+    }
+
+    #[test]
+    fn raw_zero_size_is_not_sanitized() {
+        let zero = PhysicalSize::new(0, 0);
+
+        assert_eq!(raw_presenter_size(zero), zero);
+    }
+
+    #[test]
+    fn suspend_clears_transient_input_authority() {
+        let mut app = LiveShowcase::new(None).expect("detached presenter");
+        app.input.set_window_focused(true);
+        app.input
+            .mouse_button(WinitMouseButton::Left, ElementState::Pressed, 1);
+        app.accepting_input = true;
+
+        app.reset_resume_input_state();
+
+        assert!(!app.input.input().window_focused);
+        assert!(!app.input.input().pointer.primary.pressed);
+        assert!(!app.input.input().pointer.primary.down);
+        assert!(!app.accepting_input);
+    }
 
     #[test]
     fn repaint_schedules_map_to_event_loop_control_flow() {
@@ -604,94 +758,8 @@ mod tests {
     }
 
     #[test]
-    fn blit_extents_must_match_target_and_surface() {
-        assert!(blit_extents_match(
-            PhysicalSize::new(800, 600),
-            PhysicalSize::new(800, 600),
-        ));
-        assert!(!blit_extents_match(
-            PhysicalSize::new(800, 600),
-            PhysicalSize::new(801, 600),
-        ));
-        assert!(!blit_extents_match(
-            PhysicalSize::new(800, 600),
-            PhysicalSize::new(800, 601),
-        ));
-    }
-
-    #[test]
-    fn viewport_surface_extent_drift_is_detected_before_blit() {
-        let viewport = ViewportInfo::new(
-            Size::new(640.0, 360.0),
-            kinetik_ui::core::PhysicalSize::new(960, 540),
-            ScaleFactor::new(1.5),
-        );
-
-        assert!(viewport_surface_extents_match(
-            viewport,
-            PhysicalSize::new(960, 540),
-        ));
-        assert!(!viewport_surface_extents_match(
-            viewport,
-            PhysicalSize::new(959, 540),
-        ));
-    }
-
-    #[test]
-    fn live_renderer_uses_shared_crisp_showcase_antialiasing() {
-        assert_eq!(live_antialiasing_method(), AaConfig::Msaa16);
-        assert_eq!(
-            live_antialiasing_method(),
-            crate::showcase_antialiasing_method()
-        );
-    }
-
-    #[test]
-    fn live_renderer_prefers_low_latency_present_mode() {
-        assert_eq!(live_present_mode(), PresentMode::AutoNoVsync);
-    }
-
-    #[test]
-    fn transient_surface_timeout_requests_another_redraw() {
-        assert!(surface_status_requests_redraw(SurfaceStatus::Timeout));
-        assert!(!surface_status_requests_redraw(SurfaceStatus::Occluded));
-    }
-
-    #[test]
-    fn lost_and_outdated_surfaces_force_reconfiguration() {
-        assert!(surface_status_forces_reconfigure(SurfaceStatus::Lost));
-        assert!(surface_status_forces_reconfigure(SurfaceStatus::Outdated));
-        assert!(!surface_status_forces_reconfigure(SurfaceStatus::Timeout));
-        assert!(!surface_status_forces_reconfigure(SurfaceStatus::Occluded));
-        assert!(!surface_status_forces_reconfigure(
-            SurfaceStatus::Validation
-        ));
-    }
-
-    #[test]
-    fn forced_surface_resize_reconfigures_even_when_size_matches() {
-        let current = PhysicalSize::new(800, 600);
-
-        assert!(!surface_resize_required(
-            current,
-            PhysicalSize::new(800, 600),
-            SurfaceResizeMode::IfChanged,
-        ));
-        assert!(surface_resize_required(
-            current,
-            PhysicalSize::new(801, 600),
-            SurfaceResizeMode::IfChanged,
-        ));
-        assert!(surface_resize_required(
-            current,
-            PhysicalSize::new(800, 600),
-            SurfaceResizeMode::Force,
-        ));
-    }
-
-    #[test]
     fn resume_clears_stale_input_edges_before_new_window_events() {
-        let mut app = LiveShowcase::new(None);
+        let mut app = LiveShowcase::new(None).expect("detached presenter");
         app.input
             .mouse_button(WinitMouseButton::Left, ElementState::Pressed, 1);
 
@@ -704,7 +772,7 @@ mod tests {
 
     #[test]
     fn first_redraw_snapshot_preserves_input_edges_recorded_after_resume() {
-        let mut app = LiveShowcase::new(None);
+        let mut app = LiveShowcase::new(None).expect("detached presenter");
         app.reset_resume_input_state();
         app.input
             .mouse_button(WinitMouseButton::Left, ElementState::Pressed, 1);
@@ -717,7 +785,6 @@ mod tests {
 
     #[test]
     fn recoverable_frame_roll_clears_old_edges_and_preserves_shell_response() {
-        assert!(surface_status_requests_redraw(SurfaceStatus::Timeout));
         let target = WidgetId::from_key("field");
         let mut input = WinitInputAdapter::default();
         input.mouse_button(WinitMouseButton::Left, ElementState::Pressed, 1);

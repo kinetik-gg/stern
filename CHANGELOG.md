@@ -14,8 +14,10 @@ published, or accepted as an alpha release.
   qualified facade feature, exact one-window acquire/render/blit/notify/present
   policy, zero-size handling, generation-scoped device borrowing, typed surface
   and device recovery, deterministic lifecycle evidence, and a runnable public
-  example. Showcase adoption and external native textures remain follow-up
-  work; this does not publish or accept an alpha release.
+  example. The Showcase now adopts the public presenter while retaining
+  application-owned input, shell, frame, and repaint work; only `REND-04`
+  external native textures remain as the serialized renderer follow-up. This
+  does not publish or accept an alpha release.
 - Prepared package metadata and dependency constraints for the planned
   prerelease archives.
 - Made Winit platform batches owned and consuming, with ordered shell services,

@@ -4,8 +4,11 @@
 
 Accepted for the alpha implementation contract on 2026-07-12.
 
-This decision closes `REND-ADR-01` only. The presenter and external-texture
-implementations remain `REND-03` and `REND-04`.
+This decision closes `REND-ADR-01`; the reusable presenter and Showcase
+adoption now close integrated `REND-03`. External-texture implementation remains
+`REND-04`.
+
+REND-03 is **Complete / Accepted**; REND-04 is **next**.
 
 ## Context
 
@@ -251,17 +254,16 @@ Alternatives rejected for alpha:
 
 ## Follow-on Verification
 
-`REND-03` implements the concrete presenter and replaces the Showcase-private
-live renderer. It must prove the pure lifecycle/result matrix, zero/non-zero
-resize, redundant suspend/resume, window identity, changed device-slot
-reattach, operation order, failed-acquire short circuit, configuration
-propagation, diagnostics preservation, and a documented runnable one-window
-live example. Its deterministic target tests must also prove that the separate
-offscreen path performs no surface acquire, pre-present notification, or
-presentation.
+`REND-03` is Complete / Accepted through the concrete presenter and public
+Showcase adoption. Its evidence covers the pure lifecycle/result matrix,
+zero/non-zero resize, redundant suspend/resume, window identity, changed
+device-slot reattach, operation order, failed-acquire short circuit,
+configuration propagation, diagnostics preservation, the runnable one-window
+example, and the independent offscreen path's lack of surface acquire,
+pre-present notification, or presentation.
 
-`REND-04` implements the native registry and Vello resolver without changing
-the neutral public structs. It must prove register, replace, dirty/revision,
+`REND-04` is next and implements the native registry and Vello resolver without
+changing the neutral public structs. It must prove register, replace, dirty/revision,
 extent-change re-registration, remove, ID reuse, stale/cross-renderer/scope
 rejection, device-generation invalidation, native/CPU/placeholder precedence,
 valid-native diagnostic suppression, primitive order/clipping/overlays,

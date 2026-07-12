@@ -4,6 +4,8 @@
 
 ## Execution Contract
 
+Campaign status: REND-03 is **Complete / Accepted**; REND-04 is **next**.
+
 | Field | Decision |
 | --- | --- |
 | Status | Complete / Accepted at `1f99111`; all four serial packets merged and the final exact-SHA gates passed |
@@ -97,8 +99,8 @@ appropriate to their owned paths. Event reordering, stale requests, Z2/Z3
 overlap, and shell behavior with no recorded owner would have stopped the
 campaign. Those checks passed; at the Stage 3 gate, the campaign advanced Stage
 4 to Current / Authorized without requiring new approval. Stage 4 subsequently
-passed, and Stage 5 is now Current / Authorized with `REND-ADR-01` accepted and
-`REND-03` next.
+passed, and Stage 5 is now Current / Authorized with `REND-ADR-01` and
+`REND-03` accepted and `REND-04` next.
 
 ## Deferrals
 

@@ -4,9 +4,11 @@
 
 ## Execution Contract
 
+Campaign status: REND-03 is **Complete / Accepted**; REND-04 is **next**.
+
 | Field | Decision |
 | --- | --- |
-| Status | Complete / Accepted; Stages 2-4 subsequently passed and Stage 5 is Current / Authorized with `REND-ADR-01` accepted and `REND-03` next |
+| Status | Complete / Accepted; Stages 2-4 subsequently passed and Stage 5 is Current / Authorized with `REND-ADR-01` and `REND-03` accepted and `REND-04` next |
 | Scope | Capability truth, provisional public boundary, showcase truth, and packageability scaffolding |
 | Impact / confidence | High / High overall; `API-01` is Medium-high confidence |
 | Campaign prerequisite | Stage 0 documentation gate, complete; campaign authorization recorded |
