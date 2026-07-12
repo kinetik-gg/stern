@@ -9,7 +9,7 @@
 | Status | Complete; documentation only; no audit roadmap ID closes here |
 | Impact / confidence | High / High |
 | Dependency | Accepted architecture gate at audited revision `32b45f2` |
-| Token checkpoint | Documentation verification passed; Stages 1-3 subsequently completed and Stage 4 is Current / Authorized |
+| Token checkpoint | Documentation verification passed; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with `REND-ADR-01` next |
 
 ## Scope And Work Items
 
@@ -49,10 +49,10 @@ Only one active task may own a zone unless accepted tasks prove exact disjoint f
 
 ## Acceptance Gate And Verification Expectations
 
-Stage 0 completed only after all ten target documents existed, all 43 unique IDs were represented, index-local links resolved, dependencies and overlap zones matched the accepted plan, and documentation-only checks passed. Stages 1-3 subsequently completed, and Stage 4 is Current / Authorized. A stale path, invented finding, changed alpha scope, or write outside the allowed paths remains a stop condition.
+Stage 0 completed only after all ten target documents existed, all 43 unique IDs were represented, index-local links resolved, dependencies and overlap zones matched the accepted plan, and documentation-only checks passed. Stages 1-4 subsequently completed, and Stage 5 is Current / Authorized with `REND-ADR-01` next. A stale path, invented finding, changed alpha scope, or write outside the allowed paths remains a stop condition.
 
 Verification is limited to Markdown/file/link/ID review, `git diff --check`, targeted search, and targeted status. No source or test gate is claimed.
 
 ## Deferrals
 
-Stage 0 closes documentation only and changes neither the product label from foundation/developer preview nor any implementation finding. Implementation now proceeds under the separate Stage 1-7 campaign authorization.
+Stage 0 closes documentation only and changes neither the product label from foundation/developer preview nor any implementation finding. Implementation now proceeds at Stage 5 under the separate Stage 1-7 campaign authorization.

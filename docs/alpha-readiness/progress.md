@@ -2,13 +2,13 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Stages 0-3 are Complete. Stage 4A, `TEXT-02`, and `TEXT-03` are Complete / Accepted; Stage 4B is Current / Authorized with `REND-02` the current Implementation Candidate. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-4 are Complete; Stage 4 is Complete / Accepted through `REND-02` squash merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`. Stage 5 is Current / Authorized with `REND-ADR-01` next. Stages 6-7 remain Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
 ## Stage 0: Plan And Baseline
 
-Status: Complete. This closed the documentation task only; Stages 1-3 subsequently completed and Stage 4 is Current / Authorized under the recorded campaign authorization.
+Status: Complete. This closed the documentation task only; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with `REND-ADR-01` next under the recorded campaign authorization.
 
 ### Changed files
 
@@ -42,7 +42,10 @@ Status: Complete. This closed the documentation task only; Stages 1-3 subsequent
 
 ### Remaining risks and deferred findings
 
-- Runtime, input, text, presenter, component, quality, and release risks remain unresolved until their authorized packets execute and pass.
+- At the Stage 0 checkpoint, runtime, input, text, presenter, component,
+  quality, and release risks were unresolved. The authorized Stage 1-4 runtime,
+  input, and text portions subsequently passed; presenter, component, quality,
+  and release risks remain Stage 5-7 work.
 - Timeline and node-graph packets remain deferred unless explicitly added to alpha scope.
 - Native accessibility may remain a documented semantic-output-only boundary; floating native windows, broad multi-window behavior, additional renderers, and broader production persistence remain deferred.
 - Packageability must not be interpreted as permission to tag, publish, or claim alpha readiness; pull-request merges follow the separate `squash-after-gates` campaign policy.
@@ -89,7 +92,10 @@ Experimental pending accepted behavioral evidence.
 #### Remaining risks and deferred findings
 
 No production catalogue entry is Stable by design. Promotion remains an
-evidence-backed curation decision, and all later audit packets remained open.
+evidence-backed curation decision. At the `ALPHA-00` checkpoint, all later audit
+packets remained open; the remaining Stage 1 packets and Stages 2-4
+subsequently passed, while Stages 5-7 and final `API-01` curation remain open as
+documented.
 
 ### Provisional `API-01`: alpha surface policy
 
@@ -229,7 +235,8 @@ memory-only; several application operations remain disabled Experimental.
 About owns retained application state and resolves modal input before editor
 controls. A full-viewport guard prevents pointer click-through, app-specific
 paint is emitted last, and open/close produce distinct observable outcomes.
-Documentation remains disabled until shell URL execution exists.
+At this checkpoint, Documentation remained disabled pending shell URL
+execution; `IN-02` subsequently supplied that supported-shell path.
 
 #### Tests run and results
 
@@ -239,9 +246,10 @@ Documentation remains disabled until shell URL execution exists.
 
 #### Remaining risks and deferred findings
 
-Keyboard focus trapping, global-shortcut suppression, dedicated modal/Close
-semantics, and opening documentation remain deferred to overlay, input, and
-accessibility packets.
+At this checkpoint, opening Documentation remained deferred to the input shell
+packet and subsequently passed with `IN-02`. Keyboard focus trapping,
+global-shortcut suppression, and dedicated modal/Close semantics remain
+deferred to overlay and accessibility packets.
 
 ### `SHOW-01D`: per-frame Dock preview tabs
 
@@ -316,7 +324,8 @@ than final output including diagnostics emitted afterward.
 
 Status: Complete / Accepted. `RT-01`, `RT-02`, and `RT-03` passed their bounded
 critics and complete gates. The integrated Stage 2 gate passed at `5cf07b8`;
-Stage 3 subsequently passed and Stage 4 is Current / Authorized.
+Stages 3-4 subsequently passed and Stage 5 is Current / Authorized with
+`REND-ADR-01` next.
 
 ### `RT-01`: scoped coordinates and clipping
 
@@ -448,7 +457,9 @@ repaint contract.
 Separated frame-local widget presence from duplicate-registration accounting.
 Normal IDs and scopes prove both presence and uniqueness, while semantic nodes
 and evaluated text-input helpers can prove presence without manufacturing a
-duplicate warning. Derived IDs and RT-02 pointer plans remain planning-only.
+duplicate warning. At the `RT-03` checkpoint, derived IDs and the already
+accepted `RT-02` pointer plans were treated as planning-only for presence
+accounting.
 At frame finalization, one missing capture, active, pressed, secondary-pressed,
 or drag owner cancels the complete pointer transaction. Missing focus and
 text/IME owners clear through the existing pending-stop path, which emits one
@@ -480,8 +491,9 @@ remain present; their eligibility stays governed by RT-01/RT-02 behavior.
 
 Standalone behavior functions used outside a `Ui` frame cannot participate in
 end-frame reconciliation; framed custom widgets must register their identity.
-Presence deliberately does not define async incarnation, cancellation-token,
-or tombstone policy; those remain `ASYNC-01`. Ordered platform input and shell
+At the `RT-03` checkpoint, presence deliberately did not define async
+incarnation, cancellation-token, or tombstone policy; those responsibilities
+remained `ASYNC-01` and subsequently passed. Ordered platform input and shell
 execution were subsequently completed as Stage 3 work under the continuous
 campaign authorization.
 
@@ -494,6 +506,8 @@ The final Stage 3 matrix was
 [CI run 29140855335](https://github.com/kinetik-gg/kinetik-ui/actions/runs/29140855335);
 PR [#517](https://github.com/kinetik-gg/kinetik-ui/pull/517) passed checks in
 run 29141040177 and produced the accepted merge.
+Stage 4 subsequently passed, and Stage 5 is Current / Authorized with
+`REND-ADR-01` next.
 
 ### `IN-01`: ordered platform input
 
@@ -556,11 +570,13 @@ every root conflict, and the final independent re-review passed with no finding.
 Adding `UiInput.events` is source-breaking for unknown external callers that use
 exhaustive public struct literals; in-repository literals were inventoried and
 migrated, and the facade remains provisional Experimental. Empty-stream legacy
-input cannot recover pointer order. The compatibility `wheel_delta` still mixes
-line and pixel units, and press/drag/click primitives still consume final
-snapshots until `IN-03`. Shell request execution remains `IN-02`. Independent
-critic and the complete local gate are accepted; PR CI and squash merge are not
-yet claimed by this implementation record.
+input cannot recover pointer order. At the `IN-01` checkpoint, the compatibility
+`wheel_delta` still mixed line and pixel units, press/drag/click primitives
+still consumed final snapshots pending `IN-03`, and shell request execution
+remained `IN-02`; both successor responsibilities subsequently passed. At that
+implementation-record checkpoint, the independent critic and complete local
+gate were accepted while PR CI and squash merge were not yet claimed; they also
+subsequently passed.
 
 ### `IN-02`: one-frame shell services
 
@@ -635,9 +651,9 @@ injectable Winit cursor, IME, clipboard, URL, and repaint boundaries in tests.
 
 Native clipboard ownership, real browser launch, candidate placement, and OS
 event-loop timing need desktop/three-OS smoke beyond deterministic fakes. Delayed
-clipboard target reuse remains subject to `ASYNC-01` incarnation policy. This is
-a provisional breaking Winit API change; migration is recorded in the
-changelog. Direct archive creation still requires the Stage 1 ephemeral local
+clipboard target reuse remains governed by the accepted `ASYNC-01` incarnation
+policy. This is a provisional breaking Winit API change; migration is recorded
+in the changelog. Direct archive creation still requires the Stage 1 ephemeral local
 registry until internal crates are published. Independent audit and the local
 full gate are accepted. Exact-SHA three-OS CI run `29134362277` and PR checks
 passed; PR `#513` squash-merged as `e151b111` and issue `#512` is closed.
@@ -801,14 +817,17 @@ the same captured-source effective clip as release commits.
 The threshold is a fixed private current-scope logical default rather than an OS
 or application setting. Scope changes during a retained gesture, touch/stylus/
 multipointer input, momentum, gesture phases, per-widget adapter click identity,
-and drag payload semantics remain deferred. `TEXT-01` owns actual caret/word/
-selection editing and must consume this seam without reparsing pointer events.
+and drag payload semantics remain deferred. At the `IN-03B` checkpoint,
+`TEXT-01` owned actual caret/word/selection editing and had to consume this seam
+without reparsing pointer events; it subsequently passed.
 
 ### `TEXT-01-PRE`: event-time selection modifiers
 
 Status: Complete. Issue #522 closed through PR #523, squash-merged as
 `f2fd2d0`. This is a shared-foundation prerequisite, not a new audit roadmap
-ID. `ASYNC-01` and `TEXT-01` remain gated on the separate `TEXT-01-PRE2` seam.
+ID. At the `TEXT-01-PRE` checkpoint, `ASYNC-01` and `TEXT-01` remained gated on
+the separate `TEXT-01-PRE2` seam; the prerequisite and both successors
+subsequently passed.
 
 #### Changed files
 
@@ -847,20 +866,23 @@ an accepted provisional alpha source break with a changelog migration note.
 
 #### Remaining risks and deferred findings
 
-`TEXT-01` still needs the separately gated ordinal-bearing DomainDrag seam for
-canonical editable numeric scrub; expanding this modifiers-only packet after
-its accepted task gate would mix contracts. `TEXT-01-PRE2` owns that shared
-prerequisite before `ASYNC-01`. Actual word movement/deletion, selection,
-read-only, multiline, caret-scroll, IME-owner, and text rendering behavior
-remain `TEXT-01` or later Stage 4 work.
+At the `TEXT-01-PRE` checkpoint, `TEXT-01` still needed the separately gated
+ordinal-bearing DomainDrag seam for canonical editable numeric scrub;
+expanding this modifiers-only packet after its accepted task gate would have
+mixed contracts. `TEXT-01-PRE2` owned that shared prerequisite before
+`ASYNC-01`. Actual word movement/deletion, selection, read-only, multiline,
+caret-scroll, IME-owner, and text rendering behavior remained `TEXT-01` or later
+Stage 4 work at that checkpoint. The prerequisite and both successors
+subsequently passed within their documented contracts.
 
 ### `TEXT-01-PRE2`: causal DomainDrag actions
 
 Status: Complete. Issue #524 closed through PR #525, squash-merged as
 `00b944f`. This is the second shared-foundation prerequisite discovered by the
-`TEXT-01` task gate, not a new audit roadmap ID. `ASYNC-01` is now serialized
-next; `TEXT-01` remains gated on its merge because the packets share runtime,
-memory, facade, and evidence files.
+`TEXT-01` task gate, not a new audit roadmap ID. At the `TEXT-01-PRE2`
+checkpoint, `ASYNC-01` was serialized next and `TEXT-01` remained gated on its
+merge because the packets shared runtime, memory, facade, and evidence files;
+both successors subsequently passed.
 
 #### Changed files
 
@@ -916,10 +938,11 @@ ordinal namespace was added.
 
 The action seam deliberately remains runtime-only; low-level standalone
 `draggable` callers receive the existing aggregate response without ordered
-actions. `TEXT-01` must consume the captured response once and still owns actual
-numeric caret arbitration, desktop selection, word behavior, read-only modes,
-viewports, and IME geometry. `ASYNC-01` is the next root-owned shared foundation
-because it edits the same memory/runtime and evidence files.
+actions. At the `TEXT-01-PRE2` checkpoint, `TEXT-01` still had to consume the
+captured response once and owned actual numeric caret arbitration, desktop
+selection, word behavior, read-only modes, viewports, and IME geometry;
+`ASYNC-01` was the next root-owned shared foundation because it edited the same
+memory/runtime and evidence files. Both successors subsequently passed.
 
 ### `ASYNC-01`: durable presence and incarnation
 
@@ -1006,8 +1029,8 @@ non-cloneable memory migration; it does not semantically depend on liveness.
 
 Status: Complete / Accepted at implementation merge `93d6a5f` after the
 documentation-only Issue #548 closure. Audit §6.10 is closed on canonical
-retained `Ui` paths. Checkpoint 4A is accepted and Stage 4B is Current, with
-`TEXT-02` next.
+retained `Ui` paths. At this packet's acceptance, checkpoint 4A was accepted
+and Stage 4B became Current, with `TEXT-02` next; Stage 4 subsequently passed.
 
 Implementation ledger:
 
@@ -1080,14 +1103,15 @@ paths. Bool APIs remain compatible (`false = Editable`, `true = Disabled`).
 
 #### Remaining risks and deferred findings
 
-Grapheme clusters, Unicode words, emoji, ligatures, and mixed bidi remain
-`TEXT-02`. Undo coalescing and text-layout/resource generation and byte budgets
-remain `TEXT-03`. One authoritative fractional-DPI layout for paint, hit,
-caret, and selection remains `REND-02`. Viewport motion is intentionally staged
-to the next frame. There is no dedicated read-only semantic bit. Public free
-components remain compatibility paths, and future retained `Ui` wrappers must
-use the canonical transaction kernel rather than reintroduce split ownership or
-aggregate-pointer authority.
+At the `TEXT-01` checkpoint, grapheme clusters, Unicode words, emoji, ligatures,
+and mixed bidi remained `TEXT-02`; undo coalescing and text-layout/resource
+generation and byte budgets remained `TEXT-03`; and one authoritative
+fractional-DPI layout for paint, hit, caret, and selection remained `REND-02`.
+All three responsibilities subsequently passed. Viewport motion is
+intentionally staged to the next frame. There is no dedicated read-only
+semantic bit. Public free components remain compatibility paths, and future
+retained `Ui` wrappers must use the canonical transaction kernel rather than
+reintroduce split ownership or aggregate-pointer authority.
 
 ### `TEXT-02A`: Unicode editing and caret-affinity foundation
 
@@ -1145,14 +1169,15 @@ path and true no-ops preserve redo.
 
 #### Remaining risks and deferred findings
 
-This packet deliberately supplies logical segmentation and affinity only.
-Authoritative shaped visual stops, mixed-bidi Left/Right, ligature subdivision,
-and hit/caret/selection rectangles remain `TEXT-02B`; canonical widget,
-ReadOnly, pointer, ordered re-resolution, and IME integration remain
-`TEXT-02C`. Fractional-DPI paint/hit/caret/selection parity remains `REND-02`.
-Undo coalescing and layout/resource generation and byte budgets remain
-`TEXT-03`. Locale-tailored segmentation, normalization, color emoji, and an
-engine replacement remain out of scope.
+This packet deliberately supplied logical segmentation and affinity only. At
+the `TEXT-02A` checkpoint, authoritative shaped visual stops, mixed-bidi
+Left/Right, ligature subdivision, and hit/caret/selection rectangles remained
+`TEXT-02B`; canonical widget, ReadOnly, pointer, ordered re-resolution, and IME
+integration remained `TEXT-02C`; fractional-DPI paint/hit/caret/selection
+parity remained `REND-02`; and undo coalescing plus layout/resource generation
+and byte budgets remained `TEXT-03`. Those slices subsequently passed.
+Locale-tailored segmentation, normalization, color emoji, and an engine
+replacement remain out of scope.
 
 ### `TEXT-02B`: source-bound shaped navigation authority
 
@@ -1220,9 +1245,10 @@ literals and byte-only geometry methods remain source-compatible.
 The constructor can prove structural consistency with its caller-supplied
 source but not historical shaping provenance. Pinned bundled Inter supplies a
 real `->` multi-EGC cluster; future font/shaper upgrades must deliberately
-revalidate that witness. Canonical widget/ReadOnly/pointer/ordered
-re-resolution/IME integration remains `TEXT-02C`; fractional-DPI paint parity
-remains `REND-02`; undo/layout/resource budgets remain `TEXT-03`.
+revalidate that witness. At the `TEXT-02B` checkpoint, canonical widget/
+ReadOnly/pointer/ordered re-resolution/IME integration remained `TEXT-02C`,
+fractional-DPI paint parity remained `REND-02`, and undo/layout/resource budgets
+remained `TEXT-03`; those slices subsequently passed.
 
 ### `TEXT-02C`: retained shaped text authority
 
@@ -1279,21 +1305,25 @@ promise therefore applies only to canonical retained fields configured with
 
 #### Remaining risks and deferred findings
 
-Fractional device projection remains `REND-02`. Retained layout/resource
-generation and byte budgets remain `TEXT-03B/C`. Rejected numeric
-scrub previews may register unused layouts until those budgets land. Invalid
-internal navigation falls back atomically but has no public diagnostic channel.
+At the `TEXT-02C` checkpoint, fractional device projection remained `REND-02`
+and retained layout/resource generation and byte budgets remained
+`TEXT-03B/C`; both subsequently passed. Rejected numeric scrub previews could
+register unused layouts before those budgets landed. Invalid internal
+navigation falls back atomically but has no public diagnostic channel.
 Free/no-store compatibility paths do not carry the Unicode-authoritative alpha
 promise. Locale tailoring, normalization, color emoji policy, and vertical
 visual navigation remain outside alpha scope.
 
 ### `TEXT-03A`: bounded and coalesced local undo
 
-Status: Locally verified implementation candidate for Issue #562. Focused text,
-widget, wrapper, and facade checks pass. Exact-SHA critics, PR, three-OS CI,
-PR-context CI, and squash merge remain required. This is partial `TEXT-03`
-evidence for audit §§8.4, 10.2, and 11.5; it does not close those findings,
-roadmap `TEXT-03`, or Stage 4 without `TEXT-03B/C` and `REND-02`.
+Status: Complete / Accepted for the `TEXT-03A` slice. Issue #562 closed through
+PR #563. Candidate `7f57c77b47ea394d848451548782aad053cdd26a` passed
+three exact-SHA critics at P0/P1/P2=`0/0/0`, PR CI run 29176731298, and
+Ubuntu/Windows/macOS run 29176736532 before squash merge
+`21be11cb8a16cde9666932f99ef62b01793c7845`; main-push CI run 29176933068
+passed the merge SHA. This remained only the A slice of `TEXT-03` evidence for
+audit §§8.4, 10.2, and 11.5 and, at that checkpoint, did not close those
+findings, roadmap `TEXT-03`, or Stage 4 without `TEXT-03B/C` and `REND-02`.
 
 #### Changed files
 
@@ -1358,9 +1388,10 @@ intentionally lose reverse traversal at explicit barriers. Operation-based
 4096-byte grouping is coarser than elapsed-time editor grouping. Equal-length
 direct mutation through the public `text`/`selection` fields cannot be detected
 without a breaking encapsulation change; method-driven canonical fields carry
-the alpha guarantee. Layout generations/bytes, rejected-preview churn, and
-incremental renderer-resource export remain `TEXT-03B/C`; fractional projection
-remains `REND-02`.
+the alpha guarantee. At the `TEXT-03A` checkpoint, layout generations/bytes,
+rejected-preview churn, and incremental renderer-resource export remained
+`TEXT-03B/C`, while fractional projection remained `REND-02`; those slices
+subsequently passed.
 
 ### `TEXT-03B`: retained layout generations and payload budgets
 
@@ -1405,7 +1436,8 @@ to reject foreign/stale cursors. Ordinary rollover requires a full snapshot;
 checked epoch exhaustion preserves residents, drops tombstones, and enters
 permanent resync-only mode. `stored_layout` resolves final presence in expected
 O(1), and full iteration is ID ordered. Actual renderer add/remove/full-reset
-integration remains `TEXT-03C`.
+integration remained `TEXT-03C` at the `TEXT-03B` checkpoint and subsequently
+passed.
 
 Frame attachment advances exactly once and assumes generation G resources are
 reconciled before G+1 begins. Entry pointer geometry and every event-navigation
@@ -1446,9 +1478,10 @@ Transient shaping can temporarily allocate and consume CPU outside the retained
 metric. Allocator metadata, shared font data, engine internals, and external Arc
 owners are excluded by contract. Current-generation saturation intentionally
 degrades new canonical generic text to layoutless fallback. Direct callers own
-raw handle validity across clear/eviction. Renderer reconciliation and external
-Arc byte lifetime remain `TEXT-03C`; Vello cache lifetime and fractional
-projection remain later packets. The public approximate cache remains a
+raw handle validity across clear/eviction. At the `TEXT-03B` checkpoint,
+renderer reconciliation and external Arc byte lifetime remained `TEXT-03C`,
+while Vello cache lifetime and fractional projection remained later packets;
+those slices subsequently passed. The public approximate cache remains a
 duplicate contract until final `API-01` curation in Stage 7.
 
 ### `TEXT-03C`: incremental text resource reconciliation
@@ -1536,10 +1569,11 @@ Terminal journal exhaustion deliberately causes a full text rebuild every
 reconciliation. Payload metrics exclude shared fonts, backend caches, allocator
 metadata, Arc headers, and external owners and are not RSS. Managed registries
 require the documented one-in-flight generation boundary and forbid interleaved
-manual text mutation. Vello physical text cache policy and authoritative
-fractional projection remain `REND-02`; image/texture budgets, presenter
-ownership, and external GPU resources remain later packets. Approximate
-`TextLayoutCache` duplication remains final Stage 7 `API-01`.
+manual text mutation. At the `TEXT-03C` checkpoint, Vello physical text cache
+policy and authoritative fractional projection remained `REND-02`; they
+subsequently passed. Image/texture budgets, presenter ownership, and external
+GPU resources remain later packets. Approximate `TextLayoutCache` duplication
+remains final Stage 7 `API-01`.
 
 ### `REND-01B`: sRGB, alpha, and tint contract
 
@@ -1603,7 +1637,8 @@ goldens are not introduced by this packet.
 
 Status: Complete / Accepted. The merged evidence for `REND-01A` and
 `REND-01B` closes audit §§6.12-6.13 and, together with accepted `ASYNC-01` and
-`TEXT-01`, accepts checkpoint 4A. Stage 4 remains Current / Authorized at 4B.
+`TEXT-01`, accepts checkpoint 4A. At that checkpoint, Stage 4 remained Current /
+Authorized at 4B; 4B subsequently passed.
 
 #### Changed files
 
@@ -1621,10 +1656,11 @@ snapshots. Their merged evidence is sufficient to accept `REND-01` and the 4A
 checkpoint; no source, test, spec, changelog, workflow, or audit-output behavior
 changes in this documentation-only closure.
 
-`TEXT-02` is explicitly next. `TEXT-03` remains behind the text-store API
-freeze, and `REND-02` remains behind both `TEXT-02` and accepted `REND-01`.
-Unicode editing, text-store budgets, and authoritative fractional-DPI text
-layout therefore remain checkpoint 4B requirements.
+At the `REND-01-CLOSE` checkpoint, `TEXT-02` was explicitly next, `TEXT-03`
+remained behind the text-store API freeze, and `REND-02` remained behind both
+`TEXT-02` and accepted `REND-01`. Unicode editing, text-store budgets, and
+authoritative fractional-DPI text layout were checkpoint 4B requirements at
+that time; all subsequently passed.
 
 #### Tests run and results
 
@@ -1650,19 +1686,20 @@ rather than directly executable. Premultiplied payload correctness remains
 caller-owned, and `InvalidGeometry` remains the diagnostic name for invalid
 colors. HDR/wide-gamut/ICC conversion, external GPU resources,
 presenter/swapchain ownership, and CPU/GPU pixel goldens remain deferred.
-Fractional-DPI authoritative text layout remains `REND-02`; Unicode clusters
-remain `TEXT-02`; bounded/coalesced undo and text layout/resource budgets remain
-`TEXT-03`. Checkpoint 4A is accepted, but Stage 4 and the campaign are not
-complete.
+At that checkpoint, fractional-DPI authoritative text layout remained
+`REND-02`, Unicode clusters remained `TEXT-02`, and bounded/coalesced undo plus
+text layout/resource budgets remained `TEXT-03`. Stage 4 and the campaign were
+not complete at that time; these historical 4B dependencies subsequently
+passed.
 
 ### `REND-02`: authoritative fractional-DPI text projection
 
-Status: Implementation Candidate for Issue #568. Its complete prescribed
-12-command focused gate passes. This status does not accept `REND-02` or Stage
-4, and no candidate SHA is recorded because this evidence edit replaces the
-rejected candidate. Acceptance still requires three exact-SHA candidate critics,
-PR CI, exact-SHA Ubuntu/Windows/macOS CI, the authorized squash merge, and
-resulting main-push CI.
+Status: Complete / Accepted. Issue #568 closed through PR #569. Candidate
+`156ceaec62312669b30479f2f5e359346408dc1e` passed three exact-SHA critics at
+P0/P1/P2=`0/0/0`, PR CI run 29186376228, and exact-SHA Ubuntu/Windows/macOS run
+29186433862 before authorized squash merge
+`1239dd994619de3765d8cee05c5f8ddd34c2c6de`; main-push CI run 29186580620
+passed the merge SHA.
 
 #### Changed files
 
@@ -1702,8 +1739,8 @@ frame, retains at most 32 MiB, expires after 120 idle generations, shapes
 transiently on rejection, and is independent of framebuffer scale. Registered
 resources never enter that fallback store.
 
-Three authorized correction packets align the evidence with this frozen
-contract. `REND-02-PC1` replaced the stale Showcase integer-font assertion with
+Three authorized implementation/process correction packets align the evidence
+with this frozen contract. `REND-02-PC1` replaced the stale Showcase integer-font assertion with
 registered-resource and exact scaled-size evidence. `REND-02-PC2` keeps affine
 projection and rounding in f64 until final f32 storage, adds the literal
 `2.8_f32` at 1.25 witness that encodes physical x=3, and requires strict
@@ -1712,7 +1749,9 @@ identity-transform selection/caret/glyph-anchor parity at 1.25, 1.5, and 1.75.
 metrics, substitutes a private deterministic finite-positive placeholder only
 for ignored invalid registered command fields, preserves strict validation and
 deterministic diagnostics for layoutless/missing-resource fallback, and proves
-registered layouts leave the fallback store empty.
+registered layouts leave the fallback store empty. `REND-02-PC4` was the
+documentation-only exact-SHA evidence correction that synchronized these
+tracked readiness sections with PC3; it changed no production behavior.
 
 #### Tests run and results
 
@@ -1725,6 +1764,8 @@ registered layouts leave the fallback store empty.
 - Facade passed 14 unit and 11 public-API tests.
 - Showcase passed 132 library and 25 binary tests.
 - Warning-denied all-target/all-feature Clippy for Vello and Showcase passed.
+- All six workspace gates passed on the final tree, and `RUSTDOCFLAGS` was
+  restored to its prior unset state.
 
 #### Remaining risks and deferred findings
 
@@ -1736,6 +1777,103 @@ command translations retain the generic rectangle quantization band of at most
 coordinates, not final GPU raster coverage or cross-GPU pixel identity. The
 duplicate public `TextLayoutCache` remains Stage 7 `API-01`; presenter
 ownership, external textures, and public composition remain Stage 5.
+
+### `STAGE-4-CLOSE`: integrated text, renderer, and lifetime acceptance gate
+
+Status: Stage 4 is Complete / Accepted through the accepted `REND-02` squash
+merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`. Stage 5 is Current /
+Authorized with `REND-ADR-01` next. Issue #570 owns this documentation-only
+integration; it implements or pre-accepts no Stage 5 packet.
+
+#### Changed files
+
+- `docs/alpha-readiness.md`
+- `docs/alpha-readiness/00-plan-and-baseline.md`
+- `docs/alpha-readiness/01-truth-and-release.md`
+- `docs/alpha-readiness/02-runtime-foundation.md`
+- `docs/alpha-readiness/03-input-and-shell.md`
+- `docs/alpha-readiness/04-text-renderer-lifetime.md`
+- `docs/alpha-readiness/05-composition-foundations.md`
+- `docs/alpha-readiness/progress.md`
+
+#### Reasoning and contract decisions
+
+The close packet integrates six accepted roadmap responsibilities without
+changing source, tests, specifications, changelog, workflows, release outputs,
+or audit artifacts:
+
+- `ASYNC-01` accepts deterministic presence/incarnation/cancellation cleanup at
+  `9d026c5f5a2108e79253e977868f60ec6522e9b8`.
+- `TEXT-01` accepts canonical desktop/ReadOnly behavior at implementation
+  `93d6a5f775fea1bc416ec7bf360cd95b2ac60061` and integrated close
+  `eaf214f77a7cf62877571ddd2ef78b0e94b0497b`.
+- `TEXT-02` accepts canonical Unicode/shaped authority at
+  `691c6ab56a6603b5f4857552fa70148b11715f1c`.
+- `TEXT-03` accepts bounded undo/layout/resource lifetime at
+  `3b5af7b0341520781e1d286605aaf3e3e7dd9bbe`.
+- `REND-01` accepts balanced transform recovery and cross-layer color/tint
+  behavior through `REND-01A` `1aee4f41248251e1a365967ba1d655d49b04abbf`,
+  `REND-01B` `9c1c0440385068ef58db5c6a34833f552c704c61`, and integrated
+  close `365cfb0527a22965d51521e5e14feede733c5477`.
+- `REND-02` accepts registered fractional-DPI paint/hit/caret/selection
+  authority at `1239dd994619de3765d8cee05c5f8ddd34c2c6de`.
+
+This closes audit §§6.8-6.10 and §§6.12-6.14 only inside the documented
+canonical contracts and accepts only the text-owned portions of §§8.4, 10.2,
+and 11.5. Earlier packet status remains in the chronology only where explicitly
+time-qualified. Stage 5 begins with the root-owned `REND-ADR-01` decision; no
+presenter or composition contract is inferred by this transition.
+
+#### Tests run and results
+
+- Accepted Stage 1 `c8fbf536023fcd089c9afda1b9af789dd4dbbc20`, Stage 2
+  `5cf07b8b9a64083d31da687f348f4eeb001f1754`, and Stage 3
+  `1f991113816f3c6b8ce9063a9d37ebe367109f2c` anchors, plus every full Stage 4
+  anchor listed above, resolve as ancestors of the accepted base.
+- All 25 close-specific focused commands passed:
+  - core async liveness 15/15, observer 10/10, and color 2/2;
+  - text ReadOnly 9/9, viewport 14/14, Unicode editing 12/12, Unicode layout
+    23/23, shaped key 4/4, undo budget 12/12, and layout budget 6/6;
+  - widget text field 125/125 and layout lifetime 5/5;
+  - render reconciliation 8/8, resource snapshots 12/12, and color/alpha 3/3;
+  - Vello public color 1/1, public translation 18/18, transform recovery 5/5,
+    authority 6/6, cache 6/6, layouts 4/4, paths 4/4, and snapping 7/7; and
+  - facade public API 11/11 plus Showcase library 132/132 and binary 25/25.
+  All six final close workspace gates also passed: formatting, warning-denied
+  all-target/all-feature workspace Clippy, all-feature workspace tests,
+  all-feature workspace build, all-feature example checks, and warning-denied
+  all-feature/no-deps workspace docs. `RUSTDOCFLAGS` was restored to unset.
+- `REND-02` Issue #568 / PR #569 candidate
+  `156ceaec62312669b30479f2f5e359346408dc1e` passed exact-SHA critics at
+  P0/P1/P2=`0/0/0`, PR CI 29186376228, and exact-SHA three-OS CI 29186433862
+  before squash merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`; main-push
+  CI 29186580620 passed the merge SHA.
+- The final `REND-02` tree passed authority 6/6, cache 6/6, layouts 4/4, paths
+  4/4, snapping 7/7, the recorded affected-crate suites, warning-denied touched
+  Clippy, and all six workspace gates; `RUSTDOCFLAGS` was restored to unset.
+- This documentation integration passed `git diff --check`, exact eight-path
+  equality, cross-document status/candidate/residual searches, and the frozen
+  two-file `output/` path/size/SHA-256 comparison.
+
+#### Remaining risks and deferred findings
+
+Canonical retained text paths alone receive the authoritative guarantee;
+compatibility paths remain qualified, and fallback paint cannot reconstruct
+retained wrap or Unicode navigation state. Undo run barriers, terminal
+text-resource rebuild behavior, and payload metrics that are not process RSS
+remain explicit. Fractional translated rectangles retain the generic band of
+at most 1.0001 physical pixels, and CPU scene evidence is not a final GPU pixel
+golden.
+
+Duplicate `TextLayoutCache` compatibility curation remains Stage 7 `API-01`, so
+audit §11.7 is not globally closed. Vello's resolved gradient ramp remains a
+source-verified dependency risk, and premultiplied payload validity remains
+caller-owned. HDR/wide-gamut/ICC, final GPU pixels, presenter/swapchain
+ownership, external textures, and public editor composition remain Stage 5 or
+later. Broader image/resource/performance/lifecycle findings remain open unless
+a separately accepted packet closed them. The repository remains foundation /
+developer preview, not alpha-ready; no tag, publish, deployment, or release is
+authorized.
 
 ## Packet Completion Template
 

@@ -10,7 +10,7 @@
 | Scope | Sequence-preserving input, platform request execution, and pointer normalization |
 | Impact / confidence | Critical / High (`IN-03` is High / High) |
 | Campaign prerequisite | Stage 2 gate; campaign authorization recorded |
-| Token checkpoint | Medium-large; remain serial through input-contract freeze |
+| Token checkpoint | Medium-large; executed serially through the input-contract freeze |
 
 ## Packets
 
@@ -25,8 +25,9 @@
 source-aware hardware text and preedit-driven IME behavior, one frame-local text
 claim, event-time pointer localization, and deterministic mixed-mode conflict
 diagnostics. Its depth-two remedy and independent re-review passed, as did the
-complete local CI-equivalent gate. Existing pointer primitives intentionally remain snapshot-driven;
-event-aware click, drag, and wheel policy stays in `IN-03`.
+complete local CI-equivalent gate. Existing pointer primitives intentionally
+remain snapshot-driven; accepted `IN-03` owns event-aware click, drag, and wheel
+policy.
 
 `IN-02` now uses one consumed Winit batch, ordered injectable shell services,
 payload-free failures and debug output, targeted one-shot clipboard responses,
@@ -47,8 +48,8 @@ The live Winit path now calculates click counts from inclusive 500 ms/four-unit
 press boundaries, carries counts through matching releases, resets invalid
 history deterministically, and retains the explicit-count compatibility API.
 Focused core, routing, spatial, Winit, showcase, and warning-denied Clippy gates
-pass. Three depth-one re-reviewers closed the DPI-evidence and rustdoc findings
-with no P0/P1/P2 findings, and the complete local CI-equivalent gate passes.
+passed. Three depth-one re-reviewers closed the DPI-evidence and rustdoc findings
+with no P0/P1/P2 findings, and the complete local CI-equivalent gate passed.
 Exact-SHA three-OS CI run `29135844832`, PR checks, and squash merge
 `889c3762` passed; issue `#514` is closed.
 
@@ -58,8 +59,8 @@ release clicks after crossing. Only domain draggables publish drag sources.
 The runtime also retains original root event ordinals in a private spatial
 sidecar and exposes neutral captured-selection actions without changing public
 input or common response layouts. A matching ordered text claim exposes editing
-events with the same ordinals, so `TEXT-01` can merge without pointer reparsing.
-Empty canonical streams remain compatible.
+events with the same ordinals, enabling later accepted `TEXT-01` to merge
+without pointer reparsing. Empty canonical streams remain compatible.
 Its final-depth remedy resolves composite numeric scrub interaction once as a
 domain drag, preserves sequential cleanup provenance and causal cancellation
 metadata, and retains ReleaseAll as a global spatial fence. Unrelated behavior
@@ -72,22 +73,32 @@ behavior remains compatible. Planned active drags and release commits are
 source/target evaluation-order invariant, split button owners preserve
 pre-fence output without stale hover/cursor publication, and selection
 cancellation cannot replay on a second same-frame claim. Forty-six focused
-core adversarial tests and forty-four widget taxonomy tests pass; the complete
-six-command workspace gate passes on the final evidence candidate.
+core adversarial tests and forty-four widget taxonomy tests passed; the complete
+six-command workspace gate passed on the final evidence candidate.
 
 ## Ownership And Overlap
 
-`IN-03A` and `IN-03B` own Z2 serially with text-input consumption. `IN-03B`
-cannot start until A's click metadata is squash-merged and must then freeze the
-ordered selection-gesture seam before `TEXT-01`. `ASYNC-01` and `TEXT-01` may
-not overlap B's memory/runtime ownership.
+During Stage 3, `IN-03A` and `IN-03B` owned Z2 and executed serially with
+text-input consumption. `IN-03B` could not start until A's click metadata was
+squash-merged and then had to freeze the ordered selection-gesture seam before
+`TEXT-01`. `ASYNC-01` and `TEXT-01` could not overlap B's memory/runtime
+ownership; both successors subsequently passed in Stage 4.
 
 ## Acceptance Gate And Verification Expectations
 
-Go only when hardware-style typing and the IME lifecycle work in the supported live shell; mixed key/text order is preserved; copy/cut/paste, URLs, cursor, IME rectangles, repaint, and async requests execute with one-frame ownership; and mouse/touchpad scroll, double-click, drag threshold, and click suppression are deterministic.
+The gate required hardware-style typing and the IME lifecycle to work in the
+supported live shell; mixed key/text order to remain preserved; copy/cut/paste,
+URLs, cursor, IME rectangles, repaint, and async requests to execute with
+one-frame ownership; and mouse/touchpad scroll, double-click, drag threshold,
+and click suppression to be deterministic.
 
-Packet tasks must include contract, core, adapter, and supported-shell checks appropriate to their owned paths. Event reordering, stale requests, Z2/Z3 overlap, and shell behavior with no recorded owner are stop conditions. Those checks passed, the gate is recorded, and Stage 4 is now Current / Authorized without requiring new approval.
+Packet tasks included contract, core, adapter, and supported-shell checks
+appropriate to their owned paths. Event reordering, stale requests, Z2/Z3
+overlap, and shell behavior with no recorded owner would have stopped the
+campaign. Those checks passed; at the Stage 3 gate, the campaign advanced Stage
+4 to Current / Authorized without requiring new approval. Stage 4 subsequently
+passed, and Stage 5 is now Current / Authorized with `REND-ADR-01` next.
 
 ## Deferrals
 
-Desktop/Unicode editing, presenter extraction, and showcase workflow integration remain later-stage work.
+At Stage 3 acceptance, desktop/Unicode editing, presenter extraction, and showcase workflow integration remained later-stage work. Stage 4 subsequently accepted the canonical desktop/Unicode scope; presenter extraction and broader showcase workflow integration remain Stage 5 or later.

@@ -6,17 +6,17 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Authorized / Queued |
+| Status | Current / Authorized; `REND-ADR-01` is the next serialized root-owned decision packet |
 | Scope | Presenter ownership/external textures and measured public composition foundations |
 | Impact / confidence | Critical / Medium overall |
-| Campaign prerequisite | Stage 4 gate; campaign authorization recorded |
-| Token checkpoint | Very large; checkpoint the presenter ADR and measured-`Ui` seam before continuing |
+| Campaign prerequisite | Stage 4 gate, Complete / Accepted; campaign authorization recorded |
+| Token checkpoint | Very large; execute `REND-ADR-01` first, then checkpoint the presenter boundary and measured-`Ui` seam before continuing |
 
 ## Packets
 
 | Lane | ID | Goal | Dependency | Impact / confidence | Ownership |
 | --- | --- | --- | --- | --- | --- |
-| Presenter | `REND-ADR-01` | Decide device/queue/surface/external-texture ownership, sync, lifetime, recovery, offscreen, and multi-window boundary | Stage 4 policy context | Critical / Medium | Root-only ADR |
+| Presenter | `REND-ADR-01` | Decide device/queue/surface/external-texture ownership, sync, lifetime, recovery, offscreen, and multi-window boundary | Accepted Stage 4 policy context | Critical / Medium | Root-only ADR |
 | Presenter | `REND-03` | Extract reusable Winit/Vello window, resize, recovery, submit, and present behavior from showcase-private code | `REND-ADR-01`, `IN-02` | Critical / Medium | Root integration |
 | Presenter | `REND-04` | Register/update/remove domain-owned GPU texture views without mandatory CPU snapshots | `REND-03` | Critical / Medium | Root integration |
 | Composition | `LAYOUT-UI-01` | Measured row/column/grid/padding/stack/scroll allocation through public `Ui` APIs | `RT-01` | Critical / Medium-high | Root-owned shared seam |
@@ -31,7 +31,7 @@ Presenter work owns Z3/Z5: no `REND-03` overlap with `IN-02` or live showcase ch
 
 ## Acceptance Gate And Verification Expectations
 
-First record and verify the ADR checkpoint before presenter implementation. Then record and verify that measured `Ui` APIs prove common composition without manual rectangles. After each checkpoint passes, the campaign continues without intermediate approval; an ambiguity or failed gate is a stop condition. The stage gate then requires a supported presenter outside the showcase; proven domain GPU texture interoperability or removal from the alpha promise; overlay compliance with Stage 2/3 contracts; and rendered-input plus semantic tests for chrome and collections.
+`REND-ADR-01` is next. First record and verify that ADR checkpoint before presenter implementation; this Stage 4 handoff does not implement or pre-accept any Stage 5 packet. Then record and verify that measured `Ui` APIs prove common composition without manual rectangles. After each checkpoint passes, the campaign continues without intermediate approval; an ambiguity or failed gate is a stop condition. The stage gate then requires a supported presenter outside the showcase; proven domain GPU texture interoperability or removal from the alpha promise; overlay compliance with Stage 2/3 contracts; and rendered-input plus semantic tests for chrome and collections.
 
 ## Deferrals
 

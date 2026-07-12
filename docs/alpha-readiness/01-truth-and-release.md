@@ -6,11 +6,11 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Complete / Accepted; Stages 2-3 subsequently passed and Stage 4 is Current / Authorized |
+| Status | Complete / Accepted; Stages 2-4 subsequently passed and Stage 5 is Current / Authorized with `REND-ADR-01` next |
 | Scope | Capability truth, provisional public boundary, showcase truth, and packageability scaffolding |
 | Impact / confidence | High / High overall; `API-01` is Medium-high confidence |
 | Campaign prerequisite | Stage 0 documentation gate, complete; campaign authorization recorded |
-| Token checkpoint | Small-medium; continue to Stage 2 when this gate passes unless a stop condition triggers |
+| Token checkpoint | Small-medium; executed bounded packet checks and advanced to Stage 2 after the accepted gate |
 
 ## Packets
 
@@ -23,13 +23,24 @@
 
 ## Ownership And Overlap
 
-`SHOW-01` owns Z8 and must not overlap live-shell work in Z3. `API-01` and `REL-01` share Z7 and run sequentially. No worker may count metadata/model-only evidence as a stable capability axis. Package dry-runs do not authorize a tag or publish.
+During Stage 1, `SHOW-01` owned Z8 and could not overlap live-shell work in Z3;
+`API-01` and `REL-01` shared Z7 and ran sequentially. No worker may count
+metadata/model-only evidence as a stable capability axis. Package dry-runs do
+not authorize a tag or publish.
 
 ## Acceptance Gate And Verification Expectations
 
-Go only when stable claims declare and prove their evidence axes, experimental surfaces are excluded from stable counts, bounded showcase controls no longer imply nonexistent behavior, intended crates pass package dry-runs, and the public API policy remains explicitly provisional. Each packet task must name deterministic checks for its exact files; record results in `progress.md`.
+The gate required stable claims to declare and prove their evidence axes,
+experimental surfaces to be excluded from stable counts, bounded showcase
+controls to stop implying nonexistent behavior, intended crates to pass package
+dry-runs, and the public API policy to remain explicitly provisional. Each
+packet task named deterministic checks for its exact files and recorded results
+in `progress.md`.
 
-Any contradictory capability claim, overlapping Z3/Z7/Z8 ownership, or attempt to freeze the final facade before `SHOW-02` is a stop condition. Otherwise, record the gate and advance to the already Authorized / Queued Stage 2 without new approval.
+At the Stage 1 gate, any contradictory capability claim, overlapping Z3/Z7/Z8
+ownership, or attempt to freeze the final facade before `SHOW-02` would have
+stopped the campaign. With no stop condition triggered, the accepted gate
+advanced to the already authorized Stage 2 without new approval.
 
 ## Deferrals
 
