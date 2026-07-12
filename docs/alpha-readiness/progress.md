@@ -2,7 +2,7 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Stages 0-3 are Complete. Stage 4A is Complete / Accepted; Stage 4B is Current / Authorized with `TEXT-02A/B` accepted and `TEXT-02C` the locally verified candidate. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-3 are Complete. Stage 4A and `TEXT-02` are Complete / Accepted; Stage 4B is Current / Authorized with `TEXT-03A` the locally verified candidate. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
@@ -1226,10 +1226,10 @@ remains `REND-02`; undo/layout/resource budgets remain `TEXT-03`.
 
 ### `TEXT-02C`: retained shaped text authority
 
-Status: Locally verified implementation candidate for Issue #558. All focused
-checks and six workspace gates pass. Exact-SHA critics, PR, three-OS CI,
-PR-context CI, and squash merge remain required before audit §6.9 and roadmap
-`TEXT-02` close.
+Status: Complete / Accepted. Issue #558 closed through PR #561 after candidate
+`12443ec`, three exact-SHA critics, three-OS run 29174582250, and PR run
+29174571824 passed, then squash-merged as `691c6ab`. Main push run 29174764195
+also passed. This closes audit §6.9 and roadmap `TEXT-02`.
 
 #### Changed files
 
@@ -1279,13 +1279,88 @@ promise therefore applies only to canonical retained fields configured with
 
 #### Remaining risks and deferred findings
 
-Fractional device projection remains `REND-02`. Undo coalescing and retained
-layout/resource generation and byte budgets remain `TEXT-03`. Rejected numeric
+Fractional device projection remains `REND-02`. Retained layout/resource
+generation and byte budgets remain `TEXT-03B/C`. Rejected numeric
 scrub previews may register unused layouts until those budgets land. Invalid
 internal navigation falls back atomically but has no public diagnostic channel.
 Free/no-store compatibility paths do not carry the Unicode-authoritative alpha
 promise. Locale tailoring, normalization, color emoji policy, and vertical
 visual navigation remain outside alpha scope.
+
+### `TEXT-03A`: bounded and coalesced local undo
+
+Status: Locally verified implementation candidate for Issue #562. Focused text,
+widget, wrapper, and facade checks pass. Exact-SHA critics, PR, three-OS CI,
+PR-context CI, and squash merge remain required. This is partial `TEXT-03`
+evidence for audit §§8.4, 10.2, and 11.5; it does not close those findings,
+roadmap `TEXT-03`, or Stage 4 without `TEXT-03B/C` and `REND-02`.
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `crates/kinetik-ui-text/src/{edit,undo}.rs`
+- `crates/kinetik-ui-text/tests/undo_budget_conformance.rs`
+- `docs/specs/03-rendering-text-components.md`
+- `docs/alpha-readiness/{04-text-renderer-lifetime,progress}.md`
+
+#### Reasoning and contract decisions
+
+Local undo and redo retain at most 128 combined snapshots and 4 MiB of exact
+UTF-8 snapshot text. Fixed selection, affinity, and container metadata is
+separately bounded by the entry cap. Count and payload accumulation use checked
+arithmetic. New history and traversal evict the deepest/farthest states first
+while preserving the nearest retainable reverse target. Oversized pre-edit
+states clear both directions; an oversized traversal state makes that traversal
+one-way instead of admitting a discontinuous jump. Retainability and target
+existence are checked before a full snapshot is allocated.
+
+Only canonical ordered hardware insertion plus unmodified Backspace and Delete
+without active composition coalesce. Kind, direction, text/range continuity,
+exact caret/affinity, and composition state must match; runs end at an inclusive
+4096 changed UTF-8 bytes, and a
+crossing fragment starts a new unit whole. Public direct edits, legacy slices,
+modified or active-preedit deletion, paste/cut, IME commit, selection
+replacement, word deletion, and multiline Enter remain atomic. Navigation,
+selection, pointer placement, composition, focus loss, shortcuts,
+target-matching paste results including filtered-empty input, and traversal
+fence a run; wrong-target paste does not. Stale shaped navigation and
+active-preedit suppressed arrows retain whole-state transactionality. No public
+API or dependency changed.
+
+#### Tests run and results
+
+- Dedicated undo-budget conformance passed 12/12, covering 128-entry and 4 MiB
+  boundaries, barriers, 4096-byte chunking, 10,000-byte literal traversal,
+  100,000 fragments, 10,000 alternating atomic replacements, multibyte
+  non-splitting, repeated Unicode deletion, modifier/preedit eligibility,
+  direction switches, the semantic fence matrix including cut/word
+  deletion/selection replacement and filtered/foreign paste, IME/paste/Enter
+  units, mixed undo/redo event ordering, stale and preedit transactionality,
+  forward/reversed selection and affinity restoration, direct atomicity, clone
+  continuity, and wrong-target/no-op redo behavior.
+- Private history tests passed 9/9 for exact UTF-8 accounting, inclusive byte
+  eviction, full-stack bidirectional transfer, combined count and long
+  alternating byte eviction, checked run retention without extra snapshots,
+  snapshot-allocation eligibility, nearest-target transfer eviction, and
+  one-way oversized transfers.
+- Complete text verification passed 75 unit, 9 ReadOnly, 4 shaped-key, 14
+  viewport, 12 undo-budget, 12 Unicode-editing, and 23 Unicode-layout tests.
+- Retained text-field conformance passed 125/125; the complete widgets crate
+  and integrations passed; facade public API conformance passed 9/9.
+- All six workspace gates passed in `target/runway/text03a`: formatting,
+  warning-denied Clippy, all-feature workspace tests, all-feature build,
+  all-feature examples, and warning-denied docs. `RUSTDOCFLAGS` was restored.
+
+#### Remaining risks and deferred findings
+
+Snapshots remain O(buffer size) at retained unit boundaries. Buffers over 4 MiB
+intentionally lose reverse traversal at explicit barriers. Operation-based
+4096-byte grouping is coarser than elapsed-time editor grouping. Equal-length
+direct mutation through the public `text`/`selection` fields cannot be detected
+without a breaking encapsulation change; method-driven canonical fields carry
+the alpha guarantee. Layout generations/bytes, rejected-preview churn, and
+incremental renderer-resource export remain `TEXT-03B/C`; fractional projection
+remains `REND-02`.
 
 ### `REND-01B`: sRGB, alpha, and tint contract
 

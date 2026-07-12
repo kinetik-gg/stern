@@ -7,6 +7,7 @@ use crate::boundary::{
     previous_word_boundary, vertical_line_target, word_segment_range_at,
 };
 use crate::navigation::{VisualDirection, default_affinity as visual_default_affinity};
+use crate::undo::{CoalescedEdit, CoalescedEditKind, HistoryState};
 use crate::{
     EditSnapshot, ShapedTextNavigation, TextAffinity, TextCaret, TextComposition,
     TextNavigationOutcome, TextSelection, TextUndoStack,
@@ -16,6 +17,12 @@ use crate::{
 enum VisualStep {
     Adjacent,
     Word,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EditHistory {
+    Atomic,
+    Coalesced(CoalescedEditKind),
 }
 
 fn visual_target(
@@ -129,6 +136,11 @@ impl TextEditState {
 
     /// Sets a collapsed grapheme-safe caret with explicit affinity.
     pub fn set_caret_position(&mut self, caret: TextCaret) {
+        self.undo.fence();
+        self.set_caret_position_unfenced(caret);
+    }
+
+    fn set_caret_position_unfenced(&mut self, caret: TextCaret) {
         let caret = Self::canonical_affinity(&self.text, caret);
         self.selection = TextSelection::new(caret.offset, caret.offset);
         self.set_affinity(caret);
@@ -147,6 +159,7 @@ impl TextEditState {
         selection: TextSelection,
         affinity: TextAffinity,
     ) {
+        self.undo.fence();
         self.selection = selection.clamp_to_text(&self.text);
         let caret =
             Self::canonical_affinity(&self.text, TextCaret::new(self.selection.active, affinity));
@@ -167,15 +180,12 @@ impl TextEditState {
 
     /// Applies committed text input.
     pub fn insert_text(&mut self, text: &str) {
-        self.canonicalize_selection();
-        self.record_undo();
-        self.composition = None;
-        self.replace_selection(text);
+        self.insert_text_with_history(text, EditHistory::Atomic);
     }
 
     /// Inserts pasted text and records it in the local undo stack.
     pub fn paste_text(&mut self, text: &str) {
-        self.insert_text(text);
+        self.insert_text_with_history(text, EditHistory::Atomic);
     }
 
     /// Removes and returns the current selected text.
@@ -187,33 +197,53 @@ impl TextEditState {
 
     /// Deletes backward from the current selection or caret.
     pub fn backspace(&mut self) {
+        self.backspace_with_history(EditHistory::Atomic);
+    }
+
+    fn backspace_with_history(&mut self, history: EditHistory) {
         self.canonicalize_selection();
         if !self.selection.is_caret() {
-            self.record_undo();
+            self.record_history_before_edit(EditHistory::Atomic, 0, None);
             self.replace_selection("");
         } else if let Some(previous) = previous_boundary(&self.text, self.caret()) {
-            self.record_undo();
+            let caret = self.caret();
+            let changed_bytes = caret - previous;
+            let expected_after =
+                Self::history_state_after_edit(self.text.len() - changed_bytes, previous);
+            self.record_history_before_edit(history, changed_bytes, Some(expected_after));
             self.text.replace_range(previous..self.caret(), "");
             self.set_caret_after_edit(previous);
+        } else {
+            self.undo.fence();
         }
     }
 
     /// Deletes forward from the current selection or caret.
     pub fn delete_forward(&mut self) {
+        self.delete_forward_with_history(EditHistory::Atomic);
+    }
+
+    fn delete_forward_with_history(&mut self, history: EditHistory) {
         self.canonicalize_selection();
         if !self.selection.is_caret() {
-            self.record_undo();
+            self.record_history_before_edit(EditHistory::Atomic, 0, None);
             self.replace_selection("");
         } else if let Some(next) = next_boundary(&self.text, self.caret()) {
-            self.record_undo();
             let caret = self.caret();
+            let changed_bytes = next - caret;
+            let expected_after =
+                Self::history_state_after_edit(self.text.len() - changed_bytes, caret);
+            self.record_history_before_edit(history, changed_bytes, Some(expected_after));
             self.text.replace_range(caret..next, "");
             self.set_caret_after_edit(caret);
+        } else {
+            self.undo.fence();
         }
     }
 
     /// Moves the caret backward by one extended grapheme cluster.
     pub fn move_left(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         if !self.selection.is_caret() {
             let start = self.selection.range_in(&self.text).start;
@@ -227,6 +257,7 @@ impl TextEditState {
 
     /// Extends the selection backward by one extended grapheme cluster.
     pub fn extend_left(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         if let Some(previous) = previous_boundary(&self.text, self.selection.active) {
             self.set_active(previous, TextAffinity::After);
@@ -235,6 +266,7 @@ impl TextEditState {
 
     /// Moves the caret forward by one extended grapheme cluster.
     pub fn move_right(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         if !self.selection.is_caret() {
             let end = self.selection.range_in(&self.text).end;
@@ -248,6 +280,7 @@ impl TextEditState {
 
     /// Extends the selection forward by one extended grapheme cluster.
     pub fn extend_right(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         if let Some(next) = next_boundary(&self.text, self.selection.active) {
             self.set_active(next, TextAffinity::Before);
@@ -256,6 +289,7 @@ impl TextEditState {
 
     /// Moves backward across whitespace and one full-buffer UAX #29 segment.
     pub fn move_word_left(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         if !self.selection.is_caret() {
             let start = self.selection.range_in(&self.text).start;
@@ -271,6 +305,7 @@ impl TextEditState {
 
     /// Moves forward across one UAX #29 segment and following whitespace.
     pub fn move_word_right(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         if !self.selection.is_caret() {
             let end = self.selection.range_in(&self.text).end;
@@ -286,6 +321,7 @@ impl TextEditState {
 
     /// Extends the selection left using [`Self::move_word_left`] boundary policy.
     pub fn extend_word_left(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         let target = previous_word_boundary(&self.text, self.selection.active);
         if target != self.selection.active {
@@ -295,6 +331,7 @@ impl TextEditState {
 
     /// Extends the selection right using [`Self::move_word_right`] boundary policy.
     pub fn extend_word_right(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         let target = next_word_boundary(&self.text, self.selection.active);
         if target != self.selection.active {
@@ -422,7 +459,7 @@ impl TextEditState {
     pub fn backspace_word(&mut self) {
         self.canonicalize_selection();
         if !self.selection.is_caret() {
-            self.record_undo();
+            self.record_history_before_edit(EditHistory::Atomic, 0, None);
             self.replace_selection("");
             return;
         }
@@ -430,10 +467,11 @@ impl TextEditState {
         let caret = self.caret();
         let target = previous_word_boundary(&self.text, caret);
         if target == caret {
+            self.undo.fence();
             return;
         }
 
-        self.record_undo();
+        self.record_history_before_edit(EditHistory::Atomic, 0, None);
         self.text.replace_range(target..caret, "");
         self.set_caret_after_edit(target);
     }
@@ -442,7 +480,7 @@ impl TextEditState {
     pub fn delete_word_forward(&mut self) {
         self.canonicalize_selection();
         if !self.selection.is_caret() {
-            self.record_undo();
+            self.record_history_before_edit(EditHistory::Atomic, 0, None);
             self.replace_selection("");
             return;
         }
@@ -450,10 +488,11 @@ impl TextEditState {
         let caret = self.caret();
         let target = next_word_boundary(&self.text, caret);
         if target == caret {
+            self.undo.fence();
             return;
         }
 
-        self.record_undo();
+        self.record_history_before_edit(EditHistory::Atomic, 0, None);
         self.text.replace_range(caret..target, "");
         self.set_caret_after_edit(caret);
     }
@@ -466,6 +505,7 @@ impl TextEditState {
 
     /// Moves the caret to the start of the buffer.
     pub fn move_home(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         if self.caret() != 0 || !self.selection.is_caret() {
             self.set_caret_position(TextCaret::new(0, TextAffinity::After));
@@ -474,6 +514,7 @@ impl TextEditState {
 
     /// Extends the selection to the start of the buffer.
     pub fn extend_home(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         if self.selection.active != 0 {
             self.set_active(0, TextAffinity::After);
@@ -482,6 +523,7 @@ impl TextEditState {
 
     /// Moves the caret to the end of the buffer.
     pub fn move_end(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         if self.caret() != self.text.len() || !self.selection.is_caret() {
             self.set_caret_position(TextCaret::new(self.text.len(), TextAffinity::Before));
@@ -490,6 +532,7 @@ impl TextEditState {
 
     /// Extends the selection to the end of the buffer.
     pub fn extend_end(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         if self.selection.active != self.text.len() {
             self.set_active(self.text.len(), TextAffinity::Before);
@@ -498,6 +541,7 @@ impl TextEditState {
 
     /// Moves the caret to the start of the current explicit line.
     pub fn move_line_home(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         let target = line_range_at_offset(&self.text, self.selection.active).start;
         if target != self.caret() || !self.selection.is_caret() {
@@ -507,6 +551,7 @@ impl TextEditState {
 
     /// Extends the selection to the start of the current explicit line.
     pub fn extend_line_home(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         let target = line_range_at_offset(&self.text, self.selection.active).start;
         if target != self.selection.active {
@@ -516,6 +561,7 @@ impl TextEditState {
 
     /// Moves the caret to the end of the current explicit line.
     pub fn move_line_end(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         let target = line_range_at_offset(&self.text, self.selection.active).end;
         if target != self.caret() || !self.selection.is_caret() {
@@ -525,6 +571,7 @@ impl TextEditState {
 
     /// Extends the selection to the end of the current explicit line.
     pub fn extend_line_end(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         let target = line_range_at_offset(&self.text, self.selection.active).end;
         if target != self.selection.active {
@@ -534,6 +581,7 @@ impl TextEditState {
 
     /// Moves the caret to the previous explicit line, preserving logical column for this event.
     pub fn move_line_up(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         let target = vertical_line_target(&self.text, self.selection.active, -1);
         if target != self.caret() || !self.selection.is_caret() {
@@ -543,6 +591,7 @@ impl TextEditState {
 
     /// Extends the selection to the previous explicit line.
     pub fn extend_line_up(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         let target = vertical_line_target(&self.text, self.selection.active, -1);
         if target != self.selection.active {
@@ -553,6 +602,7 @@ impl TextEditState {
 
     /// Moves the caret to the next explicit line, preserving logical column for this event.
     pub fn move_line_down(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         let target = vertical_line_target(&self.text, self.selection.active, 1);
         if target != self.caret() || !self.selection.is_caret() {
@@ -562,6 +612,7 @@ impl TextEditState {
 
     /// Extends the selection to the next explicit line.
     pub fn extend_line_down(&mut self) {
+        self.undo.fence();
         self.canonicalize_selection();
         let target = vertical_line_target(&self.text, self.selection.active, 1);
         if target != self.selection.active {
@@ -605,6 +656,7 @@ impl TextEditState {
             match event {
                 UiInputEvent::WindowFocusChanged(false) => {
                     self.composition = None;
+                    self.undo.fence();
                     accepts_editing = false;
                 }
                 UiInputEvent::WindowFocusChanged(true) => {}
@@ -624,6 +676,7 @@ impl TextEditState {
                 }
                 UiInputEvent::Text(event) => self.apply_ordered_text(event, mode),
                 UiInputEvent::ClipboardText(clipboard) if clipboard.target == target => {
+                    self.undo.fence();
                     if let Some(text) = sanitize_clipboard_text(&clipboard.text, mode) {
                         self.paste_text(&text);
                     }
@@ -657,6 +710,7 @@ impl TextEditState {
         mode: TextEditMode,
     ) -> Vec<PlatformRequest> {
         self.composition = None;
+        self.undo.fence();
         let mut platform_requests = Vec::new();
         let mut accepts_input = true;
 
@@ -691,15 +745,18 @@ impl TextEditState {
         for event in text_events {
             match event {
                 TextInputEvent::CompositionStart => {
+                    self.undo.fence();
                     self.composition = Some(TextComposition::default());
                 }
                 TextInputEvent::Composition { text, selection } => {
+                    self.undo.fence();
                     self.composition = Some(TextComposition::new(text.clone(), *selection));
                 }
                 TextInputEvent::Commit(text) => {
                     self.insert_text(text);
                 }
                 TextInputEvent::CompositionEnd => {
+                    self.undo.fence();
                     self.composition = None;
                 }
             }
@@ -742,15 +799,18 @@ impl TextEditState {
         for event in text_events {
             match event {
                 TextInputEvent::CompositionStart => {
+                    self.undo.fence();
                     self.composition = Some(TextComposition::default());
                 }
                 TextInputEvent::Composition { text, selection } => {
+                    self.undo.fence();
                     self.composition = Some(TextComposition::new(text.clone(), *selection));
                 }
                 TextInputEvent::Commit(text) => {
                     self.insert_text(text);
                 }
                 TextInputEvent::CompositionEnd => {
+                    self.undo.fence();
                     self.composition = None;
                 }
             }
@@ -787,7 +847,16 @@ impl TextEditState {
 
     /// Performs local undo.
     pub fn undo(&mut self) -> bool {
-        if let Some(previous) = self.undo.undo(EditSnapshot::from_state(self)) {
+        self.undo.fence();
+        if !self.undo.has_undo_target() {
+            return false;
+        }
+        let previous = if TextUndoStack::can_retain_snapshot_text(self.text.len()) {
+            self.undo.undo(EditSnapshot::from_state(self))
+        } else {
+            self.undo.undo_without_retainable_current()
+        };
+        if let Some(previous) = previous {
             self.restore(previous);
             true
         } else {
@@ -797,12 +866,55 @@ impl TextEditState {
 
     /// Performs local redo.
     pub fn redo(&mut self) -> bool {
-        if let Some(next) = self.undo.redo(EditSnapshot::from_state(self)) {
+        self.undo.fence();
+        if !self.undo.has_redo_target() {
+            return false;
+        }
+        let next = if TextUndoStack::can_retain_snapshot_text(self.text.len()) {
+            self.undo.redo(EditSnapshot::from_state(self))
+        } else {
+            self.undo.redo_without_retainable_current()
+        };
+        if let Some(next) = next {
             self.restore(next);
             true
         } else {
             false
         }
+    }
+
+    fn insert_text_with_history(&mut self, text: &str, history: EditHistory) {
+        self.canonicalize_selection();
+        let range = self.selection.range_in(&self.text);
+        self.composition = None;
+        if range.is_empty() && text.is_empty() {
+            self.undo.fence();
+            return;
+        }
+
+        let history = if range.is_empty() {
+            history
+        } else {
+            EditHistory::Atomic
+        };
+        let removed_bytes = range.end - range.start;
+        let Some(text_len) = self
+            .text
+            .len()
+            .checked_sub(removed_bytes)
+            .and_then(|len| len.checked_add(text.len()))
+        else {
+            self.undo.fence();
+            return;
+        };
+        let Some(caret) = range.start.checked_add(text.len()) else {
+            self.undo.fence();
+            return;
+        };
+        let expected_after = Self::history_state_after_edit(text_len, caret);
+        self.record_history_before_edit(history, text.len(), Some(expected_after));
+        self.text.replace_range(range, text);
+        self.set_caret_after_edit(caret);
     }
 
     fn replace_selection(&mut self, replacement: &str) {
@@ -831,6 +943,7 @@ impl TextEditState {
         if !navigation.matches_source(&self.text) {
             return TextNavigationOutcome::SourceMismatch;
         }
+        self.undo.fence();
 
         let original_selection = self.selection;
         let original_affinity = self.caret_position().affinity;
@@ -870,6 +983,7 @@ impl TextEditState {
 
     fn set_active(&mut self, active: usize, affinity: TextAffinity) {
         let active = clamp_boundary(&self.text, active);
+        self.undo.fence();
         self.selection.active = active;
         self.set_affinity(Self::canonical_affinity(
             &self.text,
@@ -878,7 +992,7 @@ impl TextEditState {
     }
 
     fn set_caret_after_edit(&mut self, offset: usize) {
-        self.set_caret_position(TextCaret::new(offset, TextAffinity::Before));
+        self.set_caret_position_unfenced(TextCaret::new(offset, TextAffinity::Before));
     }
 
     fn set_affinity(&mut self, caret: TextCaret) {
@@ -911,15 +1025,18 @@ impl TextEditState {
     fn apply_ordered_text(&mut self, event: &TextInputEvent, mode: TextEditMode) {
         match event {
             TextInputEvent::CompositionStart => {
+                self.undo.fence();
                 self.composition = Some(TextComposition::default());
             }
             TextInputEvent::Composition { text, selection } => {
+                self.undo.fence();
                 self.composition = Some(TextComposition::new(
                     sanitize_composition_text(text, mode),
                     *selection,
                 ));
             }
             TextInputEvent::Commit(text) => {
+                self.undo.fence();
                 if let Some(text) = sanitize_text_commit(text, mode) {
                     self.insert_text(&text);
                 } else {
@@ -927,6 +1044,7 @@ impl TextEditState {
                 }
             }
             TextInputEvent::CompositionEnd => {
+                self.undo.fence();
                 self.composition = None;
             }
         }
@@ -942,9 +1060,12 @@ impl TextEditState {
         if event.state != KeyState::Pressed {
             return;
         }
-        if self.apply_clipboard_shortcut(event, target, platform_requests)
-            || self.apply_shortcut_event(event)
-        {
+        if self.apply_clipboard_shortcut(event, target, platform_requests) {
+            self.undo.fence();
+            return;
+        }
+        if self.apply_shortcut_event(event) {
+            self.undo.fence();
             return;
         }
 
@@ -957,8 +1078,15 @@ impl TextEditState {
         if self.composition.is_some() {
             return;
         }
-        if let Some(text) = event.text.as_deref().and_then(sanitize_hardware_text) {
-            self.insert_text(&text);
+        if let Some(text) = event.text.as_deref() {
+            if let Some(text) = sanitize_hardware_text(text) {
+                self.insert_text_with_history(
+                    &text,
+                    EditHistory::Coalesced(CoalescedEditKind::Insert),
+                );
+            } else {
+                self.undo.fence();
+            }
         }
     }
 
@@ -1059,11 +1187,15 @@ impl TextEditState {
     fn apply_ordered_edit_command(&mut self, event: &KeyEvent, mode: TextEditMode) -> bool {
         match event.key {
             Key::Backspace => {
-                self.backspace();
+                let history =
+                    self.ordered_deletion_history(event, CoalescedEditKind::DeleteBackward);
+                self.backspace_with_history(history);
                 true
             }
             Key::Delete => {
-                self.delete_forward();
+                let history =
+                    self.ordered_deletion_history(event, CoalescedEditKind::DeleteForward);
+                self.delete_forward_with_history(history);
                 true
             }
             Key::ArrowLeft if event.modifiers.shift => {
@@ -1142,8 +1274,19 @@ impl TextEditState {
             | Key::PageDown
             | Key::ArrowUp
             | Key::ArrowDown
-            | Key::Function(_) => true,
+            | Key::Function(_) => {
+                self.undo.fence();
+                true
+            }
             Key::Character(_) | Key::Space | Key::Unidentified => false,
+        }
+    }
+
+    fn ordered_deletion_history(&self, event: &KeyEvent, kind: CoalescedEditKind) -> EditHistory {
+        if event.modifiers.is_empty() && self.composition.is_none() {
+            EditHistory::Coalesced(kind)
+        } else {
+            EditHistory::Atomic
         }
     }
 
@@ -1215,12 +1358,45 @@ impl TextEditState {
         }
     }
 
-    fn record_undo(&mut self) {
-        self.undo.push(EditSnapshot::from_state(self));
+    fn record_history_before_edit(
+        &mut self,
+        history: EditHistory,
+        changed_bytes: usize,
+        expected_after: Option<HistoryState>,
+    ) {
+        match (history, expected_after) {
+            (EditHistory::Coalesced(kind), Some(expected_after)) => {
+                let before = HistoryState::from_state(self);
+                let edit = CoalescedEdit::new(kind, changed_bytes, expected_after);
+                if !self.undo.try_continue_run(before, edit) {
+                    if TextUndoStack::can_retain_snapshot_text(self.text.len()) {
+                        self.undo.start_run(EditSnapshot::from_state(self), edit);
+                    } else {
+                        self.undo.record_oversized_barrier();
+                    }
+                }
+            }
+            _ => {
+                if TextUndoStack::can_retain_snapshot_text(self.text.len()) {
+                    self.undo.record_atomic(EditSnapshot::from_state(self));
+                } else {
+                    self.undo.record_oversized_barrier();
+                }
+            }
+        }
+    }
+
+    fn history_state_after_edit(text_len: usize, caret: usize) -> HistoryState {
+        let affinity = if caret == 0 {
+            TextAffinity::After
+        } else {
+            TextAffinity::Before
+        };
+        HistoryState::new(text_len, TextSelection::new(caret, caret), affinity)
     }
 
     fn restore(&mut self, snapshot: EditSnapshot) {
-        self.text = snapshot.text;
+        self.text = snapshot.text.into_string();
         self.selection = snapshot.selection;
         self.set_affinity(Self::canonical_affinity(
             &self.text,

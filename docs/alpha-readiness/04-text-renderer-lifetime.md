@@ -6,7 +6,7 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Current / Authorized; checkpoint 4A is Complete / Accepted; Stage 4B is current, `TEXT-02A/B` are accepted, and `TEXT-02C` is the locally verified candidate |
+| Status | Current / Authorized; checkpoint 4A and `TEXT-02` are Complete / Accepted; `TEXT-03A` is the locally verified candidate |
 | Scope | Async liveness, desktop/Unicode text, bounded caches, and renderer correctness |
 | Impact / confidence | Critical / Medium-high overall |
 | Campaign prerequisite | Stage 3 gate; campaign authorization recorded |
@@ -32,9 +32,9 @@ roadmap ID closes. The subpackets never run concurrently. `TEXT-02A` closed
 Issue #554 through PR #555 and squash merge `ac9a1e2`. `TEXT-02B` closed Issue
 #556 through PR #557 and squash merge `676cb4e`; the follow-up wrap-delimiter
 cell prerequisite closed Issue #559 through PR #560 and squash merge `2814a3c`.
-Issue #558 tracks the current `TEXT-02C` implementation candidate that closes
-audit §6.9 and roadmap `TEXT-02` only after its remaining exact-SHA and merge
-gates pass.
+`TEXT-02C` closed Issue #558 through PR #561 and squash merge `691c6ab` after
+its exact-SHA critics, three-OS run 29174582250, and PR run 29174571824 passed.
+Audit §6.9 and roadmap `TEXT-02` are Complete / Accepted.
 
 `TEXT-02B` adds one owned, exact-source-bound `ShapedTextNavigation` derived
 from the positioned cluster ranges already stored by cosmic-text. Construction
@@ -48,6 +48,14 @@ canonical retained widget, ReadOnly, pointer, ordered re-resolution, and IME
 integration. The Unicode-authoritative alpha path requires a canonical retained
 field configured with `TextLayoutStore`; free components and no-store
 construction remain compatibility paths.
+
+`TEXT-03` is serialized into three root-owned packets. `TEXT-03A` bounds and
+coalesces local undo while preserving public direct-edit atomicity. `TEXT-03B`
+owns retained layout generations, eviction, and byte budgets, including
+rejected preview churn. `TEXT-03C` owns incremental renderer-resource export
+and resource byte lifetimes. Audit §§8.4, 10.2, and 11.5 and roadmap `TEXT-03`
+close only after all three pass. Issue #562 tracks the current locally verified
+`TEXT-03A` candidate.
 
 `TEXT-01-PRE` is a root-owned shared-foundation prerequisite discovered by the
 `TEXT-01` task gate. It adds event-time modifier state to the already accepted
@@ -192,10 +200,9 @@ remains `REND-02`.
 
 The `TEXT-01` semantic prerequisites of `TEXT-02`, `TEXT-03`, and dependent
 editor packets are satisfied, and accepted `REND-01` unblocks the renderer side
-of 4B. `TEXT-02A/B` are accepted serialized foundations, and `TEXT-02C` is the
-current locally verified integration candidate.
-`TEXT-03` remains behind the text-store API
-freeze, and `REND-02` remains behind both `TEXT-02` and accepted `REND-01`;
+of 4B. `TEXT-02` is Complete / Accepted and `TEXT-03A` is the current locally
+verified candidate. `TEXT-03B/C` remain serialized behind it, and `REND-02`
+remains behind both accepted `TEXT-02` and `REND-01`;
 inspector/outliner still wait for their Stage 5 composition and collection
 prerequisites. Checkpoint 4A is complete, while Stage 4 remains Current at 4B.
 
@@ -211,7 +218,7 @@ Halt if Unicode work requires an unplanned shaping-engine replacement.
 
 ## Acceptance Gate And Verification Expectations
 
-The 4A checkpoint is Complete / Accepted with deterministic desktop editing/read-only behavior, async incarnation cleanup, balanced invalid-transform recovery, and a documented/tested color/tint contract. `TEXT-02A/B` are accepted and `TEXT-02C` continues 4B; continue without intermediate approval only while packet gates pass and no stop condition triggers.
+The 4A checkpoint and `TEXT-02` are Complete / Accepted with deterministic desktop and Unicode editing, async incarnation cleanup, balanced transform recovery, and documented/tested color/tint behavior. `TEXT-03A` continues 4B; continue without intermediate approval only while packet gates pass and no stop condition triggers.
 
 The Stage 4 gate requires Unicode/grapheme/bidi fixtures; paint/hit/caret/selection agreement at scales 1.25, 1.5, and 1.75; asserted long-session text/undo/cache budgets; and proof that read-only differs from disabled. Packet tasks define exact deterministic checks. Passing the gate advances to the already Authorized / Queued Stage 5; a failed checkpoint halts the campaign.
 

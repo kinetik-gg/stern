@@ -104,6 +104,16 @@ published, or accepted as an alpha release.
   model movement. Existing shaped struct literals, byte-only geometry APIs,
   free components, and construction without a retained layout store remain
   compatibility paths.
+- Bounded text-field-local undo and redo to 128 combined snapshots and 4 MiB
+  of retained UTF-8 snapshot text. Canonical ordered hardware insertion,
+  unmodified Backspace, and unmodified Delete without active composition now
+  coalesce contiguous runs in inclusive 4096-byte units without cloning a
+  full-buffer snapshot for every fragment. Public direct edits, modified or
+  active-preedit deletion, paste/cut, IME commits, selection replacement, word
+  deletion, and multiline Enter remain atomic. Deterministic oldest/farthest
+  eviction preserves nearest traversal targets; states over the byte limit form
+  explicit one-way history barriers rather than allowing discontinuous undo
+  jumps. No public text-editing API changed.
 - Defined renderer-bound `Color` as straight sRGB plus straight alpha and made
   Vello translation diagnose and sanitize every invalid color occurrence before
   command snapshots. Peniko gradients now explicitly select sRGB with

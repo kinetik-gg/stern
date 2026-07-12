@@ -182,7 +182,30 @@ search
 password/masked later if needed
 ```
 
-Text field undo should be local to text editing and should not conflict with application-level undo unless the application explicitly bridges them.
+Text field undo is local to text editing and does not conflict with
+application-level undo unless the application explicitly bridges them. Local
+history retains at most 128 snapshots and 4 MiB of exact UTF-8 snapshot text
+across undo and redo together; the count cap separately bounds selection,
+affinity, and container metadata. New units and traversal evict the
+deepest/farthest state first while preserving the nearest individually
+retainable undo or redo target. A pre-edit snapshot above 4 MiB clears both
+directions and is not retained, so an edit can never jump across an unrecorded
+oversized state. Traversal out of an oversized current state is intentionally
+one-way because that reverse target cannot be retained.
+
+Canonical ordered hardware insertion plus unmodified Backspace and Delete
+without active composition coalesce only when kind, direction, exact
+caret/affinity, text length, range continuity, and composition state agree. A
+run includes at most 4096 changed UTF-8 bytes. A fragment that would cross the
+limit starts a new unit whole, so UTF-8 and EGCs are never split. Direct editing
+methods, modified or active-preedit deletion, paste/cut, IME commit, selection
+replacement, word deletion, and multiline Enter remain atomic. Navigation,
+selection, pointer placement, composition lifecycle, focus loss, shortcuts,
+target-matching paste results (including filtered-empty results), and undo/redo
+fence a run without adding history. Wrong-target paste results do not. Stale
+shaped navigation and active-preedit suppressed arrows retain their stronger
+whole-state transactional behavior. Composition remains transient; undo/redo
+restores text, selection direction, and caret affinity, then clears composition.
 
 Production text fields consume one canonical ordered input stream through the
 current text-input owner. Key edit and shortcut commands run before hardware
