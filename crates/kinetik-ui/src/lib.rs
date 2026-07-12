@@ -45,6 +45,12 @@ pub mod render_vello {
     pub use kinetik_ui_vello::*;
 }
 
+/// Concrete Vello/Winit window presenter.
+#[cfg(feature = "vello-winit")]
+pub mod vello_winit {
+    pub use kinetik_ui_vello_winit::*;
+}
+
 /// Retained application-facing toolkit state.
 ///
 /// This owns the core UI memory and shaped text layout cache that most apps

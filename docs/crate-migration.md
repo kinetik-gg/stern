@@ -12,14 +12,14 @@ of the checkout):
 
 ```toml
 [dependencies]
-kinetik-ui = { path = "../kinetik-ui/crates/kinetik-ui", features = ["platform-winit", "render-vello"] }
+kinetik-ui = { path = "../kinetik-ui/crates/kinetik-ui", features = ["vello-winit"] }
 ```
 
 After `0.1.0-alpha.1` has actually been published, the future registry form is:
 
 ```toml
 [dependencies]
-kinetik-ui = { version = "=0.1.0-alpha.1", features = ["platform-winit", "render-vello"] }
+kinetik-ui = { version = "=0.1.0-alpha.1", features = ["vello-winit"] }
 ```
 
 The facade re-exports the common application stack through
@@ -39,6 +39,7 @@ kinetik-ui-widgets = { path = "../kinetik-ui/crates/kinetik-ui-widgets" }
 kinetik-ui-render = { path = "../kinetik-ui/crates/kinetik-ui-render" }
 kinetik-ui-vello = { path = "../kinetik-ui/crates/kinetik-ui-vello" }
 kinetik-ui-winit = { path = "../kinetik-ui/crates/kinetik-ui-winit" }
+kinetik-ui-vello-winit = { path = "../kinetik-ui/crates/kinetik-ui-vello-winit" }
 ```
 
 Once published, each lower-level registry dependency must use the exact
@@ -56,6 +57,7 @@ a reason to use the registry snippets early.
 | `kinetik-ui-render-vello` | `kinetik-ui-vello` | Vello renderer backend and primitive translation |
 | `kinetik-ui-platform-winit` | `kinetik-ui-winit` | winit input normalization, platform requests, DPI, cursor, IME, redraw, and accessibility handoff data |
 | `kinetik-ui-text` | `kinetik-ui-text` | Text editing, shaping, measurement, hit testing, and layout cache |
+| no prior supported presenter crate | `kinetik-ui-vello-winit` | Concrete Vello/winit surface, device, presentation, and recovery integration |
 
 ## Import Changes
 
@@ -71,6 +73,7 @@ When a boundary needs a specific layer, import that layer directly:
 use kinetik_ui_render::{RenderFrameInput, RenderResources, RendererBackend};
 use kinetik_ui_vello::VelloRenderer;
 use kinetik_ui_winit::{WinitInputAdapter, frame_context_from_winit};
+use kinetik_ui_vello_winit::{VelloPresenterConfig, VelloWindowPresenter};
 ```
 
 ## Boundary Rules
@@ -81,5 +84,9 @@ use kinetik_ui_winit::{WinitInputAdapter, frame_context_from_winit};
 - Vello-specific code should depend on `kinetik-ui-vello`.
 - winit shells should depend on `kinetik-ui-winit` or enable the facade's
   `platform-winit` feature.
+- Applications using the accepted live Vello window path should depend on
+  `kinetik-ui-vello-winit` directly or enable the facade's composite
+  `vello-winit` feature. Presenter types remain under
+  `kinetik_ui::vello_winit`, not the prelude.
 - Applications that want the full default stack can use the facade default
   features.

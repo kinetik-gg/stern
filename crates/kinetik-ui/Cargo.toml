@@ -11,9 +11,10 @@ categories.workspace = true
 description = "Application-facing facade for the Kinetik UI desktop toolkit"
 
 [features]
-default = ["platform-winit", "render-vello"]
+default = ["platform-winit", "render-vello", "vello-winit"]
 platform-winit = ["dep:kinetik-ui-winit"]
 render-vello = ["dep:kinetik-ui-vello"]
+vello-winit = ["platform-winit", "render-vello", "dep:kinetik-ui-vello-winit"]
 
 [dependencies]
 kinetik-ui-core = { version = "=0.1.0-alpha.1", path = "../kinetik-ui-core" }
@@ -22,6 +23,7 @@ kinetik-ui-text = { version = "=0.1.0-alpha.1", path = "../kinetik-ui-text" }
 kinetik-ui-widgets = { version = "=0.1.0-alpha.1", path = "../kinetik-ui-widgets" }
 kinetik-ui-winit = { version = "=0.1.0-alpha.1", path = "../kinetik-ui-winit", optional = true }
 kinetik-ui-vello = { version = "=0.1.0-alpha.1", path = "../kinetik-ui-vello", optional = true }
+kinetik-ui-vello-winit = { version = "=0.1.0-alpha.1", path = "../kinetik-ui-vello-winit", optional = true }
 
 [lints]
 workspace = true

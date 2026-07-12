@@ -19,11 +19,13 @@ paths without deprecation and makes no export additions, removals, or moves.
 ## Exact Facade Root
 
 The facade root is exactly: `UiState`, `core`, `text`, `render`, `widgets`,
-`platform_winit`, `render_vello`, `prelude`.
+`platform_winit`, `render_vello`, `vello_winit`, `prelude`.
 
 `platform_winit` is available with the `platform-winit` feature and
-`render_vello` is available with the `render-vello` feature. Both features are
-enabled by default today. The modules and `UiState` are provisional
+`render_vello` is available with the `render-vello` feature. The concrete
+`vello_winit` presenter is available through the composite `vello-winit`
+feature, which enables both lower features and is enabled by default today.
+The modules and `UiState` are provisional
 Experimental until their applicable capability axes are proven through the
 public vertical slice.
 
@@ -42,6 +44,7 @@ curation.
 | Render | Provisional Experimental | `kinetik_ui::render`; current common subset is also in `kinetik_ui::prelude` | Yes: backend-independent frame and resource contract | Presenter, resource-lifetime, diagnostic, and external-texture workflow proof |
 | Winit | Provisional Experimental, feature-gated | `kinetik_ui::platform_winit` | Yes: supported window and platform loop | Winit input, IME/clipboard/cursor/platform-request, accessibility boundary, and redraw-loop proof; no new prelude exports before presenter proof |
 | Vello | Provisional Experimental, feature-gated | `kinetik_ui::render_vello` | Yes: supported 2D backend and presenter | Surface acquisition/recovery, resize/scale, presentation, diagnostics, and Vello-backed workflow proof; no new prelude exports before presenter proof |
+| Vello/Winit presenter | Provisional Experimental, feature-gated, qualified only | `kinetik_ui::vello_winit` | Yes: supported one-window live presenter | `REND-03A` proves the reusable lifecycle/API foundation; Showcase adoption and offscreen separation remain `REND-03B`, native texture composition remains `REND-04`, and no presenter item enters the prelude |
 | Widgets | Provisional Experimental | Common composition path: `kinetik_ui::widgets`; advanced APIs use the qualified modules listed below | Yes: controls and viewport surface; exact final subset deferred | Public paint/input/accessibility/platform/live-workflow evidence for each selected component |
 
 ### Facade state inventory
@@ -134,6 +137,32 @@ These exports are present when the `render-vello` feature is enabled:
 - `VelloRenderer`
 - `translate_primitives`
 
+### Vello/Winit presenter inventory
+
+These qualified exports are present at `kinetik_ui::vello_winit` when the
+`vello-winit` feature is enabled. None is re-exported from the prelude:
+
+- `VelloWindowPresenter`
+- `VelloPresenterConfig`
+- `PresenterDeviceScope`
+- `PresenterDevice`
+- `VelloPresenterStatus`
+- `VelloAttachmentStatus`
+- `VelloAttachOutcome`
+- `VelloSuspendOutcome`
+- `VelloResizeOutcome`
+- `VelloRecoveryKind`
+- `VelloRecoveryOutcome`
+- `VelloPresentReport`
+- `VelloPresentStatus`
+- `VelloRedrawGuidance`
+- `VelloPresenterError`
+- `PresenterGpuError`
+- `PresenterGpuErrorKind`
+- `InvalidColorChannel`
+- `AaConfig`
+- `wgpu`
+
 ### Widgets inventory
 
 - `IconGraphic`
@@ -162,9 +191,10 @@ and deferred from the supported alpha vertical slice unless later behavioral
 evidence changes that decision.
 
 Platform and renderer implementations stay qualified under
-`kinetik_ui::platform_winit` and `kinetik_ui::render_vello`. Their current
-prelude compatibility exports remain intact for Stage 1, but the prelude gains
-no new implementation-specific exports before presenter proof.
+`kinetik_ui::platform_winit`, `kinetik_ui::render_vello`, and
+`kinetik_ui::vello_winit`. Existing platform/Vello prelude compatibility
+exports remain intact, while the presenter stays qualified-only until the
+Stage 7 API decision.
 
 Later stages may add new qualified APIs when a subsystem needs them. Any
 prelude expansion requires an explicit policy decision plus accepted evidence;

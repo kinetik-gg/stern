@@ -152,7 +152,7 @@ the public crate graph changes again.
 
 ## Package Graph And Publish Order
 
-The showcase application is never published. The seven library crates must be
+The showcase application is never published. The eight library crates must be
 packaged and, if separately authorized, published in this exact dependency
 order:
 
@@ -162,7 +162,8 @@ order:
 4. `kinetik-ui-widgets`
 5. `kinetik-ui-winit`
 6. `kinetik-ui-vello`
-7. `kinetik-ui`
+7. `kinetik-ui-vello-winit`
+8. `kinetik-ui`
 
 Every internal dependency must contain both its local development `path` and
 the exact registry requirement for the shared prerelease version. The path is
@@ -199,6 +200,7 @@ cargo package -p kinetik-ui-render --no-verify
 cargo package -p kinetik-ui-widgets --no-verify
 cargo package -p kinetik-ui-winit --no-verify
 cargo package -p kinetik-ui-vello --no-verify
+cargo package -p kinetik-ui-vello-winit --no-verify
 cargo package -p kinetik-ui --no-verify
 ```
 
@@ -221,7 +223,7 @@ artifacts after verification.
 ## Release-State Vocabulary
 
 - **Packageable:** local archives generate, normalize, inspect, and build.
-- **Published:** crates.io accepted all seven crates in dependency order.
+- **Published:** crates.io accepted all eight crates in dependency order.
 - **Tagged:** the authorized release commit has a matching signed or annotated
   `vX.Y.Z[-PRERELEASE]` Git tag.
 - **Alpha-accepted:** the separate product/readiness gate accepted the alpha.
@@ -251,7 +253,7 @@ Also verify:
 - Breaking changes are documented.
 - Migration notes exist when APIs changed.
 - Showcase/examples compile.
-- All seven normalized archives pass dependency-aware inspection and extracted
+- All eight normalized archives pass dependency-aware inspection and extracted
   builds in publish order.
 - The release approver has explicitly authorized any publication or tag.
 

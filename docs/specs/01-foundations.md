@@ -149,6 +149,11 @@ kinetik-ui-winit
   winit platform adapter, event normalization, window integration,
   cursor mapping, redraw scheduling, and DPI handling.
 
+kinetik-ui-vello-winit
+  Concrete one-window integration owning the Vello/wgpu surface, current
+  device/queue, presentation order, and recovery policy. It does not own the
+  event loop, input, shell requests, or application state.
+
 kinetik-ui
   Facade crate that re-exports the common application stack.
 
@@ -159,12 +164,12 @@ kinetik-ui-showcase
 Dependency direction:
 
 ```text
-kinetik-ui-core
-  <- kinetik-ui-widgets
-  <- kinetik-ui-render
-  <- kinetik-ui-vello
-  <- kinetik-ui-winit
-  <- kinetik-ui
+kinetik-ui-core <- kinetik-ui-widgets
+kinetik-ui-core <- kinetik-ui-render <- kinetik-ui-vello
+kinetik-ui-core <- kinetik-ui-winit
+(kinetik-ui-core, kinetik-ui-render, kinetik-ui-vello)
+  <- kinetik-ui-vello-winit
+(all public library layers) <- kinetik-ui
 ```
 
 `kinetik-ui-core` must remain platform-independent.
@@ -175,8 +180,11 @@ Renderer backends must not know about component types such as `Button`, `Tabs`, 
 
 Application code should normally depend on the `kinetik-ui` facade crate. Custom
 renderers should depend on `kinetik-ui-render`, Vello integrations on
-`kinetik-ui-vello`, and winit shells on `kinetik-ui-winit`. Breaking crate graph
-changes require migration notes; the `ef7c2f9` consolidation is documented in
+`kinetik-ui-vello`, winit shells on `kinetik-ui-winit`, and the accepted live
+Vello window path on `kinetik-ui-vello-winit`. The concrete presenter uses
+Winit directly but does not depend on the input/shell adapter merely to share a
+windowing library. Breaking crate graph changes require migration notes; the
+`ef7c2f9` consolidation and later presenter addition are documented in
 [`crate-migration.md`](../crate-migration.md).
 
 ## 5. Terminology

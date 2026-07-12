@@ -6,6 +6,7 @@ members = [
     "crates/kinetik-ui-render",
     "crates/kinetik-ui-text",
     "crates/kinetik-ui-vello",
+    "crates/kinetik-ui-vello-winit",
     "crates/kinetik-ui-widgets",
     "crates/kinetik-ui-winit",
     "apps/kinetik-ui-showcase",

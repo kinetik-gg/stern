@@ -148,6 +148,33 @@ fn facade_root_and_feature_qualified_paths_compile() {
         let _ = kinetik_ui::render_vello::VelloRenderer::new();
         let _ = kinetik_ui::render_vello::translate_primitives;
     }
+
+    #[cfg(feature = "vello-winit")]
+    {
+        let presenter = kinetik_ui::vello_winit::VelloWindowPresenter::new(
+            kinetik_ui::vello_winit::VelloPresenterConfig::new(),
+        )
+        .expect("detached construction is GPU-free");
+        let qualified = [
+            std::any::type_name::<kinetik_ui::vello_winit::PresenterDeviceScope>(),
+            std::any::type_name::<kinetik_ui::vello_winit::VelloPresentReport>(),
+            std::any::type_name::<kinetik_ui::vello_winit::VelloRecoveryOutcome>(),
+        ];
+        assert!(qualified.iter().all(|path| !path.is_empty()));
+        assert!(presenter.window().is_none());
+    }
+}
+
+#[cfg(feature = "vello-winit")]
+#[test]
+fn facade_vello_winit_module_preserves_direct_crate_identities_without_prelude_exports() {
+    fn same_type<T>(_: Option<T>, _: Option<T>) {}
+
+    same_type::<kinetik_ui::vello_winit::wgpu::Device>(
+        None,
+        None::<kinetik_ui_vello_winit::wgpu::Device>,
+    );
+    same_type::<kinetik_ui::vello_winit::AaConfig>(None, None::<kinetik_ui_vello_winit::AaConfig>);
 }
 
 #[test]

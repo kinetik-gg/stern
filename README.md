@@ -99,6 +99,9 @@ kinetik-ui-vello
 kinetik-ui-winit
   winit platform adapter.
 
+kinetik-ui-vello-winit
+  Concrete Vello/winit window presenter, surface lifecycle, and recovery policy.
+
 kinetik-ui
   Facade crate.
 
@@ -115,7 +118,7 @@ checkout, depend on the facade with a local path:
 
 ```toml
 [dependencies]
-kinetik-ui = { path = "../kinetik-ui/crates/kinetik-ui", features = ["platform-winit", "render-vello"] }
+kinetik-ui = { path = "../kinetik-ui/crates/kinetik-ui", features = ["vello-winit"] }
 ```
 
 Then start from the prelude:
@@ -131,22 +134,28 @@ Use checkout-relative paths for lower-level integration boundaries as well:
 kinetik-ui-render = { path = "../kinetik-ui/crates/kinetik-ui-render" } # custom renderer contracts
 kinetik-ui-vello = { path = "../kinetik-ui/crates/kinetik-ui-vello" }   # Vello backend
 kinetik-ui-winit = { path = "../kinetik-ui/crates/kinetik-ui-winit" }   # winit platform adapter
+kinetik-ui-vello-winit = { path = "../kinetik-ui/crates/kinetik-ui-vello-winit" } # live presenter
 ```
 
 ### Future registry use
 
-Only after all seven crates are published may applications replace those paths
+Only after all eight library crates are published may applications replace those paths
 with exact prerelease requirements:
 
 ```toml
 [dependencies]
-kinetik-ui = { version = "=0.1.0-alpha.1", features = ["platform-winit", "render-vello"] }
+kinetik-ui = { version = "=0.1.0-alpha.1", features = ["vello-winit"] }
 ```
 
 Lower-level registry dependencies would likewise use
 `=0.1.0-alpha.1`. Package dry-runs and generated-archive checks establish
 packageability only; they do not create a tag, publish a crate, or constitute
 alpha acceptance.
+
+The default facade stack includes the composite `vello-winit` feature. Its
+presenter remains qualified at `kinetik_ui::vello_winit` and is deliberately
+absent from the prelude. A complete application-owned event-loop example is in
+`kinetik-ui-vello-winit/examples/one_window.rs`.
 
 The `ef7c2f9` crate consolidation renamed the old `kinetik-ui-render-vello`
 crate to `kinetik-ui-vello` and the old `kinetik-ui-platform-winit` crate to

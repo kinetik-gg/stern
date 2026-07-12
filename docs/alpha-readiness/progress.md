@@ -1961,6 +1961,88 @@ presenter backends remain deferred. Stage 5 composition packets and Stages 6-7
 remain open. The repository remains foundation / developer preview, not
 alpha-ready; no tag, publish, deployment, or release is authorized.
 
+### `REND-03A`: reusable Vello/Winit presenter foundation
+
+Status: Complete / Accepted for the shared presenter foundation. Issue #574
+owns this bounded slice. `REND-03B` is next and must replace the Showcase-
+private presenter plus prove the independent offscreen negative path before
+integrated `REND-03` can close. `REND-04`, Stage 5 composition, Stages 6-7, and
+alpha readiness remain open.
+
+#### Changed files
+
+- Workspace manifest/lock, README, and changelog.
+- New `crates/kinetik-ui-vello-winit` manifest, nine source files, public API
+  compile test, and runnable `one_window` example.
+- Facade manifest, qualified module, and public API compile test.
+- Public API policy, foundation spec, crate migration guide, release policy,
+  and this progress ledger.
+
+#### Reasoning and contract decisions
+
+The new eighth publishable library owns exactly one attached Winit window's
+Vello/wgpu context, compatible device/queue, surface, intermediate target,
+blitter, acquire policy, GPU renderer, notify, presentation, and recovery. The
+application still owns the event loop, input, frame construction, shell work,
+and repaint scheduling; `VelloRenderer` remains the backend-neutral scene
+encoder boundary. The facade exposes the integration only through the default
+composite `vello-winit` feature and qualified `kinetik_ui::vello_winit` module,
+with no presenter prelude exports.
+
+Zero extents never become fabricated 1x1 surfaces. Frame, configured-target,
+and acquired-texture extents reconcile before scene mutation; an acquired
+mismatch drops its frame before one configure and never reacquires in the same
+call. The success order is acquire, validate, encode, Vello submission, blit
+submission, pre-present notification, and present. Surface statuses produce
+typed redraw guidance. Device loss invalidates checked scopes immediately and
+rebuilds the whole context/device/renderer/surface path; native borrowing is a
+closure gated by opaque presenter identity and generation. Device loss uses a
+non-droppable generation-bound signal while uncaptured errors retain their
+bounded, overflow-reporting queue; callbacks never rebuild on callback threads.
+
+#### Tests run and results
+
+- Three final exact-task critics accepted task SHA
+  `7835f0eb12d0eac068213cb0819dbd50d9450293a0158aee7b9a0cc7f3879c6e`
+  at P0/P1/P2=`0/0/0` after five consolidated correction rounds. The executable
+  archive verifier was frozen at 11,379 bytes / SHA-256
+  `202f0e653d633308822c003ab22b9d30becd6f646d3946f8280fa06dc38e6fbc`.
+- Presenter deterministic tests passed 25/25 and direct public API tests passed
+  4/4. The runnable example compiled. Facade public API tests passed 12/12 with
+  all features and 11/11 without defaults; isolated `platform-winit`,
+  `render-vello`, their pair, and composite `vello-winit` checks passed.
+- Both normalized archives generated with ephemeral unpublished-dependency
+  patches. Parsed manifest/member/dependency guards and extracted all-target,
+  all-feature builds passed; lower dependency trees remained uncontaminated.
+- Warning-denied touched-crate Clippy and all exact six workspace gates passed:
+  format, warning-denied all-target/all-feature Clippy, all-feature tests,
+  all-feature build, all-feature examples, and warning-denied no-deps docs.
+  `RUSTDOCFLAGS` was restored to its prior unset state. Candidate critics and
+  remote CI remain required before merge.
+- The first candidate review found P0/P1/P2=`0/1/3`. Its consolidated remedy
+  made loss non-droppable under callback saturation, connected accessor,
+  post-render, same/changed-slot, failed-rebuild, and exact whole-device-order
+  evidence to production-used control/drivers, and completed the example's
+  one-shot timeout redraw. Fresh candidate critics remain required.
+- The frozen user-owned audit Markdown/PDF baseline remained outside the
+  tracked change set and is rechecked by the final packet gate.
+
+#### Remaining risks and deferred findings
+
+This packet compiles a runnable live example but does not claim the Showcase
+has adopted it or that a live/offscreen pair has been exercised; those are
+serial `REND-03B` evidence. Native same-device texture registration, GPU-only
+resolution precedence, no-readback tracing, dirty/replace semantics, and final
+straight-sRGB/straight-alpha pixels remain `REND-04`. Vello atlas-copy bandwidth
+and duplicate GPU memory remain unmeasured.
+
+Zero-copy, arbitrary views, foreign/shared-device import, explicit native
+synchronization, reusable offscreen presenters, multiple live presenters or
+windows, additional backends, HDR/wide-gamut/ICC conversion, and transparent
+production device recovery remain deliberately unsupported or deferred. The
+repository remains foundation / developer preview: no tag, publication,
+deployment, release, or alpha acceptance occurred.
+
 ## Packet Completion Template
 
 Every packet review must use these exact headings and include commands plus concrete results:
