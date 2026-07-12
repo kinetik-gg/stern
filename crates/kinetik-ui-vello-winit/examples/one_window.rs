@@ -38,6 +38,9 @@ impl OneWindowApp {
     }
 
     fn redraw(&mut self, event_loop: &ActiveEventLoop, window: &Arc<Window>) {
+        // Any delivered redraw supersedes an older timeout; only a new
+        // `Later` result below may arm the next one-shot deadline.
+        event_loop.set_control_flow(ControlFlow::Wait);
         let raw_size = window.inner_size();
         match self.presenter.resize(raw_size) {
             Ok(VelloResizeOutcome::RecoveryRequired(_)) => {
