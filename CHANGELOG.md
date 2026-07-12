@@ -92,10 +92,18 @@ published, or accepted as an alpha release.
   multi-grapheme clusters by EGC count, preserves bidi/wrap affinity aliases,
   and supplies one authority for visual caret/word motion, hit testing, caret
   rectangles, and disjoint selection spans. New `TextEditState` visual
-  move/extend methods reject stale maps transactionally and leave text,
-  composition, and local undo/redo untouched. Existing shaped struct literals
-  and byte-only geometry APIs remain compatible; retained widget wiring remains
-  the following serialized text packet.
+  move/extend methods and `apply_visual_navigation_key` reject stale maps
+  transactionally and leave text, composition, and local undo/redo untouched.
+  Canonical retained fields configured with `TextLayoutStore` now rebuild one
+  exact display-source map after ordered input and use it for registered paint,
+  visual keyboard movement, pointer selection, caret affinity, mixed-bidi
+  selection, preedit underline/caret, viewport reveal, and native IME geometry.
+  Pointer hits remain frozen to entry geometry while each horizontal key
+  resolves the current post-mutation source. Read-only shares shaped navigation
+  and copy without mutation or native IME; active preedit consumes horizontal
+  model movement. Existing shaped struct literals, byte-only geometry APIs,
+  free components, and construction without a retained layout store remain
+  compatibility paths.
 - Defined renderer-bound `Color` as straight sRGB plus straight alpha and made
   Vello translation diagnose and sanitize every invalid color occurrence before
   command snapshots. Peniko gradients now explicitly select sRGB with

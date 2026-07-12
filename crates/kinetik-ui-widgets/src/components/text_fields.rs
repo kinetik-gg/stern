@@ -1,10 +1,10 @@
 use super::{
     ComponentState, CursorShape, OrderedTextInputResult, Primitive, Rect, RectPrimitive, Response,
-    TextEditMode, TextEditState, TextLayoutStore, TextSelection, Theme, UiInput, UiMemory,
-    WidgetId, WidgetOutput, display_text_with_composition, focusable, multi_line_hit_offset,
-    multi_line_text_primitives, single_line_hit_offset, single_line_text_primitives,
-    text_field_layout, text_field_semantics, text_input_platform_requests, text_line_fragments,
-    with_hover_cursor, with_response_state,
+    TextEditMode, TextEditState, TextLayoutKey, TextLayoutStore, TextSelection, TextStyle, Theme,
+    UiInput, UiMemory, WidgetId, WidgetOutput, display_text_with_composition, focusable,
+    multi_line_hit_offset, multi_line_text_primitives, single_line_hit_offset,
+    single_line_text_primitives, text_field_layout, text_field_semantics,
+    text_input_platform_requests, text_line_fragments, with_hover_cursor, with_response_state,
 };
 use kinetik_ui_core::{
     CapturedDomainDragGesture, DomainDragGesturePhase, RepaintRequest, TextInputOwnerMode,
@@ -15,8 +15,8 @@ use kinetik_ui_text::TextViewport;
 use super::semantics::text_field_semantics_with_access;
 use super::text_geometry::{TextFieldGeometry, TextFieldKind};
 use super::text_interaction::{
-    ResolvedTextPointerAction, TextPointerPhase, TextReplayResult, replay_text_field_events,
-    text_wheel_delta,
+    ResolvedTextPointerAction, TextNavigationResolution, TextPointerPhase, TextReplayResult,
+    replay_text_field_events_with_navigation, text_wheel_delta,
 };
 
 /// Access policy for a canonical text field.
@@ -771,9 +771,9 @@ fn canonical_text_field_runtime(
         .map(|action| ResolvedTextPointerAction {
             ordinal: action.ordinal,
             phase: action.phase,
-            model_offset: action.position.map(|position| {
-                entry_geometry.model_offset_at_with_layout(position, text_layouts.as_deref())
-            }),
+            model_caret: action
+                .position
+                .map(|position| entry_geometry.model_caret_at(position)),
             click_count: action.click_count,
             modifiers: action.modifiers,
             release_clicked: action.release_clicked,
@@ -791,7 +791,7 @@ fn canonical_text_field_runtime(
                 .filter(|action| {
                     is_pointer_ownership_press(action.phase)
                         && action.ordinal == Some(final_ordinal)
-                        && action.model_offset.is_some()
+                        && action.model_caret.is_some()
                 })
                 .count()
                 == 1
@@ -801,7 +801,7 @@ fn canonical_text_field_runtime(
             .filter(|action| {
                 is_pointer_ownership_press(action.phase)
                     && action.ordinal.is_none()
-                    && action.model_offset.is_some()
+                    && action.model_caret.is_some()
             })
             .count()
             == 1
@@ -833,16 +833,16 @@ fn canonical_text_field_runtime(
         pointer_actions.clear();
     }
 
-    let accepted_place_caret = pointer_actions.iter().any(|action| {
-        action.phase == TextPointerPhase::PlaceCaret && action.model_offset.is_some()
-    });
+    let accepted_place_caret = pointer_actions
+        .iter()
+        .any(|action| action.phase == TextPointerPhase::PlaceCaret && action.model_caret.is_some());
     let accepted_double_click = pointer_actions.iter().any(|action| {
         action.release_clicked
             && matches!(
                 action.phase,
                 TextPointerPhase::Release | TextPointerPhase::OwnershipRelease
             )
-            && action.model_offset.is_some()
+            && action.model_caret.is_some()
             && action.click_count >= 2
     });
     let domain_drag_modifiers = domain_drag_aggregate_authoritative.then(|| {
@@ -883,6 +883,21 @@ fn canonical_text_field_runtime(
     });
     let requires_transaction_preview =
         domain_drag_source && response.dragged && pointer_metadata.domain_drag_modifiers.is_some();
+    let navigation_recipe = theme.text_field(ComponentState {
+        hovered: response.state.hovered,
+        pressed: response.state.pressed,
+        focused: runtime.memory().is_focused(id) && !access.is_disabled(),
+        disabled: access.is_disabled(),
+        selected: false,
+    });
+    let navigation_style = TextStyle::new(
+        navigation_recipe.font.family,
+        navigation_recipe.font.size,
+        navigation_recipe.font.line_height,
+    );
+    let navigation_width = (rect.width - navigation_recipe.padding_x * 2.0).max(0.0);
+    let navigation_wrap = kind.wraps();
+    let shaped_navigation_configured = text_layouts.is_some();
     let (replay_enabled, replay) = if access.is_disabled() || interaction_fenced {
         (false, TextReplayResult::default())
     } else if requires_transaction_preview {
@@ -897,7 +912,7 @@ fn canonical_text_field_runtime(
         };
         if let Some(preview_events) = preview_events {
             let mut preview_state = state.clone();
-            let preview_replay = replay_text_field_events(
+            let preview_replay = replay_text_field_events_with_navigation(
                 &mut preview_state,
                 access,
                 edit_mode,
@@ -907,6 +922,16 @@ fn canonical_text_field_runtime(
                 retained_gesture_anchor,
                 pointer_actions.clone(),
                 preview_events.clone(),
+                shaped_navigation_configured,
+                |state| {
+                    resolve_text_navigation(
+                        text_layouts.as_deref_mut(),
+                        state,
+                        &navigation_style,
+                        navigation_width,
+                        navigation_wrap,
+                    )
+                },
             );
             if replay_guard(&pointer_metadata, &preview_state) {
                 let claim_matches = !prepared
@@ -939,7 +964,7 @@ fn canonical_text_field_runtime(
             Vec::new()
         };
         let replay = if replay_enabled {
-            replay_text_field_events(
+            replay_text_field_events_with_navigation(
                 state,
                 access,
                 edit_mode,
@@ -949,6 +974,16 @@ fn canonical_text_field_runtime(
                 retained_gesture_anchor,
                 pointer_actions,
                 ordered_events,
+                shaped_navigation_configured,
+                |state| {
+                    resolve_text_navigation(
+                        text_layouts.as_deref_mut(),
+                        state,
+                        &navigation_style,
+                        navigation_width,
+                        navigation_wrap,
+                    )
+                },
             )
         } else {
             TextReplayResult::default()
@@ -1047,6 +1082,31 @@ fn canonical_text_field_runtime(
         ordered: replay.ordered,
         pointer: pointer_metadata,
     }
+}
+
+fn resolve_text_navigation(
+    text_layouts: Option<&mut TextLayoutStore>,
+    state: &TextEditState,
+    style: &TextStyle,
+    width: f32,
+    wrap: bool,
+) -> TextNavigationResolution {
+    let Some(store) = text_layouts else {
+        return TextNavigationResolution::Unavailable;
+    };
+    let id = store.layout_id(TextLayoutKey::new(
+        state.text.clone(),
+        style.clone(),
+        width,
+        wrap,
+    ));
+    let Some(layout) = store.layout(id) else {
+        return TextNavigationResolution::Invalid;
+    };
+    layout.navigation(&state.text).map_or(
+        TextNavigationResolution::Invalid,
+        TextNavigationResolution::Ready,
+    )
 }
 
 fn discarded_domain_trace_cannot_drag(

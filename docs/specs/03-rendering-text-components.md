@@ -242,9 +242,27 @@ that history. Direct `TextEditState` visual move/extend methods compare the
 current text with the owned snapshot before canonicalizing or mutating state.
 A mismatch is transactional and reports `SourceMismatch`; matching calls first
 canonicalize both public selection endpoints, preserve composition and local
-undo/redo, and report whether selection or effective affinity moved. Canonical
-retained widget, ReadOnly, pointer, ordered mutation/re-resolution, and IME
-integration remains the final serialized `TEXT-02C` step.
+undo/redo, and report whether selection or effective affinity moved.
+`apply_visual_navigation_key` applies the same authority to pressed or repeated
+Left/Right keys, including Shift extension and the documented Ctrl-xor-Alt
+visual-word policy. A stale map consumes the key without logical fallback.
+While preedit is active, horizontal keys are consumed unchanged before source
+resolution because the platform IME owns navigation inside the display-only
+composition text.
+
+The Unicode-authoritative alpha path is the canonical retained field configured
+with `TextLayoutStore`. Its entry display map resolves every pointer action once
+before ordered replay. Each consumed horizontal key then resolves a fresh map
+from the exact current model source at that event's replay position. After
+replay, one exact display-source layout/navigation pair owns registered paint,
+caret and affinity, selection, preedit underline and caret, viewport reveal,
+and clipped native IME geometry. Shaped hits carry affinity through
+display/model composition mapping; hits at or inside preedit collapse to its
+model insertion seam. If retained navigation validation fails, the whole
+snapshot falls back to layoutless compatibility geometry instead of mixing
+shaped paint with byte-only geometry. Public free components and construction
+without `TextLayoutStore` remain compatible, but do not carry the
+Unicode-authoritative alpha promise.
 
 Canonical fields expose `TextFieldAccess::{Editable, ReadOnly, Disabled}`.
 Editable fields navigate, select, copy, mutate, use cut/paste, and activate

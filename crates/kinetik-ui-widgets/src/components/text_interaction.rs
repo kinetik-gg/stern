@@ -1,10 +1,13 @@
 use core::cmp::Ordering;
 
 use kinetik_ui_core::{
-    InputWheelDelta, OrderedTextInputEvent, PointerRoute, Rect, SelectionGesturePhase, UiInput,
-    UiInputEvent, UiMemory, Vec2, WidgetId,
+    InputWheelDelta, Key, KeyState, OrderedTextInputEvent, PointerRoute, Rect,
+    SelectionGesturePhase, UiInput, UiInputEvent, UiMemory, Vec2, WidgetId,
 };
-use kinetik_ui_text::{OrderedTextInputResult, TextEditMode, TextEditState, TextSelection};
+use kinetik_ui_text::{
+    OrderedTextInputResult, ShapedTextNavigation, TextCaret, TextEditMode, TextEditState,
+    TextSelection,
+};
 
 use super::text_fields::TextFieldAccess;
 use super::text_geometry::TextFieldKind;
@@ -39,10 +42,17 @@ impl From<SelectionGesturePhase> for TextPointerPhase {
 pub(crate) struct ResolvedTextPointerAction {
     pub(crate) ordinal: Option<usize>,
     pub(crate) phase: TextPointerPhase,
-    pub(crate) model_offset: Option<usize>,
+    pub(crate) model_caret: Option<TextCaret>,
     pub(crate) click_count: u8,
     pub(crate) modifiers: kinetik_ui_core::Modifiers,
     pub(crate) release_clicked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum TextNavigationResolution {
+    Unavailable,
+    Ready(ShapedTextNavigation),
+    Invalid,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -76,6 +86,7 @@ impl ReplayItem {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub(crate) fn replay_text_field_events(
     state: &mut TextEditState,
     access: TextFieldAccess,
@@ -86,6 +97,36 @@ pub(crate) fn replay_text_field_events(
     retained_gesture_anchor: Option<usize>,
     pointer_actions: Vec<ResolvedTextPointerAction>,
     text_events: Vec<OrderedTextInputEvent>,
+) -> TextReplayResult {
+    replay_text_field_events_with_navigation(
+        state,
+        access,
+        mode,
+        target,
+        entry_focused,
+        entry_selection_anchor,
+        retained_gesture_anchor,
+        pointer_actions,
+        text_events,
+        false,
+        |_| TextNavigationResolution::Unavailable,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
+pub(crate) fn replay_text_field_events_with_navigation(
+    state: &mut TextEditState,
+    access: TextFieldAccess,
+    mode: TextEditMode,
+    target: WidgetId,
+    entry_focused: bool,
+    entry_selection_anchor: usize,
+    retained_gesture_anchor: Option<usize>,
+    pointer_actions: Vec<ResolvedTextPointerAction>,
+    text_events: Vec<OrderedTextInputEvent>,
+    shaped_navigation_configured: bool,
+    mut resolve_navigation: impl FnMut(&TextEditState) -> TextNavigationResolution,
 ) -> TextReplayResult {
     let mut items = pointer_actions
         .into_iter()
@@ -109,18 +150,21 @@ pub(crate) fn replay_text_field_events(
         match item {
             ReplayItem::Pointer(action) => match action.phase {
                 TextPointerPhase::Press | TextPointerPhase::PlaceCaret => {
-                    let Some(offset) = action.model_offset else {
+                    let Some(caret) = action.model_caret else {
                         continue;
                     };
                     if action.click_count >= 2 {
-                        state.select_word_at(offset);
+                        state.select_word_at(caret.offset);
                         gesture_anchor = state.selection.anchor;
                     } else if action.modifiers.shift {
-                        state.set_selection(TextSelection::new(entry_selection_anchor, offset));
+                        state.set_selection_with_affinity(
+                            TextSelection::new(entry_selection_anchor, caret.offset),
+                            caret.affinity,
+                        );
                         gesture_anchor = entry_selection_anchor;
                     } else {
-                        state.set_caret(offset);
-                        gesture_anchor = offset;
+                        state.set_caret_position(caret);
+                        gesture_anchor = caret.offset;
                     }
                     active = true;
                     result.accepted_press |= action.phase == TextPointerPhase::Press;
@@ -130,8 +174,11 @@ pub(crate) fn replay_text_field_events(
                     }
                 }
                 TextPointerPhase::Move if active => {
-                    if let Some(offset) = action.model_offset {
-                        state.set_selection(TextSelection::new(gesture_anchor, offset));
+                    if let Some(caret) = action.model_caret {
+                        state.set_selection_with_affinity(
+                            TextSelection::new(gesture_anchor, caret.offset),
+                            caret.affinity,
+                        );
                     }
                 }
                 TextPointerPhase::Move
@@ -145,6 +192,28 @@ pub(crate) fn replay_text_field_events(
             ReplayItem::Text(event) => {
                 let loses_focus = matches!(event.event, UiInputEvent::WindowFocusChanged(false));
                 if active {
+                    if let UiInputEvent::Key(key) = &event.event
+                        && access != TextFieldAccess::Disabled
+                        && is_pressed_horizontal_key(key)
+                    {
+                        if shaped_navigation_configured && state.composition.is_some() {
+                            continue;
+                        }
+                        match resolve_navigation(state) {
+                            TextNavigationResolution::Unavailable
+                                if shaped_navigation_configured =>
+                            {
+                                continue;
+                            }
+                            TextNavigationResolution::Unavailable => {}
+                            TextNavigationResolution::Ready(navigation) => {
+                                let outcome = state.apply_visual_navigation_key(key, &navigation);
+                                debug_assert!(outcome.is_some());
+                                continue;
+                            }
+                            TextNavigationResolution::Invalid => continue,
+                        }
+                    }
                     match access {
                         TextFieldAccess::Editable => {
                             merge_ordered_result(
@@ -171,6 +240,10 @@ pub(crate) fn replay_text_field_events(
     }
 
     result
+}
+
+fn is_pressed_horizontal_key(event: &kinetik_ui_core::KeyEvent) -> bool {
+    event.state == KeyState::Pressed && matches!(event.key, Key::ArrowLeft | Key::ArrowRight)
 }
 
 fn compare_replay_items(left: &ReplayItem, right: &ReplayItem) -> Ordering {

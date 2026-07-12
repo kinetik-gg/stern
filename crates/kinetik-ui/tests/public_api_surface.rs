@@ -257,6 +257,11 @@ fn shaped_navigation_api_is_qualified_and_state_methods_are_typed() {
         TextNavigationOutcome, TextStyle,
     };
     type Operation = fn(&mut TextEditState, &ShapedTextNavigation) -> TextNavigationOutcome;
+    type KeyOperation = fn(
+        &mut TextEditState,
+        &kinetik_ui::core::KeyEvent,
+        &ShapedTextNavigation,
+    ) -> Option<TextNavigationOutcome>;
 
     let mut engine = CosmicTextEngine::new();
     let layout = engine.shape_text(&TextLayoutKey::new(
@@ -287,6 +292,8 @@ fn shaped_navigation_api_is_qualified_and_state_methods_are_typed() {
         TextEditState::extend_visual_word_right,
     ];
     assert_eq!(operations.len(), 8);
+    let key_operation: KeyOperation = TextEditState::apply_visual_navigation_key;
+    let _ = key_operation;
 }
 
 #[test]

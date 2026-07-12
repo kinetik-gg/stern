@@ -704,7 +704,7 @@ fn canonical_replay_resolves_impossible_equal_ordinals_pointer_first() {
         vec![ResolvedTextPointerAction {
             ordinal: Some(7),
             phase: TextPointerPhase::Press,
-            model_offset: Some(1),
+            model_caret: Some(kinetik_ui_text::TextCaret::at(1)),
             click_count: 1,
             modifiers: Modifiers::default(),
             release_clicked: false,
@@ -741,7 +741,7 @@ fn canonical_replay_retains_one_outer_focus_loss_fence() {
         vec![ResolvedTextPointerAction {
             ordinal: Some(3),
             phase: TextPointerPhase::Press,
-            model_offset: Some(0),
+            model_caret: Some(kinetik_ui_text::TextCaret::at(0)),
             click_count: 1,
             modifiers: Modifiers::default(),
             release_clicked: false,
@@ -794,7 +794,7 @@ fn canonical_replay_retains_press_anchor_across_an_interleaved_edit() {
             ResolvedTextPointerAction {
                 ordinal: Some(1),
                 phase: TextPointerPhase::Press,
-                model_offset: Some(1),
+                model_caret: Some(kinetik_ui_text::TextCaret::at(1)),
                 click_count: 1,
                 modifiers: Modifiers::default(),
                 release_clicked: false,
@@ -802,7 +802,7 @@ fn canonical_replay_retains_press_anchor_across_an_interleaved_edit() {
             ResolvedTextPointerAction {
                 ordinal: Some(3),
                 phase: TextPointerPhase::Move,
-                model_offset: Some(4),
+                model_caret: Some(kinetik_ui_text::TextCaret::at(4)),
                 click_count: 0,
                 modifiers: Modifiers::default(),
                 release_clicked: false,
@@ -841,7 +841,7 @@ fn canonical_place_caret_is_release_ordered_pointer_first_without_press_activati
             ResolvedTextPointerAction {
                 ordinal: Some(1),
                 phase: TextPointerPhase::OwnershipPress,
-                model_offset: Some(0),
+                model_caret: Some(kinetik_ui_text::TextCaret::at(0)),
                 click_count: 1,
                 modifiers: Modifiers::default(),
                 release_clicked: false,
@@ -849,7 +849,7 @@ fn canonical_place_caret_is_release_ordered_pointer_first_without_press_activati
             ResolvedTextPointerAction {
                 ordinal: Some(7),
                 phase: TextPointerPhase::PlaceCaret,
-                model_offset: Some(1),
+                model_caret: Some(kinetik_ui_text::TextCaret::at(1)),
                 click_count: 1,
                 modifiers: Modifiers::default(),
                 release_clicked: true,
@@ -893,7 +893,7 @@ fn focus_loss_fences_place_caret_and_release_metadata_drives_selection() {
         vec![ResolvedTextPointerAction {
             ordinal: Some(2),
             phase: TextPointerPhase::PlaceCaret,
-            model_offset: Some(7),
+            model_caret: Some(kinetik_ui_text::TextCaret::at(7)),
             click_count: 2,
             modifiers: Modifiers::new(true, false, false, false),
             release_clicked: true,
@@ -925,7 +925,7 @@ fn focus_loss_fences_place_caret_and_release_metadata_drives_selection() {
         vec![ResolvedTextPointerAction {
             ordinal: Some(2),
             phase: TextPointerPhase::PlaceCaret,
-            model_offset: Some(7),
+            model_caret: Some(kinetik_ui_text::TextCaret::at(7)),
             click_count: 2,
             modifiers: Modifiers::new(true, false, false, false),
             release_clicked: true,
@@ -948,7 +948,7 @@ fn focus_loss_fences_place_caret_and_release_metadata_drives_selection() {
         vec![ResolvedTextPointerAction {
             ordinal: Some(2),
             phase: TextPointerPhase::PlaceCaret,
-            model_offset: Some(5),
+            model_caret: Some(kinetik_ui_text::TextCaret::at(5)),
             click_count: 1,
             modifiers: Modifiers::new(true, false, false, false),
             release_clicked: true,
@@ -956,6 +956,455 @@ fn focus_loss_fences_place_caret_and_release_metadata_drives_selection() {
         Vec::new(),
     );
     assert_eq!(shifted.selection, TextSelection::new(0, 5));
+}
+
+#[test]
+fn shaped_replay_validation_failure_consumes_without_scalar_fallback() {
+    use crate::TextFieldAccess;
+    use crate::components::text_interaction::{
+        TextNavigationResolution, replay_text_field_events_with_navigation,
+    };
+    use kinetik_ui_core::{Key, KeyEvent, KeyState, OrderedTextInputEvent, UiInputEvent};
+    use kinetik_ui_text::TextEditMode;
+
+    let mut state = TextEditState::new("abc");
+    let expected = state.clone();
+    let mut resolver_calls = 0;
+    let result = replay_text_field_events_with_navigation(
+        &mut state,
+        TextFieldAccess::Editable,
+        TextEditMode::SingleLine,
+        WidgetId::from_key("field"),
+        true,
+        3,
+        None,
+        Vec::new(),
+        vec![OrderedTextInputEvent {
+            ordinal: Some(0),
+            event: UiInputEvent::Key(KeyEvent::new(
+                Key::ArrowLeft,
+                KeyState::Pressed,
+                Modifiers::default(),
+                false,
+            )),
+        }],
+        true,
+        |_| {
+            resolver_calls += 1;
+            TextNavigationResolution::Invalid
+        },
+    );
+
+    assert_eq!(resolver_calls, 1);
+    assert_eq!(state, expected);
+    assert_eq!(
+        result,
+        crate::components::text_interaction::TextReplayResult::default()
+    );
+}
+
+#[test]
+fn configured_unavailable_navigation_is_fail_closed_but_no_store_keeps_legacy_preedit() {
+    use crate::TextFieldAccess;
+    use crate::components::text_interaction::{
+        TextNavigationResolution, replay_text_field_events,
+        replay_text_field_events_with_navigation,
+    };
+    use kinetik_ui_core::{Key, KeyEvent, KeyState, OrderedTextInputEvent, UiInputEvent};
+    use kinetik_ui_text::{TextComposition, TextEditMode};
+
+    let event = OrderedTextInputEvent {
+        ordinal: Some(0),
+        event: UiInputEvent::Key(KeyEvent::new(
+            Key::ArrowLeft,
+            KeyState::Pressed,
+            Modifiers::default(),
+            false,
+        )),
+    };
+
+    let mut unavailable = TextEditState::new("abc");
+    let unavailable_expected = unavailable.clone();
+    let _ = replay_text_field_events_with_navigation(
+        &mut unavailable,
+        TextFieldAccess::Editable,
+        TextEditMode::SingleLine,
+        WidgetId::from_key("configured"),
+        true,
+        3,
+        None,
+        Vec::new(),
+        vec![event.clone()],
+        true,
+        |_| TextNavigationResolution::Unavailable,
+    );
+    assert_eq!(unavailable, unavailable_expected);
+
+    let mut legacy = TextEditState::new("abc");
+    legacy.composition = Some(TextComposition::new("候", None));
+    let _ = replay_text_field_events(
+        &mut legacy,
+        TextFieldAccess::Editable,
+        TextEditMode::SingleLine,
+        WidgetId::from_key("legacy"),
+        true,
+        3,
+        None,
+        Vec::new(),
+        vec![event],
+    );
+    assert_eq!(legacy.caret(), 2);
+    assert!(legacy.composition.is_some());
+}
+
+#[test]
+fn active_preedit_horizontal_replay_never_invokes_the_navigation_resolver() {
+    use crate::TextFieldAccess;
+    use crate::components::text_interaction::{
+        TextNavigationResolution, replay_text_field_events_with_navigation,
+    };
+    use kinetik_ui_core::{Key, KeyEvent, KeyState, OrderedTextInputEvent, UiInputEvent};
+    use kinetik_ui_text::{TextComposition, TextEditMode};
+
+    let mut state = TextEditState::new("abc");
+    state.set_caret(1);
+    state.composition = Some(TextComposition::new("候補", None));
+    let expected = state.clone();
+    let mut resolver_calls = 0;
+    let events = [
+        (Key::ArrowLeft, Modifiers::new(true, true, false, false)),
+        (Key::ArrowRight, Modifiers::new(false, false, true, false)),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(ordinal, (key, modifiers))| OrderedTextInputEvent {
+        ordinal: Some(ordinal),
+        event: UiInputEvent::Key(KeyEvent::new(key, KeyState::Pressed, modifiers, false)),
+    })
+    .collect();
+
+    let result = replay_text_field_events_with_navigation(
+        &mut state,
+        TextFieldAccess::Editable,
+        TextEditMode::SingleLine,
+        WidgetId::from_key("field"),
+        true,
+        1,
+        None,
+        Vec::new(),
+        events,
+        true,
+        |_| {
+            resolver_calls += 1;
+            TextNavigationResolution::Invalid
+        },
+    );
+
+    assert_eq!(resolver_calls, 0);
+    assert_eq!(state, expected);
+    assert_eq!(
+        result,
+        crate::components::text_interaction::TextReplayResult::default()
+    );
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn shaped_replay_reresolves_after_every_mutation_class() {
+    use crate::TextFieldAccess;
+    use crate::components::text_interaction::{
+        TextNavigationResolution, replay_text_field_events_with_navigation,
+    };
+    use kinetik_ui_core::{
+        ClipboardText, Key, KeyEvent, KeyState, OrderedTextInputEvent, PhysicalKey, TextInputEvent,
+        UiInputEvent,
+    };
+    use kinetik_ui_text::{
+        CosmicTextEngine, TextAffinity, TextCaret, TextEditMode, TextLayoutKey, TextStyle,
+    };
+
+    struct Case {
+        name: &'static str,
+        initial: TextEditState,
+        mutation: Vec<UiInputEvent>,
+    }
+
+    let target = WidgetId::from_key("field");
+    let source = "abc אבג def";
+    let at_bidi = || {
+        let mut state = TextEditState::new(source);
+        state.set_caret_position(TextCaret::new(8, TextAffinity::After));
+        state
+    };
+    let hardware = UiInputEvent::Key(
+        KeyEvent::with_physical_key(
+            Key::Character("X".to_owned()),
+            PhysicalKey::Unidentified,
+            KeyState::Pressed,
+            Modifiers::default(),
+            false,
+        )
+        .with_text("X"),
+    );
+    let mut undo = at_bidi();
+    undo.insert_text("X");
+    let exposes_shaped_difference = |state: &TextEditState| {
+        let mut engine = CosmicTextEngine::new();
+        let layout = engine.shape_text(&TextLayoutKey::new(
+            state.text.clone(),
+            TextStyle::new("Inter", 14.0, 20.0),
+            400.0,
+            false,
+        ));
+        let navigation = layout.navigation(&state.text).expect("redo navigation");
+        [
+            (Key::ArrowLeft, Modifiers::default(), false),
+            (Key::ArrowRight, Modifiers::default(), false),
+            (
+                Key::ArrowLeft,
+                Modifiers::new(false, true, false, false),
+                true,
+            ),
+            (
+                Key::ArrowRight,
+                Modifiers::new(false, true, false, false),
+                true,
+            ),
+        ]
+        .into_iter()
+        .any(|(direction, modifiers, word)| {
+            let arrow = KeyEvent::new(direction.clone(), KeyState::Pressed, modifiers, false);
+            let mut visual = state.clone();
+            let _ = visual.apply_visual_navigation_key(&arrow, &navigation);
+            let mut scalar = state.clone();
+            match (direction, word) {
+                (Key::ArrowLeft, false) => scalar.move_left(),
+                (Key::ArrowRight, false) => scalar.move_right(),
+                (Key::ArrowLeft, true) => scalar.move_word_left(),
+                (Key::ArrowRight, true) => scalar.move_word_right(),
+                _ => unreachable!(),
+            }
+            visual.caret_position() != scalar.caret_position()
+        })
+    };
+    let mut base_engine = CosmicTextEngine::new();
+    let base_layout = base_engine.shape_text(&TextLayoutKey::new(
+        source,
+        TextStyle::new("Inter", 14.0, 20.0),
+        400.0,
+        false,
+    ));
+    let base_navigation = base_layout.navigation(source).expect("base navigation");
+    let redo = base_navigation
+        .caret_stops()
+        .iter()
+        .find_map(|stop| {
+            let mut inserted = TextEditState::new(source);
+            inserted.set_caret_position(stop.caret);
+            inserted.insert_text("X");
+            if !exposes_shaped_difference(&inserted) {
+                return None;
+            }
+            let mut redo = inserted;
+            assert!(redo.undo());
+            Some(redo)
+        })
+        .expect("redo restoration exposes shaped/scalar difference");
+    let cases = vec![
+        Case {
+            name: "hardware text",
+            initial: at_bidi(),
+            mutation: vec![hardware],
+        },
+        Case {
+            name: "committed text",
+            initial: at_bidi(),
+            mutation: vec![UiInputEvent::Text(TextInputEvent::Commit("X".to_owned()))],
+        },
+        Case {
+            name: "IME commit",
+            initial: at_bidi(),
+            mutation: vec![
+                UiInputEvent::Text(TextInputEvent::CompositionStart),
+                UiInputEvent::Text(TextInputEvent::Composition {
+                    text: "候".to_owned(),
+                    selection: None,
+                }),
+                UiInputEvent::Text(TextInputEvent::Commit("X".to_owned())),
+            ],
+        },
+        Case {
+            name: "Backspace",
+            initial: at_bidi(),
+            mutation: vec![UiInputEvent::Key(KeyEvent::new(
+                Key::Backspace,
+                KeyState::Pressed,
+                Modifiers::default(),
+                false,
+            ))],
+        },
+        Case {
+            name: "Delete",
+            initial: at_bidi(),
+            mutation: vec![UiInputEvent::Key(KeyEvent::new(
+                Key::Delete,
+                KeyState::Pressed,
+                Modifiers::default(),
+                false,
+            ))],
+        },
+        Case {
+            name: "targeted paste",
+            initial: at_bidi(),
+            mutation: vec![UiInputEvent::ClipboardText(ClipboardText::new(target, "X"))],
+        },
+        Case {
+            name: "undo",
+            initial: undo,
+            mutation: vec![UiInputEvent::Key(KeyEvent::new(
+                Key::Character("z".to_owned()),
+                KeyState::Pressed,
+                Modifiers::new(false, true, false, false),
+                false,
+            ))],
+        },
+        Case {
+            name: "redo",
+            initial: redo,
+            mutation: vec![UiInputEvent::Key(KeyEvent::new(
+                Key::Character("y".to_owned()),
+                KeyState::Pressed,
+                Modifiers::new(false, true, false, false),
+                false,
+            ))],
+        },
+    ];
+
+    for case in cases {
+        let mut candidate_engine = CosmicTextEngine::new();
+        let candidate_layout = candidate_engine.shape_text(&TextLayoutKey::new(
+            case.initial.text.clone(),
+            TextStyle::new("Inter", 14.0, 20.0),
+            400.0,
+            false,
+        ));
+        let candidate_navigation = candidate_layout
+            .navigation(&case.initial.text)
+            .expect("initial navigation");
+        let mut candidate_initials = vec![case.initial.clone()];
+        candidate_initials.extend(candidate_navigation.caret_stops().iter().map(|stop| {
+            let mut candidate = case.initial.clone();
+            candidate.set_caret_position(stop.caret);
+            candidate
+        }));
+
+        let (initial, post_mutation, expected, arrow) = candidate_initials
+            .into_iter()
+            .find_map(|initial| {
+                let mut post_mutation = initial.clone();
+                let _ = post_mutation.apply_ordered_input_with_result(
+                    &case.mutation,
+                    target,
+                    TextEditMode::SingleLine,
+                );
+                let mut engine = CosmicTextEngine::new();
+                let layout = engine.shape_text(&TextLayoutKey::new(
+                    post_mutation.text.clone(),
+                    TextStyle::new("Inter", 14.0, 20.0),
+                    400.0,
+                    false,
+                ));
+                let navigation = layout
+                    .navigation(&post_mutation.text)
+                    .expect("post-mutation navigation");
+                [
+                    (Key::ArrowLeft, Modifiers::default(), false),
+                    (Key::ArrowRight, Modifiers::default(), false),
+                    (
+                        Key::ArrowLeft,
+                        Modifiers::new(false, true, false, false),
+                        true,
+                    ),
+                    (
+                        Key::ArrowRight,
+                        Modifiers::new(false, true, false, false),
+                        true,
+                    ),
+                ]
+                .into_iter()
+                .find_map(|(direction, modifiers, word)| {
+                    let arrow =
+                        KeyEvent::new(direction.clone(), KeyState::Pressed, modifiers, false);
+                    let mut visual = post_mutation.clone();
+                    let _ = visual.apply_visual_navigation_key(&arrow, &navigation);
+                    let mut scalar = post_mutation.clone();
+                    match (direction, word) {
+                        (Key::ArrowLeft, false) => scalar.move_left(),
+                        (Key::ArrowRight, false) => scalar.move_right(),
+                        (Key::ArrowLeft, true) => scalar.move_word_left(),
+                        (Key::ArrowRight, true) => scalar.move_word_right(),
+                        _ => unreachable!(),
+                    }
+                    (visual.caret_position() != scalar.caret_position()).then_some((
+                        initial.clone(),
+                        post_mutation.clone(),
+                        visual,
+                        arrow,
+                    ))
+                })
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "{} must expose a shaped/scalar directional witness",
+                    case.name
+                )
+            });
+
+        let mut ordered = case
+            .mutation
+            .into_iter()
+            .enumerate()
+            .map(|(ordinal, event)| OrderedTextInputEvent {
+                ordinal: Some(ordinal),
+                event,
+            })
+            .collect::<Vec<_>>();
+        ordered.push(OrderedTextInputEvent {
+            ordinal: Some(ordered.len()),
+            event: UiInputEvent::Key(arrow),
+        });
+        let mut actual = initial;
+        let entry_anchor = actual.selection.anchor;
+        let mut resolved_sources = Vec::new();
+        let _ = replay_text_field_events_with_navigation(
+            &mut actual,
+            TextFieldAccess::Editable,
+            TextEditMode::SingleLine,
+            target,
+            true,
+            entry_anchor,
+            None,
+            Vec::new(),
+            ordered,
+            true,
+            |state| {
+                resolved_sources.push(state.text.clone());
+                let mut engine = CosmicTextEngine::new();
+                let layout = engine.shape_text(&TextLayoutKey::new(
+                    state.text.clone(),
+                    TextStyle::new("Inter", 14.0, 20.0),
+                    400.0,
+                    false,
+                ));
+                layout.navigation(&state.text).map_or(
+                    TextNavigationResolution::Invalid,
+                    TextNavigationResolution::Ready,
+                )
+            },
+        );
+        assert_eq!(resolved_sources, [post_mutation.text], "{}", case.name);
+        assert_eq!(actual, expected, "{}", case.name);
+    }
 }
 
 #[test]
@@ -1009,16 +1458,13 @@ fn fallback_wrapped_geometry_shares_rows_for_paint_hit_selection_caret_and_exten
         Primitive::Rect(rect) if rect.fill == Some(Brush::Solid(recipe.caret)) => Some(rect.rect),
         _ => None,
     });
-    let third_row_hit = geometry.model_offset_at_with_layout(
-        Point::new(
-            rect.x + recipe.padding_x + 1.0,
-            rect.y + recipe.padding_y + line_height * 2.0 + 1.0,
-        ),
-        None,
-    );
+    let third_row_hit = geometry.model_caret_at(Point::new(
+        rect.x + recipe.padding_x + 1.0,
+        rect.y + recipe.padding_y + line_height * 2.0 + 1.0,
+    ));
 
     assert_eq!(fallback_rows, ["a", "b", "c", "d"]);
-    assert_eq!(third_row_hit, 2);
+    assert_eq!(third_row_hit.offset, 2);
     assert_eq!(selection_rows, 2);
     assert_approx(geometry.caret_content_rect().y, line_height * 3.0);
     assert_eq!(

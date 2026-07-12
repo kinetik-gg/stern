@@ -5,8 +5,8 @@ use kinetik_ui_core::{
     Stroke, TextFieldRecipe, TextLayoutId, TextPrimitive, Transform, Vec2, WidgetId,
 };
 use kinetik_ui_text::{
-    TextEditState, TextLayoutKey, TextLayoutStore, TextSelection, TextStyle, TextViewport,
-    TextViewportMode,
+    ShapedTextLayout, ShapedTextNavigation, TextAffinity, TextCaret, TextEditState, TextLayoutKey,
+    TextLayoutStore, TextSelection, TextStyle, TextViewport, TextViewportMode,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,7 +23,7 @@ impl TextFieldKind {
         }
     }
 
-    const fn wraps(self) -> bool {
+    pub(crate) const fn wraps(self) -> bool {
         matches!(self, Self::WrappedMultiLine)
     }
 }
@@ -34,15 +34,16 @@ struct DisplayTextMap {
     model_len: usize,
     insertion: usize,
     preedit_range: Option<Range<usize>>,
-    display_caret: usize,
+    display_caret: TextCaret,
 }
 
 impl DisplayTextMap {
     fn from_state(state: &TextEditState) -> Self {
-        let insertion = clamp_boundary(&state.text, state.caret());
+        let model_caret = state.caret_position();
+        let insertion = model_caret.offset;
         let mut text = state.text.clone();
         let mut preedit_range = None;
-        let mut display_caret = insertion;
+        let mut display_caret = model_caret;
 
         if let Some(composition) = &state.composition
             && !composition.text.is_empty()
@@ -50,10 +51,14 @@ impl DisplayTextMap {
             text.insert_str(insertion, &composition.text);
             let end = insertion + composition.text.len();
             preedit_range = Some(insertion..end);
-            let selection_end = composition
-                .selection
-                .map_or(composition.text.len(), |selection| selection.end);
-            display_caret = insertion + clamp_boundary(&composition.text, selection_end);
+            let selection = clamped_composition_selection(composition);
+            let selection_end =
+                selection.map_or(composition.text.len(), |selection| selection.active);
+            let display_offset = insertion + selection_end;
+            display_caret = TextCaret::new(
+                display_offset,
+                default_caret_affinity(&text, display_offset),
+            );
         }
 
         Self {
@@ -65,17 +70,22 @@ impl DisplayTextMap {
         }
     }
 
-    fn display_to_model(&self, display_offset: usize) -> usize {
-        let display_offset = clamp_boundary(&self.text, display_offset);
+    fn display_to_model_caret(&self, display_caret: TextCaret) -> TextCaret {
+        let display_offset = clamp_grapheme_boundary(&self.text, display_caret.offset);
         let Some(range) = &self.preedit_range else {
-            return display_offset.min(self.model_len);
+            return TextCaret::new(display_offset.min(self.model_len), display_caret.affinity);
         };
-        if display_offset <= range.end {
-            display_offset.min(self.insertion)
+        if display_offset < range.start {
+            TextCaret::new(display_offset, display_caret.affinity)
+        } else if display_offset <= range.end {
+            TextCaret::new(self.insertion, display_caret.affinity)
         } else {
-            display_offset
-                .saturating_sub(range.len())
-                .min(self.model_len)
+            TextCaret::new(
+                display_offset
+                    .saturating_sub(range.len())
+                    .min(self.model_len),
+                display_caret.affinity,
+            )
         }
     }
 
@@ -113,6 +123,7 @@ pub(crate) struct TextFieldGeometry {
     content_rect: Rect,
     viewport: TextViewport,
     layout_id: Option<TextLayoutId>,
+    navigation: Option<ShapedTextNavigation>,
     rows: Vec<VisualRow>,
     selection_rects: Vec<Rect>,
     composition_rects: Vec<Rect>,
@@ -129,19 +140,25 @@ impl TextFieldGeometry {
         text_layouts: Option<&mut TextLayoutStore>,
     ) -> Self {
         let display = DisplayTextMap::from_state(state);
+        let model_selection = state.selection.clamp_to_text(&state.text);
         let content_rect = Rect::new(
             rect.x + recipe.padding_x,
             rect.y + recipe.padding_y,
             (rect.width - recipe.padding_x * 2.0).max(0.0),
             (rect.height - recipe.padding_y * 2.0).max(0.0),
         );
-        let (layout_id, rows, selection_rects, composition_rects, caret_content_rect, size) =
-            text_layouts.map_or_else(
-                || fallback_geometry(&display, state.selection, content_rect, recipe, kind),
-                |store| {
-                    shaped_geometry(&display, state.selection, content_rect, recipe, kind, store)
-                },
-            );
+        let (
+            layout_id,
+            navigation,
+            rows,
+            selection_rects,
+            composition_rects,
+            caret_content_rect,
+            size,
+        ) = text_layouts.map_or_else(
+            || fallback_geometry(&display, model_selection, content_rect, recipe, kind),
+            |store| shaped_geometry(&display, model_selection, content_rect, recipe, kind, store),
+        );
         let content_size = Size::new(
             size.width.max(caret_content_rect.max_x()),
             size.height.max(caret_content_rect.max_y()),
@@ -161,6 +178,7 @@ impl TextFieldGeometry {
             content_rect,
             viewport,
             layout_id,
+            navigation,
             rows,
             selection_rects,
             composition_rects,
@@ -168,22 +186,20 @@ impl TextFieldGeometry {
         }
     }
 
-    pub(crate) fn model_offset_at_with_layout(
-        &self,
-        position: Point,
-        text_layouts: Option<&TextLayoutStore>,
-    ) -> usize {
+    pub(crate) fn model_caret_at(&self, position: Point) -> TextCaret {
         let offset = self.viewport.offset();
         let x = position.x - self.content_rect.x + offset.x;
         let y = position.y - self.content_rect.y + offset.y;
-        let display_offset = self
-            .layout_id
-            .and_then(|id| text_layouts.and_then(|store| store.layout(id)))
-            .map_or_else(
-                || fallback_hit_offset(&self.display.text, &self.rows, x, y, &self.recipe),
-                |layout| layout.hit_test_point(x, y - self.recipe.font.size),
-            );
-        self.display.display_to_model(display_offset)
+        let display_caret = self.navigation.as_ref().map_or_else(
+            || {
+                let offset =
+                    fallback_hit_offset(&self.display.text, &self.rows, x, y, &self.recipe);
+                let offset = clamp_grapheme_boundary(&self.display.text, offset);
+                TextCaret::at(offset)
+            },
+            |navigation| navigation.hit_test_caret(x, y - self.recipe.font.size),
+        );
+        self.display.display_to_model_caret(display_caret)
     }
 
     pub(crate) const fn viewport(&self) -> TextViewport {
@@ -298,6 +314,7 @@ impl TextFieldGeometry {
 
 type GeometryParts = (
     Option<TextLayoutId>,
+    Option<ShapedTextNavigation>,
     Vec<VisualRow>,
     Vec<Rect>,
     Vec<Rect>,
@@ -324,8 +341,32 @@ fn shaped_geometry(
         kind.wraps(),
     ));
     let layout = store.layout(id).expect("newly registered text layout");
+    geometry_from_layout_or_fallback(display, selection, content_rect, recipe, kind, id, layout)
+}
+
+fn geometry_from_layout_or_fallback(
+    display: &DisplayTextMap,
+    selection: TextSelection,
+    content_rect: Rect,
+    recipe: &TextFieldRecipe,
+    kind: TextFieldKind,
+    id: TextLayoutId,
+    layout: &ShapedTextLayout,
+) -> GeometryParts {
+    authoritative_geometry(display, selection, recipe, id, layout)
+        .unwrap_or_else(|| fallback_geometry(display, selection, content_rect, recipe, kind))
+}
+
+fn authoritative_geometry(
+    display: &DisplayTextMap,
+    selection: TextSelection,
+    recipe: &TextFieldRecipe,
+    id: TextLayoutId,
+    layout: &ShapedTextLayout,
+) -> Option<GeometryParts> {
+    let navigation = layout.navigation(&display.text).ok()?;
     let baseline = Vec2::new(0.0, recipe.font.size);
-    let selection_rects = layout
+    let selection_rects = navigation
         .selection_rects(display.model_range_to_display(selection))
         .into_iter()
         .map(|rect| rect.translate(baseline))
@@ -334,21 +375,24 @@ fn shaped_geometry(
         .preedit_range
         .as_ref()
         .map_or_else(Vec::new, |range| {
-            layout
+            navigation
                 .selection_rects(range.clone())
                 .into_iter()
                 .map(|rect| rect.translate(baseline))
                 .collect()
         });
-    let caret = layout.caret_rect(display.display_caret).translate(baseline);
-    (
+    let caret = navigation
+        .caret_rect(display.display_caret)
+        .translate(baseline);
+    Some((
         Some(id),
+        Some(navigation),
         Vec::new(),
         selection_rects,
         composition_rects,
         caret,
         layout.size,
-    )
+    ))
 }
 
 fn fallback_geometry(
@@ -377,6 +421,7 @@ fn fallback_geometry(
         row.top + recipe.font.line_height.max(1.0)
     });
     (
+        None,
         None,
         rows,
         selection_rects,
@@ -457,10 +502,10 @@ fn fallback_range_rects(
 fn fallback_caret_rect(
     text: &str,
     rows: &[VisualRow],
-    offset: usize,
+    caret: TextCaret,
     recipe: &TextFieldRecipe,
 ) -> Rect {
-    let offset = clamp_boundary(text, offset);
+    let offset = clamp_grapheme_boundary(text, caret.offset);
     let index = fallback_row_index(rows, offset);
     let row = &rows[index];
     let x = fallback_prefix_width(&text[row.start..row.end], offset - row.start, recipe);
@@ -530,4 +575,194 @@ fn clamp_boundary(text: &str, offset: usize) -> usize {
         offset -= 1;
     }
     offset
+}
+
+fn clamp_grapheme_boundary(text: &str, offset: usize) -> usize {
+    TextSelection::new(offset, offset)
+        .clamp_to_text(text)
+        .active
+}
+
+fn clamped_composition_selection(
+    composition: &kinetik_ui_text::TextComposition,
+) -> Option<TextSelection> {
+    composition.selection.map(|selection| {
+        TextSelection::new(selection.start, selection.end).clamp_to_text(&composition.text)
+    })
+}
+
+const fn default_caret_affinity(text: &str, offset: usize) -> TextAffinity {
+    if offset == 0 {
+        TextAffinity::After
+    } else if offset >= text.len() {
+        TextAffinity::Before
+    } else {
+        TextAffinity::After
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kinetik_ui_core::{ComponentState, TextRange, default_dark_theme};
+    use kinetik_ui_text::{ShapedTextLine, TextComposition};
+
+    #[test]
+    fn malformed_shaped_navigation_discards_the_whole_snapshot() {
+        let theme = default_dark_theme();
+        let recipe = theme.text_field(ComponentState {
+            hovered: false,
+            pressed: false,
+            focused: true,
+            disabled: false,
+            selected: false,
+        });
+        let state = TextEditState::new("a");
+        let display = DisplayTextMap::from_state(&state);
+        let content_rect = Rect::new(0.0, 0.0, 120.0, 24.0);
+        let malformed = ShapedTextLayout {
+            size: Size::new(8.0, 24.0),
+            line_count: 1,
+            lines: vec![ShapedTextLine {
+                visual_index: 0,
+                source_line_index: 0,
+                text_start: 0,
+                text_end: 1,
+                top_y: -18.0,
+                baseline_y: 0.0,
+                height: 24.0,
+                width: 8.0,
+                rtl: false,
+            }],
+            runs: Vec::new(),
+        };
+
+        let parts = geometry_from_layout_or_fallback(
+            &display,
+            state.selection,
+            content_rect,
+            &recipe,
+            TextFieldKind::SingleLine,
+            TextLayoutId::from_raw(77),
+            &malformed,
+        );
+        assert!(parts.0.is_none(), "invalid layout ID must not be painted");
+        assert!(parts.1.is_none(), "invalid navigation must not escape");
+        assert!(!parts.2.is_empty(), "fallback rows must own geometry");
+    }
+
+    #[test]
+    fn public_preedit_selection_clamps_both_grapheme_endpoints() {
+        let composition = TextComposition {
+            text: "e\u{301}o\u{301}".to_owned(),
+            selection: Some(TextRange::new(2, 5)),
+        };
+        assert_eq!(
+            clamped_composition_selection(&composition),
+            Some(TextSelection::new(0, 3))
+        );
+    }
+
+    #[test]
+    fn retained_preedit_uses_one_navigation_for_caret_underline_and_hits() {
+        let theme = default_dark_theme();
+        let recipe = theme.text_field(ComponentState {
+            hovered: false,
+            pressed: false,
+            focused: true,
+            disabled: false,
+            selected: false,
+        });
+        let rect = Rect::new(10.0, 8.0, 260.0, 32.0);
+        let mut state = TextEditState::new("ab");
+        state.set_caret_position(TextCaret::new(1, TextAffinity::After));
+        state.composition = Some(TextComposition::new("e\u{301}o\u{301}", None));
+        let mut store = TextLayoutStore::new();
+        let geometry = TextFieldGeometry::build(
+            rect,
+            &state,
+            &recipe,
+            TextFieldKind::SingleLine,
+            Vec2::ZERO,
+            Some(&mut store),
+        );
+
+        let navigation = geometry
+            .navigation
+            .as_ref()
+            .expect("valid retained preedit navigation");
+        let preedit = geometry
+            .display
+            .preedit_range
+            .clone()
+            .expect("non-empty preedit range");
+        assert_eq!(preedit, 1..7);
+        assert_eq!(
+            geometry.display.display_caret,
+            TextCaret::new(preedit.end, TextAffinity::After),
+            "an absent platform selection places the display caret at preedit end"
+        );
+
+        let baseline = Vec2::new(0.0, recipe.font.size);
+        assert_eq!(
+            geometry.caret_content_rect,
+            navigation
+                .caret_rect(geometry.display.display_caret)
+                .translate(baseline)
+        );
+        let expected_underline_rects = navigation
+            .selection_rects(preedit.clone())
+            .into_iter()
+            .map(|rect| rect.translate(baseline))
+            .collect::<Vec<_>>();
+        assert_eq!(geometry.composition_rects, expected_underline_rects);
+
+        let painted_underlines = geometry
+            .primitives(WidgetId::from_key("field"), true, true, true)
+            .into_iter()
+            .filter_map(|primitive| match primitive {
+                Primitive::Line(line) => Some((line.from, line.to)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let expected_underlines = expected_underline_rects
+            .iter()
+            .map(|rect| {
+                let rect =
+                    rect.translate(Vec2::new(geometry.content_rect.x, geometry.content_rect.y));
+                let y = rect.max_y() + 1.0;
+                (
+                    Point::new(rect.x, y),
+                    Point::new(rect.max_x().max(rect.x + 1.0), y),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(painted_underlines, expected_underlines);
+
+        for display_offset in [4, preedit.end] {
+            let witness = navigation
+                .caret_stops()
+                .iter()
+                .filter(|stop| stop.caret.offset == display_offset)
+                .find_map(|stop| {
+                    let rect = navigation.caret_rect(stop.caret);
+                    let y = rect.y + rect.height * 0.5;
+                    [0.0, -0.25, 0.25].into_iter().find_map(|delta| {
+                        let x = rect.x + delta;
+                        let hit = navigation.hit_test_caret(x, y);
+                        (hit.offset == display_offset).then_some((x, y, hit))
+                    })
+                })
+                .unwrap_or_else(|| panic!("shaped hit witness at display offset {display_offset}"));
+            let model = geometry.model_caret_at(Point::new(
+                geometry.content_rect.x + witness.0,
+                geometry.content_rect.y + recipe.font.size + witness.1,
+            ));
+            assert_eq!(
+                model,
+                TextCaret::new(1, witness.2.affinity),
+                "preedit hits collapse to the insertion and preserve shaped affinity"
+            );
+        }
+    }
 }

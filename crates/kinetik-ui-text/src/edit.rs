@@ -383,6 +383,41 @@ impl TextEditState {
         self.apply_visual_navigation(navigation, VisualDirection::Right, VisualStep::Word, true)
     }
 
+    /// Applies a pressed horizontal key through shaped visual navigation.
+    ///
+    /// Returns `None` for releases and non-horizontal keys. Shift extends the
+    /// selection, while Control xor Alt (without Super) selects word-wise
+    /// movement. An active IME composition consumes horizontal keys without
+    /// moving the model caret because the native IME owns preedit navigation.
+    /// Source mismatches are returned by the shaped navigation methods and
+    /// never fall back to logical movement.
+    #[must_use]
+    pub fn apply_visual_navigation_key(
+        &mut self,
+        event: &KeyEvent,
+        navigation: &ShapedTextNavigation,
+    ) -> Option<TextNavigationOutcome> {
+        if event.state != KeyState::Pressed {
+            return None;
+        }
+
+        let direction = match event.key {
+            Key::ArrowLeft => VisualDirection::Left,
+            Key::ArrowRight => VisualDirection::Right,
+            _ => return None,
+        };
+        if self.composition.is_some() {
+            return Some(TextNavigationOutcome::Unchanged);
+        }
+
+        let step = if !event.modifiers.super_key && (event.modifiers.ctrl ^ event.modifiers.alt) {
+            VisualStep::Word
+        } else {
+            VisualStep::Adjacent
+        };
+        Some(self.apply_visual_navigation(navigation, direction, step, event.modifiers.shift))
+    }
+
     /// Deletes the current selection or the span to [`Self::move_word_left`]'s target.
     pub fn backspace_word(&mut self) {
         self.canonicalize_selection();

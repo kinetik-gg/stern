@@ -295,6 +295,8 @@ mod multiline_navigation;
 mod numeric_and_scrub;
 #[path = "text_field_conformance/ordered_input.rs"]
 mod ordered_input;
+#[path = "text_field_conformance/unicode_authority.rs"]
+mod unicode_authority;
 #[path = "text_field_conformance/viewport_ime.rs"]
 mod viewport_ime;
 #[path = "text_field_conformance/wrappers_and_path.rs"]

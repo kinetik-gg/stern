@@ -2,7 +2,7 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Stages 0-3 are Complete. Stage 4A is Complete / Accepted; Stage 4B is Current / Authorized with `TEXT-02A` accepted and `TEXT-02B` the current local candidate. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-3 are Complete. Stage 4A is Complete / Accepted; Stage 4B is Current / Authorized with `TEXT-02A/B` accepted and `TEXT-02C` the locally verified candidate. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
@@ -1156,9 +1156,13 @@ engine replacement remain out of scope.
 
 ### `TEXT-02B`: source-bound shaped navigation authority
 
-Status: Locally verified implementation candidate for Issue #556. This is the
-second serialized foundation of `TEXT-02`; exact-SHA review, PR, CI, and squash
-evidence are pending. It does not close audit §6.9 or roadmap `TEXT-02`.
+Status: Complete / Accepted. Issue #556 closed through PR #557 after candidate
+`6735879`, exact-SHA review, three-OS CI, and PR CI passed, then squash-merged as
+`676cb4e`. The retained-widget integration exposed omitted ASCII wrap
+delimiters as a prerequisite; Issue #559 closed through PR #560 after remediated
+candidate `0b63eb2` and the same gates passed, then squash-merged as `2814a3c`.
+This accepted text-layer foundation does not close audit §6.9 or roadmap
+`TEXT-02` without `TEXT-02C`.
 
 #### Changed files
 
@@ -1206,7 +1210,10 @@ literals and byte-only geometry methods remain source-compatible.
   workspace tests, all-feature workspace build, all-feature example checks,
   and warning-denied workspace docs passed with isolated
   `target/runway/text02b`.
-- Exact-SHA candidate critics, three-OS CI, PR CI, and squash merge: **PENDING**.
+- Three exact-SHA critics reported P0/P1/P2=`0/0/0` for both accepted
+  candidates. The original packet and wrap-cell prerequisite each passed local
+  focused/workspace verification, exact-SHA Ubuntu/Windows/macOS dispatch, and
+  PR-context CI before squash merge.
 
 #### Remaining risks and deferred findings
 
@@ -1216,6 +1223,69 @@ real `->` multi-EGC cluster; future font/shaper upgrades must deliberately
 revalidate that witness. Canonical widget/ReadOnly/pointer/ordered
 re-resolution/IME integration remains `TEXT-02C`; fractional-DPI paint parity
 remains `REND-02`; undo/layout/resource budgets remain `TEXT-03`.
+
+### `TEXT-02C`: retained shaped text authority
+
+Status: Locally verified implementation candidate for Issue #558. All focused
+checks and six workspace gates pass. Exact-SHA critics, PR, three-OS CI,
+PR-context CI, and squash merge remain required before audit §6.9 and roadmap
+`TEXT-02` close.
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `crates/kinetik-ui-text/src/edit.rs`
+- `crates/kinetik-ui-text/tests/shaped_key_conformance.rs`
+- `crates/kinetik-ui-widgets/src/components/{text_fields,text_geometry,text_interaction}.rs`
+- `crates/kinetik-ui-widgets/src/components/tests/text_fields.rs`
+- `crates/kinetik-ui-widgets/tests/text_field_conformance.rs`
+- `crates/kinetik-ui-widgets/tests/text_field_conformance/unicode_authority.rs`
+- `crates/kinetik-ui/tests/public_api_surface.rs`
+- `docs/specs/03-rendering-text-components.md`
+- `docs/alpha-readiness/{04-text-renderer-lifetime,progress}.md`
+
+#### Reasoning and contract decisions
+
+`TextEditState::apply_visual_navigation_key` gives ordered replay one qualified
+pressed/repeated Left/Right entry point. Every consumed horizontal key resolves
+the exact current model source after preceding mutations; invalid or stale
+retained maps fail closed without scalar fallback. Active preedit consumes the
+key unchanged before invoking the resolver because native IME owns movement
+inside display-only composition text.
+
+Entry pointer hits remain frozen to their causal display snapshot. Post-replay
+geometry owns one exact display-source `ShapedTextNavigation` and registered
+layout for paint, hit, caret affinity, disjoint selection, preedit underline and
+caret, viewport reveal, and visible native IME placement. Composition mapping
+preserves shaped affinity while collapsing interior and end hits to the model
+insertion seam. Invalid retained navigation discards the entire shaped snapshot
+and uses the layoutless compatibility path. The Unicode-authoritative alpha
+promise therefore applies only to canonical retained fields configured with
+`TextLayoutStore`.
+
+#### Tests run and results
+
+- Shaped-key conformance passed 4/4; the complete text crate passed 66 unit, 9
+  ReadOnly, 4 shaped-key, 14 viewport, 12 Unicode-editing, and 23 Unicode-layout
+  tests plus doc tests.
+- Retained text-field conformance passed 125/125, including the full mutation
+  and pointer causal matrices, grapheme/bidi/wrap/offset fixtures, preedit
+  geometry and hit mapping, validation fallback, access modes, and clipboard.
+- The complete widgets crate and all integrations passed; facade public API
+  conformance passed 9/9.
+- Formatting, warning-denied workspace Clippy, all-feature workspace tests,
+  all-feature workspace build, all-feature examples, and warning-denied
+  workspace docs passed in `target/runway/text02c`. `RUSTDOCFLAGS` was restored.
+
+#### Remaining risks and deferred findings
+
+Fractional device projection remains `REND-02`. Undo coalescing and retained
+layout/resource generation and byte budgets remain `TEXT-03`. Rejected numeric
+scrub previews may register unused layouts until those budgets land. Invalid
+internal navigation falls back atomically but has no public diagnostic channel.
+Free/no-store compatibility paths do not carry the Unicode-authoritative alpha
+promise. Locale tailoring, normalization, color emoji policy, and vertical
+visual navigation remain outside alpha scope.
 
 ### `REND-01B`: sRGB, alpha, and tint contract
 
