@@ -414,3 +414,34 @@ fn retained_text_layout_lifecycle_surface_is_additive() {
     assert_eq!(cache.generation(), 1);
     assert_eq!(cache.retained_payload_bytes(), 0);
 }
+
+#[test]
+fn incremental_text_resource_sync_is_qualified_and_caller_owned() {
+    use kinetik_ui::{UiState, render, text};
+
+    let mut state = UiState::new();
+    let id = state.text_layouts_mut().layout_id(text::TextLayoutKey::new(
+        "resource",
+        text::TextStyle::new("Inter", 12.0, 16.0),
+        80.0,
+        false,
+    ));
+    let mut resources = render::RenderResources::new();
+    let mut sync = render::TextLayoutResourceSync::new();
+    let report: render::TextLayoutResourceSyncReport =
+        state.reconcile_text_layouts(&mut resources, &mut sync);
+
+    assert_eq!(report.kind, render::TextLayoutResourceSyncKind::Full);
+    assert_eq!(report.added, 1);
+    assert!(resources.has_text_layout(id));
+    assert_eq!(resources.text_layout_count(), 1);
+    assert_eq!(
+        resources.retained_text_layout_payload_bytes(),
+        Some(state.text_layouts().retained_payload_bytes())
+    );
+    assert!(
+        state
+            .reconcile_text_layouts(&mut resources, &mut sync)
+            .is_noop()
+    );
+}

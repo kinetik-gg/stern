@@ -131,7 +131,7 @@ impl LiveShowcase {
         window.pre_present_notify();
         let retry_surface_redraw = if let Some(renderer) = self.renderer.as_mut() {
             renderer.resize(size);
-            match renderer.render(self.app.output(), &resources, viewport) {
+            match renderer.render(self.app.output(), resources, viewport) {
                 Ok(()) => false,
                 Err(LiveRenderError::Surface(status)) => {
                     handle_surface_status(status, renderer, size);

@@ -243,8 +243,37 @@ in mutation order; consumers query final presence through O(1)
 reuse within the live epoch. Checked epoch exhaustion enters permanent
 resync-only mode, preserves resident layouts, retains no tombstones, and makes
 every cursor request a full snapshot. Renderer reconciliation and external Arc
-byte lifetime are specified by the following resource-lifetime packet rather
-than by the store.
+byte lifetime use the renderer-neutral policy below.
+
+Each renderer consumer pairs one `RenderResources` with one non-clonable
+`TextLayoutResourceSync`. First use, explicit sync reset, foreign/replaced
+stores, journal epoch rollover, future cursors, and terminal resync-only stores
+clear and rebuild only the registry text namespace; images and textures remain
+untouched. Ordinary updates consume dirty IDs in journal order and resolve each
+ID's final presence with `stored_layout`: present resources are inserted or
+replaced only when key or Arc identity differs, while absent resources are
+removed. A zero-change incremental pass performs no key clones, Arc
+replacements, or registry map mutations. Each separate or cloned registry must
+start with a fresh sync state and full reconciliation; manually mutating the
+managed text namespace between sync calls is unsupported.
+
+Full reports classify the previous text count as removed and the current store
+snapshot count as added because the namespace is literally cleared and rebuilt.
+Incremental reports count processed journal records and actual insert, replace,
+and remove mutations. Only an incremental batch with zero processed records and
+zero mutations is a no-op. Reconciliation does not advance layout generation;
+generation G resources must be reconciled after frame completion and before a
+UI attachment advances the store to G+1.
+
+`RenderResources::retained_text_layout_payload_bytes` checks the owned key plus
+reachable shaped layout structs and Vec capacities using the same boundary as
+the retained store. It excludes registry buckets, allocator/Arc headers, shared
+font bytes, shaping-engine and backend caches, and arbitrary external Arc
+owners. Store and registry values are per-owner reachability metrics and cannot
+be added as process RSS because the shaped layout payload is Arc-shared. A
+resource Arc may deliberately outlive store eviction until the next consumer
+reconciliation; it is released when the stale registry entry is removed unless
+another external owner remains.
 
 The public approximate `TextLayoutCache` remains a compatibility surface. It
 uses the same 32 MiB and 120-generation policy with deterministic eviction, but

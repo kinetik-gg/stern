@@ -21,7 +21,7 @@ fn showcase_pages_translate_to_vello_without_renderer_diagnostics() {
             let output = renderer.submit_frame(RenderFrameInput {
                 viewport: test_viewport(size),
                 primitives: &app.output().primitives,
-                resources: &resources,
+                resources,
             });
 
             assert!(
@@ -54,7 +54,7 @@ fn showcase_pages_snap_text_origins_and_baselines_at_fractional_dpi() {
             let output = renderer.submit_frame(RenderFrameInput {
                 viewport: test_viewport_scaled(size, scale_factor),
                 primitives: &app.output().primitives,
-                resources: &resources,
+                resources,
             });
             let encoding = renderer.scene().encoding();
             let glyphs = &encoding.resources.glyphs;
@@ -93,7 +93,7 @@ fn editor_open_menu_translates_to_vello_without_renderer_diagnostics() {
     let output = renderer.submit_frame(RenderFrameInput {
         viewport: test_viewport(Size::new(1440.0, 900.0)),
         primitives: &app.output().primitives,
-        resources: &resources,
+        resources,
     });
 
     assert!(output.diagnostics.is_empty(), "{:?}", output.diagnostics);

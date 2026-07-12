@@ -2,7 +2,7 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Stages 0-3 are Complete. Stage 4A, `TEXT-02`, and `TEXT-03A` are Complete / Accepted; Stage 4B is Current / Authorized with `TEXT-03B` the current locally verified candidate. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-3 are Complete. Stage 4A, `TEXT-02`, and `TEXT-03A/B` are Complete / Accepted; Stage 4B is Current / Authorized with `TEXT-03C` the current implementation candidate. Stages 5-7 are Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
@@ -1364,10 +1364,10 @@ remains `REND-02`.
 
 ### `TEXT-03B`: retained layout generations and payload budgets
 
-Status: Locally verified implementation candidate for Issue #564. The exact task gate passed
-three independent read-only reviews at P0/P1/P2=`0/0/0`; focused text, widget,
-facade, and renderer compatibility checks pass. Exact-candidate critics, PR,
-three-OS CI, PR-context CI, and squash merge remain required. This is partial
+Status: Complete / Accepted. Issue #564 closed through PR #565 and squash merge
+`83e2847`. The accepted candidate `2c79c10` passed three exact-SHA critics at
+P0/P1/P2=`0/0/0`, PR CI run 29179370375, Ubuntu/Windows/macOS run 29179370450,
+and main-push CI run 29179571377. This is partial
 `TEXT-03` evidence for audit §§8.4, 10.2, 11.5, and the bounded-cache portion of
 §11.7; it does not close `TEXT-03`, Stage 4, or the duplicate-cache API finding
 without `TEXT-03C`, `REND-02`, and final Stage 7 API curation.
@@ -1450,6 +1450,92 @@ raw handle validity across clear/eviction. Renderer reconciliation and external
 Arc byte lifetime remain `TEXT-03C`; Vello cache lifetime and fractional
 projection remain later packets. The public approximate cache remains a
 duplicate contract until final `API-01` curation in Stage 7.
+
+### `TEXT-03C`: incremental text resource reconciliation
+
+Status: Implementation candidate for Issue #566. The amended task SHA-256
+`41e7ebec3c3cfc638f62361d39be0016b8293cb36346e169dee24f136601f5d0`
+passed three independent read-only task critics at P0/P1/P2=`0/0/0` after one
+bounded task remedy. Focused renderer, facade, and persistent-showcase tests and
+warning-denied touched-surface Clippy pass. All six workspace gates pass in the
+isolated `target/runway/text03c` cache with `RUSTDOCFLAGS` restored. Exact-
+candidate critics, PR/three-OS CI, squash merge, and main-push CI remain required.
+This packet may close roadmap `TEXT-03` and the text-resource portions of audit
+§§8.4, 10.2, and 11.5, but not Stage 4 or duplicate-cache §11.7.
+
+#### Changed files
+
+- `CHANGELOG.md`
+- `crates/kinetik-ui-render/src/lib.rs`
+- `crates/kinetik-ui-render/tests/text_layout_reconciliation_conformance.rs`
+- `crates/kinetik-ui/src/lib.rs`
+- `crates/kinetik-ui/tests/public_api_surface.rs`
+- `apps/kinetik-ui-showcase/src/{app,live,main}.rs`
+- `apps/kinetik-ui-showcase/src/app/runtime/lifecycle.rs`
+- `apps/kinetik-ui-showcase/src/app/tests/{resources,vello}.rs`
+- `docs/specs/03-rendering-text-components.md`
+- `docs/alpha-readiness/{04-text-renderer-lifetime,progress}.md`
+
+#### Reasoning and contract decisions
+
+Each renderer registry now pairs with one intentionally non-clonable,
+caller-owned `TextLayoutResourceSync`. Initial, explicit reset, foreign/stale,
+rollover, and terminal cursors clear and rebuild only text resources. Ordinary
+batches consume bounded dirty IDs and resolve final store presence, so present
+IDs upsert only when key or Arc identity differs and absent IDs remove. A
+zero-change incremental pass clones no key, replaces no Arc, and mutates no map.
+Full and incremental report counts plus the no-op predicate are literal, and
+multiple delayed consumers remain independent.
+
+Renderer payload accounting mirrors the accepted store boundary with checked
+owned-key and reachable shaped-layout capacities. Store and registry metrics
+are reachability measures, not additive RSS, because layouts are Arc-shared.
+Resource Arcs may intentionally bridge store eviction until the next
+reconciliation; stale entries then release unless an external owner remains.
+Manual full-snapshot registration remains compatible but may not be mixed into
+a managed text namespace between sync calls.
+
+`UiState` exposes an additive caller-owned reconciliation helper. The showcase
+owns one persistent registry and sync state, registers static media once,
+reconciles after each completed frame, and returns a borrowed registry instead
+of cloning static payloads and every retained text key on each access.
+
+#### Tests run and results
+
+- Renderer reconciliation conformance passed 8/8: initial/no-op, add/remove,
+  duplicate final absence, clear/manual/foreign reset, delayed consumers, Arc
+  lifetime, 1,000 dynamic generations, and same-frame 32 MiB saturation.
+- Renderer unit tests passed 9/9, including dirty update/identity classification
+  and checked overflow rejection.
+- Facade public API passed 11/11 and facade unit tests passed 14/14, including
+  two independent caller-owned consumers.
+- Showcase resource-focused tests passed 8/8, including persistent registry/key/
+  Arc identity, genuine page-exclusive stale-layout removal, and 1,000 page
+  frames with exact store/resource presence and equal bounded metrics.
+- Existing renderer resource snapshots passed 12/12, showcase quality passed
+  2/2, and Vello text-focused compatibility passed 37 unit plus 4 translation
+  tests.
+- Complete affected crates passed: renderer 9 unit, 3 color, 12 snapshot, 8
+  reconciliation, and 1 compile-fail doc test; facade 14 unit plus 11 public API;
+  showcase 131 library plus 25 binary; Vello 94 unit, 1 color, 18 translation,
+  and 5 transform-recovery tests.
+- Warning-denied Clippy passed for render, facade, and showcase all targets and
+  all features.
+- All six workspace gates passed in `target/runway/text03c`: formatting,
+  warning-denied workspace Clippy, all-feature workspace tests, all-feature
+  workspace build, all-feature examples, and warning-denied workspace docs.
+  `RUSTDOCFLAGS` was restored.
+
+#### Remaining risks and deferred findings
+
+Terminal journal exhaustion deliberately causes a full text rebuild every
+reconciliation. Payload metrics exclude shared fonts, backend caches, allocator
+metadata, Arc headers, and external owners and are not RSS. Managed registries
+require the documented one-in-flight generation boundary and forbid interleaved
+manual text mutation. Vello physical text cache policy and authoritative
+fractional projection remain `REND-02`; image/texture budgets, presenter
+ownership, and external GPU resources remain later packets. Approximate
+`TextLayoutCache` duplication remains final Stage 7 `API-01`.
 
 ### `REND-01B`: sRGB, alpha, and tint contract
 

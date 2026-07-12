@@ -124,6 +124,16 @@ published, or accepted as an alpha release.
   not churn the cache. Existing infallible admission and caller-owned layout
   handles remain compatible; strict saturation degrades canonical new text to
   layoutless fallback.
+- Added per-renderer `TextLayoutResourceSync` reconciliation with deterministic
+  full/reset reports, dirty-ID final-presence updates, text-only removal, and
+  checked reachable-payload metrics. Sync state is deliberately non-clonable
+  and caller-owned so independent registries cannot reuse a cursor without its
+  matching resource state. No-change frames clone no text keys and mutate no
+  resource maps. `UiState` now provides an additive reconciliation helper, and
+  the showcase retains one resource registry, registers static media once, and
+  incrementally reconciles text after each completed frame instead of cloning
+  and rebuilding resources on access. Existing manual/full-snapshot
+  registration APIs remain compatible.
 - Defined renderer-bound `Color` as straight sRGB plus straight alpha and made
   Vello translation diagnose and sanitize every invalid color occurrence before
   command snapshots. Peniko gradients now explicitly select sRGB with

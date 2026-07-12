@@ -20,7 +20,8 @@ use kinetik_ui::core::{
     inspect_primitives, rect_from_size, row_layout, split_leading,
 };
 use kinetik_ui::render::{
-    ImageResource, RenderImage, RenderImageSampling, RenderResources, TextureResource,
+    ImageResource, RenderImage, RenderImageSampling, RenderResources, TextLayoutResourceSync,
+    TextureResource,
 };
 use kinetik_ui::text::{TextEditState, TextLayoutStore};
 use kinetik_ui::widgets::{
@@ -181,7 +182,8 @@ pub struct ShowcaseApp {
     pending_platform_requests: Vec<PlatformRequest>,
     output: FrameOutput,
     editor: EditorShowcase,
-    static_resources: RenderResources,
+    render_resources: RenderResources,
+    text_resource_sync: TextLayoutResourceSync,
 }
 
 impl Default for ShowcaseApp {
@@ -215,7 +217,8 @@ impl Default for ShowcaseApp {
             pending_platform_requests: Vec::new(),
             output: FrameOutput::new(),
             editor: EditorShowcase::new(),
-            static_resources: static_render_resources(),
+            render_resources: static_render_resources(),
+            text_resource_sync: TextLayoutResourceSync::new(),
         };
         app.redraw_idle();
         app
