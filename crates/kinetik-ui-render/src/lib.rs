@@ -5,10 +5,13 @@
 //! backends such as Vello consume this contract and keep backend-specific
 //! encoding details in their own crates.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, mem::size_of, sync::Arc};
 
 use kinetik_ui_core::{ImageId, Primitive, Rect, Size, TextLayoutId, TextureId, ViewportInfo};
-use kinetik_ui_text::{ShapedTextLayout, StoredTextLayout, TextLayoutKey};
+use kinetik_ui_text::{
+    ShapedGlyph, ShapedGlyphRun, ShapedTextLayout, ShapedTextLine, StoredTextLayout,
+    TextLayoutChangeCursor, TextLayoutKey, TextLayoutStore,
+};
 
 /// Static image resource known by a renderer.
 #[derive(Debug, Clone, PartialEq)]
@@ -167,6 +170,80 @@ pub struct TextLayoutResource {
     pub layout: Arc<ShapedTextLayout>,
 }
 
+/// Reconciliation path used for one renderer text-resource update.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextLayoutResourceSyncKind {
+    /// The complete text namespace was cleared and rebuilt.
+    Full,
+    /// Dirty IDs were reconciled against final store presence.
+    Incremental,
+}
+
+/// Deterministic result of reconciling one text layout store into resources.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextLayoutResourceSyncReport {
+    /// Reconciliation path used for this update.
+    pub kind: TextLayoutResourceSyncKind,
+    /// Number of bounded journal records inspected.
+    pub processed_changes: usize,
+    /// Number of resources inserted into absent IDs.
+    pub added: usize,
+    /// Number of present IDs replaced with different key/layout data.
+    pub updated: usize,
+    /// Number of present IDs removed.
+    pub removed: usize,
+    /// Final number of retained text resources.
+    pub retained: usize,
+}
+
+impl TextLayoutResourceSyncReport {
+    /// Returns true only for an empty incremental batch with no mutations.
+    #[must_use]
+    pub const fn is_noop(&self) -> bool {
+        matches!(self.kind, TextLayoutResourceSyncKind::Incremental)
+            && self.processed_changes == 0
+            && self.added == 0
+            && self.updated == 0
+            && self.removed == 0
+    }
+}
+
+/// Cursor state pairing one text layout store consumer with one resource registry.
+///
+/// This state is intentionally not cloneable: its cursor is valid only for the
+/// exact registry state advanced alongside it. A separate or cloned registry
+/// must start with a fresh sync state and perform a full reconciliation.
+///
+/// ```compile_fail
+/// use kinetik_ui_render::TextLayoutResourceSync;
+///
+/// let sync = TextLayoutResourceSync::new();
+/// let _invalid_fork = sync.clone();
+/// ```
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct TextLayoutResourceSync {
+    cursor: Option<TextLayoutChangeCursor>,
+}
+
+impl TextLayoutResourceSync {
+    /// Creates an uninitialized resource sync state.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { cursor: None }
+    }
+
+    /// Forces the next reconciliation to rebuild the complete text namespace.
+    pub fn reset(&mut self) {
+        self.cursor = None;
+    }
+
+    /// Returns whether this sync state has reconciled a registry snapshot.
+    #[must_use]
+    pub const fn is_initialized(&self) -> bool {
+        self.cursor.is_some()
+    }
+}
+
 /// Resource registry used during frame translation and encoding.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RenderResources {
@@ -231,6 +308,72 @@ impl RenderResources {
         }
     }
 
+    /// Reconciles one retained text store into this registry's text namespace.
+    ///
+    /// The sync state must remain paired with this exact registry. Managed
+    /// reconciliation owns all text-layout IDs in the registry; manually
+    /// registering text layouts between managed calls is unsupported. Images
+    /// and textures remain independently owned and are never cleared here.
+    pub fn reconcile_text_layouts(
+        &mut self,
+        store: &TextLayoutStore,
+        sync: &mut TextLayoutResourceSync,
+    ) -> TextLayoutResourceSyncReport {
+        let Some(cursor) = sync.cursor else {
+            return self.rebuild_text_layouts(store, sync);
+        };
+        let changes = store.changes_since(cursor);
+        if changes.requires_reset() {
+            return self.rebuild_text_layouts(store, sync);
+        }
+
+        let next_cursor = changes.cursor();
+        let mut report = TextLayoutResourceSyncReport {
+            kind: TextLayoutResourceSyncKind::Incremental,
+            processed_changes: 0,
+            added: 0,
+            updated: 0,
+            removed: 0,
+            retained: self.text_layouts.len(),
+        };
+        for change in changes.iter() {
+            report.processed_changes += 1;
+            if let Some(stored) = store.stored_layout(change.id()) {
+                match self.upsert_stored_text_layout(stored) {
+                    TextLayoutMutation::Added => report.added += 1,
+                    TextLayoutMutation::Updated => report.updated += 1,
+                    TextLayoutMutation::Unchanged => {}
+                }
+            } else if self.text_layouts.remove(&change.id()).is_some() {
+                report.removed += 1;
+            }
+        }
+        report.retained = self.text_layouts.len();
+        sync.cursor = Some(next_cursor);
+        report
+    }
+
+    /// Returns the number of retained shaped text resources.
+    #[must_use]
+    pub fn text_layout_count(&self) -> usize {
+        self.text_layouts.len()
+    }
+
+    /// Returns checked owned-key and reachable shaped-layout payload bytes.
+    ///
+    /// This metric excludes registry buckets, allocator and `Arc` headers,
+    /// shared font data, renderer caches, shaping-engine internals, and external
+    /// `Arc` owners. Because shaped layouts are shared with the text store, this
+    /// reachability metric and the store metric are not additive process RSS.
+    #[must_use]
+    pub fn retained_text_layout_payload_bytes(&self) -> Option<usize> {
+        self.text_layouts
+            .values()
+            .try_fold(0_usize, |total, resource| {
+                total.checked_add(text_layout_resource_payload_bytes(resource)?)
+            })
+    }
+
     /// Returns true when an image is registered.
     #[must_use]
     pub fn has_image(&self, image: ImageId) -> bool {
@@ -279,6 +422,88 @@ impl RenderResources {
     pub fn snapshot(&self) -> RenderResourceSnapshot {
         RenderResourceSnapshot::from_resources(self)
     }
+
+    fn rebuild_text_layouts(
+        &mut self,
+        store: &TextLayoutStore,
+        sync: &mut TextLayoutResourceSync,
+    ) -> TextLayoutResourceSyncReport {
+        let removed = self.text_layouts.len();
+        self.text_layouts.clear();
+        let mut added = 0;
+        for stored in store.layouts() {
+            let mutation = self.upsert_stored_text_layout(stored);
+            debug_assert!(matches!(mutation, TextLayoutMutation::Added));
+            added += 1;
+        }
+        sync.cursor = Some(store.change_cursor());
+        TextLayoutResourceSyncReport {
+            kind: TextLayoutResourceSyncKind::Full,
+            processed_changes: 0,
+            added,
+            updated: 0,
+            removed,
+            retained: self.text_layouts.len(),
+        }
+    }
+
+    fn upsert_stored_text_layout(&mut self, stored: StoredTextLayout<'_>) -> TextLayoutMutation {
+        if let Some(existing) = self.text_layouts.get(&stored.id)
+            && existing.key.eq(stored.key)
+            && Arc::ptr_eq(&existing.layout, &stored.layout)
+        {
+            return TextLayoutMutation::Unchanged;
+        }
+
+        let mutation = if self.text_layouts.contains_key(&stored.id) {
+            TextLayoutMutation::Updated
+        } else {
+            TextLayoutMutation::Added
+        };
+        self.text_layouts.insert(
+            stored.id,
+            TextLayoutResource {
+                id: stored.id,
+                key: stored.key.clone(),
+                layout: stored.layout,
+            },
+        );
+        mutation
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TextLayoutMutation {
+    Added,
+    Updated,
+    Unchanged,
+}
+
+fn text_layout_resource_payload_bytes(resource: &TextLayoutResource) -> Option<usize> {
+    let layout = resource.layout.as_ref();
+    let mut bytes = checked_payload_sum([
+        size_of::<TextLayoutKey>(),
+        resource.key.text.capacity(),
+        resource.key.style.family.capacity(),
+        size_of::<ShapedTextLayout>(),
+        checked_payload_product(layout.lines.capacity(), size_of::<ShapedTextLine>())?,
+        checked_payload_product(layout.runs.capacity(), size_of::<ShapedGlyphRun>())?,
+    ])?;
+    for run in &layout.runs {
+        bytes = bytes.checked_add(checked_payload_product(
+            run.glyphs.capacity(),
+            size_of::<ShapedGlyph>(),
+        )?)?;
+    }
+    Some(bytes)
+}
+
+fn checked_payload_product(count: usize, item_size: usize) -> Option<usize> {
+    count.checked_mul(item_size)
+}
+
+fn checked_payload_sum(parts: impl IntoIterator<Item = usize>) -> Option<usize> {
+    parts.into_iter().try_fold(0_usize, usize::checked_add)
 }
 
 /// Deterministic, payload-free resource inventory used by renderer snapshot tests.
@@ -621,18 +846,19 @@ pub const fn crate_name() -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use std::{convert::Infallible, sync::Arc};
+    use std::{convert::Infallible, mem::size_of, sync::Arc};
 
     use super::{
         ImageAtlasRegion, ImageResource, RenderDiagnostic, RenderFrameInput, RenderFrameOutput,
-        RenderImage, RenderImageSampling, RenderResources, RendererBackend, TextLayoutResource,
-        TextureResource,
+        RenderImage, RenderImageSampling, RenderResources, RendererBackend, TextLayoutMutation,
+        TextLayoutResource, TextureResource, checked_payload_product, checked_payload_sum,
     };
     use kinetik_ui_core::{
         ImageId, PhysicalSize, ScaleFactor, Size, TextLayoutId, TextureId, ViewportInfo,
     };
     use kinetik_ui_text::{
-        CosmicTextEngine, ShapedTextLayout, TextLayoutKey, TextLayoutStore, TextStyle,
+        CosmicTextEngine, ShapedGlyph, ShapedGlyphRun, ShapedTextLayout, ShapedTextLine,
+        TextLayoutKey, TextLayoutStore, TextStyle,
     };
 
     #[derive(Default)]
@@ -746,6 +972,94 @@ mod tests {
                 .expect("resource layout")
                 .layout
         ));
+    }
+
+    #[test]
+    fn dirty_upsert_distinguishes_update_from_identity_and_payload_sum_is_checked() {
+        let mut store = TextLayoutStore::new();
+        let id = store.layout_id(TextLayoutKey::new(
+            "canonical",
+            TextStyle::new("sans-serif", 12.0, 16.0),
+            200.0,
+            false,
+        ));
+        let mut resources = RenderResources::new();
+        resources.register_text_layout(TextLayoutResource {
+            id,
+            key: TextLayoutKey::new(
+                "manual conflict",
+                TextStyle::new("serif", 9.0, 11.0),
+                80.0,
+                true,
+            ),
+            layout: Arc::new(ShapedTextLayout {
+                size: Size::new(1.0, 1.0),
+                line_count: 1,
+                lines: Vec::new(),
+                runs: Vec::new(),
+            }),
+        });
+
+        assert_eq!(
+            resources.upsert_stored_text_layout(store.stored_layout(id).expect("stored")),
+            TextLayoutMutation::Updated
+        );
+        assert_eq!(
+            resources.upsert_stored_text_layout(store.stored_layout(id).expect("stored")),
+            TextLayoutMutation::Unchanged
+        );
+        assert!(checked_payload_sum([usize::MAX, 1]).is_none());
+    }
+
+    #[test]
+    fn text_layout_payload_metric_counts_spare_capacities_and_checks_multiplication() {
+        let mut text = String::with_capacity(128);
+        text.push_str("capacity metric");
+        let mut family = String::with_capacity(96);
+        family.push_str("sans-serif");
+        let key = TextLayoutKey::new(text, TextStyle::new(family, 12.0, 16.0), 200.0, false);
+        let mut engine = CosmicTextEngine::new();
+        let mut layout = engine.shape_text(&key);
+        layout.lines.reserve_exact(9);
+        layout.runs.reserve_exact(7);
+        for run in &mut layout.runs {
+            run.glyphs.reserve_exact(19);
+        }
+
+        assert!(key.text.capacity() > key.text.len());
+        assert!(key.style.family.capacity() > key.style.family.len());
+        assert!(layout.lines.capacity() > layout.lines.len());
+        assert!(layout.runs.capacity() > layout.runs.len());
+        assert!(
+            layout
+                .runs
+                .iter()
+                .all(|run| run.glyphs.capacity() > run.glyphs.len())
+        );
+
+        let mut expected = size_of::<TextLayoutKey>()
+            + key.text.capacity()
+            + key.style.family.capacity()
+            + size_of::<ShapedTextLayout>()
+            + layout.lines.capacity() * size_of::<ShapedTextLine>()
+            + layout.runs.capacity() * size_of::<ShapedGlyphRun>();
+        for run in &layout.runs {
+            expected += run.glyphs.capacity() * size_of::<ShapedGlyph>();
+        }
+
+        let mut resources = RenderResources::new();
+        resources.register_text_layout(TextLayoutResource {
+            id: TextLayoutId::from_raw(91),
+            key,
+            layout: Arc::new(layout),
+        });
+
+        assert_eq!(
+            resources.retained_text_layout_payload_bytes(),
+            Some(expected)
+        );
+        assert!(checked_payload_product(usize::MAX, 2).is_none());
+        assert!(checked_payload_sum([usize::MAX, 1]).is_none());
     }
 
     #[test]

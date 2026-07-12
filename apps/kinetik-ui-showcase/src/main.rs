@@ -221,7 +221,7 @@ fn submit_render_once_to_vello(
     let output = renderer.submit_frame(RenderFrameInput {
         viewport,
         primitives: &app.output().primitives,
-        resources: &resources,
+        resources,
     });
 
     if output.diagnostics.is_empty() {

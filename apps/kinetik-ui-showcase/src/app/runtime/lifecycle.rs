@@ -117,12 +117,10 @@ impl ShowcaseApp {
         &self.output
     }
 
-    /// Builds render resources referenced by the current showcase frame.
+    /// Returns persistent render resources referenced by the current showcase frame.
     #[must_use]
-    pub fn render_resources(&self) -> RenderResources {
-        let mut resources = self.static_resources.clone();
-        resources.register_text_layouts(self.text_layouts.layouts());
-        resources
+    pub const fn render_resources(&self) -> &RenderResources {
+        &self.render_resources
     }
 
     pub(in crate::app) fn redraw_idle(&mut self) {
@@ -162,6 +160,9 @@ impl ShowcaseApp {
         }
         self.memory = memory;
         self.text_layouts = text_layouts;
+        let _ = self
+            .render_resources
+            .reconcile_text_layouts(&self.text_layouts, &mut self.text_resource_sync);
         output
     }
 

@@ -126,6 +126,18 @@ impl UiState {
         resources.register_text_layouts(self.text_layouts.layouts());
     }
 
+    /// Reconciles retained text layouts into one caller-owned resource registry.
+    ///
+    /// The sync state must remain paired with the exact registry passed here.
+    /// Separate renderer consumers use independent registries and sync states.
+    pub fn reconcile_text_layouts(
+        &self,
+        resources: &mut render::RenderResources,
+        sync: &mut render::TextLayoutResourceSync,
+    ) -> render::TextLayoutResourceSyncReport {
+        resources.reconcile_text_layouts(&self.text_layouts, sync)
+    }
+
     /// Creates renderer resources containing the cached shaped text layouts.
     #[must_use]
     pub fn text_render_resources(&self) -> render::RenderResources {
@@ -178,7 +190,7 @@ pub mod prelude {
 
 #[cfg(test)]
 mod tests {
-    use super::{UiState, core, prelude, text, widgets};
+    use super::{UiState, core, prelude, render, text, widgets};
 
     #[test]
     fn facade_reexports_core_text_and_widgets() {
@@ -380,6 +392,49 @@ mod tests {
         let resources = state.text_render_resources();
 
         assert!(resources.has_text_layout(layout));
+    }
+
+    #[test]
+    fn ui_state_reconciles_independent_text_resource_consumers() {
+        let mut state = UiState::new();
+        let first = state.text_layouts_mut().layout_id(text::TextLayoutKey::new(
+            "first",
+            text::TextStyle::new("Inter", 12.0, 16.0),
+            80.0,
+            false,
+        ));
+        let mut first_resources = render::RenderResources::new();
+        let mut second_resources = render::RenderResources::new();
+        let mut first_sync = render::TextLayoutResourceSync::new();
+        let mut second_sync = render::TextLayoutResourceSync::new();
+
+        let first_report = state.reconcile_text_layouts(&mut first_resources, &mut first_sync);
+        let second_report = state.reconcile_text_layouts(&mut second_resources, &mut second_sync);
+        assert_eq!(first_report.kind, render::TextLayoutResourceSyncKind::Full);
+        assert_eq!(second_report.kind, render::TextLayoutResourceSyncKind::Full);
+        assert!(first_resources.has_text_layout(first));
+        assert_eq!(first_resources.snapshot(), second_resources.snapshot());
+
+        let second = state.text_layouts_mut().layout_id(text::TextLayoutKey::new(
+            "second",
+            text::TextStyle::new("Inter", 12.0, 16.0),
+            80.0,
+            false,
+        ));
+        assert_eq!(
+            state
+                .reconcile_text_layouts(&mut first_resources, &mut first_sync)
+                .processed_changes,
+            1
+        );
+        assert!(!second_resources.has_text_layout(second));
+        assert_eq!(
+            state
+                .reconcile_text_layouts(&mut second_resources, &mut second_sync)
+                .processed_changes,
+            1
+        );
+        assert_eq!(first_resources.snapshot(), second_resources.snapshot());
     }
 
     #[test]
