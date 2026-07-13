@@ -302,7 +302,9 @@ impl DockScene {
         for frame in &self.layout.frames {
             plan.with_clip(frame.tab_list_rect, |plan| {
                 for tab in &frame.tabs {
-                    let mut target = PointerTarget::new(tab.id, tab.rect, take_order(&mut ordinal));
+                    let mut target =
+                        PointerTarget::new(tab.id, tab.rect, take_order(&mut ordinal))
+                            .drop_owner(frame.id);
                     if tab.draggable {
                         target = target.domain_drag_source();
                     }
@@ -310,6 +312,7 @@ impl DockScene {
                     if let Some(close_rect) = tab.close_rect {
                         plan.target(
                             PointerTarget::new(tab.close_id, close_rect, take_order(&mut ordinal))
+                                .drop_owner(frame.id)
                                 .enabled(enabled && tab.close_visible),
                         );
                     }

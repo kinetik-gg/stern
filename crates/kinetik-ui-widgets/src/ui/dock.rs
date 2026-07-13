@@ -89,8 +89,19 @@ impl Ui<'_> {
 
         for frame in &scene.layout().frames {
             let response = self.pressable_with_id(frame.id, frame.rect, disabled);
-            if response.clicked {
-                dock.set_active_frame(frame.frame);
+            if response.clicked
+                && let Some(panel) = dock
+                    .frame(frame.frame)
+                    .and_then(|item| item.active_panel())
+                    .map(|panel| panel.id)
+            {
+                self.select_and_focus_dock_tab(
+                    dock,
+                    controller,
+                    frame.frame,
+                    panel,
+                    scene.tab_widget_id(panel),
+                );
             }
         }
 
