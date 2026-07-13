@@ -1,5 +1,17 @@
 //! Data-only asset browser contracts for app-owned asset collections.
 
+mod component;
+
+pub use component::{
+    AssetBrowserConfig, AssetBrowserContextMenuConfig, AssetBrowserItemResponse,
+    AssetBrowserOutput, AssetBrowserRenameConflict, AssetBrowserRequest, AssetBrowserScene,
+    AssetBrowserSelectionMode, AssetBrowserState,
+};
+pub(crate) use component::{
+    AssetBrowserContextState, AssetBrowserDragState, background_drop_widget_id,
+    background_widget_id, context_overlay_id, drop_widget_id,
+};
+
 use std::cmp::Ordering;
 use std::ops::Range;
 
@@ -443,7 +455,8 @@ impl AssetBrowserResolvedItem {
     /// Creates stable drag source metadata for this asset item.
     #[must_use]
     pub fn drag_source(&self, selection: &Selection) -> Option<CollectionDragSource> {
-        (!self.state.disabled).then(|| CollectionDragSource::from_selection(self.id, selection))
+        (!self.state.disabled && !self.state.read_only)
+            .then(|| CollectionDragSource::from_selection(self.id, selection))
     }
 
     /// Creates a context-menu target for this asset item.
@@ -480,7 +493,7 @@ impl AssetBrowserItemRect {
     /// Resolves this item as a drop target for a drag source.
     #[must_use]
     pub fn drop_target(&self, source: &CollectionDragSource) -> Option<AssetBrowserDropTarget> {
-        if self.item.state.disabled || source.contains(self.item.id) {
+        if self.item.state.disabled || self.item.state.read_only || source.contains(self.item.id) {
             return None;
         }
 
@@ -812,8 +825,17 @@ pub fn asset_browser_semantics(
     result: &AssetBrowserLayoutResult,
     label: impl Into<String>,
 ) -> Vec<SemanticNode> {
-    let children = result
+    let bounds = finite_rect(bounds);
+    let visible_items = result
         .items
+        .iter()
+        .filter(|item| {
+            item.rect
+                .intersection(bounds)
+                .is_some_and(|rect| rect.width > 0.0 && rect.height > 0.0)
+        })
+        .collect::<Vec<_>>();
+    let children = visible_items
         .iter()
         .map(|item| asset_browser_item_widget_id(id, item.item.id))
         .collect::<Vec<_>>();
@@ -822,13 +844,16 @@ pub fn asset_browser_semantics(
         AssetBrowserViewMode::List => SemanticRole::List,
     };
     let mut semantics = vec![
-        SemanticNode::new(id, role, finite_rect(bounds))
+        SemanticNode::new(id, role, bounds)
             .with_label(label)
             .with_children(children),
     ];
-    semantics[0].state.value = Some(SemanticValue::Text(format!("{} items", result.items.len())));
+    semantics[0].state.value = Some(SemanticValue::Text(format!(
+        "{} visible items",
+        visible_items.len()
+    )));
 
-    semantics.extend(result.items.iter().map(|item| {
+    semantics.extend(visible_items.into_iter().map(|item| {
         let mut node = SemanticNode::new(
             asset_browser_item_widget_id(id, item.item.id),
             SemanticRole::ListItem,

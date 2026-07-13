@@ -1,5 +1,6 @@
 //! Immediate-mode composition wrapper for widget primitives.
 
+mod asset_browser;
 mod basic_controls;
 mod behavior;
 mod choice_controls;
