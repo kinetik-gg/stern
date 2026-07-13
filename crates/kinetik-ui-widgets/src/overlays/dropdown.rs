@@ -3,8 +3,10 @@ use kinetik_ui_core::{Point, Rect, Size, WidgetId};
 use crate::collections::{VirtualWindowRequest, virtual_window};
 
 use super::{
-    OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayStack, PopoverPlacement,
-    PopoverRequest, placement::placed_entry,
+    OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayNavigationInput, OverlayStack,
+    PopoverPlacement, PopoverRequest, TypeaheadBuffer,
+    navigation::{moved_index, typeahead_index},
+    placement::placed_entry,
 };
 /// Stable dropdown item identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -94,6 +96,22 @@ pub enum DropdownHighlightMove {
     First,
     /// Move to the last enabled item, like End.
     Last,
+}
+
+/// Pure result of dropdown keyboard navigation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DropdownNavigationIntent {
+    /// Highlight changed to an enabled item.
+    Highlighted(DropdownItemId),
+    /// Selection of an enabled item was requested by Enter.
+    Select(DropdownItemId),
+    /// Dropdown close was requested by Escape.
+    Close {
+        /// Overlay that should close.
+        overlay_id: OverlayId,
+        /// Trigger that should regain focus.
+        focus_return: WidgetId,
+    },
 }
 
 /// Data-only dropdown/select model.
@@ -241,6 +259,40 @@ impl DropdownModel {
             DropdownHighlightMove::First => self.first_enabled_index(),
             DropdownHighlightMove::Last => self.last_enabled_index(),
         }?;
+        let id = self.items[index].id;
+        self.highlighted = Some(id);
+        Some(id)
+    }
+
+    /// Moves the highlight through enabled items with keyboard-style wrapping.
+    pub fn keyboard_move(&mut self, input: OverlayNavigationInput) -> Option<DropdownItemId> {
+        let candidates = self
+            .items
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| item.enabled.then_some(index))
+            .collect::<Vec<_>>();
+        let index = moved_index(&candidates, self.highlighted_index(), input)?;
+        let id = self.items[index].id;
+        self.highlighted = Some(id);
+        Some(id)
+    }
+
+    /// Highlights a matching enabled item using bounded, timeout-aware typeahead state.
+    pub fn typeahead(
+        &mut self,
+        state: &mut TypeaheadBuffer,
+        text: &str,
+        now_millis: u64,
+    ) -> Option<DropdownItemId> {
+        let query = state.update(text, now_millis)?;
+        let candidates = self
+            .items
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| item.enabled.then_some((index, item.label.as_str())))
+            .collect::<Vec<_>>();
+        let index = typeahead_index(&candidates, self.highlighted_index(), query)?;
         let id = self.items[index].id;
         self.highlighted = Some(id);
         Some(id)
@@ -424,6 +476,27 @@ impl DropdownOverlay {
     /// Opens this dropdown as a child of an existing overlay.
     pub fn open_child_in(&self, stack: &mut OverlayStack, parent: OverlayId) -> bool {
         stack.open_child(parent, self.entry.clone())
+    }
+
+    /// Applies keyboard input and returns a pure highlight, selection, or close intent.
+    pub fn navigate(&mut self, input: OverlayNavigationInput) -> Option<DropdownNavigationIntent> {
+        match input {
+            OverlayNavigationInput::Previous
+            | OverlayNavigationInput::Next
+            | OverlayNavigationInput::First
+            | OverlayNavigationInput::Last => self
+                .model
+                .keyboard_move(input)
+                .map(DropdownNavigationIntent::Highlighted),
+            OverlayNavigationInput::Activate => self
+                .model
+                .highlighted_item()
+                .map(|item| DropdownNavigationIntent::Select(item.id)),
+            OverlayNavigationInput::Escape => Some(DropdownNavigationIntent::Close {
+                overlay_id: self.entry.id,
+                focus_return: self.trigger_id,
+            }),
+        }
     }
 
     /// Closes this dropdown if it is open and returns its focus target.
