@@ -5,6 +5,7 @@ mod feedback;
 mod jobs;
 mod menu_bar;
 mod overflow;
+mod scene;
 mod status_bar;
 mod tab_strip;
 mod toolbar;
@@ -26,6 +27,11 @@ pub use overflow::{
     ChromeOverflowItem, ChromeOverflowPlacement, ChromeOverflowProjection, ChromeOverflowTrigger,
     project_chrome_overflow,
 };
+pub use scene::{
+    ChromeOverflowRequest, ChromeScene, ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey,
+    ChromeSceneOutput, ChromeSurfaceKind,
+};
+pub(crate) use scene::{ChromeSceneRow, ChromeSceneRowKind};
 pub use status_bar::{StatusBar, StatusItem, StatusItemId, StatusItemKind, StatusProgress};
 pub use tab_strip::{TabStrip, TabStripMove, TabStripTarget};
 pub use toolbar::{Toolbar, ToolbarGroup, ToolbarGroupId, ToolbarItem, ToolbarItemPresentation};
