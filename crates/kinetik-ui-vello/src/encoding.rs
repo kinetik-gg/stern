@@ -396,11 +396,11 @@ pub(crate) fn encode_texture_command_with_native(
         && logical_size_matches(source_size, resource.size)
         && let Some(image) = registry.resolve_native_texture(scope, texture)
         && let Some((extent, sampling)) = registry.native_texture_metadata(scope, texture)
-        && f64::from(source_size.width).to_bits() == f64::from(extent[0]).to_bits()
-        && f64::from(source_size.height).to_bits() == f64::from(extent[1]).to_bits()
+        && f64::from(resource.size.width).to_bits() == f64::from(extent[0]).to_bits()
+        && f64::from(resource.size.height).to_bits() == f64::from(extent[1]).to_bits()
         && sampling == resource.sampling
     {
-        let source = Rect::new(0.0, 0.0, source_size.width, source_size.height);
+        let source = Rect::new(0.0, 0.0, resource.size.width, resource.size.height);
         if rect.width <= 0.0 || rect.height <= 0.0 {
             return;
         }

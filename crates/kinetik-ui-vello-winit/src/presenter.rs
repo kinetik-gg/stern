@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_lines)]
-
 use std::sync::Arc;
 
 use kinetik_ui_render::RenderFrameInput;
@@ -358,6 +356,7 @@ impl VelloWindowPresenter {
     ///
     /// Returns callback, initialization, recovery, or generation errors. A
     /// failed attempt remains pending and never exposes old native handles.
+    #[allow(clippy::too_many_lines)]
     pub async fn recover(&mut self) -> Result<VelloRecoveryOutcome, VelloPresenterError> {
         self.poll_device_events()?;
         let Some(kind) = self.control.lifecycle.recovery() else {

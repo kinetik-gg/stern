@@ -139,6 +139,39 @@ fn native_texture_wins_over_compatible_cpu_snapshot() {
 }
 
 #[test]
+fn native_encoding_uses_validated_extent_after_tolerant_source_size_match() {
+    let texture = TextureId::from_raw(7_022);
+    let mut resources = RenderResources::new();
+    resources.register_texture(TextureResource {
+        id: texture,
+        size: Size::new(1.0, 1.0),
+        sampling: RenderImageSampling::Pixelated,
+        snapshot: None,
+    });
+    let primitives = vec![Primitive::Texture(TexturePrimitive {
+        texture,
+        rect: Rect::new(4.0, 6.0, 16.0, 12.0),
+        source_size: Size::new(1.0 + f32::EPSILON, 1.0),
+    })];
+    let (scope, registry) = native_registry(texture, [1, 1], RenderImageSampling::Pixelated);
+    let mut renderer = VelloRenderer::new();
+
+    let output = renderer.submit_frame_with_native_textures(
+        RenderFrameInput {
+            viewport: viewport(),
+            primitives: &primitives,
+            resources: &resources,
+        },
+        &registry,
+        &scope,
+    );
+
+    assert!(output.diagnostics.is_empty());
+    assert_eq!(renderer.scene().encoding().resources.patches.len(), 1);
+    assert_eq!(renderer.cached_texture_count(), 0);
+}
+
+#[test]
 fn native_metadata_mismatch_falls_back_with_invalid_geometry() {
     let texture = TextureId::from_raw(703);
     let resources = resources(texture, None);
