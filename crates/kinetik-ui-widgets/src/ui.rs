@@ -3,6 +3,7 @@
 mod basic_controls;
 mod behavior;
 mod choice_controls;
+mod chrome;
 mod frame;
 mod inspector_fields;
 mod layout;
