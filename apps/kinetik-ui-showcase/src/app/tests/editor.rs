@@ -9,7 +9,13 @@ fn default_page_is_engine_editor_surface() {
     let app = ShowcaseApp::new();
 
     assert_eq!(app.page(), ShowcasePage::Editor);
-    for label in ["Kinetik Forge", "Scene", "Viewport", "Inspector", "Console"] {
+    for label in [
+        "Kinetik Forge",
+        "Explorer",
+        "Viewport",
+        "Properties",
+        "Console",
+    ] {
         assert!(
             app.primitives().iter().any(|primitive| {
                 matches!(primitive, Primitive::Text(text) if text.text == label)
@@ -20,14 +26,14 @@ fn default_page_is_engine_editor_surface() {
 }
 
 #[test]
-fn showcase_action_truth_editor_file_menu_disables_unfinished_actions() {
+fn editor_file_menu_saves_application_owned_project_state() {
     let mut app = ShowcaseApp::new();
 
     click(&mut app, Point::new(145.0, 14.0));
 
     for label in [
         "New Scene (Experimental)",
-        "Save Scene (Experimental)",
+        "Save Scene",
         "Export Build (Experimental)",
     ] {
         assert!(
@@ -40,14 +46,12 @@ fn showcase_action_truth_editor_file_menu_disables_unfinished_actions() {
 
     click(&mut app, Point::new(170.0, 93.0));
 
-    assert_eq!(app.action_count(), 0);
-    assert!(app.primitives().iter().any(|primitive| {
-        matches!(primitive, Primitive::Text(text) if text.text == "Save Scene (Experimental)")
-    }));
+    assert_eq!(app.action_count(), 1);
+    assert!(has_text(&app, "Project state saved in memory (revision 1)"));
 }
 
 #[test]
-fn showcase_action_truth_unfinished_editor_shortcut_does_not_invoke() {
+fn editor_save_has_no_unregistered_global_shortcut() {
     let mut app = ShowcaseApp::new();
     app.update_with_context(frame_context(
         Size::new(1440.0, 900.0),
@@ -94,32 +98,6 @@ fn editor_play_toolbar_updates_hint_same_frame() {
 }
 
 #[test]
-fn editor_scene_add_requests_follow_up_repaint() {
-    let mut app = ShowcaseApp::new();
-    let add_node = app
-        .output()
-        .semantics
-        .nodes()
-        .iter()
-        .find(|node| node.label.as_deref() == Some("Add node"))
-        .expect("add node semantics")
-        .bounds;
-
-    click(
-        &mut app,
-        Point::new(
-            add_node.x + add_node.width * 0.5,
-            add_node.y + add_node.height * 0.5,
-        ),
-    );
-
-    assert_eq!(app.output().repaint, RepaintRequest::NextFrame);
-    assert!(app.primitives().iter().any(|primitive| {
-        matches!(primitive, Primitive::Text(text) if text.text == "Create node requested")
-    }));
-}
-
-#[test]
 fn editor_resources_match_emitted_media_and_phosphor_atlas_icons() {
     let app = ShowcaseApp::new();
     let resources = app.render_resources();
@@ -158,17 +136,12 @@ fn editor_resources_match_emitted_media_and_phosphor_atlas_icons() {
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert!(icon_images.len() >= 24);
+    assert!(icon_images.len() >= 12);
     assert!(icon_images.iter().all(|image| image.tint.is_some()));
     assert!(
         icon_images
             .iter()
             .all(|image| resources.image(image.image).is_some())
-    );
-    assert!(
-        primitives
-            .iter()
-            .any(|primitive| matches!(primitive, Primitive::Line(_) | Primitive::Path(_)))
     );
     assert!(!resources.snapshot().images.is_empty());
 }

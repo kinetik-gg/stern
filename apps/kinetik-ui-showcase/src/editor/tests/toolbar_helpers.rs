@@ -97,16 +97,6 @@ fn editor_workspace_bounds() -> Rect {
     )
 }
 
-fn frame_body_rect(frame_rect: Rect) -> Rect {
-    let tab_height = 26.0;
-    Rect::new(
-        frame_rect.x + 1.0,
-        frame_rect.y + tab_height + 2.0,
-        (frame_rect.width - 2.0).max(0.0),
-        (frame_rect.height - tab_height - 3.0).max(0.0),
-    )
-}
-
 fn point_is_in_toolbar(point: Point) -> bool {
     let chrome = EditorChromeMetrics::from_theme(&default_dark_theme());
     point.y >= TOOLBAR_Y && point.y <= TOOLBAR_Y + chrome.toolbar_button
@@ -125,15 +115,6 @@ fn count_semantic_role(output: &kinetik_ui::core::FrameOutput, role: &SemanticRo
         .nodes()
         .iter()
         .filter(|node| &node.role == role)
-        .count()
-}
-
-fn focused_frame_semantic_count(output: &kinetik_ui::core::FrameOutput) -> usize {
-    output
-        .semantics
-        .nodes()
-        .iter()
-        .filter(|node| node.role == SemanticRole::Frame && node.state.focused)
         .count()
 }
 

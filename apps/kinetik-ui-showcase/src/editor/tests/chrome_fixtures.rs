@@ -84,11 +84,11 @@ fn mass_fixture_non_positive_or_non_finite_values_have_exact_error() {
 fn mass_fixture_render_uses_state_derived_status() {
     assert_eq!(
         mass_fixture_rendered_label_brush("84.0"),
-        Brush::Solid(rgb(154, 160, 168))
+        Brush::Solid(default_dark_theme().colors.text_muted)
     );
     assert_eq!(
         mass_fixture_rendered_label_brush("0"),
-        Brush::Solid(rgb(236, 96, 96))
+        Brush::Solid(default_dark_theme().colors.danger)
     );
 }
 
@@ -144,8 +144,8 @@ fn editor_chrome_menu_bar_converts_active_menu_to_overlay_contract() {
         item,
         MenuItem::Action(action)
             if action.id.as_str() == ACTION_SAVE
-                && action.label == "Save Scene (Experimental)"
-                && !action.can_invoke()
+                && action.label == "Save Scene"
+                && action.can_invoke()
                 && action.shortcut.is_none()
     )));
     assert!(overlay.visible_items().iter().any(|item| matches!(
@@ -299,7 +299,6 @@ fn showcase_action_truth_apply_action_rejects_every_unfinished_outcome() {
     for action_id in [
         super::ACTION_NEW_SCENE,
         super::ACTION_OPEN_PROJECT,
-        ACTION_SAVE,
         super::ACTION_IMPORT_ASSET,
         ACTION_EXPORT,
         super::ACTION_QUIT,
@@ -351,6 +350,10 @@ fn showcase_action_truth_enabled_editor_actions_mutate_dedicated_state() {
 
     assert!(editor.apply_action(super::ACTION_TOOL_SELECT));
     assert_eq!(editor.selected_tool, EditorTool::Select);
+
+    assert!(editor.apply_action(ACTION_SAVE));
+    assert_eq!(editor.save_revision, 1);
+    assert!(editor.saved_project.is_some());
 }
 
 #[test]

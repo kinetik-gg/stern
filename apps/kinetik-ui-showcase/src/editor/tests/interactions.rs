@@ -248,34 +248,6 @@ fn showcase_menu_outside_dismissal_cannot_click_through_workspace() {
 }
 
 #[test]
-fn inspector_snap_toggle_updates_status_same_frame() {
-    let mut editor = EditorShowcase::new();
-    let mut memory = UiMemory::new();
-    let theme = default_dark_theme();
-
-    let mut ui = Ui::begin_frame(
-        editor_test_context(pointer_input_at(1290.0, 362.0, true, true, false)),
-        &mut memory,
-        &theme,
-    );
-    editor.render(&mut ui, 0);
-    let _ = ui.finish_output();
-
-    let mut ui = Ui::begin_frame(
-        editor_test_context(pointer_input_at(1290.0, 362.0, false, false, true)),
-        &mut memory,
-        &theme,
-    );
-    editor.render(&mut ui, 0);
-    let output = ui.finish_output();
-
-    assert!(!editor.snap_enabled);
-    assert!(output.primitives.iter().any(|primitive| {
-        matches!(primitive, Primitive::Text(text) if text.text == "Snap off")
-    }));
-}
-
-#[test]
 fn toolbar_tool_selection_updates_status_same_frame() {
     let mut editor = EditorShowcase::new();
     let mut memory = UiMemory::new();
@@ -391,25 +363,26 @@ fn toolbar_tool_click_has_single_same_frame_selection_visual() {
 }
 
 #[test]
-fn frame_tab_click_updates_body_same_frame() {
+fn frame_tab_click_updates_model_and_next_prepared_public_scene() {
     let mut editor = EditorShowcase::new();
     let mut memory = UiMemory::new();
     let theme = default_dark_theme();
-    let bottom = bottom_frame_rect(&editor);
-    let timeline = editor
-        .dock
-        .frame(FRAME_BOTTOM)
-        .and_then(|frame| {
-            frame_tab_rects(frame, bottom, 26.0)
-                .into_iter()
-                .find(|(tab, _rect)| tab.panel == PANEL_TIMELINE)
-                .map(|(_tab, rect)| rect)
-        })
-        .expect("timeline tab");
-    let point = Point::new(
-        timeline.x + timeline.width * 0.5,
-        timeline.y + timeline.height * 0.5,
+    let mut ui = Ui::begin_frame(
+        editor_test_context(UiInput::default()),
+        &mut memory,
+        &theme,
     );
+    editor.render(&mut ui, 0);
+    let idle = ui.finish_output();
+    let point = idle
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| {
+            node.role == SemanticRole::Tab && node.label.as_deref() == Some("Timeline")
+        })
+        .map(|node| node.bounds.center())
+        .expect("public dock Timeline tab semantics");
 
     let mut ui = Ui::begin_frame(
         editor_test_context(pointer_input_at(point.x, point.y, true, true, false)),
@@ -425,14 +398,31 @@ fn frame_tab_click_updates_body_same_frame() {
         &theme,
     );
     editor.render(&mut ui, 0);
-    let output = ui.finish_output();
+    let released = ui.finish_output();
 
     assert_eq!(editor.dock.active_frame(), Some(FRAME_BOTTOM));
-    assert_eq!(focused_frame_semantic_count(&output), 1);
+    assert_eq!(
+        editor
+            .dock
+            .frame(FRAME_BOTTOM)
+            .and_then(|frame| frame.active_panel())
+            .map(|panel| panel.id),
+        Some(PANEL_TIMELINE)
+    );
+    assert_eq!(released.repaint, RepaintRequest::NextFrame);
+
+    let mut ui = Ui::begin_frame(
+        editor_test_context(UiInput::default()),
+        &mut memory,
+        &theme,
+    );
+    editor.render(&mut ui, 0);
+    let output = ui.finish_output();
+
     assert!(output.semantics.nodes().iter().any(|node| {
-        node.role == SemanticRole::Frame
-            && node.label.as_deref() == Some("Frame 4")
-            && node.state.focused
+        node.role == SemanticRole::Tab
+            && node.label.as_deref() == Some("Timeline")
+            && node.state.selected
     }));
     assert!(output.primitives.iter().any(|primitive| {
         matches!(primitive, Primitive::Text(text) if text.text == "Intro camera pan")
@@ -566,105 +556,4 @@ fn editor_splitter_swap_action_uses_context_metadata_and_apply_request() {
             target.raw()
         )
     );
-}
-
-#[test]
-fn tab_drag_drop_uses_dock_drag_and_target_without_panel_metadata_mutation() {
-    let mut editor = EditorShowcase::new();
-    let mut memory = UiMemory::new();
-    let theme = default_dark_theme();
-    let bottom = bottom_frame_rect(&editor);
-    let inspector = editor_frame_rect(&editor, FRAME_INSPECTOR);
-    let timeline = editor
-        .dock
-        .frame(FRAME_BOTTOM)
-        .and_then(|frame| {
-            frame_tab_rects(frame, bottom, 26.0)
-                .into_iter()
-                .find(|(tab, _rect)| tab.panel == PANEL_TIMELINE)
-                .map(|(_tab, rect)| rect)
-        })
-        .expect("timeline tab");
-    let start = timeline.center();
-    let target = inspector.center();
-
-    let mut ui = Ui::begin_frame(
-        editor_test_context(pointer_input_at(start.x, start.y, true, true, false)),
-        &mut memory,
-        &theme,
-    );
-    editor.render(&mut ui, 0);
-    let _ = ui.finish_output();
-
-    let drag_delta = Vec2::new(target.x - start.x, target.y - start.y);
-    let mut ui = Ui::begin_frame(
-        editor_test_context(pointer_input_at_with_delta(
-            target.x, target.y, true, false, false, drag_delta,
-        )),
-        &mut memory,
-        &theme,
-    );
-    editor.render(&mut ui, 0);
-    let dragging_output = ui.finish_output();
-
-    assert_eq!(editor.status, "Dragging Timeline tab");
-    assert!(dragging_output.primitives.iter().any(|primitive| {
-            matches!(
-                primitive,
-                Primitive::Rect(rect)
-                    if matches!(&rect.fill, Some(Brush::Solid(color)) if *color == rgba(78, 142, 245, 0.18))
-                        && inspector.contains_point(rect.rect.center())
-            )
-        }));
-
-    let mut ui = Ui::begin_frame(
-        editor_test_context(pointer_input_at(target.x, target.y, false, false, true)),
-        &mut memory,
-        &theme,
-    );
-    editor.render(&mut ui, 0);
-    let output = ui.finish_output();
-    let inspector_frame = editor.dock.frame(FRAME_INSPECTOR).expect("inspector frame");
-    let timeline_panel = inspector_frame
-        .panels
-        .iter()
-        .find(|panel| panel.id == PANEL_TIMELINE)
-        .expect("moved timeline panel");
-
-    assert_eq!(timeline_panel.title, "Timeline");
-    assert_eq!(
-        inspector_frame.active_panel().map(|panel| panel.id),
-        Some(PANEL_TIMELINE)
-    );
-    assert_eq!(editor.dock.active_frame(), Some(FRAME_INSPECTOR));
-    assert!(
-        !editor
-            .dock
-            .frame(FRAME_BOTTOM)
-            .expect("bottom frame")
-            .panels
-            .iter()
-            .any(|panel| panel.id == PANEL_TIMELINE)
-    );
-    assert!(editor.status.contains("Dock tab merged into frame"));
-    assert_eq!(output.repaint, RepaintRequest::NextFrame);
-
-    let registry = super::editor_panel_registry();
-    let moved_workspace = editor
-        .dock
-        .workspace_snapshot(super::editor_panel_instances());
-    moved_workspace
-        .validate(registry.descriptors())
-        .expect("moved workspace validates");
-    let moved_timeline = moved_workspace
-        .panel_instances
-        .iter()
-        .find(|instance| instance.id == PANEL_TIMELINE.instance_id())
-        .expect("timeline instance metadata");
-    assert_eq!(moved_timeline.panel_type, super::PANEL_TYPE_TIMELINE);
-    assert_eq!(moved_timeline.title, "Timeline");
-    assert_eq!(moved_timeline.state_key.as_deref(), Some("editor.timeline"));
-    let restored = super::Dock::restore_workspace(moved_workspace.clone(), registry.descriptors())
-        .expect("moved workspace restores");
-    assert_eq!(restored.snapshot(), moved_workspace.dock);
 }

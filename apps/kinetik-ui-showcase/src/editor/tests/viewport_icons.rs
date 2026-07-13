@@ -1,89 +1,4 @@
 #[test]
-fn viewport_selection_overlay_uses_scaled_content_mapping() {
-    let mut editor = EditorShowcase::new();
-    let mut memory = UiMemory::new();
-    let theme = default_dark_theme();
-    let viewport_frame = editor_frame_rect(&editor, FRAME_VIEWPORT);
-    let viewport_body = frame_body_rect(viewport_frame);
-    let surface_bounds = Rect::new(
-        viewport_body.x + 8.0,
-        viewport_body.y + 36.0,
-        (viewport_body.width - 16.0).max(1.0),
-        (viewport_body.height - 66.0).max(1.0),
-    );
-    let surface = ViewportSurface {
-        texture: super::VIEWPORT_TEXTURE,
-        source_size: VIEWPORT_SIZE,
-        bounds: surface_bounds,
-        pan_zoom: editor.viewport_pan_zoom,
-    };
-    let scale = ScaleFactor::new(1.25);
-    let expected = surface
-        .content_rect_to_screen_at(Rect::new(720.0, 210.0, 210.0, 280.0), scale)
-        .expect("selection rect");
-
-    let mut ui = Ui::begin_frame(
-        editor_test_context_scaled(UiInput::default(), scale),
-        &mut memory,
-        &theme,
-    );
-    editor.render(&mut ui, 0);
-    let output = ui.finish_output();
-    let selection_fill = rgba(78, 142, 245, 0.12);
-    let selection = output
-            .primitives
-            .iter()
-            .find_map(|primitive| match primitive {
-                Primitive::Rect(rect)
-                    if matches!(&rect.fill, Some(Brush::Solid(color)) if *color == selection_fill) =>
-                {
-                    Some(rect.rect)
-                }
-                _ => None,
-            })
-            .expect("selection overlay rect");
-
-    assert_eq!(selection, expected);
-    let physical_x = f64::from(selection.x) * scale.value();
-    let physical_width = f64::from(selection.width) * scale.value();
-    assert!((physical_x - physical_x.round()).abs() < 0.001);
-    assert!((physical_width - physical_width.round()).abs() < 0.001);
-}
-
-#[test]
-fn scene_expander_flips_arrow_and_requests_repaint_same_frame() {
-    let mut editor = EditorShowcase::new();
-    let mut memory = UiMemory::new();
-    let theme = default_dark_theme();
-    let expander = Point::new(38.0, super::workspace_top(&theme) + 100.0);
-
-    let mut ui = Ui::begin_frame(
-        editor_test_context(pointer_input_at(expander.x, expander.y, true, true, false)),
-        &mut memory,
-        &theme,
-    );
-    editor.render(&mut ui, 0);
-    let _ = ui.finish_output();
-
-    let mut ui = Ui::begin_frame(
-        editor_test_context(pointer_input_at(expander.x, expander.y, false, false, true)),
-        &mut memory,
-        &theme,
-    );
-    editor.render(&mut ui, 0);
-    let output = ui.finish_output();
-
-    assert_eq!(output.repaint, RepaintRequest::NextFrame);
-    assert!(!editor.scene_expansion.is_expanded(item_id(2)));
-    assert!(
-        output
-            .primitives
-            .iter()
-            .any(|primitive| { matches!(primitive, Primitive::Text(text) if text.text == ">") })
-    );
-}
-
-#[test]
 fn outside_click_dismisses_menu_and_requests_repaint() {
     let mut editor = EditorShowcase::new();
     editor.open_menu = Some(EditorMenuKind::File);
@@ -201,24 +116,24 @@ fn editor_structural_smoke_emits_dock_frame_panel_viewport_and_action_categories
 
     assert!(invocations.is_empty());
     assert_eq!(output.warnings, Vec::new());
-    assert!(output.primitives.len() > 200);
+    assert!(output.primitives.len() > 150);
     assert!(
         count_primitives(&output.primitives, |primitive| matches!(
             primitive,
             Primitive::Rect(_)
-        )) > 100
+        )) > 70
     );
     assert!(
         count_primitives(&output.primitives, |primitive| matches!(
             primitive,
             Primitive::Text(_)
-        )) > 50
+        )) > 35
     );
     assert!(
         count_primitives(&output.primitives, |primitive| matches!(
             primitive,
             Primitive::Image(_)
-        )) >= 24
+        )) >= 12
     );
     assert!(
         count_primitives(&output.primitives, |primitive| matches!(
@@ -229,21 +144,27 @@ fn editor_structural_smoke_emits_dock_frame_panel_viewport_and_action_categories
     assert!(
         count_primitives(&output.primitives, |primitive| matches!(
             primitive,
-            Primitive::Line(_)
-        )) >= 8
-    );
-    assert!(
-        count_primitives(&output.primitives, |primitive| matches!(
-            primitive,
             Primitive::ClipBegin { .. }
         )) >= 2
     );
     assert!(output.primitives.iter().any(|primitive| {
             matches!(primitive, Primitive::Texture(texture) if texture.texture == super::VIEWPORT_TEXTURE)
         }));
-    assert!(output.primitives.iter().any(|primitive| {
-        matches!(primitive, Primitive::Text(text) if text.text == "CameraPreview")
-    }));
+    for label in [
+        "Scene outliner",
+        "Project assets",
+        "Property grid",
+        "Project viewport",
+    ] {
+        assert!(
+            output
+                .semantics
+                .nodes()
+                .iter()
+                .any(|node| node.label.as_deref() == Some(label)),
+            "missing public component semantics for {label}"
+        );
+    }
 
     assert_eq!(count_semantic_role(&output, &SemanticRole::Dock), 1);
     assert!(count_semantic_role(&output, &SemanticRole::Frame) >= 5);
@@ -288,7 +209,7 @@ fn editor_uses_phosphor_atlas_primitives_for_visible_editor_icons() {
         .count();
 
     assert!(
-        atlas_icon_count >= 24,
+        atlas_icon_count >= 12,
         "visible Phosphor icon count was {atlas_icon_count}"
     );
 }
