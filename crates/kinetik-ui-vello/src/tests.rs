@@ -3,6 +3,7 @@ mod common;
 mod frame_encoding;
 mod geometry;
 mod images;
+mod native_textures;
 mod primitives;
 mod renderer_api;
 mod scene_reset;

@@ -8,7 +8,14 @@ This decision closes `REND-ADR-01`; the reusable presenter and Showcase
 adoption now close integrated `REND-03`. External-texture implementation remains
 `REND-04`.
 
-REND-03 is **Complete / Accepted**; REND-04 is **next**.
+REND-04A: **Complete / Accepted**; REND-04B: **next**; integrated REND-04 remains **Current / Authorized**.
+
+No tag, package publication, deployment, release, or alpha-readiness claim is made by REND-04A.
+
+REND-04A freezes the native texture registry, presenter token/revision seam,
+native-first Vello resolution, and device-generation invalidation. REND-04B is
+the next serial evidence packet for real-GPU color/alpha, producer example,
+package archive, and integrated acceptance.
 
 ## Context
 
@@ -262,13 +269,17 @@ configuration propagation, diagnostics preservation, the runnable one-window
 example, and the independent offscreen path's lack of surface acquire,
 pre-present notification, or presentation.
 
-`REND-04` is next and implements the native registry and Vello resolver without
-changing the neutral public structs. It must prove register, replace, dirty/revision,
-extent-change re-registration, remove, ID reuse, stale/cross-renderer/scope
-rejection, device-generation invalidation, native/CPU/placeholder precedence,
-valid-native diagnostic suppression, primitive order/clipping/overlays,
-straight-sRGB/alpha composition, and a no-readback trace that forbids
-texture-to-buffer copies, mapping, or CPU snapshot acquisition.
+`REND-04A` is Complete / Accepted. It implemented the native registry and Vello
+resolver without changing the neutral public structs, with deterministic evidence
+for register, replace, dirty/revision, extent-change re-registration, remove, ID
+reuse, stale/cross-renderer/scope rejection, device-generation invalidation,
+native/CPU/placeholder precedence, valid-native diagnostic suppression, primitive
+order/clipping/overlays, and production no-readback guards.
+
+`REND-04B` is next. It must provide real-GPU evidence for straight-sRGB/alpha
+composition, producer-handle lifetime, update/replace/remove and recovery, the
+two-device validation path, the runnable producer example, and packaged archive
+consumption before integrated `REND-04` can be accepted.
 
 Any implementation that contradicts this ownership, lifetime, color,
 synchronization, or recovery contract requires an explicit ADR amendment before

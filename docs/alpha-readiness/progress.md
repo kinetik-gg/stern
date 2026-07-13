@@ -2,13 +2,21 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Stages 0-4 are Complete; Stage 4 is Complete / Accepted through `REND-02` squash merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`. Stage 5 is Current / Authorized with `REND-ADR-01` and `REND-03` Complete / Accepted; `REND-04` is next. Stages 6-7 remain Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Campaign status: REND-04A is **Complete / Accepted**; REND-04B is **next**.
+
+Integrated REND-04 remains **Current / Authorized**.
+
+Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
+
+Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
+
+Stages 0-4 are Complete; Stage 4 is Complete / Accepted through `REND-02` squash merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`. Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, and `REND-04A` Complete / Accepted; `REND-04B` is next. Stages 6-7 remain Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
 ## Stage 0: Plan And Baseline
 
-Status: Complete. This closed the documentation task only; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with `REND-ADR-01` and `REND-03` Complete / Accepted; `REND-04` is next under the recorded campaign authorization.
+Status: Complete. This closed the documentation task only; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, and `REND-04A` Complete / Accepted; `REND-04B` is next under the recorded campaign authorization.
 
 ### Changed files
 

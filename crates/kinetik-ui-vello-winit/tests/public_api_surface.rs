@@ -2,13 +2,16 @@
 
 use std::time::Duration;
 
-use kinetik_ui_core::Color;
+use kinetik_ui_core::{Color, TextureId};
+use kinetik_ui_render::TextureResource;
 use kinetik_ui_vello_winit::{
     AaConfig, InvalidColorChannel, PresenterDevice, PresenterDeviceScope, PresenterGpuError,
-    PresenterGpuErrorKind, VelloAttachOutcome, VelloAttachmentStatus, VelloPresentReport,
-    VelloPresentStatus, VelloPresenterConfig, VelloPresenterError, VelloPresenterStatus,
-    VelloRecoveryKind, VelloRecoveryOutcome, VelloRedrawGuidance, VelloResizeOutcome,
-    VelloSuspendOutcome, VelloWindowPresenter, wgpu,
+    PresenterGpuErrorKind, VelloAttachOutcome, VelloAttachmentStatus,
+    VelloNativeTextureRegistration, VelloNativeTextureUpdateOutcome,
+    VelloNativeTextureValidationError, VelloPresentReport, VelloPresentStatus,
+    VelloPresenterConfig, VelloPresenterError, VelloPresenterStatus, VelloRecoveryKind,
+    VelloRecoveryOutcome, VelloRedrawGuidance, VelloResizeOutcome, VelloSuspendOutcome,
+    VelloWindowPresenter, wgpu,
 };
 
 fn same_type<T>(_: Option<T>, _: Option<T>) {}
@@ -72,4 +75,44 @@ fn non_exhaustive_statuses_are_matched_with_a_fallback() {
     }
 
     assert_eq!(describe(VelloPresentStatus::Timeout), "other");
+}
+
+#[test]
+fn qualified_native_texture_api_has_frozen_signatures() {
+    let register: fn(
+        &mut VelloWindowPresenter,
+        &PresenterDeviceScope,
+        &TextureResource,
+        &wgpu::Texture,
+        u64,
+    ) -> Result<VelloNativeTextureRegistration, VelloPresenterError> =
+        VelloWindowPresenter::register_native_texture;
+    let update: fn(
+        &mut VelloWindowPresenter,
+        &VelloNativeTextureRegistration,
+        u64,
+    ) -> Result<VelloNativeTextureUpdateOutcome, VelloPresenterError> =
+        VelloWindowPresenter::update_native_texture;
+    let replace: fn(
+        &mut VelloWindowPresenter,
+        &VelloNativeTextureRegistration,
+        &TextureResource,
+        &wgpu::Texture,
+        u64,
+    ) -> Result<VelloNativeTextureRegistration, VelloPresenterError> =
+        VelloWindowPresenter::replace_native_texture;
+    let remove: fn(
+        &mut VelloWindowPresenter,
+        &VelloNativeTextureRegistration,
+    ) -> Result<(), VelloPresenterError> = VelloWindowPresenter::remove_native_texture;
+    let texture_id: fn(&VelloNativeTextureRegistration) -> TextureId =
+        VelloNativeTextureRegistration::texture_id;
+    let types = [
+        std::any::type_name::<VelloNativeTextureRegistration>(),
+        std::any::type_name::<VelloNativeTextureUpdateOutcome>(),
+        std::any::type_name::<VelloNativeTextureValidationError>(),
+    ];
+
+    assert!(types.iter().all(|name| !name.is_empty()));
+    let _ = (register, update, replace, remove, texture_id);
 }

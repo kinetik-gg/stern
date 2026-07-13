@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use kinetik_ui_render::RenderFrameInput;
-use kinetik_ui_vello::VelloRenderer;
+use kinetik_ui_vello::{VelloNativeTextureRegistry, VelloNativeTextureScope, VelloRenderer};
 use vello::{
     Renderer, RendererOptions,
     util::{RenderContext, RenderSurface},
@@ -30,15 +30,18 @@ use crate::{
         DeviceRecoveryBuild, DeviceRecoveryTeardown, DropAction, Extent, LifecycleState,
         ResizePlan, ResumePlan, drive_device_recovery_build, drive_device_recovery_teardown,
     },
+    native_texture::{NativeTextureMutationDriver, RealNativeTextureOperations},
 };
 
-struct GpuState {
-    renderer: Renderer,
+pub(super) struct GpuState {
+    pub(super) renderer: Renderer,
     context: RenderContext,
     dev_id: usize,
+    pub(super) native_registry: VelloNativeTextureRegistry,
+    pub(super) native_scope: VelloNativeTextureScope,
 }
 
-struct PresenterControl<W> {
+pub(super) struct PresenterControl<W> {
     authority: DeviceAuthority,
     lifecycle: LifecycleState<W>,
 }
@@ -125,6 +128,26 @@ impl<W: Copy + Eq> PresenterControl<W> {
         self.lifecycle.mark_surface_ready(extent);
         Ok((candidate, scope))
     }
+
+    pub(super) fn validated_native_scope(
+        &self,
+        scope: &PresenterDeviceScope,
+    ) -> Result<PresenterDeviceScope, VelloPresenterError> {
+        if self.lifecycle.window().is_none() {
+            return Err(VelloPresenterError::DeviceUnavailable);
+        }
+        self.authority.validate(scope)?;
+        Ok(scope.clone())
+    }
+
+    pub(super) fn current_native_scope(&self) -> Result<PresenterDeviceScope, VelloPresenterError> {
+        if self.lifecycle.window().is_none() {
+            return Err(VelloPresenterError::DeviceUnavailable);
+        }
+        self.authority
+            .scope()
+            .ok_or(VelloPresenterError::DeviceUnavailable)
+    }
 }
 
 enum PresentAttempt {
@@ -135,10 +158,11 @@ enum PresentAttempt {
 /// Presenter for one live Vello surface attached to one Winit window.
 pub struct VelloWindowPresenter {
     config: VelloPresenterConfig,
-    control: PresenterControl<WindowId>,
+    pub(super) control: PresenterControl<WindowId>,
+    pub(super) native_textures: NativeTextureMutationDriver,
     surface: Option<RenderSurface<'static>>,
     window: Option<Arc<Window>>,
-    gpu: Option<GpuState>,
+    pub(super) gpu: Option<GpuState>,
     inbox: Option<DeviceInbox>,
     toolkit: VelloRenderer,
 }
@@ -154,6 +178,7 @@ impl VelloWindowPresenter {
         Ok(Self {
             config,
             control: PresenterControl::new()?,
+            native_textures: NativeTextureMutationDriver::new(),
             surface: None,
             window: None,
             gpu: None,
@@ -331,6 +356,7 @@ impl VelloWindowPresenter {
     ///
     /// Returns callback, initialization, recovery, or generation errors. A
     /// failed attempt remains pending and never exposes old native handles.
+    #[allow(clippy::too_many_lines)]
     pub async fn recover(&mut self) -> Result<VelloRecoveryOutcome, VelloPresenterError> {
         self.poll_device_events()?;
         let Some(kind) = self.control.lifecycle.recovery() else {
@@ -393,14 +419,39 @@ impl VelloWindowPresenter {
             .map_err(VelloPresenterError::recovery)?;
         let changed = surface.dev_id != gpu.dev_id;
         let scope = if changed {
+            let native_scope =
+                VelloNativeTextureScope::new().ok_or(VelloPresenterError::GenerationExhausted)?;
+            let native_registry = VelloNativeTextureRegistry::new(&native_scope);
             let device = &gpu.context.devices[surface.dev_id].device;
             let renderer = Renderer::new(device, RendererOptions::default())
                 .map_err(VelloPresenterError::recovery)?;
-            let (_, scope) = self
+            let selection = self
                 .control
-                .select_surface_device(gpu.dev_id, surface.dev_id)?;
+                .select_surface_device(gpu.dev_id, surface.dev_id);
+            let (_, scope) = match selection {
+                Ok(selected) => selected,
+                Err(error) => {
+                    drop(surface);
+                    drop(renderer);
+                    return Err(error);
+                }
+            };
             let inbox = DeviceInbox::install(device, scope.clone());
+            {
+                let mut operations = RealNativeTextureOperations {
+                    registry: &mut gpu.native_registry,
+                    scope: &gpu.native_scope,
+                    renderer: &mut gpu.renderer,
+                    source_texture: None,
+                };
+                NativeTextureMutationDriver::invalidate_all(
+                    &mut self.native_textures,
+                    &mut operations,
+                );
+            }
             gpu.renderer = renderer;
+            gpu.native_registry = native_registry;
+            gpu.native_scope = native_scope;
             gpu.dev_id = surface.dev_id;
             self.inbox = Some(inbox);
             scope
@@ -566,6 +617,9 @@ impl VelloWindowPresenter {
         ),
         VelloPresenterError,
     > {
+        let native_scope =
+            VelloNativeTextureScope::new().ok_or(VelloPresenterError::GenerationExhausted)?;
+        let native_registry = VelloNativeTextureRegistry::new(&native_scope);
         let mut build = RealDeviceRecoveryBuild {
             window,
             extent,
@@ -573,16 +627,28 @@ impl VelloWindowPresenter {
             rebuilding,
         };
         let candidate = drive_device_recovery_build(&mut build).await;
-        let (artifacts, scope) = if rebuilding {
-            self.control.complete_device_rebuild(extent, candidate)?
+        let artifacts = candidate?;
+        let scope = if rebuilding {
+            self.control
+                .complete_device_rebuild(extent, Ok(()))
+                .map(|((), scope)| scope)
+        } else if self.control.authority.scope().is_some() {
+            self.control.authority.replace()
         } else {
-            let artifacts = candidate?;
-            let scope = if self.control.authority.scope().is_some() {
-                self.control.authority.replace()?
-            } else {
-                self.control.authority.activate()
-            };
-            (artifacts, scope)
+            Ok(self.control.authority.activate())
+        };
+        let scope = match scope {
+            Ok(scope) => scope,
+            Err(error) => {
+                let mut teardown = RealDeviceRecoveryTeardown {
+                    surface: Some(artifacts.surface),
+                    inbox: None,
+                    renderer: Some(artifacts.renderer),
+                    context: Some(artifacts.context),
+                };
+                drive_device_recovery_teardown(&mut teardown);
+                return Err(error);
+            }
         };
         let context = artifacts.context;
         let surface = artifacts.surface;
@@ -595,6 +661,8 @@ impl VelloWindowPresenter {
                 renderer,
                 context,
                 dev_id,
+                native_registry,
+                native_scope,
             },
             surface,
             inbox,
@@ -634,7 +702,7 @@ impl VelloWindowPresenter {
         Ok(())
     }
 
-    fn poll_device_events(&mut self) -> Result<bool, VelloPresenterError> {
+    pub(super) fn poll_device_events(&mut self) -> Result<bool, VelloPresenterError> {
         let Some(current) = self.control.authority.scope() else {
             return Ok(false);
         };
@@ -662,11 +730,19 @@ impl VelloWindowPresenter {
 
     fn teardown_device_for_rebuild(&mut self) {
         let (renderer, context) = match self.gpu.take() {
-            Some(GpuState {
-                renderer,
-                context,
-                dev_id: _,
-            }) => (Some(renderer), Some(context)),
+            Some(mut gpu) => {
+                let mut operations = RealNativeTextureOperations {
+                    registry: &mut gpu.native_registry,
+                    scope: &gpu.native_scope,
+                    renderer: &mut gpu.renderer,
+                    source_texture: None,
+                };
+                NativeTextureMutationDriver::invalidate_all(
+                    &mut self.native_textures,
+                    &mut operations,
+                );
+                (Some(gpu.renderer), Some(gpu.context))
+            }
             None => (None, None),
         };
         let mut teardown = RealDeviceRecoveryTeardown {
@@ -711,6 +787,43 @@ impl VelloWindowPresenter {
             .complete_device_rebuild(extent, Err::<(), _>(error))
             .map(|_| ())
     }
+}
+
+#[cfg(test)]
+pub(crate) fn test_detached_native_scope_guards() -> (
+    Result<PresenterDeviceScope, VelloPresenterError>,
+    Result<PresenterDeviceScope, VelloPresenterError>,
+) {
+    let mut control = PresenterControl::<WindowId>::new().expect("test presenter control");
+    let scope = control.authority.activate();
+    let validated = control.validated_native_scope(&scope);
+    let current = control.current_native_scope();
+    (validated, current)
+}
+
+#[cfg(test)]
+pub(crate) fn test_foreign_and_stale_native_scope_guards() -> (
+    Result<PresenterDeviceScope, VelloPresenterError>,
+    Result<PresenterDeviceScope, VelloPresenterError>,
+) {
+    let extent = Extent {
+        width: 16,
+        height: 16,
+    };
+    let mut control = PresenterControl::<WindowId>::new().expect("test presenter control");
+    let _ = control
+        .lifecycle
+        .resume(WindowId::dummy(), extent)
+        .expect("test lifecycle resume");
+    control.lifecycle.mark_surface_ready(extent);
+    let stale = control.authority.activate();
+    let mut foreign_authority = DeviceAuthority::for_test(41_001, 1, false);
+    let foreign = foreign_authority.activate();
+    let _ = control.authority.replace().expect("replace test authority");
+    (
+        control.validated_native_scope(&foreign),
+        control.validated_native_scope(&stale),
+    )
 }
 
 struct RealDeviceRecoveryTeardown {
@@ -868,7 +981,11 @@ impl PresentOperations for RealPresentOperations<'_> {
         &mut self,
         input: RenderFrameInput<'_>,
     ) -> kinetik_ui_render::RenderFrameOutput {
-        self.toolkit.submit_frame(input)
+        self.toolkit.submit_frame_with_native_textures(
+            input,
+            &self.gpu.native_registry,
+            &self.gpu.native_scope,
+        )
     }
 
     fn render_vello(&mut self) -> Result<(), Self::RenderError> {

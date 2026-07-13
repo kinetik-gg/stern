@@ -1071,3 +1071,15 @@ fn constructing_presenter_is_gpu_free_and_detached() {
     assert!(presenter.window().is_none());
     assert!(presenter.window_id().is_none());
 }
+
+#[test]
+fn same_device_surface_recovery_preserves_native_registry() {
+    assert!(crate::native_texture::test_same_device_native_lifetime_preserved());
+}
+
+#[test]
+fn changed_device_and_device_loss_invalidate_native_registry_before_renderer_drop() {
+    let (clear_calls, entries_empty) = crate::native_texture::test_native_lifetime_clear();
+    assert_eq!(clear_calls, 1);
+    assert!(entries_empty);
+}

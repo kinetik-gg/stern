@@ -4,11 +4,17 @@
 
 ## Execution Contract
 
-Campaign status: REND-03 is **Complete / Accepted**; REND-04 is **next**.
+Campaign status: REND-04A is **Complete / Accepted**; REND-04B is **next**.
+
+Integrated REND-04 remains **Current / Authorized**.
+
+Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
+
+Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
 | Field | Decision |
 | --- | --- |
-| Status | Complete / Accepted at `5cf07b8`; Stages 3-4 subsequently passed and Stage 5 is Current / Authorized with `REND-ADR-01` and `REND-03` accepted and `REND-04` next |
+| Status | Complete / Accepted at `5cf07b8`; Stages 3-4 subsequently passed and Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, and `REND-04A` accepted and `REND-04B` next |
 | Scope | Shared coordinate, arbitration, and interaction-ownership invariants |
 | Impact / confidence | Critical / High |
 | Campaign prerequisite | Stage 1 gate; campaign authorization recorded |
@@ -48,7 +54,7 @@ approval.
 duplicate registration, to cancel removed interaction owners at `end_frame`.
 Its independent critic and the integrated Stage 2 gate passed after one
 fixture-only depth-one remedy. Stages 3-4 subsequently passed, and Stage 5 is
-Current / Authorized with `REND-ADR-01` and `REND-03` accepted and `REND-04` next under the continuous campaign
+Current / Authorized with `REND-ADR-01`, `REND-03`, and `REND-04A` accepted and `REND-04B` next under the continuous campaign
 authorization.
 
 ## Deferrals

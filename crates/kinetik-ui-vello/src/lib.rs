@@ -8,6 +8,7 @@ mod renderer;
 mod sanitize;
 mod snapshot;
 mod text;
+mod texture;
 mod translation;
 
 pub use command::{RenderClip, RenderCommand, RenderCommandKind, Translation};
@@ -18,6 +19,7 @@ pub use kinetik_ui_render::{
 };
 pub use renderer::{VelloRenderer, VelloRendererError};
 pub use snapshot::render_translation_snapshot;
+pub use texture::{VelloNativeTextureRegistry, VelloNativeTextureScope};
 pub use translation::translate_primitives;
 
 #[cfg(test)]

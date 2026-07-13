@@ -3,8 +3,11 @@ use kinetik_ui_text::TextLayoutStore;
 use vello::Scene;
 
 use crate::{
-    encoding::encode_scene, geometry::viewport_device_scale, image::ImageDataCache,
-    translation::translate_primitives,
+    VelloNativeTextureRegistry, VelloNativeTextureScope,
+    encoding::{encode_scene, encode_scene_with_native},
+    geometry::viewport_device_scale,
+    image::ImageDataCache,
+    translation::{translate_primitives, translate_primitives_with_native},
 };
 
 /// Vello renderer boundary.
@@ -89,6 +92,38 @@ impl VelloRenderer {
             &mut self.fallback_text_layouts,
             &mut self.image_cache,
             viewport_device_scale(input.viewport),
+        );
+        RenderFrameOutput {
+            primitive_count: input.primitives.len(),
+            diagnostics: translated.diagnostics,
+        }
+    }
+
+    /// Submits a frame with native textures owned by this renderer.
+    ///
+    /// This API requires the same renderer instance.
+    #[doc(hidden)]
+    pub fn submit_frame_with_native_textures(
+        &mut self,
+        input: RenderFrameInput<'_>,
+        registry: &VelloNativeTextureRegistry,
+        scope: &VelloNativeTextureScope,
+    ) -> RenderFrameOutput {
+        self.fallback_text_layouts.advance_generation();
+        let translated = translate_primitives_with_native(
+            input.primitives,
+            input.resources,
+            Some((registry, scope)),
+        );
+        self.scene.reset();
+        encode_scene_with_native(
+            &mut self.scene,
+            &translated.commands,
+            input.resources,
+            &mut self.fallback_text_layouts,
+            &mut self.image_cache,
+            viewport_device_scale(input.viewport),
+            Some((registry, scope)),
         );
         RenderFrameOutput {
             primitive_count: input.primitives.len(),

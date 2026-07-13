@@ -4,15 +4,21 @@
 
 ## Execution Contract
 
-Campaign status: REND-03 is **Complete / Accepted**; REND-04 is **next**.
+Campaign status: REND-04A is **Complete / Accepted**; REND-04B is **next**.
+
+Integrated REND-04 remains **Current / Authorized**.
+
+Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
+
+Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
 | Field | Decision |
 | --- | --- |
-| Status | Current / Authorized; REND-03 is **Complete / Accepted**; REND-04 is **next**. |
+| Status | Current / Authorized; REND-04A is **Complete / Accepted**; REND-04B is **next**. |
 | Scope | Presenter ownership/external textures and measured public composition foundations |
 | Impact / confidence | Critical / Medium overall |
 | Campaign prerequisite | Stage 4 gate, Complete / Accepted; campaign authorization recorded |
-| Token checkpoint | Very large; presenter ownership and Showcase adoption are accepted through `REND-03`, so execute `REND-04` next before checkpointing the measured-`Ui` seam |
+| Token checkpoint | Very large; native-texture foundation is accepted through `REND-04A`, so execute `REND-04B` next before checkpointing the measured-`Ui` seam |
 
 ## Packets
 
@@ -36,7 +42,7 @@ Presenter work owns Z3/Z5: no `REND-03` overlap with `IN-02` or live showcase ch
 [ADR 0001](../adr/0001-gpu-presenter-contract.md) accepts `REND-ADR-01` and
 freezes the supported presenter/device/external-texture boundary. `REND-03` is
 Complete / Accepted through reusable presenter and Showcase adoption evidence;
-`REND-04` is next for native GPU texture registration. Then record and verify
+`REND-04B` is next for native GPU golden/example/archive proof. Then record and verify
 that measured `Ui` APIs prove common composition without manual rectangles. After each checkpoint
 passes, the campaign continues without intermediate approval; an ambiguity or
 failed gate is a stop condition. The stage gate then requires a supported

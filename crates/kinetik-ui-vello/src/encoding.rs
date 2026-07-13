@@ -13,11 +13,11 @@ use vello::{
 use crate::{
     command::{RenderCommand, RenderCommandKind},
     geometry::{
-        crisp_rect_border_segments, kurbo_rect, quantize_stroke_width_to_device, radius_is_zero,
-        root_transform, rounded_rect, snap_axis_aligned_translation, snap_image_rect_to_device,
-        snap_point_to_device, snap_radius_to_device, snap_rect_to_device,
-        snap_stroked_line_to_device, snap_stroked_rect_to_device, transform_to_affine, vello_color,
-        vello_gradient,
+        crisp_rect_border_segments, kurbo_rect, logical_size_matches,
+        quantize_stroke_width_to_device, radius_is_zero, root_transform, rounded_rect,
+        snap_axis_aligned_translation, snap_image_rect_to_device, snap_point_to_device,
+        snap_radius_to_device, snap_rect_to_device, snap_stroked_line_to_device,
+        snap_stroked_rect_to_device, transform_to_affine, vello_color, vello_gradient,
     },
     image::{
         ImageDataCache, atlas_source_fits_image, atlas_source_is_finite_positive,
@@ -25,6 +25,7 @@ use crate::{
         image_resource_size_matches_pixels, source_size_matches_snapshot,
     },
     text::{encode_text_layout, shape_fallback_text},
+    texture::{VelloNativeTextureRegistry, VelloNativeTextureScope},
 };
 
 pub(crate) fn encode_scene(
@@ -34,6 +35,27 @@ pub(crate) fn encode_scene(
     fallback_text_layouts: &mut TextLayoutStore,
     image_cache: &mut ImageDataCache,
     device_scale: f64,
+) {
+    encode_scene_with_native(
+        scene,
+        commands,
+        resources,
+        fallback_text_layouts,
+        image_cache,
+        device_scale,
+        None,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn encode_scene_with_native(
+    scene: &mut Scene,
+    commands: &[RenderCommand],
+    resources: &RenderResources,
+    fallback_text_layouts: &mut TextLayoutStore,
+    image_cache: &mut ImageDataCache,
+    device_scale: f64,
+    native: Option<(&VelloNativeTextureRegistry, &VelloNativeTextureScope)>,
 ) {
     let root_transform = root_transform(device_scale);
     for command in commands {
@@ -45,13 +67,14 @@ pub(crate) fn encode_scene(
             );
         }
 
-        encode_command(
+        encode_command_with_native(
             scene,
             command,
             resources,
             fallback_text_layouts,
             image_cache,
             device_scale,
+            native,
         );
 
         for _ in &command.clips {
@@ -60,6 +83,7 @@ pub(crate) fn encode_scene(
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn encode_command(
     scene: &mut Scene,
     command: &RenderCommand,
@@ -67,6 +91,27 @@ pub(crate) fn encode_command(
     fallback_text_layouts: &mut TextLayoutStore,
     image_cache: &mut ImageDataCache,
     device_scale: f64,
+) {
+    encode_command_with_native(
+        scene,
+        command,
+        resources,
+        fallback_text_layouts,
+        image_cache,
+        device_scale,
+        None,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn encode_command_with_native(
+    scene: &mut Scene,
+    command: &RenderCommand,
+    resources: &RenderResources,
+    fallback_text_layouts: &mut TextLayoutStore,
+    image_cache: &mut ImageDataCache,
+    device_scale: f64,
+    native: Option<(&VelloNativeTextureRegistry, &VelloNativeTextureScope)>,
 ) {
     let raw_transform = root_transform(device_scale) * transform_to_affine(command.transform);
     let transform = snap_axis_aligned_translation(raw_transform);
@@ -151,7 +196,7 @@ pub(crate) fn encode_command(
             rect,
             source_size,
         } => {
-            encode_texture_command(
+            encode_texture_command_with_native(
                 scene,
                 transform,
                 resources,
@@ -160,6 +205,7 @@ pub(crate) fn encode_command(
                 *rect,
                 *source_size,
                 device_scale,
+                native,
             );
         }
     }
@@ -309,6 +355,7 @@ pub(crate) fn encode_image_command(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) fn encode_texture_command(
     scene: &mut Scene,
     transform: Affine,
@@ -319,6 +366,58 @@ pub(crate) fn encode_texture_command(
     source_size: Size,
     device_scale: f64,
 ) {
+    encode_texture_command_with_native(
+        scene,
+        transform,
+        resources,
+        image_cache,
+        texture,
+        rect,
+        source_size,
+        device_scale,
+        None,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn encode_texture_command_with_native(
+    scene: &mut Scene,
+    transform: Affine,
+    resources: &RenderResources,
+    image_cache: &mut ImageDataCache,
+    texture: TextureId,
+    rect: Rect,
+    source_size: Size,
+    device_scale: f64,
+    native: Option<(&VelloNativeTextureRegistry, &VelloNativeTextureScope)>,
+) {
+    if let Some((registry, scope)) = native
+        && let Some(resource) = resources.texture(texture)
+        && logical_size_matches(source_size, resource.size)
+        && let Some(image) = registry.resolve_native_texture(scope, texture)
+        && let Some((extent, sampling)) = registry.native_texture_metadata(scope, texture)
+        && f64::from(resource.size.width).to_bits() == f64::from(extent[0]).to_bits()
+        && f64::from(resource.size.height).to_bits() == f64::from(extent[1]).to_bits()
+        && sampling == resource.sampling
+    {
+        let source = Rect::new(0.0, 0.0, resource.size.width, resource.size.height);
+        if rect.width <= 0.0 || rect.height <= 0.0 {
+            return;
+        }
+        if !atlas_source_is_finite_positive(source) {
+            return;
+        }
+        fill_image_region(
+            scene,
+            transform,
+            rect,
+            image.clone(),
+            source,
+            sampling,
+            device_scale,
+        );
+        return;
+    }
     if let Some(resource) = resources.texture(texture)
         && let Some(snapshot) = resource.snapshot.as_ref()
         && source_size_matches_snapshot(source_size, snapshot)

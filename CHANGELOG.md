@@ -8,8 +8,15 @@ follow the repository release policy.
 `0.1.0-alpha.1` is the planned first prerelease. It has not been dated, tagged,
 published, or accepted as an alpha release.
 
+REND-04A: **Complete / Accepted**; REND-04B: **next**; integrated REND-04 remains **Current / Authorized**.
+
+No tag, package publication, deployment, release, or alpha-readiness claim is made by REND-04A.
+
 ### Changed
 
+- Added the qualified native-texture registration and Vello resolver foundation,
+  including checked registration/revision identity, native-first texture command
+  resolution, same-renderer lower bridge scoping, and device-lifetime invalidation.
 - Added the Experimental `kinetik-ui-vello-winit` presenter boundary with a
   qualified facade feature, exact one-window acquire/render/blit/notify/present
   policy, zero-size handling, generation-scoped device borrowing, typed surface
