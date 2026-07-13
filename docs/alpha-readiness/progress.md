@@ -2,21 +2,23 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Campaign status: REND-04 is **Complete / Accepted**; `LAYOUT-UI-01` is **next**.
+Campaign status: integrated `LAYOUT-UI-01` is **Complete / Accepted**;
+`OVL-UI-01` is **next**, and `COLL-UI-01` is queued behind the frozen
+measured-`Ui` seam.
 
-Integrated REND-04 is **Complete / Accepted**.
+Integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**.
 
 Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
-Stages 0-4 are Complete; Stage 4 is Complete / Accepted through `REND-02` squash merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`. Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, and `REND-04` Complete / Accepted; `LAYOUT-UI-01` is next. Stages 6-7 remain Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-4 are Complete; Stage 4 is Complete / Accepted through `REND-02` squash merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`. Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, `REND-04`, and `LAYOUT-UI-01` Complete / Accepted; `OVL-UI-01` is next, while `COLL-UI-01` is queued behind the frozen measured-`Ui` seam. Stages 6-7 remain Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
 ## Stage 0: Plan And Baseline
 
-Status: Complete. This closed the documentation task only; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with presenter/external-texture work Complete / Accepted; `LAYOUT-UI-01` is next under the recorded campaign authorization.
+Status: Complete. This closed the documentation task only; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with presenter, external-texture, and measured-layout work Complete / Accepted; `OVL-UI-01` is next under the recorded campaign authorization.
 
 ### Changed files
 
@@ -2127,7 +2129,8 @@ Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queue
 
 Status: **Complete / Accepted**. Issues #578, #580, #582, #584, and #586
 closed through squash-merged PRs #579, #581, #583, #585, and #587.
-`LAYOUT-UI-01` is next.
+`LAYOUT-UI-01` was the next packet at this checkpoint and is now Complete /
+Accepted.
 
 #### Changed files
 
@@ -2189,6 +2192,77 @@ branch. The producer example compiled and packaged but was not manually
 observed interactively. The root lock's yanked `swash 0.2.8` remains a Stage 7
 dependency/release risk. No tag, package publication, deployment, release, or
 alpha-readiness claim occurred.
+
+### Integrated `LAYOUT-UI-01`: measured composition foundation
+
+Status: **Complete / Accepted**. Issues #590, #592, and #594 closed through
+squash-merged PRs #591, #593, and #596. `OVL-UI-01` is next, while
+`COLL-UI-01` is queued behind the frozen measured-`Ui` seam.
+
+#### Changed files
+
+- `crates/kinetik-ui-core/src/layout.rs`, its root export, and
+  `tests/layout_invariants.rs` add deterministic row-major measured grid
+  allocation and focused invariants.
+- `crates/kinetik-ui-widgets/src/ui/layout.rs`, its module registrations, and
+  focused `Ui` tests add public keyed row, column, grid, padding, stack,
+  horizontal-scroll-row, and vertical-scroll-column allocation closures.
+- `crates/kinetik-ui/examples/first_frame.rs` and the Showcase layout runtime
+  dogfood the public measured-`Ui` seam while preserving established geometry.
+- The changelog, public API policy, GPU presenter ADR, and readiness documents
+  record integrated acceptance and the next serialized Stage 5 work.
+
+#### Reasoning and contract decisions
+
+The core grid shares the existing deterministic `SizeRule` semantics: Fit uses
+the largest intrinsic track measurement, Fill divides only remaining space,
+and declared overflow remains explicit and finite. Public `Ui` containers stay
+thin wrappers over those solvers, execute child closures within deterministic
+container/index scopes, and reuse the accepted scroll-area contract for clip,
+translation, offsets, and input. Layout stays in logical coordinates and does
+not introduce a retained tree or styling policy.
+
+Index scopes are appropriate for static composition but not dynamic collection
+reordering. The collection packets therefore own stable item identities rather
+than extending this shared seam. The facade example and Showcase preview prove
+common public composition without caller-computed child rectangles; their
+application behavior and exact established geometry remain unchanged.
+
+#### Tests run and results
+
+- Issue #590 / PR #591 squash merge
+  `09c4621828629cb0382a1c7b7d0a2ca72a6cc6e9` passed 19 focused core layout
+  invariants, the full core package suite, warning-denied all-target Clippy,
+  warning-denied no-deps docs, formatting, and diff checks. PR CI run
+  `29247938315` and main CI run `29248083792` passed.
+- Issue #592 / PR #593 squash merge
+  `b758cce74934fb2cdc2d84c817b7401121a19603` passed 5 focused `Ui` layout
+  tests, 227 widget unit tests plus every widget conformance binary and doc
+  test, warning-denied all-target Clippy, warning-denied no-deps docs,
+  formatting, and diff checks. PR CI run `29248574784` and main CI run
+  `29248723630` passed.
+- Issue #594 / PR #596 squash merge
+  `1f12a9a6876092c44ca8a529f6046525aa102998` passed the runnable facade
+  example with exact geometry assertions, example check and warning-denied
+  Clippy, 2 focused Showcase layout tests, 132 Showcase library tests,
+  warning-denied Showcase Clippy, direct legacy-solver scans, formatting, and
+  diff checks. PR CI run `29249250377` and main CI run `29249384711` passed.
+- Each candidate received an independent review. The accepted candidates ended
+  with P0/P1/P2=`0/0/0`; all three issues are closed and all three PRs are
+  squash-merged.
+
+#### Remaining risks and deferred findings
+
+Static index scopes are unsuitable for dynamic reordering; `COLL-UI-01` owns
+stable item identities. Implicit widget measurement, retained layout, grid
+spans, wrapping, margins, weighted fill, and CSS-like behavior remain outside
+the MVP. Empty/fill-only/sanitized scroll edge cases follow accepted solver and
+extent behavior but do not each have a dedicated widget regression.
+
+No interactive pixel/screenshot comparison was run; exact geometry assertions
+and structural/rendering tests cover the dogfood refactor. Broader Showcase
+migration remains later feature-packet and `SHOW-02` work. No tag, package
+publication, deployment, release, or alpha-readiness claim occurred.
 
 ## Packet Completion Template
 

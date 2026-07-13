@@ -6,9 +6,12 @@ the alpha-readiness campaign. Prelude inclusion is a convenience decision and
 never implies Stable conformance. Candidate-for-alpha-stable is a separate
 product decision from conformance status.
 
-REND-04: **Complete / Accepted**; `LAYOUT-UI-01` is **next**.
+Integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**;
+`OVL-UI-01` is **next**, and `COLL-UI-01` is queued behind the frozen
+measured-`Ui` seam.
 
-No tag, package publication, deployment, release, or alpha-readiness claim is made by REND-04 acceptance.
+No tag, package publication, deployment, release, or alpha-readiness claim is
+made by these acceptances.
 
 The application-facing native texture API is qualified-only; none of its symbols are exported by `kinetik_ui::prelude`.
 
@@ -66,7 +69,7 @@ curation.
 | Winit | Provisional Experimental, feature-gated | `kinetik_ui::platform_winit` | Yes: supported window and platform loop | Winit input, IME/clipboard/cursor/platform-request, accessibility boundary, and redraw-loop proof; no new prelude exports before presenter proof |
 | Vello | Provisional Experimental, feature-gated | `kinetik_ui::render_vello` | Yes: supported 2D backend and presenter | Surface acquisition/recovery, resize/scale, presentation, diagnostics, and Vello-backed workflow proof; no new prelude exports before presenter proof |
 | Vello/Winit presenter | Provisional Experimental, feature-gated, qualified only | `kinetik_ui::vello_winit` | Yes: supported one-window live presenter | REND-04 is Complete / Accepted with real-GPU and packaged-example evidence; access remains qualified only, and no presenter item enters the prelude |
-| Widgets | Provisional Experimental | Common composition path: `kinetik_ui::widgets`; advanced APIs use the qualified modules listed below | Yes: controls and viewport surface; exact final subset deferred | Public paint/input/accessibility/platform/live-workflow evidence for each selected component |
+| Widgets | Provisional Experimental | Common composition path: `kinetik_ui::widgets`; advanced APIs use the qualified modules listed below | Yes: controls and viewport surface; exact final subset deferred | `LAYOUT-UI-01` accepts the measured container seam; public paint/input/accessibility/platform/live-workflow evidence remains required for each selected component |
 
 ### Facade state inventory
 

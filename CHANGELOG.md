@@ -8,12 +8,19 @@ follow the repository release policy.
 `0.1.0-alpha.1` is the planned first prerelease. It has not been dated, tagged,
 published, or accepted as an alpha release.
 
-REND-04: **Complete / Accepted**; `LAYOUT-UI-01` is **next**.
+Integrated `LAYOUT-UI-01`: **Complete / Accepted**; `OVL-UI-01` is **next**,
+and `COLL-UI-01` is queued behind the frozen measured-`Ui` seam.
 
-No tag, package publication, deployment, release, or alpha-readiness claim is made by REND-04 acceptance.
+No tag, package publication, deployment, release, or alpha-readiness claim is
+made by this acceptance.
 
 ### Changed
 
+- Added deterministic measured grid allocation and public keyed `Ui` row,
+  column, grid, padding, stack, and scrolling containers, then dogfooded that
+  seam through the facade example and Showcase layout preview without changing
+  their established geometry. Integrated `LAYOUT-UI-01` is accepted; broader
+  retained/CSS-like layout remains outside the MVP.
 - Added the qualified native-texture registration and Vello resolver foundation,
   including checked registration/revision identity, native-first texture command
   resolution, same-renderer lower bridge scoping, and device-lifetime invalidation.
