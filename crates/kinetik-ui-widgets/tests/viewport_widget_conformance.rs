@@ -221,19 +221,23 @@ fn pointer_plan_blocks_lower_content_and_click_focuses_with_grab_cursors() {
     assert!(memory.is_focused(VIEWPORT));
     assert_eq!(clicked.frame.repaint, RepaintRequest::NextFrame);
 
-    let _ = run_frame(
+    let mut drag_pan_zoom = config.surface.pan_zoom;
+    let mut drag_memory = UiMemory::new();
+    let drag_pressed = run_frame(
         config.clone(),
-        &mut pan_zoom,
-        &mut memory,
+        &mut drag_pan_zoom,
+        &mut drag_memory,
         pointer_button(point, true),
         ScaleFactor::ONE,
         &[],
         false,
     );
+    assert!(drag_pressed.output.response.state.focused);
+    assert!(drag_memory.is_focused(VIEWPORT));
     let dragged = run_frame(
-        config,
-        &mut pan_zoom,
-        &mut memory,
+        config.clone(),
+        &mut drag_pan_zoom,
+        &mut drag_memory,
         pointer_move(Point::new(120.0, 110.0), Vec2::new(20.0, 10.0)),
         ScaleFactor::ONE,
         &[],
@@ -244,6 +248,20 @@ fn pointer_plan_blocks_lower_content_and_click_focuses_with_grab_cursors() {
         dragged.frame.platform_requests,
         vec![PlatformRequest::SetCursor(CursorShape::Grabbing)]
     );
+    let released = run_frame(
+        config,
+        &mut drag_pan_zoom,
+        &mut drag_memory,
+        pointer_button(Point::new(120.0, 110.0), false),
+        ScaleFactor::ONE,
+        &[],
+        false,
+    );
+    assert_eq!(
+        released.frame.platform_requests,
+        vec![PlatformRequest::SetCursor(CursorShape::Grab)]
+    );
+    assert_eq!(released.frame.repaint, RepaintRequest::NextFrame);
 }
 
 #[test]
