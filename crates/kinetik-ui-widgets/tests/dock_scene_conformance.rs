@@ -149,6 +149,7 @@ fn nested_splits_prepare_expected_geometry_and_splitter_primitives() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn semantics_follow_dock_frame_tablist_tab_panel_order_and_callbacks_are_clipped() {
     let dock = two_frame_dock();
     let scene = DockScene::new(
