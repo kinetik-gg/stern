@@ -13,6 +13,7 @@ const DEFAULT_SPLITTER_THICKNESS: f32 = 6.0;
 const DROP_EDGE_FRACTION: f32 = 0.25;
 
 mod actions;
+mod controller;
 mod ids;
 mod layout;
 mod model;
@@ -23,6 +24,7 @@ mod snapshot;
 mod tabs;
 
 pub use actions::*;
+pub use controller::*;
 pub use ids::*;
 pub use layout::*;
 pub use model::*;
