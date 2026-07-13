@@ -179,7 +179,9 @@ pub use overlays::{
     DropdownOverlay, DropdownTriggerPresentation, DropdownVisibleRange, Menu, MenuItem,
     MenuOverlay, ModalAction, ModalActionRole, ModalCloseReason, ModalCloseRequest, ModalDialog,
     ModalDialogBody, ModalDialogOverlay, ModalFocusContainment, OverlayDismissal, OverlayEntry,
-    OverlayId, OverlayKind, OverlayStack, PopoverPlacement, PopoverRequest, dropdown_visible_range,
+    OverlayId, OverlayKind, OverlayScene, OverlaySceneDismissReason, OverlaySceneDismissRequest,
+    OverlaySceneDropdownSelection, OverlaySceneIntent, OverlaySceneMetrics, OverlaySceneOutput,
+    OverlaySceneSurface, OverlayStack, PopoverPlacement, PopoverRequest, dropdown_visible_range,
     overlay_semantics, place_popover,
 };
 pub use taxonomy::{

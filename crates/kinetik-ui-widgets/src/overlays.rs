@@ -7,6 +7,7 @@ mod modal;
 mod model;
 mod navigation;
 mod placement;
+mod scene;
 mod semantics;
 mod stack;
 
@@ -24,6 +25,12 @@ pub use modal::{
 pub use model::{OverlayDismissal, OverlayEntry, OverlayId, OverlayKind};
 pub use navigation::{OverlayNavigationInput, TypeaheadBuffer};
 pub use placement::{PopoverPlacement, PopoverRequest, place_popover};
+pub use scene::{
+    OverlayScene, OverlaySceneDismissReason, OverlaySceneDismissRequest,
+    OverlaySceneDropdownSelection, OverlaySceneIntent, OverlaySceneMetrics, OverlaySceneOutput,
+    OverlaySceneSurface,
+};
+pub(crate) use scene::{OverlaySceneRow, OverlaySceneRowKind};
 pub use semantics::overlay_semantics;
 pub use stack::OverlayStack;
 

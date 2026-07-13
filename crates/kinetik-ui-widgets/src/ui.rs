@@ -7,6 +7,7 @@ mod frame;
 mod inspector_fields;
 mod layout;
 mod output;
+mod overlays;
 mod passive;
 mod sliders;
 #[cfg(test)]
