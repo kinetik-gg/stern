@@ -18,6 +18,7 @@ mod layout;
 mod model;
 mod policy;
 mod registry;
+mod scene;
 mod snapshot;
 mod tabs;
 
@@ -27,6 +28,7 @@ pub use layout::*;
 pub use model::*;
 pub use policy::*;
 pub use registry::*;
+pub use scene::*;
 pub use snapshot::*;
 pub use tabs::*;
 

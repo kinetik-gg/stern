@@ -5,6 +5,7 @@ mod behavior;
 mod choice_controls;
 mod chrome;
 mod collections;
+mod dock;
 mod frame;
 mod inspector_fields;
 mod layout;
