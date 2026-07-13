@@ -17,6 +17,7 @@ mod sliders;
 mod tests;
 mod text_controls;
 mod viewport;
+mod viewport_tools;
 mod virtual_table;
 mod virtual_tree;
 

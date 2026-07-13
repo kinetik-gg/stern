@@ -11,6 +11,8 @@ mod surface;
 pub use surface::*;
 mod widget;
 pub use widget::*;
+mod tool_scene;
+pub use tool_scene::*;
 mod actions;
 pub use actions::*;
 mod tools;
