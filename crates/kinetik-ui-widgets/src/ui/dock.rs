@@ -1,12 +1,442 @@
 use kinetik_ui_core::{
-    Brush, ClipId, ComponentState, Point, Primitive, Rect, RectPrimitive, SemanticNode,
-    SemanticRole, Stroke, TextPrimitive, TextRole,
+    Brush, ClipId, ComponentState, DomainDragGesturePhase, Key, KeyState, Point, Primitive, Rect,
+    RectPrimitive, RepaintRequest, SemanticNode, SemanticRole, Stroke, TextPrimitive, TextRole,
+    context_menu_trigger, drop_target,
 };
 
 use super::Ui;
-use crate::dock::{DockScene, DockSceneFrame, DockScenePanel, DockScenePreviewKind, DockSceneTab};
+use crate::dock::{
+    Dock, DockController, DockControllerConfig, DockControllerFocus, DockControllerOutput,
+    DockDropTarget, DockNeighborDirection, DockScene, DockSceneFrame, DockScenePanel,
+    DockScenePreviewKind, DockSceneTab, DockSplitterContextRequest, FrameId, FrameLayout, PanelId,
+    PanelInstanceLocation, frame_neighbor, resolve_dock_drop_target_with_policy,
+    resolve_dock_splitter_context_actions_with_policy, solve_dock_layout,
+    solve_dock_splitters_with_style,
+};
+
+fn dock_drop_target_frame(target: DockDropTarget) -> FrameId {
+    match target {
+        DockDropTarget::Tab { frame } | DockDropTarget::Split { frame, .. } => frame,
+    }
+}
+
+fn dock_drop_target_is_current(dock: &Dock, target: DockDropTarget) -> bool {
+    match target {
+        DockDropTarget::Tab { frame } => dock.frame(frame).is_some(),
+        DockDropTarget::Split {
+            frame, new_frame, ..
+        } => dock.frame(frame).is_some() && dock.frame(new_frame).is_none(),
+    }
+}
+
+fn active_dock_focus(scene: &DockScene, dock: &Dock) -> Option<DockControllerFocus> {
+    let frame = dock.active_frame()?;
+    let panel = dock.frame(frame)?.active_panel()?.id;
+    Some(DockControllerFocus {
+        frame,
+        panel,
+        widget: scene.tab_widget_id(panel),
+    })
+}
+
+fn scene_focus_for_widget(
+    scene: &DockScene,
+    widget: Option<kinetik_ui_core::WidgetId>,
+) -> Option<DockControllerFocus> {
+    let widget = widget?;
+    scene.layout().frames.iter().find_map(|frame| {
+        frame.tabs.iter().find_map(|tab| {
+            (tab.id == widget).then_some(DockControllerFocus {
+                frame: frame.frame,
+                panel: tab.panel,
+                widget,
+            })
+        })
+    })
+}
 
 impl Ui<'_> {
+    /// Evaluates public Dock interactions against an immutable prepared scene.
+    ///
+    /// The Dock remains application-owned. Close and splitter context actions
+    /// are emitted as requests; selection, docking, and resize mutations are
+    /// applied through the existing deterministic Dock model API.
+    #[allow(clippy::too_many_lines)]
+    pub fn dock_controller(
+        &mut self,
+        scene: &DockScene,
+        dock: &mut Dock,
+        controller: &mut DockController,
+        config: DockControllerConfig,
+    ) -> DockControllerOutput {
+        let before = dock.snapshot();
+        let old_focus = self.memory().focused();
+        let old_preview = controller.preview;
+        let disabled = scene.config().disabled;
+        let bounds = scene.layout().bounds;
+        let frozen_layout = scene
+            .layout()
+            .frames
+            .iter()
+            .map(|frame| FrameLayout {
+                frame: frame.frame,
+                rect: frame.rect,
+            })
+            .collect::<Vec<_>>();
+        let mut output = DockControllerOutput::default();
+
+        self.reconcile_dock_controller(scene, dock, controller);
+        let drag_was_retained = controller.drag.is_some();
+
+        for frame in &scene.layout().frames {
+            let response = self.pressable_with_id(frame.id, frame.rect, disabled);
+            if response.clicked
+                && let Some(panel) = dock
+                    .frame(frame.frame)
+                    .and_then(|item| item.active_panel())
+                    .map(|panel| panel.id)
+            {
+                self.select_and_focus_dock_tab(
+                    dock,
+                    controller,
+                    frame.frame,
+                    panel,
+                    scene.tab_widget_id(panel),
+                );
+            }
+        }
+
+        let mut drag_position = self.input().pointer.position;
+        let mut drag_released = false;
+        let mut drag_cancelled = false;
+        for frame in &scene.layout().frames {
+            for tab in &frame.tabs {
+                let gesture = self.runtime.captured_domain_drag_gesture(
+                    tab.id,
+                    tab.rect,
+                    disabled || !tab.draggable,
+                );
+                if gesture.response.clicked || gesture.response.keyboard_activated {
+                    self.select_and_focus_dock_tab(
+                        dock,
+                        controller,
+                        frame.frame,
+                        tab.panel,
+                        tab.id,
+                    );
+                }
+                let source_visible = self.memory().drag_source() == Some(tab.id)
+                    || self.memory().released_drag_source() == Some(tab.id)
+                    || gesture.response.dragged;
+                if source_visible && controller.drag.is_none() {
+                    controller.drag = dock.begin_tab_drag(frame.frame, tab.panel);
+                }
+                for action in gesture.actions {
+                    match action.phase {
+                        DomainDragGesturePhase::Move => {
+                            drag_position = action.position.or(drag_position);
+                        }
+                        DomainDragGesturePhase::Release => {
+                            drag_position = action.position.or(drag_position);
+                            drag_released = true;
+                        }
+                        DomainDragGesturePhase::Cancel => drag_cancelled = true,
+                        DomainDragGesturePhase::Press => {}
+                    }
+                }
+
+                if let Some(close_rect) = tab.close_rect {
+                    let close = self.pressable_with_id(
+                        tab.close_id,
+                        close_rect,
+                        disabled || !tab.close_visible,
+                    );
+                    if close.clicked || close.keyboard_activated {
+                        output.close_requests.push(PanelInstanceLocation::new(
+                            tab.panel.instance_id(),
+                            frame.frame,
+                        ));
+                    }
+                }
+            }
+        }
+
+        let source_widget = controller.drag.map(|drag| scene.tab_widget_id(drag.panel));
+        let mut hovered_frame = None;
+        let mut dropped_frame = None;
+        if source_widget.is_some() {
+            let mut drop_surfaces = Vec::new();
+            for frame in &scene.layout().frames {
+                drop_surfaces.push((frame.id, frame.rect, frame.frame));
+                for tab in &frame.tabs {
+                    drop_surfaces.push((tab.id.child("dock-drop"), tab.rect, frame.frame));
+                    if let Some(close_rect) = tab.close_rect {
+                        drop_surfaces.push((
+                            tab.close_id.child("dock-drop"),
+                            close_rect,
+                            frame.frame,
+                        ));
+                    }
+                }
+            }
+            for (id, rect, frame) in drop_surfaces {
+                let (input, memory) = self.runtime.input_and_memory_mut();
+                let response = drop_target(id, rect, input, memory, disabled);
+                if response.source == source_widget && response.response.state.hovered {
+                    hovered_frame = Some(frame);
+                }
+                if response.source == source_widget && response.dropped {
+                    dropped_frame = Some(frame);
+                }
+            }
+        }
+
+        if drag_cancelled {
+            controller.drag = None;
+            controller.preview = None;
+        } else if let Some(drag) = controller.drag {
+            let resolved = drag_position
+                .and_then(|position| {
+                    resolve_dock_drop_target_with_policy(
+                        &frozen_layout,
+                        position,
+                        config.new_frame,
+                        config.policy,
+                    )
+                })
+                .filter(|target| dock_drop_target_is_current(dock, *target))
+                .filter(|target| {
+                    hovered_frame.is_some_and(|frame| dock_drop_target_frame(*target) == frame)
+                        || (!drag_was_retained && self.memory().drag_source() == source_widget)
+                });
+            controller.preview = resolved;
+
+            if drag_released || self.memory().released_drag_source() == source_widget {
+                if let (Some(target), Some(frame)) = (resolved, dropped_frame)
+                    && dock_drop_target_frame(target) == frame
+                {
+                    dock.drop_tab(drag, target);
+                }
+                controller.drag = None;
+                controller.preview = None;
+            }
+        } else {
+            controller.preview = None;
+        }
+
+        for splitter in &scene.layout().splitters {
+            let gesture = self.runtime.captured_domain_drag_gesture(
+                splitter.id,
+                splitter.rect,
+                disabled || !config.policy.splitters.allow_resize,
+            );
+            let pointer_context_requested = gesture.response.secondary_clicked;
+            for action in gesture.actions {
+                if matches!(action.phase, DomainDragGesturePhase::Move) {
+                    dock.resize_split_with_policy(
+                        &splitter.path,
+                        bounds,
+                        action.delta,
+                        config.policy,
+                    );
+                }
+            }
+
+            let (input, memory) = self.runtime.input_and_memory_mut();
+            let context = context_menu_trigger(splitter.id, splitter.rect, input, memory, disabled);
+            if pointer_context_requested || context.context_requested {
+                let frames = solve_dock_layout(dock, bounds);
+                if let Some(model_splitter) =
+                    solve_dock_splitters_with_style(dock, bounds, scene.config().chrome_style)
+                        .into_iter()
+                        .find(|candidate| candidate.path == splitter.path)
+                {
+                    output
+                        .splitter_context_requests
+                        .push(DockSplitterContextRequest {
+                            path: splitter.path.clone(),
+                            actions: resolve_dock_splitter_context_actions_with_policy(
+                                dock,
+                                &frames,
+                                &model_splitter,
+                                config.policy,
+                            ),
+                        });
+                }
+            }
+        }
+
+        self.handle_dock_keyboard(scene, dock, controller, &frozen_layout, disabled);
+
+        output.changed = before != dock.snapshot();
+        output.focus_changed = old_focus != self.memory().focused();
+        output.drop_preview = controller.preview;
+        if output.changed
+            || output.focus_changed
+            || old_preview != controller.preview
+            || !output.close_requests.is_empty()
+            || !output.splitter_context_requests.is_empty()
+        {
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
+        output
+    }
+
+    fn reconcile_dock_controller(
+        &mut self,
+        scene: &DockScene,
+        dock: &mut Dock,
+        controller: &mut DockController,
+    ) {
+        if dock.active_frame().is_none()
+            && let Some(frame) = dock
+                .frames()
+                .into_iter()
+                .find(|frame| frame.active_panel().is_some())
+                .map(|frame| frame.id)
+        {
+            dock.set_active_frame(frame);
+        }
+
+        if let Some(drag) = controller.drag
+            && dock
+                .frame(drag.source_frame)
+                .is_none_or(|frame| !frame.panels.iter().any(|panel| panel.id == drag.panel))
+        {
+            let widget = scene.tab_widget_id(drag.panel);
+            if self.memory().drag_source() == Some(widget)
+                || self.memory().released_drag_source() == Some(widget)
+            {
+                self.runtime.memory_mut().clear_drag();
+            }
+            controller.drag = None;
+            controller.preview = None;
+        }
+
+        if controller
+            .preview
+            .is_some_and(|target| !dock_drop_target_is_current(dock, target))
+        {
+            controller.preview = None;
+        }
+
+        if let Some(focus) = controller.focus
+            && dock
+                .frame(focus.frame)
+                .is_none_or(|frame| !frame.panels.iter().any(|panel| panel.id == focus.panel))
+        {
+            if let Some(frame) = dock.frames().into_iter().find_map(|frame| {
+                frame
+                    .panels
+                    .iter()
+                    .any(|panel| panel.id == focus.panel)
+                    .then_some(frame.id)
+            }) {
+                controller.focus = Some(DockControllerFocus { frame, ..focus });
+            } else if self.memory().focused() == Some(focus.widget) {
+                if let Some(repaired) = active_dock_focus(scene, dock) {
+                    self.runtime.memory_mut().focus(repaired.widget);
+                    controller.focus = Some(repaired);
+                } else {
+                    self.runtime.memory_mut().clear_focus();
+                    controller.focus = None;
+                }
+            } else {
+                controller.focus = None;
+            }
+        }
+
+        if let Some(focus) = scene_focus_for_widget(scene, self.memory().focused()) {
+            controller.focus = Some(focus);
+        }
+    }
+
+    fn select_and_focus_dock_tab(
+        &mut self,
+        dock: &mut Dock,
+        controller: &mut DockController,
+        frame: FrameId,
+        panel: PanelId,
+        widget: kinetik_ui_core::WidgetId,
+    ) {
+        dock.select_panel(frame, panel);
+        self.runtime.memory_mut().focus(widget);
+        controller.focus = Some(DockControllerFocus {
+            frame,
+            panel,
+            widget,
+        });
+    }
+
+    fn handle_dock_keyboard(
+        &mut self,
+        scene: &DockScene,
+        dock: &mut Dock,
+        controller: &mut DockController,
+        frozen_layout: &[FrameLayout],
+        disabled: bool,
+    ) {
+        if disabled {
+            return;
+        }
+        let Some(mut focus) = controller
+            .focus
+            .filter(|focus| self.memory().focused() == Some(focus.widget))
+        else {
+            return;
+        };
+        let events = self.input().keyboard.events.clone();
+        for event in events {
+            if event.state != KeyState::Pressed || event.modifiers.alt || event.modifiers.super_key
+            {
+                continue;
+            }
+
+            let target = if event.modifiers.ctrl {
+                let direction = match event.key {
+                    Key::ArrowLeft => Some(DockNeighborDirection::Left),
+                    Key::ArrowRight => Some(DockNeighborDirection::Right),
+                    Key::ArrowUp => Some(DockNeighborDirection::Up),
+                    Key::ArrowDown => Some(DockNeighborDirection::Down),
+                    _ => None,
+                };
+                direction
+                    .and_then(|direction| frame_neighbor(frozen_layout, focus.frame, direction))
+                    .and_then(|frame| {
+                        dock.frame(frame)
+                            .and_then(|item| item.active_panel())
+                            .map(|panel| (frame, panel.id))
+                    })
+            } else {
+                dock.frame(focus.frame).and_then(|frame| {
+                    let current = frame
+                        .panels
+                        .iter()
+                        .position(|panel| panel.id == focus.panel)?;
+                    let last = frame.panels.len().saturating_sub(1);
+                    let index = match event.key {
+                        Key::ArrowLeft => current.saturating_sub(1),
+                        Key::ArrowRight => current.saturating_add(1).min(last),
+                        Key::Home => 0,
+                        Key::End => last,
+                        _ => return None,
+                    };
+                    Some((focus.frame, frame.panels[index].id))
+                })
+            };
+
+            if let Some((frame, panel)) = target {
+                let widget = scene.tab_widget_id(panel);
+                self.select_and_focus_dock_tab(dock, controller, frame, panel, widget);
+                focus = DockControllerFocus {
+                    frame,
+                    panel,
+                    widget,
+                };
+            }
+        }
+    }
+
     /// Paints one prepared public Dock → Frame → Panel scene.
     ///
     /// The callback runs exactly once for each active panel body with positive
@@ -227,9 +657,11 @@ impl Ui<'_> {
         }
         self.primitive(Primitive::ClipEnd { id: tab_clip });
 
-        let mut node =
-            SemanticNode::new(tab.id, SemanticRole::Tab, tab.rect).with_label(&tab.title);
+        let mut node = SemanticNode::new(tab.id, SemanticRole::Tab, tab.rect)
+            .with_label(&tab.title)
+            .focusable(!disabled);
         node.state.selected = tab.selected;
+        node.state.focused = self.memory().is_focused(tab.id);
         node.state.disabled = disabled;
         self.push_semantic_node(node);
     }
