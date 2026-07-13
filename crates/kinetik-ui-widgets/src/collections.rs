@@ -10,6 +10,7 @@ mod table;
 mod tree_layout;
 mod tree_model;
 mod virtual_list;
+mod virtual_tree;
 mod virtualization;
 
 pub use grid::{GridColumns, GridLayout};
@@ -26,6 +27,10 @@ pub use tree_model::{TreeExpansion, TreeItem, TreeModel, TreeModelError};
 pub use virtual_list::{
     VirtualList, VirtualListConfig, VirtualListItemResponse, VirtualListOutput, VirtualListRow,
     VirtualListSelectionMode,
+};
+pub use virtual_tree::{
+    VirtualTree, VirtualTreeConfig, VirtualTreeItemResponse, VirtualTreeOutput, VirtualTreeRow,
+    VirtualTreeSelectionMode,
 };
 pub use virtualization::{
     VirtualRangeRequest, VirtualWindow, VirtualWindowRequest, clamp_virtual_scroll_offset,

@@ -15,6 +15,7 @@ mod sliders;
 #[cfg(test)]
 mod tests;
 mod text_controls;
+mod virtual_tree;
 
 use std::time::Duration;
 
