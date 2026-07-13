@@ -4,14 +4,15 @@
 
 ## Execution Contract
 
-Campaign status: integrated `CHROME-UI-01` is **Complete / Accepted**;
-`COLL-UI-01A` stable collection navigation and reconciliation is **next**,
-followed by the painted list/tree and table packets.
+Campaign status: Stage 5 is **Complete / Accepted** through integrated
+`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
+`DOCK-UI-01` **next**.
 
-Integrated `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` are
+Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
+`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
 **Complete / Accepted**.
 
-Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
+Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
@@ -21,7 +22,7 @@ Kinetik UI remains a foundation/developer-preview; this packet does not tag, pub
 | Scope | Async liveness, desktop/Unicode text, bounded caches, and renderer correctness |
 | Impact / confidence | Critical / Medium-high overall |
 | Campaign prerequisite | Stage 3 gate; campaign authorization recorded |
-| Token checkpoint | Stage 4 gate passed; Stage 5 is Current / Authorized with presenter, external-texture, measured-layout, overlay, and chrome work accepted; `COLL-UI-01A` is next |
+| Token checkpoint | Stage 4 gate passed; Stage 5 subsequently passed and Stage 6 is Current / Authorized with `DOCK-UI-01` next |
 
 ## Packets
 
@@ -224,9 +225,10 @@ documented contracts.
 The `TEXT-01` semantic prerequisites of `TEXT-02`, `TEXT-03`, and dependent
 editor packets are satisfied, and accepted `REND-01` unblocked the renderer
 side of 4B. `TEXT-02`, `TEXT-03`, and `REND-02` are Complete / Accepted.
-Inspector/outliner still wait for their Stage 5 composition and collection
-prerequisites. Checkpoints 4A and 4B are complete, and the integrated Stage 4
-gate is accepted.
+At this checkpoint, inspector/outliner still waited for their Stage 5
+composition and collection prerequisites. Those prerequisites subsequently
+passed; editor integration remains Stage 6. Checkpoints 4A and 4B are complete,
+and the integrated Stage 4 gate is accepted.
 
 ## `REND-02`: authoritative fractional-DPI text projection
 
@@ -273,8 +275,9 @@ Layoutless and unresolved-resource paint remains non-authoritative
 compatibility behavior. Fractional command translations retain the existing
 generic-rectangle band of at most 1.0001 physical pixels. CPU scene encoding
 does not prove GPU raster or pixel identity. Duplicate `TextLayoutCache`
-curation remains Stage 7 `API-01`; presenter ownership, external textures, and
-public composition remain Stage 5.
+curation remains Stage 7 `API-01`. The presenter, external-texture, and
+composition foundations subsequently passed in Stage 5; public editor
+composition remains Stage 6.
 
 ## Integrated Stage 4 Acceptance
 
@@ -317,10 +320,10 @@ recovery and cross-layer sRGB/alpha/tint behavior; and registered paint/hit/
 caret/selection geometry agreement at scale factors 1.25, 1.5, and 1.75.
 
 At this gate, Stage 5 advanced to Current / Authorized with `REND-ADR-01`
-next. ADR 0001 subsequently accepted that decision, `REND-03` is now Complete /
-Accepted, integrated `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and
-`CHROME-UI-01` are Complete / Accepted, and `COLL-UI-01A` is next.
-Every Stage 5 packet still requires its own deterministic task gate; a failed
+next. Stage 5 subsequently completed its presenter and composition packets,
+including integrated `COLL-UI-01` and `COLL-UI-02`, and is Complete /
+Accepted. Stage 6 is Current / Authorized with `DOCK-UI-01` next. Every
+remaining packet still requires its own deterministic task gate; a failed
 checkpoint or unresolved ownership decision halts the campaign.
 
 ## Deferrals
@@ -329,7 +332,8 @@ Canonical retained text paths alone receive the authoritative guarantee;
 compatibility paths remain qualified. Undo run barriers, terminal text-resource
 rebuild behavior, and payload metrics that are not process RSS remain explicit.
 Vello's resolved gradient ramp remains a source-verified dependency risk, and
-premultiplied payload validity remains caller-owned. HDR/wide-gamut/ICC, final
-GPU pixels, presenter/swapchain ownership, external textures, and public editor
-composition remain Stage 5 or later. The repository remains foundation /
-developer preview, not alpha-ready.
+premultiplied payload validity remains caller-owned. Stage 5 subsequently
+accepted the supported presenter/swapchain and external-texture scope;
+HDR/wide-gamut/ICC and final GPU-pixel evidence remain later work, while public
+editor composition remains Stage 6 or later. The repository remains foundation
+/ developer preview, not alpha-ready.

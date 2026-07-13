@@ -6,11 +6,11 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Authorized / Queued |
+| Status | Current / Authorized; Stage 5 is Complete / Accepted and `DOCK-UI-01` is next |
 | Scope | Reusable editor components and one coherent public-facade workflow |
 | Impact / confidence | High-critical / Medium overall |
-| Campaign prerequisite | Stage 5 gate; campaign authorization covers every non-deferred packet |
-| Token checkpoint | Very large; execute and review non-deferred packets individually before `SHOW-02` |
+| Campaign prerequisite | Stage 5 gate, Complete / Accepted; campaign authorization covers every non-deferred packet |
+| Token checkpoint | Very large; execute and review non-deferred packets individually, beginning with `DOCK-UI-01`, before `SHOW-02` |
 
 ## Packets
 

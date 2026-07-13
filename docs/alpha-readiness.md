@@ -6,18 +6,25 @@ Runway state controls execution details such as executor, depth, and gate status
 
 ## Authorization And Status
 
-Campaign status: integrated `CHROME-UI-01` is **Complete / Accepted**;
-`COLL-UI-01A` stable collection navigation and reconciliation is **next**,
-followed by the painted list/tree and table packets.
+Campaign status: Stage 5 is **Complete / Accepted** through integrated
+`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
+`DOCK-UI-01` **next**.
 
-Integrated `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` are
+Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
+`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
 **Complete / Accepted**.
 
-Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
+Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
-Stages 0-4 are **Complete**; Stage 4 is **Complete / Accepted** through the accepted `REND-02` merge `1239dd9`. Stage 5 is **Current / Authorized** with `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` Complete / Accepted; `COLL-UI-01A` is next. Stages 6-7 remain **Authorized / Queued** and execute in order as their prerequisite gates pass. The Stage 1-7 campaign is authorized for continuous sequential execution without intermediate approval, but any Runway stop condition halts the active packet or stage.
+Stages 0-5 are **Complete**; Stage 5 is **Complete / Accepted** through
+`COLL-UI-02` squash merge `98f4aec` and passing main CI run
+`29265615424`. Stage 6 is **Current / Authorized** with `DOCK-UI-01`
+**next**. Stage 7 remains **Authorized / Queued** and executes after the Stage
+6 gate passes. The Stage 1-7 campaign is authorized for continuous sequential
+execution without intermediate approval, but any Runway stop condition halts
+the active packet or stage.
 
 The campaign workflow policy is `create-if-available` for issues, `create-if-gates-pass` for pull requests, and `squash-after-gates` for merges. Those permissions do not authorize a tag, package publish, alpha release, or a claim that unresolved findings are fixed.
 
@@ -28,8 +35,8 @@ The campaign workflow policy is `create-if-available` for issues, `create-if-gat
 | [2. Runtime Foundation](alpha-readiness/02-runtime-foundation.md) | Complete / Accepted | Coordinates, arbitration, and interaction ownership | Gate passed at `5cf07b8` |
 | [3. Input And Shell](alpha-readiness/03-input-and-shell.md) | Complete / Accepted | Ordered input, platform requests, and pointer normalization | Gate passed at `1f99111` |
 | [4. Text, Renderer, And Lifetime](alpha-readiness/04-text-renderer-lifetime.md) | Complete / Accepted | Async liveness, desktop/Unicode text, bounded caches, renderer correctness | Gate passed through accepted `REND-02` merge `1239dd9` |
-| [5. Composition Foundations](alpha-readiness/05-composition-foundations.md) | Current / Authorized | Presenter ADR/path, external textures, measured layout, overlays, chrome, collections | Very large; presenter, external textures, measured layout, overlays, and chrome accepted; `COLL-UI-01A` next |
-| [6. Editor Vertical Slice](alpha-readiness/06-editor-vertical-slice.md) | Authorized / Queued | Dock, inspector, outliner, assets, viewport, feedback, and public workflow | Very large; gate non-deferred packets individually |
+| [5. Composition Foundations](alpha-readiness/05-composition-foundations.md) | Complete / Accepted | Presenter ADR/path, external textures, measured layout, overlays, chrome, collections | Gate passed through `COLL-UI-02` merge `98f4aec` and main CI run `29265615424` |
+| [6. Editor Vertical Slice](alpha-readiness/06-editor-vertical-slice.md) | Current / Authorized | Dock, inspector, outliner, assets, viewport, feedback, and public workflow | Very large; `DOCK-UI-01` next; gate non-deferred packets individually |
 | [7. Quality And Alpha Gate](alpha-readiness/07-quality-and-alpha-gate.md) | Authorized / Queued | Performance, visuals, accessibility boundary, CI, final API and release decision | Large; no tag or publish without explicit authority |
 
 See [Progress And Evidence](alpha-readiness/progress.md) for the current authorization record and the required packet-completion format.

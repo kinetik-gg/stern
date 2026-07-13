@@ -2,24 +2,33 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Campaign status: integrated `CHROME-UI-01` is **Complete / Accepted**;
-`COLL-UI-01A` stable collection navigation and reconciliation is **next**,
-followed by the painted list/tree and table packets.
+Campaign status: Stage 5 is **Complete / Accepted** through integrated
+`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
+`DOCK-UI-01` **next**.
 
-Integrated `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` are
+Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
+`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
 **Complete / Accepted**.
 
-Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
+Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
-Stages 0-4 are Complete; Stage 4 is Complete / Accepted through `REND-02` squash merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`. Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` Complete / Accepted; `COLL-UI-01A` is next. Stages 6-7 remain Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-5 are Complete; Stage 5 is Complete / Accepted through `COLL-UI-02`
+squash merge `98f4aec4c091438d8a86fee05c8c65ed9e96a5f2` and passing main CI
+run `29265615424`. Stage 6 is Current / Authorized with `DOCK-UI-01` next.
+Stage 7 remains Authorized / Queued for continuous sequential execution after
+the Stage 6 gate passes. Every remaining packet still has to pass its
+deterministic gates, and any Runway stop condition halts the active packet or
+stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
 ## Stage 0: Plan And Baseline
 
-Status: Complete. This closed the documentation task only; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with presenter, external-texture, measured-layout, overlay, and chrome work Complete / Accepted; `COLL-UI-01A` is next under the recorded campaign authorization.
+Status: Complete. This closed the documentation task only; Stages 1-5
+subsequently completed and Stage 6 is Current / Authorized with `DOCK-UI-01`
+next under the recorded campaign authorization.
 
 ### Changed files
 
@@ -54,9 +63,10 @@ Status: Complete. This closed the documentation task only; Stages 1-4 subsequent
 ### Remaining risks and deferred findings
 
 - At the Stage 0 checkpoint, runtime, input, text, presenter, component,
-  quality, and release risks were unresolved. The authorized Stage 1-4 runtime,
-  input, and text portions subsequently passed; presenter, component, quality,
-  and release risks remain Stage 5-7 work.
+  quality, and release risks were unresolved. The authorized Stage 1-5 runtime,
+  input, text, presenter, and composition foundations subsequently passed;
+  editor integration remains Stage 6, while quality and release risks remain
+  Stage 7 work.
 - Timeline and node-graph packets remain deferred unless explicitly added to alpha scope.
 - Native accessibility may remain a documented semantic-output-only boundary; floating native windows, broad multi-window behavior, additional renderers, and broader production persistence remain deferred.
 - Packageability must not be interpreted as permission to tag, publish, or claim alpha readiness; pull-request merges follow the separate `squash-after-gates` campaign policy.
@@ -104,9 +114,8 @@ Experimental pending accepted behavioral evidence.
 
 No production catalogue entry is Stable by design. Promotion remains an
 evidence-backed curation decision. At the `ALPHA-00` checkpoint, all later audit
-packets remained open; the remaining Stage 1 packets and Stages 2-4
-subsequently passed, while Stages 5-7 and final `API-01` curation remain open as
-documented.
+packets remained open. Stages 1-5 subsequently passed; Stage 6 is Current /
+Authorized, while Stage 7 and final `API-01` curation remain open as documented.
 
 ### Provisional `API-01`: alpha surface policy
 
@@ -335,8 +344,8 @@ than final output including diagnostics emitted afterward.
 
 Status: Complete / Accepted. `RT-01`, `RT-02`, and `RT-03` passed their bounded
 critics and complete gates. The integrated Stage 2 gate passed at `5cf07b8`;
-Stages 3-4 subsequently passed and Stage 5 is Current / Authorized with
-`REND-ADR-01` accepted and `REND-03` next.
+Stages 3-5 subsequently passed, and Stage 6 is Current / Authorized with
+`DOCK-UI-01` next.
 
 ### `RT-01`: scoped coordinates and clipping
 
@@ -517,8 +526,8 @@ The final Stage 3 matrix was
 [CI run 29140855335](https://github.com/kinetik-gg/kinetik-ui/actions/runs/29140855335);
 PR [#517](https://github.com/kinetik-gg/kinetik-ui/pull/517) passed checks in
 run 29141040177 and produced the accepted merge.
-Stage 4 subsequently passed, and Stage 5 is Current / Authorized with
-`REND-ADR-01` accepted and `REND-03` next.
+Stages 4-5 subsequently passed, and Stage 6 is Current / Authorized with
+`DOCK-UI-01` next.
 
 ### `IN-01`: ordered platform input
 
@@ -1786,16 +1795,17 @@ cannot reconstruct retained wrap or Unicode navigation state. Fractional
 command translations retain the generic rectangle quantization band of at most
 1.0001 physical pixels. CPU scene encoding proves submitted topology and
 coordinates, not final GPU raster coverage or cross-GPU pixel identity. The
-duplicate public `TextLayoutCache` remains Stage 7 `API-01`; presenter
-ownership, external textures, and public composition remain Stage 5.
+duplicate public `TextLayoutCache` remains Stage 7 `API-01`. Presenter,
+external-texture, and composition foundations subsequently passed in Stage 5;
+public editor composition remains Stage 6.
 
 ### `STAGE-4-CLOSE`: integrated text, renderer, and lifetime acceptance gate
 
 Status: Stage 4 is Complete / Accepted through the accepted `REND-02` squash
 merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`. At that close, Stage 5 became
-Current / Authorized with `REND-ADR-01` next. ADR 0001 subsequently accepted
-that decision, and `REND-03` is now next. Issue #570 owns this
-documentation-only integration; it implements or pre-accepts no Stage 5
+Current / Authorized with `REND-ADR-01` next. ADR 0001 and the remaining Stage
+5 packets subsequently passed. Issue #570 owns this historical
+documentation-only integration; it implemented or pre-accepted no Stage 5
 packet.
 
 #### Changed files
@@ -1834,7 +1844,7 @@ or audit artifacts:
 This closes audit §§6.8-6.10 and §§6.12-6.14 only inside the documented
 canonical contracts and accepts only the text-owned portions of §§8.4, 10.2,
 and 11.5. Earlier packet status remains in the chronology only where explicitly
-time-qualified. Stage 5 begins with the root-owned `REND-ADR-01` decision; no
+time-qualified. Stage 5 began with the root-owned `REND-ADR-01` decision; no
 presenter or composition contract is inferred by this transition.
 
 #### Tests run and results
@@ -1881,10 +1891,11 @@ golden.
 Duplicate `TextLayoutCache` compatibility curation remains Stage 7 `API-01`, so
 audit §11.7 is not globally closed. Vello's resolved gradient ramp remains a
 source-verified dependency risk, and premultiplied payload validity remains
-caller-owned. HDR/wide-gamut/ICC, final GPU pixels, presenter/swapchain
-ownership, external textures, and public editor composition remain Stage 5 or
-later. Broader image/resource/performance/lifecycle findings remain open unless
-a separately accepted packet closed them. The repository remains foundation /
+caller-owned. Stage 5 subsequently accepted the supported presenter/swapchain,
+external-texture, and composition-foundation scope; HDR/wide-gamut/ICC and
+final GPU pixels remain later work, while public editor composition remains
+Stage 6. Broader image/resource/performance/lifecycle findings remain open
+unless a separately accepted packet closed them. The repository remains foundation /
 developer preview, not alpha-ready; no tag, publish, deployment, or release is
 authorized.
 
@@ -1893,8 +1904,8 @@ authorized.
 Status: Complete / Accepted for the architecture decision. Issue #572 owns the
 documentation-only packet. [ADR 0001](../adr/0001-gpu-presenter-contract.md)
 freezes the supported alpha ownership, synchronization, lifetime, recovery,
-offscreen, and multi-window boundary; `REND-03` is next. This packet implements
-or pre-accepts neither `REND-03` nor `REND-04`.
+offscreen, and multi-window boundary. At this checkpoint, `REND-03` was next;
+this packet implemented or pre-accepted neither `REND-03` nor `REND-04`.
 
 #### Changed files
 
@@ -1958,9 +1969,10 @@ historical Stage 4 close.
 
 #### Remaining risks and deferred findings
 
-The ADR is a decision checkpoint, not runtime proof. `REND-03` must extract the
-live presenter and prove lifecycle/recovery; `REND-04` must implement native
-registration, no-readback, color/alpha, and device-generation evidence. Vello
+At this checkpoint, the ADR was a decision rather than runtime proof:
+`REND-03` still had to extract the live presenter and prove lifecycle/recovery,
+and `REND-04` still had to implement native registration, no-readback,
+color/alpha, and device-generation evidence. Both subsequently passed. Vello
 atlas-copy bandwidth and duplicate GPU memory remain performance risks,
 foreign-device provenance remains a caller precondition with an explicit wgpu
 validation path, and final GPU color/alpha pixels remain unproved.
@@ -1968,17 +1980,19 @@ validation path, and final GPU color/alpha pixels remain unproved.
 Zero-copy, arbitrary texture views, foreign/shared-device import, explicit
 native synchronization, a reusable offscreen presenter, general multi-window
 coordination, HDR/wide-gamut/ICC conversion in the UI renderer, and additional
-presenter backends remain deferred. Stage 5 composition packets and Stages 6-7
-remain open. The repository remains foundation / developer preview, not
-alpha-ready; no tag, publish, deployment, or release is authorized.
+presenter backends remain deferred. Stage 5 composition subsequently passed;
+Stage 6 is Current / Authorized and Stage 7 remains queued. The repository
+remains foundation / developer preview, not alpha-ready; no tag, publish,
+deployment, or release is authorized.
 
 ### `REND-03A`: reusable Vello/Winit presenter foundation
 
 Status: Complete / Accepted for the shared presenter foundation. Issue #574
-owns this bounded slice. `REND-03B` is next and must replace the Showcase-
-private presenter plus prove the independent offscreen negative path before
-integrated `REND-03` can close. `REND-04`, Stage 5 composition, Stages 6-7, and
-alpha readiness remain open.
+owns this bounded slice. At this checkpoint, `REND-03B` was next and still had
+to replace the Showcase-private presenter plus prove the independent offscreen
+negative path before integrated `REND-03` could close. Those presenter and
+Stage 5 composition checkpoints subsequently passed; Stage 6 is Current /
+Authorized, Stage 7 remains queued, and alpha readiness remains open.
 
 #### Changed files
 
@@ -2115,16 +2129,19 @@ BMP output remain unchanged; no reusable offscreen presenter was introduced.
 
 #### Remaining risks and deferred findings
 
-`REND-04` still owns native texture registration, resolution precedence,
-straight-sRGB/straight-alpha composition evidence, generation invalidation,
-and the no-readback proof. Vello atlas-copy bandwidth and duplicate GPU memory
-remain unmeasured. Zero-copy, arbitrary texture views, foreign/shared-device
+At this checkpoint, `REND-04` still owned native texture registration,
+resolution precedence, straight-sRGB/straight-alpha composition evidence,
+generation invalidation, and the no-readback proof; it subsequently passed.
+Vello atlas-copy bandwidth and duplicate GPU memory remain unmeasured.
+Zero-copy, arbitrary texture views, foreign/shared-device
 import, HDR/wide-gamut/ICC handling, reusable offscreen presentation, general
 multi-window coordination, additional backends, and transparent production
 recovery remain deferred. The pre-existing root-lock `swash 0.2.8` warning
 remains a Stage 7 release risk.
 
-Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**. This packet does not declare alpha readiness, create a tag, publish packages, deploy, or release.
+Stage 5 subsequently completed; Stage 6 is **Current / Authorized** and Stage 7
+remains **Authorized / Queued**. This packet does not declare alpha readiness,
+create a tag, publish packages, deploy, or release.
 
 ### Integrated `REND-04`: native texture presentation and evidence closure
 
@@ -2342,8 +2359,8 @@ alpha-readiness claim occurred.
 ### Integrated `CHROME-UI-01`: painted application chrome
 
 Status: **Complete / Accepted**. Issues #604 and #606 closed through
-squash-merged PRs #605 and #607. `COLL-UI-01A` stable collection navigation and
-reconciliation is next.
+squash-merged PRs #605 and #607. `COLL-UI-01` was the next packet at this
+checkpoint and is now Complete / Accepted.
 
 #### Changed files
 
@@ -2408,6 +2425,167 @@ Toolbar icon/presentation fidelity remains visual polish. Broader Showcase
 adoption and public editor workflow proof remain `SHOW-02`; native OS menus,
 gamepad/touch behavior, and a new theme schema stay outside this MVP. No tag,
 package publication, deployment, release, or alpha-readiness claim occurred.
+
+### Integrated `COLL-UI-01`: virtual list and tree composition
+
+Status: **Complete / Accepted**. Issues #610, #612, and #614 closed through
+squash-merged PRs #611, #613, and #615. `COLL-UI-02` was the next serial
+packet at this checkpoint and is now Complete / Accepted.
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/collections/navigation.rs`, its public
+  module/export seams, and
+  `tests/collection_navigation_conformance.rs` add retained stable-ID cursor
+  movement, activation, reorder preservation, and deterministic
+  removal/filter reconciliation.
+- `crates/kinetik-ui-widgets/src/collections/virtual_list.rs`,
+  `src/ui/collections.rs`, and `tests/virtual_list_conformance.rs` add the
+  public prepared fixed-height list scene, bounded callbacks, clipped scroll and
+  row input, selection, keyboard focus/reveal, theme primitives, and ordered
+  semantics.
+- `crates/kinetik-ui-widgets/src/collections/virtual_tree.rs`,
+  `src/ui/virtual_tree.rs`, and `tests/virtual_tree_conformance.rs` add the
+  public prepared fixed-height tree scene, flattened expansion projection,
+  disclosure and row targets, selection, tree keyboard navigation,
+  focus/reveal, theme primitives, and ordered semantics.
+- `crates/kinetik-ui-widgets/src/{collections,ui}.rs` and `src/lib.rs`
+  expose the qualified public collection and `Ui` seams.
+
+#### Reasoning and contract decisions
+
+One stable navigation/reconciliation foundation is shared by list and tree
+instead of introducing component-specific cursor or selection models.
+`ItemId` remains the retained identity across reorder, filtering, collapse,
+and removal. Prepared snapshots freeze current-frame geometry before pointer
+planning; wheel, reveal, and expansion changes apply to the next frame without
+mixing input, paint, or semantic coordinates.
+
+List and tree callbacks, responses, primitives, and strictly visible semantics
+remain bounded by their materialized windows for 10,000-row inputs. Tree
+preparation still flattens the model before bounded emission. Disclosure
+targets have distinct stable IDs and outrank overlapping row targets.
+Application command execution, drag/drop, rename, and domain behavior remain
+outside the collection scenes.
+
+#### Tests run and results
+
+- Issue #610 / PR #611 candidate
+  `e3f21bc9a24aa275be3c857e0dd8e7e822bb2806` passed 8 focused
+  navigation conformance tests, the full all-feature widgets suite,
+  warning-denied all-target Clippy, no-deps docs, formatting, and diff checks.
+  Independent review ended at P0/P1/P2=`0/0/0`. PR CI run `29258275277`
+  passed before squash merge
+  `120266397aa5b1726640db15b6abd43d59c0fa62`; main CI run
+  `29258478772` passed.
+- Issue #612 / PR #613 candidate
+  `b4748c9a85602abb359906e627ebb581f7ac0bc1` passed 9 focused
+  virtual-list tests, the full all-feature widgets suite, warning-denied
+  all-target Clippy, no-deps docs, formatting, and diff checks. Independent
+  review found and verified the idle focused-row repaint/manual-wheel remedy,
+  ending at P0/P1/P2=`0/0/0`. PR CI run `29260324222` passed before
+  squash merge `0bfcca449420920a5849d0200a9c0f01b20622d6`; main CI run
+  `29260511552` passed.
+- Issue #614 / PR #615 candidate
+  `053db3d4e041a0bfb5e5dee85291eb05840c1d00` passed 9 focused
+  virtual-tree tests, the full all-feature widgets suite, warning-denied
+  all-target Clippy, no-deps docs, formatting, and diff checks. Independent
+  review ended at P0/P1/P2=`0/0/0`. PR CI run `29261750955` passed before
+  squash merge `ab1452a67ad633b04bfe63f2b1c32859e81ebe68`; main CI run
+  `29261938773` passed.
+- All three issues are closed, all three PRs are squash-merged, their exact
+  merge and CI evidence was rechecked on GitHub, and their campaign branches
+  are pruned.
+
+#### Remaining risks and deferred findings
+
+Meaningful retained identity requires caller-unique `ItemId` values. Projection
+and tree flattening remain linear in model size even though per-frame callback
+and output work is bounded. Rows are fixed-height with simple labels; tree
+semantics expose a flat ordered `List`/`ListItem` projection with disclosure
+state.
+
+Variable heights, custom row bodies/icons, lazy-loading UI, typeahead,
+select-all, drag/drop, context menus, inline rename, and painted scrollbars
+remain later or deferred work. No tag, package publication, deployment,
+release, or alpha-readiness claim occurred.
+
+### Integrated `COLL-UI-02`: virtual table composition
+
+Status: **Complete / Accepted**. Issues #616 and #618 closed through
+squash-merged PRs #617 and #619. This completes the Stage 5 implementation and
+acceptance gate; Stage 6 is Current / Authorized with `DOCK-UI-01` next.
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/collections/virtual_table.rs` adds the
+  prepared fixed-height table model, validation, bounded row materialization,
+  stable header/row/cell IDs, retained row/cell selection and reconciliation,
+  two-dimensional navigation/reveal, pointer targets, and constrained resize
+  requests.
+- `crates/kinetik-ui-widgets/src/ui/virtual_table.rs` adds public table
+  preparation and rendering, separate header/body clip and transform scopes,
+  retained scrolling, application-owned sort intents, pointer selection,
+  keyboard focus/reveal, selection-aware paint/semantics, and resize-drag
+  handling.
+- `crates/kinetik-ui-widgets/tests/virtual_table_conformance.rs` covers
+  100,000-row bounded work, two-axis frozen geometry, header behavior, sorting,
+  stable IDs, row/cell interaction, reorder/removal repair, keyboard traversal,
+  resize priority/constraints/positive floor, semantics, disabled/empty input,
+  and idle-wheel behavior.
+- `crates/kinetik-ui-widgets/src/{collections,ui}.rs` and `src/lib.rs`
+  expose the qualified public table contracts.
+
+#### Reasoning and contract decisions
+
+The work was split into a public paint/scroll/sort foundation and one serial
+interaction/resize packet to keep each PR reviewable while preserving one table
+architecture. Prepared geometry remains frozen for the frame: the header
+translates horizontally only, body content translates on both axes, and
+scroll/reveal/resize results become caller-owned next-frame state.
+
+`VirtualTableSelection` is the retained stable row/cell cursor and
+single-selection state. Row and column IDs survive reorder; prior indexes
+repair removals deterministically. Resize handles outrank header sort targets
+and reuse `TableLayout` constraints with a documented one-logical-pixel
+minimum. `Ui::virtual_table` now accepts caller-owned
+`VirtualTableSelection`, an intentional provisional breaking alpha API
+completion of the immediately preceding foundation.
+
+#### Tests run and results
+
+- Issue #616 / PR #617 candidate
+  `a0f0e63c1a85c22c6a5874914354f58d6c7ec81e` passed 5 focused
+  virtual-table tests, the full all-feature widgets suite, warning-denied
+  all-target Clippy, no-deps docs, formatting, and diff checks. Independent
+  review ended at P0/P1/P2=`0/0/0`. PR CI run `29263339408` passed before
+  squash merge `f7282e868b2c56899ac20a66a3fa4d01333e83e8`; main CI run
+  `29263497752` passed.
+- Issue #618 / PR #619 candidate
+  `020557b13484b6cdfbe1b9f79e7b330564c1a9b5` passed 10 focused
+  virtual-table tests, the full all-feature widgets suite, warning-denied
+  all-target Clippy, no-deps docs, formatting, and diff checks. Independent
+  review found and verified the unconstrained zero-width remedy, ending at
+  P0/P1/P2=`0/0/0`. PR CI run `29265455564` passed before squash merge
+  `98f4aec4c091438d8a86fee05c8c65ed9e96a5f2`; main CI run
+  `29265615424` passed its full format, Clippy, workspace test, build,
+  example, and documentation gates.
+- Both issues are closed, both PRs are squash-merged, their exact merge and CI
+  evidence was rechecked on GitHub, and their campaign branches are pruned.
+
+#### Remaining risks and deferred findings
+
+Horizontal column virtualization and variable-height rows remain deferred;
+vertical materialization is bounded, but each materialized row includes all
+configured columns. Projection row-ID uniqueness remains a caller contract,
+and very tall viewports with tiny rows can amplify bounded row grouping cost.
+
+Multi/range table selection, editing/clipboard, grouped headers, multi-sort and
+filter execution, auto-fit, keyboard resizing, column reordering, drag/drop,
+custom cell bodies, and painted scrollbars remain explicit non-goals. The Stage
+5 gate does not tag, publish, deploy, release, or claim alpha readiness; the
+repository remains foundation / developer preview while Stage 6 is Current /
+Authorized and Stage 7 remains Authorized / Queued.
 
 ## Packet Completion Template
 

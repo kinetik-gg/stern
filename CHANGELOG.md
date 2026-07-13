@@ -8,15 +8,28 @@ follow the repository release policy.
 `0.1.0-alpha.1` is the planned first prerelease. It has not been dated, tagged,
 published, or accepted as an alpha release.
 
-Integrated `CHROME-UI-01`: **Complete / Accepted**; `COLL-UI-01A` stable
-collection navigation and reconciliation is **next**, followed by the painted
-list/tree and table packets.
+Integrated Stage 5 composition foundations are **Complete / Accepted** through
+`COLL-UI-01` and `COLL-UI-02`. Stage 6 is **Current / Authorized** with
+`DOCK-UI-01` **next**; Stage 7 remains **Authorized / Queued**.
 
 No tag, package publication, deployment, release, or alpha-readiness claim is
-made by this acceptance.
+made by this stage acceptance.
 
 ### Changed
 
+- Added stable-ID collection cursor navigation and public fixed-height virtual
+  list/tree scenes with bounded large-data materialization, scrolling,
+  keyboard focus/reveal, selection, expansion, theme primitives, and ordered
+  semantics. Integrated `COLL-UI-01` is accepted; variable-height rows,
+  custom row bodies, drag/drop, and inline rename remain later component work.
+- Added a public fixed-height virtual table scene with headers and cells,
+  two-axis retained scrolling, application-owned sort intents, stable row/cell
+  selection, two-dimensional keyboard focus/reveal, constrained column resize
+  requests, theme primitives, and ordered table semantics. Integrated
+  `COLL-UI-02` is accepted; horizontal column virtualization, editing,
+  multi-selection, grouped headers, and column reordering remain outside the
+  MVP. `Ui::virtual_table` now takes caller-owned retained
+  `VirtualTableSelection`, a provisional breaking alpha API change.
 - Added stable-key chrome overflow projection and one public borrowed painted
   chrome scene over menu bar, toolbar, tab strip, and status bar models. The
   scene contributes clipped pointer targets, emits themed backend-independent

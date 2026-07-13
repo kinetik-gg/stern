@@ -6,9 +6,10 @@ the alpha-readiness campaign. Prelude inclusion is a convenience decision and
 never implies Stable conformance. Candidate-for-alpha-stable is a separate
 product decision from conformance status.
 
-Integrated `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` are
-**Complete / Accepted**; `COLL-UI-01A` stable collection navigation and
-reconciliation is **next**.
+Integrated Stage 5 is **Complete / Accepted** through `REND-04`,
+`LAYOUT-UI-01`, `OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and
+`COLL-UI-02`. Stage 6 is **Current / Authorized** with `DOCK-UI-01`
+**next**; Stage 7 remains **Authorized / Queued**.
 
 No tag, package publication, deployment, release, or alpha-readiness claim is
 made by these acceptances.
@@ -69,7 +70,7 @@ curation.
 | Winit | Provisional Experimental, feature-gated | `kinetik_ui::platform_winit` | Yes: supported window and platform loop | Winit input, IME/clipboard/cursor/platform-request, accessibility boundary, and redraw-loop proof; no new prelude exports before presenter proof |
 | Vello | Provisional Experimental, feature-gated | `kinetik_ui::render_vello` | Yes: supported 2D backend and presenter | Surface acquisition/recovery, resize/scale, presentation, diagnostics, and Vello-backed workflow proof; no new prelude exports before presenter proof |
 | Vello/Winit presenter | Provisional Experimental, feature-gated, qualified only | `kinetik_ui::vello_winit` | Yes: supported one-window live presenter | REND-04 is Complete / Accepted with real-GPU and packaged-example evidence; access remains qualified only, and no presenter item enters the prelude |
-| Widgets | Provisional Experimental | Common composition path: `kinetik_ui::widgets`; advanced APIs use the qualified modules listed below | Yes: controls and viewport surface; exact final subset deferred | `LAYOUT-UI-01` accepts measured containers, `OVL-UI-01` accepts the qualified painted overlay scene, and `CHROME-UI-01` accepts qualified overflow/painted-chrome seams; no prelude promotion, and public live-workflow evidence remains required |
+| Widgets | Provisional Experimental | Common composition path: `kinetik_ui::widgets`; advanced APIs use the qualified modules listed below | Yes: controls and viewport surface; exact final subset deferred | `LAYOUT-UI-01` accepts measured containers; `OVL-UI-01`, `CHROME-UI-01`, and `COLL-UI-01/02` accept qualified painted overlay, chrome, and collection seams; no prelude promotion, and public live-workflow evidence remains required |
 
 ### Facade state inventory
 
@@ -232,9 +233,14 @@ delivered by accepted `CHROME-UI-01`, and the public editor workflow remains
 
 `CHROME-UI-01` accepts the qualified `kinetik_ui::widgets::chrome` overflow and
 scene contracts plus their public `Ui` paint/input/semantic integration. It
-does not add chrome symbols to the default prelude. Collection composition now
-proceeds through bounded `COLL-UI-01A` navigation/reconciliation before public
-painted list/tree and table surfaces.
+does not add chrome symbols to the default prelude.
+
+`COLL-UI-01` and `COLL-UI-02` accept the qualified
+`kinetik_ui::widgets::collections` navigation, virtual-list, virtual-tree, and
+virtual-table contracts plus their public `Ui` paint/input/semantic
+integration. They do not add collection symbols to the default prelude. Final
+promotion still requires the facade-only `SHOW-02` workflow and Stage 7
+`API-01` review.
 
 ## Final-Review Ledger
 
