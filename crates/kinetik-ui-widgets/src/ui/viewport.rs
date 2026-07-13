@@ -41,16 +41,26 @@ impl Ui<'_> {
         let mut response =
             self.runtime
                 .captured_domain_drag_gesture(widget.widget_id(), bounds, disabled);
+        let pointer_pressed = response
+            .actions
+            .iter()
+            .any(|action| matches!(action.phase, DomainDragGesturePhase::Press));
+        let gesture_ended = response.actions.iter().any(|action| {
+            matches!(
+                action.phase,
+                DomainDragGesturePhase::Release | DomainDragGesturePhase::Cancel
+            )
+        });
 
-        if response.response.clicked {
+        if pointer_pressed || response.response.clicked {
             self.runtime.memory_mut().focus(widget.widget_id());
         }
         response.response.state.focused = self.memory().is_focused(widget.widget_id());
 
-        let drag_is_active = response.response.dragged
+        let drag_has_movement = response.response.dragged
             || self.memory().is_drag_source(widget.widget_id())
             || self.memory().released_drag_source() == Some(widget.widget_id());
-        if drag_is_active {
+        if drag_has_movement {
             for action in &response.actions {
                 if matches!(action.phase, DomainDragGesturePhase::Move) {
                     next.pan_by(action.delta);
@@ -134,7 +144,7 @@ impl Ui<'_> {
         *pan_zoom = next;
 
         if !disabled {
-            let cursor = if drag_is_active {
+            let cursor = if self.memory().is_drag_source(widget.widget_id()) {
                 CursorShape::Grabbing
             } else {
                 CursorShape::Grab
@@ -172,6 +182,7 @@ impl Ui<'_> {
             || response.response.clicked
             || response.response.dragged
             || response.response.state.pressed
+            || gesture_ended
         {
             self.request_repaint(RepaintRequest::NextFrame);
         }
