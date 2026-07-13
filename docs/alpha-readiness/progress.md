@@ -2,23 +2,24 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Campaign status: integrated `LAYOUT-UI-01` is **Complete / Accepted**;
-`OVL-UI-01` is **next**, and `COLL-UI-01` is queued behind the frozen
-measured-`Ui` seam.
+Campaign status: integrated `OVL-UI-01` is **Complete / Accepted**;
+`CHROME-UI-01` is **next**, and `COLL-UI-01` remains queued behind the frozen
+measured-`Ui` and overlay seams.
 
-Integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**.
+Integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` are **Complete /
+Accepted**.
 
 Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
-Stages 0-4 are Complete; Stage 4 is Complete / Accepted through `REND-02` squash merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`. Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, `REND-04`, and `LAYOUT-UI-01` Complete / Accepted; `OVL-UI-01` is next, while `COLL-UI-01` is queued behind the frozen measured-`Ui` seam. Stages 6-7 remain Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
+Stages 0-4 are Complete; Stage 4 is Complete / Accepted through `REND-02` squash merge `1239dd994619de3765d8cee05c5f8ddd34c2c6de`. Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` Complete / Accepted; `CHROME-UI-01` is next, while `COLL-UI-01` remains queued behind the frozen measured-`Ui` and overlay seams. Stages 6-7 remain Authorized / Queued for continuous sequential execution without intermediate approval. Every remaining packet still has to pass its deterministic gates, and any Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
 ## Stage 0: Plan And Baseline
 
-Status: Complete. This closed the documentation task only; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with presenter, external-texture, and measured-layout work Complete / Accepted; `OVL-UI-01` is next under the recorded campaign authorization.
+Status: Complete. This closed the documentation task only; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with presenter, external-texture, measured-layout, and overlay work Complete / Accepted; `CHROME-UI-01` is next under the recorded campaign authorization.
 
 ### Changed files
 
@@ -2196,8 +2197,8 @@ alpha-readiness claim occurred.
 ### Integrated `LAYOUT-UI-01`: measured composition foundation
 
 Status: **Complete / Accepted**. Issues #590, #592, and #594 closed through
-squash-merged PRs #591, #593, and #596. `OVL-UI-01` is next, while
-`COLL-UI-01` is queued behind the frozen measured-`Ui` seam.
+squash-merged PRs #591, #593, and #596. `OVL-UI-01` was the next packet at
+this checkpoint and is now Complete / Accepted.
 
 #### Changed files
 
@@ -2263,6 +2264,80 @@ No interactive pixel/screenshot comparison was run; exact geometry assertions
 and structural/rendering tests cover the dogfood refactor. Broader Showcase
 migration remains later feature-packet and `SHOW-02` work. No tag, package
 publication, deployment, release, or alpha-readiness claim occurred.
+
+### Integrated `OVL-UI-01`: painted overlay composition
+
+Status: **Complete / Accepted**. Issues #595 and #599 closed through
+squash-merged PRs #600 and #601. `CHROME-UI-01` is next, while `COLL-UI-01`
+remains queued behind the frozen measured-`Ui` and overlay seams.
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/overlays/{navigation,menu,dropdown}.rs`, the
+  overlay module, and `tests/overlay_keyboard_conformance.rs` add pure wrapping
+  keyboard navigation, bounded caller-clocked typeahead, reconciliation,
+  submenu metadata, and application-owned menu/dropdown intents.
+- `crates/kinetik-ui-widgets/src/overlays/scene.rs`,
+  `crates/kinetik-ui-widgets/src/ui/overlays.rs`, their public module seams, and
+  `tests/overlay_scene_conformance.rs` add one typed public scene for every
+  overlay kind, frame-wide pointer-target contribution, theme-based painting,
+  lifecycle/action results, stable interactive IDs, and ordered semantics.
+- The changelog, public API policy, GPU presenter ADR, and readiness documents
+  record integrated acceptance and the next serialized Stage 5 work.
+
+#### Reasoning and contract decisions
+
+The overlay work was serialized into a windowless model packet and one shared
+paint/input/semantics packet so the public scene reuses a single navigation
+contract instead of creating separate widget architectures. The scene
+contributes barriers, surface blockers, and enabled row targets to the caller's
+single closed-world pointer plan, then emits backend-independent primitives and
+ordered semantics through `Ui`. It returns lifecycle, selection, submenu, and
+action intents; application command execution remains outside widgets.
+
+Interactive row IDs derive from overlay identity plus stable action/item
+identity. Disabled, hidden, label, separator, clipped, and overflow rows remain
+inert. Outside activation and Escape dismiss one deterministic topmost surface,
+and keyboard/pointer activation share the same result path. Menu-bar triggers
+and overflow painting stay with `CHROME-UI-01`; this acceptance does not claim a
+complete editor workflow.
+
+#### Tests run and results
+
+- Issue #595 / PR #600 candidate
+  `c128becdc6e7a601cc87e93bb55a4a4e510a3689` passed 9 focused overlay keyboard
+  conformance tests, the full all-feature widgets suite, warning-denied
+  all-target Clippy, warning-denied no-deps docs, formatting, and diff checks.
+  Independent review found and verified the current-relative typeahead remedy,
+  ending at P0/P1/P2=`0/0/0`. PR CI run `29250930936` passed before squash
+  merge `a2b183effbe4a3c0be9ac027e8a41f05595b0b47`; main CI run `29251080769`
+  passed.
+- Issue #599 / PR #601 candidate
+  `465d5f58b9701efcd4201b61c52900f820f20d4c` passed 11 focused overlay-scene
+  conformance tests, warning-denied all-target Clippy, warning-denied no-deps
+  docs, formatting, and diff checks. Independent review verified the
+  exactly-once focused-keyboard activation remedy and ended at
+  P0/P1/P2=`0/0/0`. PR CI run `29253044647` passed before squash merge
+  `5dd7735c90ded62fd6871ba5621577b5d879ff38`; main CI run `29253206045`
+  passed.
+- Both issues are closed, both PRs are squash-merged, and their exact merge and
+  CI evidence was rechecked on GitHub for this documentation closure.
+
+#### Remaining risks and deferred findings
+
+Typeahead uses lowercase prefix comparison rather than locale-sensitive
+normalization or full case folding, assumes unique action IDs within one menu,
+and depends on callers supplying consistent millisecond timestamps. Duplicate
+passive labels/separators use occurrence identity because the existing menu
+model has no passive-item ID. Command-palette query editing remains
+application-owned.
+
+Menu-bar trigger and overflow painting remain explicitly owned by
+`CHROME-UI-01`. Broader Showcase adoption and public editor workflow proof
+remain `SHOW-02`. Rich arbitrary modal/popover body layout, animation, submenu
+aim delay, native OS menus, gamepad/touch behavior, and a new theme schema stay
+outside this MVP. No tag, package publication, deployment, release, or
+alpha-readiness claim occurred.
 
 ## Packet Completion Template
 

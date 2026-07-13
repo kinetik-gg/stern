@@ -4,11 +4,12 @@
 
 ## Execution Contract
 
-Campaign status: integrated `LAYOUT-UI-01` is **Complete / Accepted**;
-`OVL-UI-01` is **next**, and `COLL-UI-01` is queued behind the frozen
-measured-`Ui` seam.
+Campaign status: integrated `OVL-UI-01` is **Complete / Accepted**;
+`CHROME-UI-01` is **next**, and `COLL-UI-01` remains queued behind the frozen
+measured-`Ui` and overlay seams.
 
-Integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**.
+Integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` are **Complete /
+Accepted**.
 
 Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
 
@@ -16,11 +17,11 @@ Kinetik UI remains a foundation/developer-preview; this packet does not tag, pub
 
 | Field | Decision |
 | --- | --- |
-| Status | Current / Authorized; integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**; `OVL-UI-01` is **next**. |
+| Status | Current / Authorized; integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` are **Complete / Accepted**; `CHROME-UI-01` is **next**. |
 | Scope | Presenter ownership/external textures and measured public composition foundations |
 | Impact / confidence | Critical / Medium overall |
 | Campaign prerequisite | Stage 4 gate, Complete / Accepted; campaign authorization recorded |
-| Token checkpoint | Very large; native-texture interoperability and measured composition are accepted, so execute `OVL-UI-01` next; `COLL-UI-01` is queued behind the frozen seam |
+| Token checkpoint | Very large; native-texture interoperability, measured composition, and overlays are accepted, so execute `CHROME-UI-01` next; `COLL-UI-01` remains queued behind frozen shared seams |
 
 ## Packets
 
@@ -30,7 +31,7 @@ Kinetik UI remains a foundation/developer-preview; this packet does not tag, pub
 | Presenter | `REND-03` | Extract reusable Winit/Vello window, resize, recovery, submit, and present behavior from showcase-private code | `REND-ADR-01`, `IN-02` | Critical / Medium | Root integration; Complete / Accepted |
 | Presenter | `REND-04` | Register/update/remove domain-owned native GPU textures without mandatory CPU snapshots | `REND-03` | Critical / Medium | Root integration; Complete / Accepted |
 | Composition | `LAYOUT-UI-01` | Measured row/column/grid/padding/stack/scroll allocation through public `Ui` APIs | `RT-01` | Critical / Medium-high | Root-owned shared seam; Complete / Accepted |
-| Composition | `OVL-UI-01` | Public painted menus, dropdowns, context/popover/tooltip/palette/modal behavior | `RT-02`, `RT-03`, `LAYOUT-UI-01` | High / Medium | Root arbitration; leaf work after seam freeze |
+| Composition | `OVL-UI-01` | Public painted menus, dropdowns, context/popover/tooltip/palette/modal behavior | `RT-02`, `RT-03`, `LAYOUT-UI-01` | High / Medium | Root arbitration; Complete / Accepted |
 | Composition | `CHROME-UI-01` | Public toolbar, tab strip, status bar, and overflow behavior | Layout, overlay/input/action contracts | High / Medium-high | Isolated leaf after seams freeze |
 | Composition | `COLL-UI-01` | Public virtual list/tree with scroll, keyboard, focus, selection, expansion, semantics | `RT-01`, `LAYOUT-UI-01` | High / High | Isolated after seams freeze |
 | Composition | `COLL-UI-02` | Public table/grid with headers, two-axis scroll, sort, selection, resize | `COLL-UI-01` | High / High | Isolated; serial with `COLL-UI-01` |
@@ -48,9 +49,12 @@ Complete / Accepted through reusable presenter and Showcase adoption evidence;
 example, and extracted archive proof. `LAYOUT-UI-01` is Complete / Accepted
 through deterministic core allocation, public measured `Ui` containers, and
 facade/Showcase dogfood without caller-computed rectangles. `OVL-UI-01` is
-next, while `COLL-UI-01` remains queued behind the frozen seam. After each
-checkpoint passes, the campaign continues without intermediate approval; an
-ambiguity or failed gate is a stop condition. The stage gate then requires a supported
+Complete / Accepted through pure navigation and typeahead models plus the
+public painted scene's pointer arbitration, primitives, action intents, and
+ordered semantics. `CHROME-UI-01` is next, while `COLL-UI-01` remains queued
+behind the frozen shared seams. After each checkpoint passes, the campaign
+continues without intermediate approval; an ambiguity or failed gate is a stop
+condition. The stage gate then requires a supported
 presenter outside the showcase; proven domain GPU texture interoperability or
 removal from the alpha promise; overlay compliance with Stage 2/3 contracts;
 and rendered-input plus semantic tests for chrome and collections.

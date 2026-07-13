@@ -8,14 +8,23 @@ follow the repository release policy.
 `0.1.0-alpha.1` is the planned first prerelease. It has not been dated, tagged,
 published, or accepted as an alpha release.
 
-Integrated `LAYOUT-UI-01`: **Complete / Accepted**; `OVL-UI-01` is **next**,
-and `COLL-UI-01` is queued behind the frozen measured-`Ui` seam.
+Integrated `OVL-UI-01`: **Complete / Accepted**; `CHROME-UI-01` is **next**,
+and `COLL-UI-01` remains queued behind the frozen measured-`Ui` and overlay
+seams.
 
 No tag, package publication, deployment, release, or alpha-readiness claim is
 made by this acceptance.
 
 ### Changed
 
+- Added pure menu/dropdown keyboard, typeahead, reconciliation, and submenu
+  intents plus one public painted overlay scene for menus, context menus,
+  dropdowns, command palettes, modals, popovers, tooltips, and drag previews.
+  The scene contributes to the caller's frame-wide pointer plan, emits themed
+  backend-independent primitives and ordered semantics, and returns lifecycle
+  and application-owned action intents. Integrated `OVL-UI-01` is accepted;
+  menu-bar trigger/overflow painting remains `CHROME-UI-01`, and broader
+  Showcase adoption remains `SHOW-02`.
 - Added deterministic measured grid allocation and public keyed `Ui` row,
   column, grid, padding, stack, and scrolling containers, then dogfooded that
   seam through the facade example and Showcase layout preview without changing

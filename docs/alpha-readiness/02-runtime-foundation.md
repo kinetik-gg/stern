@@ -4,11 +4,12 @@
 
 ## Execution Contract
 
-Campaign status: integrated `LAYOUT-UI-01` is **Complete / Accepted**;
-`OVL-UI-01` is **next**, and `COLL-UI-01` is queued behind the frozen
-measured-`Ui` seam.
+Campaign status: integrated `OVL-UI-01` is **Complete / Accepted**;
+`CHROME-UI-01` is **next**, and `COLL-UI-01` remains queued behind the frozen
+measured-`Ui` and overlay seams.
 
-Integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**.
+Integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` are **Complete /
+Accepted**.
 
 Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
 
@@ -16,7 +17,7 @@ Kinetik UI remains a foundation/developer-preview; this packet does not tag, pub
 
 | Field | Decision |
 | --- | --- |
-| Status | Complete / Accepted at `5cf07b8`; Stages 3-4 subsequently passed and Stage 5 is Current / Authorized with presenter, external-texture, and measured-layout work accepted; `OVL-UI-01` is next |
+| Status | Complete / Accepted at `5cf07b8`; Stages 3-4 subsequently passed and Stage 5 is Current / Authorized with presenter, external-texture, measured-layout, and overlay work accepted; `CHROME-UI-01` is next |
 | Scope | Shared coordinate, arbitration, and interaction-ownership invariants |
 | Impact / confidence | Critical / High |
 | Campaign prerequisite | Stage 1 gate; campaign authorization recorded |
@@ -56,9 +57,9 @@ approval.
 duplicate registration, to cancel removed interaction owners at `end_frame`.
 Its independent critic and the integrated Stage 2 gate passed after one
 fixture-only depth-one remedy. Stages 3-4 subsequently passed, and Stage 5 is
-Current / Authorized with `REND-ADR-01`, `REND-03`, integrated `REND-04`, and
-`LAYOUT-UI-01` accepted; `OVL-UI-01` is next under the continuous campaign
-authorization.
+Current / Authorized with `REND-ADR-01`, `REND-03`, integrated `REND-04`,
+`LAYOUT-UI-01`, and `OVL-UI-01` accepted; `CHROME-UI-01` is next under the
+continuous campaign authorization.
 
 ## Deferrals
 

@@ -8,9 +8,9 @@ This decision closes `REND-ADR-01`; the reusable presenter and Showcase
 adoption close integrated `REND-03`, and the accepted implementation plus GPU,
 example, and archive evidence close integrated `REND-04`.
 
-Integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**;
-`OVL-UI-01` is **next**, and `COLL-UI-01` is queued behind the frozen
-measured-`Ui` seam.
+Integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` are **Complete /
+Accepted**; `CHROME-UI-01` is **next**, and `COLL-UI-01` remains queued behind
+the frozen measured-`Ui` and overlay seams.
 
 No tag, package publication, deployment, release, or alpha-readiness claim is
 made by these acceptances.

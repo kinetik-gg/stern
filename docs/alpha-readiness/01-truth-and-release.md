@@ -4,11 +4,12 @@
 
 ## Execution Contract
 
-Campaign status: integrated `LAYOUT-UI-01` is **Complete / Accepted**;
-`OVL-UI-01` is **next**, and `COLL-UI-01` is queued behind the frozen
-measured-`Ui` seam.
+Campaign status: integrated `OVL-UI-01` is **Complete / Accepted**;
+`CHROME-UI-01` is **next**, and `COLL-UI-01` remains queued behind the frozen
+measured-`Ui` and overlay seams.
 
-Integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**.
+Integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` are **Complete /
+Accepted**.
 
 Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
 
@@ -16,7 +17,7 @@ Kinetik UI remains a foundation/developer-preview; this packet does not tag, pub
 
 | Field | Decision |
 | --- | --- |
-| Status | Complete / Accepted; Stages 2-4 subsequently passed and Stage 5 is Current / Authorized with presenter, external-texture, and measured-layout work accepted; `OVL-UI-01` is next |
+| Status | Complete / Accepted; Stages 2-4 subsequently passed and Stage 5 is Current / Authorized with presenter, external-texture, measured-layout, and overlay work accepted; `CHROME-UI-01` is next |
 | Scope | Capability truth, provisional public boundary, showcase truth, and packageability scaffolding |
 | Impact / confidence | High / High overall; `API-01` is Medium-high confidence |
 | Campaign prerequisite | Stage 0 documentation gate, complete; campaign authorization recorded |

@@ -4,11 +4,12 @@
 
 ## Execution Contract
 
-Campaign status: integrated `LAYOUT-UI-01` is **Complete / Accepted**;
-`OVL-UI-01` is **next**, and `COLL-UI-01` is queued behind the frozen
-measured-`Ui` seam.
+Campaign status: integrated `OVL-UI-01` is **Complete / Accepted**;
+`CHROME-UI-01` is **next**, and `COLL-UI-01` remains queued behind the frozen
+measured-`Ui` and overlay seams.
 
-Integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**.
+Integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` are **Complete /
+Accepted**.
 
 Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
 
@@ -19,7 +20,7 @@ Kinetik UI remains a foundation/developer-preview; this packet does not tag, pub
 | Status | Complete; documentation only; no audit roadmap ID closes here |
 | Impact / confidence | High / High |
 | Dependency | Accepted architecture gate at audited revision `32b45f2` |
-| Token checkpoint | Documentation verification passed; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with presenter, external-texture, and measured-layout work accepted; `OVL-UI-01` is next |
+| Token checkpoint | Documentation verification passed; Stages 1-4 subsequently completed and Stage 5 is Current / Authorized with presenter, external-texture, measured-layout, and overlay work accepted; `CHROME-UI-01` is next |
 
 ## Scope And Work Items
 
@@ -59,7 +60,7 @@ Only one active task may own a zone unless accepted tasks prove exact disjoint f
 
 ## Acceptance Gate And Verification Expectations
 
-Stage 0 completed only after all ten target documents existed, all 43 unique IDs were represented, index-local links resolved, dependencies and overlap zones matched the accepted plan, and documentation-only checks passed. Stages 1-4 subsequently completed, and Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, integrated `REND-04`, and `LAYOUT-UI-01` accepted; `OVL-UI-01` is next, while `COLL-UI-01` is queued behind the frozen measured-`Ui` seam. A stale path, invented finding, changed alpha scope, or write outside the allowed paths remains a stop condition.
+Stage 0 completed only after all ten target documents existed, all 43 unique IDs were represented, index-local links resolved, dependencies and overlap zones matched the accepted plan, and documentation-only checks passed. Stages 1-4 subsequently completed, and Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` accepted; `CHROME-UI-01` is next, while `COLL-UI-01` remains queued behind the frozen measured-`Ui` and overlay seams. A stale path, invented finding, changed alpha scope, or write outside the allowed paths remains a stop condition.
 
 Verification is limited to Markdown/file/link/ID review, `git diff --check`, targeted search, and targeted status. No source or test gate is claimed.
 

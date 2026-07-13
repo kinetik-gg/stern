@@ -4,11 +4,12 @@
 
 ## Execution Contract
 
-Campaign status: integrated `LAYOUT-UI-01` is **Complete / Accepted**;
-`OVL-UI-01` is **next**, and `COLL-UI-01` is queued behind the frozen
-measured-`Ui` seam.
+Campaign status: integrated `OVL-UI-01` is **Complete / Accepted**;
+`CHROME-UI-01` is **next**, and `COLL-UI-01` remains queued behind the frozen
+measured-`Ui` and overlay seams.
 
-Integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**.
+Integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` are **Complete /
+Accepted**.
 
 Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
 
@@ -20,7 +21,7 @@ Kinetik UI remains a foundation/developer-preview; this packet does not tag, pub
 | Scope | Async liveness, desktop/Unicode text, bounded caches, and renderer correctness |
 | Impact / confidence | Critical / Medium-high overall |
 | Campaign prerequisite | Stage 3 gate; campaign authorization recorded |
-| Token checkpoint | Stage 4 gate passed; Stage 5 is Current / Authorized with presenter, external-texture, and measured-layout work accepted; `OVL-UI-01` is next |
+| Token checkpoint | Stage 4 gate passed; Stage 5 is Current / Authorized with presenter, external-texture, measured-layout, and overlay work accepted; `CHROME-UI-01` is next |
 
 ## Packets
 
@@ -317,8 +318,9 @@ caret/selection geometry agreement at scale factors 1.25, 1.5, and 1.75.
 
 At this gate, Stage 5 advanced to Current / Authorized with `REND-ADR-01`
 next. ADR 0001 subsequently accepted that decision, `REND-03` is now Complete /
-Accepted, integrated `REND-04` and `LAYOUT-UI-01` are Complete / Accepted,
-`OVL-UI-01` is next, and `COLL-UI-01` is queued behind the frozen seam.
+Accepted, integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` are Complete /
+Accepted, `CHROME-UI-01` is next, and `COLL-UI-01` remains queued behind the
+frozen measured-`Ui` and overlay seams.
 Every Stage 5 packet still requires its own deterministic task gate; a failed
 checkpoint or unresolved ownership decision halts the campaign.
 

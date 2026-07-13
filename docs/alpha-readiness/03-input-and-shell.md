@@ -4,11 +4,12 @@
 
 ## Execution Contract
 
-Campaign status: integrated `LAYOUT-UI-01` is **Complete / Accepted**;
-`OVL-UI-01` is **next**, and `COLL-UI-01` is queued behind the frozen
-measured-`Ui` seam.
+Campaign status: integrated `OVL-UI-01` is **Complete / Accepted**;
+`CHROME-UI-01` is **next**, and `COLL-UI-01` remains queued behind the frozen
+measured-`Ui` and overlay seams.
 
-Integrated `REND-04` and `LAYOUT-UI-01` are **Complete / Accepted**.
+Integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` are **Complete /
+Accepted**.
 
 Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
 
@@ -107,9 +108,10 @@ appropriate to their owned paths. Event reordering, stale requests, Z2/Z3
 overlap, and shell behavior with no recorded owner would have stopped the
 campaign. Those checks passed; at the Stage 3 gate, the campaign advanced Stage
 4 to Current / Authorized without requiring new approval. Stage 4 subsequently
-passed, and Stage 5 is now Current / Authorized with `REND-ADR-01` and
-`REND-03`, integrated `REND-04`, and `LAYOUT-UI-01` accepted; `OVL-UI-01` is
-next, while `COLL-UI-01` is queued behind the frozen measured-`Ui` seam.
+passed, and Stage 5 is now Current / Authorized with `REND-ADR-01`, `REND-03`,
+integrated `REND-04`, `LAYOUT-UI-01`, and `OVL-UI-01` accepted;
+`CHROME-UI-01` is next, while `COLL-UI-01` remains queued behind the frozen
+measured-`Ui` and overlay seams.
 
 ## Deferrals
 
