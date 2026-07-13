@@ -2,6 +2,7 @@
 
 mod affordances;
 mod layout;
+mod property_grid;
 mod row;
 mod status;
 mod util;
@@ -13,6 +14,11 @@ pub use affordances::{
     property_grid_row_status_semantics,
 };
 pub use layout::{PropertyGridError, PropertyGridLayout, PropertyGridRowRect};
+pub use property_grid::{
+    PropertyGridAccess, PropertyGridCell, PropertyGridConfig, PropertyGridIntent,
+    PropertyGridOutput, PropertyGridValueOutput, property_grid_row_widget_id,
+    property_grid_value_widget_id,
+};
 pub use row::{
     PropertyGridKeyframeAffordance, PropertyGridResetAffordance, PropertyGridRow,
     PropertyGridRowAffordances, PropertyGridRowKind, PropertyGridRowState,
