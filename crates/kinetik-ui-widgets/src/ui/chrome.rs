@@ -1,3 +1,5 @@
+mod system_feedback;
+
 use kinetik_ui_core::{
     Brush, ClipId, ComponentState, Point, Primitive, Rect, RectPrimitive, RepaintRequest,
     SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, Stroke, TextPrimitive,

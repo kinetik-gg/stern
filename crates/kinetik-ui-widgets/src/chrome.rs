@@ -7,6 +7,7 @@ mod menu_bar;
 mod overflow;
 mod scene;
 mod status_bar;
+mod system_feedback;
 mod tab_strip;
 mod toolbar;
 
@@ -33,5 +34,15 @@ pub use scene::{
 };
 pub(crate) use scene::{ChromeSceneRow, ChromeSceneRowKind};
 pub use status_bar::{StatusBar, StatusItem, StatusItemId, StatusItemKind, StatusProgress};
+pub use system_feedback::{
+    DiagnosticAction, DiagnosticActionKind, DiagnosticActionRequest, DiagnosticActionSet,
+    SystemFeedbackOutput, SystemFeedbackRequest, SystemFeedbackResponse, SystemFeedbackScene,
+    SystemFeedbackSceneConfig, SystemFeedbackSceneError, SystemFeedbackSurface,
+    SystemFeedbackTarget,
+};
+#[allow(unused_imports)] // Re-exported for the sibling UI renderer module.
+pub(crate) use system_feedback::{
+    SystemFeedbackActionRow, SystemFeedbackRow, SystemFeedbackRowKind, SystemFeedbackSurfaceLayout,
+};
 pub use tab_strip::{TabStrip, TabStripMove, TabStripTarget};
 pub use toolbar::{Toolbar, ToolbarGroup, ToolbarGroupId, ToolbarItem, ToolbarItemPresentation};
