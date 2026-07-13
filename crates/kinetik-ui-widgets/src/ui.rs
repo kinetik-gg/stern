@@ -8,6 +8,7 @@ mod collections;
 mod dock;
 mod frame;
 mod inspector_fields;
+mod inspector_pickers;
 mod layout;
 mod output;
 mod overlays;

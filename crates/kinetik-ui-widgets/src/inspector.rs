@@ -2,6 +2,7 @@
 
 mod affordances;
 mod layout;
+pub(crate) mod pickers;
 mod property_grid;
 mod row;
 mod status;
@@ -14,6 +15,11 @@ pub use affordances::{
     property_grid_row_status_semantics,
 };
 pub use layout::{PropertyGridError, PropertyGridLayout, PropertyGridRowRect};
+pub use pickers::{
+    AssetPickerItem, InspectorPickerCancelReason, InspectorPickerCommit, InspectorPickerKind,
+    InspectorPickerOutput, InspectorPickerScene, InspectorPickerState, PathPickerKind,
+    PathPickerOutcome, PathPickerRequest, PathPickerResult,
+};
 pub use property_grid::{
     PropertyGridAccess, PropertyGridCell, PropertyGridConfig, PropertyGridIntent,
     PropertyGridOutput, PropertyGridValueOutput, property_grid_row_widget_id,
