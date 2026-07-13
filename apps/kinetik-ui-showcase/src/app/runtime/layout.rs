@@ -1,9 +1,9 @@
 use super::super::{
     Axis, Dock, DockDropTarget, DockNode, DockPlacement, DockSplitDemoState, Frame, FrameId,
-    GridColumns, GridLayout, Insets, ItemId, LayoutItem, Measurement, Panel, PanelId, Rect,
-    SemanticNode, SemanticRole, ShowcaseApp, Size, SizeRule, TableColumn, TableLayout, Ui,
-    column_layout, frame_tabs, page_rect, panel_title, panel_title_body, rect, rect_from_size, rgb,
-    row_layout, section_title, solve_dock_layout, solve_dock_splitters, text,
+    Insets, ItemId, LayoutItem, Measurement, Panel, PanelId, Rect, SemanticNode, SemanticRole,
+    ShowcaseApp, Size, SizeRule, TableColumn, TableLayout, Ui, frame_tabs, page_rect, panel_title,
+    panel_title_body, rect, rect_from_size, rgb, section_title, solve_dock_layout,
+    solve_dock_splitters, text,
 };
 use kinetik_ui::widgets::FrameLayout;
 
@@ -65,17 +65,23 @@ impl ShowcaseApp {
                     Measurement::new(Size::new(96.0, 42.0)),
                 ),
             ];
-            for (index, rect_value) in row_layout(row_bounds, &items, 8.0).into_iter().enumerate() {
-                rect(ui, rect_value, rgb(36, 42, 50), Some(rgb(90, 110, 140)));
-                text(
-                    ui,
-                    rect_value.x + 12.0,
-                    rect_value.y + 26.0,
-                    &format!("Row {index}"),
-                    11.0,
-                    rgb(236, 236, 236),
-                );
-            }
+            ui.row(
+                "layout.measurement.row",
+                row_bounds,
+                &items,
+                8.0,
+                |ui, index, rect_value| {
+                    rect(ui, rect_value, rgb(36, 42, 50), Some(rgb(90, 110, 140)));
+                    text(
+                        ui,
+                        rect_value.x + 12.0,
+                        rect_value.y + 26.0,
+                        &format!("Row {index}"),
+                        11.0,
+                        rgb(236, 236, 236),
+                    );
+                },
+            );
 
             let column_items = [
                 LayoutItem::new(
@@ -95,21 +101,29 @@ impl ShowcaseApp {
                 ),
             ];
             let column_bounds = Rect::new(body.x + 4.0, body.y + 70.0, 220.0, 122.0);
-            for rect_value in column_layout(column_bounds, &column_items, 8.0) {
-                rect(ui, rect_value, rgb(44, 38, 52), Some(rgb(120, 94, 150)));
-            }
+            ui.column(
+                "layout.measurement.column",
+                column_bounds,
+                &column_items,
+                8.0,
+                |ui, _, rect_value| {
+                    rect(ui, rect_value, rgb(44, 38, 52), Some(rgb(120, 94, 150)));
+                },
+            );
 
             let grid_x = (body.x + 280.0).min(body.max_x() - 220.0).max(body.x + 4.0);
-            let adaptive = GridLayout {
-                columns: GridColumns::Adaptive { min_width: 64.0 },
-                item_size: Size::new(58.0, 32.0),
-                gap: 8.0,
-            };
-            for item in
-                adaptive.item_rects(Rect::new(grid_x, body.y + 70.0, 220.0, 120.0), 12, 0..12)
-            {
-                rect(ui, item.rect, rgb(38, 45, 44), Some(rgb(84, 122, 110)));
-            }
+            ui.grid(
+                "layout.measurement.grid",
+                Rect::new(grid_x, body.y + 70.0, 220.0, 120.0),
+                &[SizeRule::Fixed(58.0); 3],
+                &[SizeRule::Fixed(32.0); 4],
+                &[Measurement::default(); 12],
+                8.0,
+                8.0,
+                |ui, _, rect_value| {
+                    rect(ui, rect_value, rgb(38, 45, 44), Some(rgb(84, 122, 110)));
+                },
+            );
         });
     }
 
