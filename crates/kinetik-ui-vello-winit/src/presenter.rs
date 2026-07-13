@@ -1031,3 +1031,6 @@ impl PresentOperations for RealPresentOperations<'_> {
         classify_current_device_events(events)
     }
 }
+
+#[cfg(test)]
+mod gpu_tests;
