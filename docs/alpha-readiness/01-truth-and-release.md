@@ -4,21 +4,21 @@
 
 ## Execution Contract
 
-Campaign status: Stage 5 is **Complete / Accepted** through integrated
-`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
-`DOCK-UI-01` **next**.
+Campaign status: Stage 6 is **Complete / Accepted** through `SHOW-02` squash
+merge `f38805e` and passing main Linux CI run `29285719629`. Stage 7 is
+**Current / Authorized** with `PERF-01` **next**.
 
-Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
-`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
-**Complete / Accepted**.
+Integrated `DOCK-UI-01`, `DOCK-UI-02`, `VIEW-UI-01`, `VIEW-UI-02`,
+`INSP-UI-01`, `INSP-UI-02`, `OUT-UI-01`, `ASSET-UI-01`, `SYS-UI-01`, and
+`SHOW-02` are **Complete / Accepted**.
 
-Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
+Stage 7 is **Current / Authorized**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
 | Field | Decision |
 | --- | --- |
-| Status | Complete / Accepted; Stages 2-5 subsequently passed and Stage 6 is Current / Authorized with `DOCK-UI-01` next |
+| Status | Complete / Accepted; Stages 2-6 subsequently passed and Stage 7 is Current / Authorized with `PERF-01` next |
 | Scope | Capability truth, provisional public boundary, showcase truth, and packageability scaffolding |
 | Impact / confidence | High / High overall; `API-01` is Medium-high confidence |
 | Campaign prerequisite | Stage 0 documentation gate, complete; campaign authorization recorded |

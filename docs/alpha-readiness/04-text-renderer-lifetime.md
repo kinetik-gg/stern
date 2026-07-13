@@ -4,15 +4,15 @@
 
 ## Execution Contract
 
-Campaign status: Stage 5 is **Complete / Accepted** through integrated
-`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
-`DOCK-UI-01` **next**.
+Campaign status: Stage 6 is **Complete / Accepted** through `SHOW-02` squash
+merge `f38805e` and passing main Linux CI run `29285719629`. Stage 7 is
+**Current / Authorized** with `PERF-01` **next**.
 
-Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
-`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
-**Complete / Accepted**.
+Integrated `DOCK-UI-01`, `DOCK-UI-02`, `VIEW-UI-01`, `VIEW-UI-02`,
+`INSP-UI-01`, `INSP-UI-02`, `OUT-UI-01`, `ASSET-UI-01`, `SYS-UI-01`, and
+`SHOW-02` are **Complete / Accepted**.
 
-Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
+Stage 7 is **Current / Authorized**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
@@ -22,7 +22,7 @@ Kinetik UI remains a foundation/developer-preview; this packet does not tag, pub
 | Scope | Async liveness, desktop/Unicode text, bounded caches, and renderer correctness |
 | Impact / confidence | Critical / Medium-high overall |
 | Campaign prerequisite | Stage 3 gate; campaign authorization recorded |
-| Token checkpoint | Stage 4 gate passed; Stage 5 subsequently passed and Stage 6 is Current / Authorized with `DOCK-UI-01` next |
+| Token checkpoint | Stage 4 gate passed; Stages 5-6 subsequently passed and Stage 7 is Current / Authorized with `PERF-01` next |
 
 ## Packets
 
@@ -226,8 +226,8 @@ The `TEXT-01` semantic prerequisites of `TEXT-02`, `TEXT-03`, and dependent
 editor packets are satisfied, and accepted `REND-01` unblocked the renderer
 side of 4B. `TEXT-02`, `TEXT-03`, and `REND-02` are Complete / Accepted.
 At this checkpoint, inspector/outliner still waited for their Stage 5
-composition and collection prerequisites. Those prerequisites subsequently
-passed; editor integration remains Stage 6. Checkpoints 4A and 4B are complete,
+composition and collection prerequisites. Those prerequisites and Stage 6
+editor integration subsequently passed. Checkpoints 4A and 4B are complete,
 and the integrated Stage 4 gate is accepted.
 
 ## `REND-02`: authoritative fractional-DPI text projection
@@ -276,8 +276,8 @@ compatibility behavior. Fractional command translations retain the existing
 generic-rectangle band of at most 1.0001 physical pixels. CPU scene encoding
 does not prove GPU raster or pixel identity. Duplicate `TextLayoutCache`
 curation remains Stage 7 `API-01`. The presenter, external-texture, and
-composition foundations subsequently passed in Stage 5; public editor
-composition remains Stage 6.
+composition foundations subsequently passed in Stage 5, followed by public
+editor composition in Stage 6.
 
 ## Integrated Stage 4 Acceptance
 
@@ -322,7 +322,8 @@ caret/selection geometry agreement at scale factors 1.25, 1.5, and 1.75.
 At this gate, Stage 5 advanced to Current / Authorized with `REND-ADR-01`
 next. Stage 5 subsequently completed its presenter and composition packets,
 including integrated `COLL-UI-01` and `COLL-UI-02`, and is Complete /
-Accepted. Stage 6 is Current / Authorized with `DOCK-UI-01` next. Every
+Accepted. Stage 6 subsequently passed, and Stage 7 is Current / Authorized
+with `PERF-01` next. Every
 remaining packet still requires its own deterministic task gate; a failed
 checkpoint or unresolved ownership decision halts the campaign.
 
@@ -334,6 +335,6 @@ rebuild behavior, and payload metrics that are not process RSS remain explicit.
 Vello's resolved gradient ramp remains a source-verified dependency risk, and
 premultiplied payload validity remains caller-owned. Stage 5 subsequently
 accepted the supported presenter/swapchain and external-texture scope;
-HDR/wide-gamut/ICC and final GPU-pixel evidence remain later work, while public
-editor composition remains Stage 6 or later. The repository remains foundation
+HDR/wide-gamut/ICC and final GPU-pixel evidence remain later work. Public
+editor composition subsequently passed in Stage 6. The repository remains foundation
 / developer preview, not alpha-ready.

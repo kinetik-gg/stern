@@ -6,25 +6,23 @@ Runway state controls execution details such as executor, depth, and gate status
 
 ## Authorization And Status
 
-Campaign status: Stage 5 is **Complete / Accepted** through integrated
-`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
-`DOCK-UI-01` **next**.
+Campaign status: Stage 6 is **Complete / Accepted** through `SHOW-02` squash
+merge `f38805e` and passing main Linux CI run `29285719629`. Stage 7 is
+**Current / Authorized** with `PERF-01` **next**.
 
-Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
-`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
-**Complete / Accepted**.
+Integrated `DOCK-UI-01`, `DOCK-UI-02`, `VIEW-UI-01`, `VIEW-UI-02`,
+`INSP-UI-01`, `INSP-UI-02`, `OUT-UI-01`, `ASSET-UI-01`, `SYS-UI-01`, and
+`SHOW-02` are **Complete / Accepted**.
 
-Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
+Stage 7 is **Current / Authorized**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
-Stages 0-5 are **Complete**; Stage 5 is **Complete / Accepted** through
-`COLL-UI-02` squash merge `98f4aec` and passing main CI run
-`29265615424`. Stage 6 is **Current / Authorized** with `DOCK-UI-01`
-**next**. Stage 7 remains **Authorized / Queued** and executes after the Stage
-6 gate passes. The Stage 1-7 campaign is authorized for continuous sequential
-execution without intermediate approval, but any Runway stop condition halts
-the active packet or stage.
+Stages 0-6 are **Complete**; Stage 6 is **Complete / Accepted** through
+`SHOW-02` squash merge `f38805e` and passing main Linux CI run `29285719629`.
+Stage 7 is **Current / Authorized** with `PERF-01` next. The Stage 1-7 campaign
+is authorized for continuous sequential execution without intermediate
+approval, but any Runway stop condition halts the active packet or stage.
 
 The campaign workflow policy is `create-if-available` for issues, `create-if-gates-pass` for pull requests, and `squash-after-gates` for merges. Those permissions do not authorize a tag, package publish, alpha release, or a claim that unresolved findings are fixed.
 
@@ -36,8 +34,8 @@ The campaign workflow policy is `create-if-available` for issues, `create-if-gat
 | [3. Input And Shell](alpha-readiness/03-input-and-shell.md) | Complete / Accepted | Ordered input, platform requests, and pointer normalization | Gate passed at `1f99111` |
 | [4. Text, Renderer, And Lifetime](alpha-readiness/04-text-renderer-lifetime.md) | Complete / Accepted | Async liveness, desktop/Unicode text, bounded caches, renderer correctness | Gate passed through accepted `REND-02` merge `1239dd9` |
 | [5. Composition Foundations](alpha-readiness/05-composition-foundations.md) | Complete / Accepted | Presenter ADR/path, external textures, measured layout, overlays, chrome, collections | Gate passed through `COLL-UI-02` merge `98f4aec` and main CI run `29265615424` |
-| [6. Editor Vertical Slice](alpha-readiness/06-editor-vertical-slice.md) | Current / Authorized | Dock, inspector, outliner, assets, viewport, feedback, and public workflow | Very large; `DOCK-UI-01` next; gate non-deferred packets individually |
-| [7. Quality And Alpha Gate](alpha-readiness/07-quality-and-alpha-gate.md) | Authorized / Queued | Performance, visuals, accessibility boundary, CI, final API and release decision | Large; no tag or publish without explicit authority |
+| [6. Editor Vertical Slice](alpha-readiness/06-editor-vertical-slice.md) | Complete / Accepted | Dock, inspector, outliner, assets, viewport, feedback, and public workflow | Gate passed through `SHOW-02` merge `f38805e` and Linux run `29285719629`; four optional packets remain deferred |
+| [7. Quality And Alpha Gate](alpha-readiness/07-quality-and-alpha-gate.md) | Current / Authorized | Performance, visuals, accessibility boundary, CI, final API and release decision | Large; `PERF-01` next; no tag or publish without explicit authority |
 
 See [Progress And Evidence](alpha-readiness/progress.md) for the current authorization record and the required packet-completion format.
 

@@ -6,10 +6,10 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Authorized / Queued |
+| Status | Current / Authorized; Stage 6 and `SHOW-02` are Complete / Accepted, with `PERF-01` next |
 | Scope | Performance, Vello visuals, accessibility boundary, CI, final API, and release decision |
 | Impact / confidence | High / High after upstream gates; `ALPHA-GATE` is Critical / High |
-| Campaign prerequisite | `SHOW-02` and all selected upstream gates; campaign authorization recorded |
+| Campaign prerequisite | Satisfied through `SHOW-02` squash merge `f38805e` and passing main Linux CI run `29285719629` |
 | Token checkpoint | Large; review evidence packet-by-packet before the final release decision |
 
 ## Packets

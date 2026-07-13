@@ -6,11 +6,11 @@
 
 | Field | Decision |
 | --- | --- |
-| Status | Current / Authorized; Stage 5 is Complete / Accepted and `DOCK-UI-01` is next |
+| Status | Complete / Accepted through `SHOW-02` squash merge `f38805e` and passing main Linux CI run `29285719629` |
 | Scope | Reusable editor components and one coherent public-facade workflow |
 | Impact / confidence | High-critical / Medium overall |
 | Campaign prerequisite | Stage 5 gate, Complete / Accepted; campaign authorization covers every non-deferred packet |
-| Token checkpoint | Very large; execute and review non-deferred packets individually, beginning with `DOCK-UI-01`, before `SHOW-02` |
+| Token checkpoint | Gate passed; Stage 7 is Current / Authorized with `PERF-01` next |
 
 ## Packets
 
@@ -38,6 +38,24 @@ Shared Dock, viewport, and `SHOW-02` integration stay root-owned. Inspector, out
 ## Acceptance Gate And Verification Expectations
 
 Each non-deferred packet gets its own gate review. A passing review advances to the next dependency-ready packet without intermediate approval; any Runway stop condition halts execution. The stage gate requires the selected coherent workflow to use only the facade and reusable presenter path; shared components are not hand-painted in the showcase; enabled actions produce distinct application-state outcomes; and rendered-input, semantic, persistence, and workflow evidence is present rather than metadata/model-only proof.
+
+## Acceptance Record
+
+Accepted packets are `DOCK-UI-01`, `DOCK-UI-02`, `VIEW-UI-01`,
+`VIEW-UI-02`, `INSP-UI-01`, `INSP-UI-02`, `OUT-UI-01`, `ASSET-UI-01`,
+`SYS-UI-01`, and `SHOW-02`. Their issues and pull requests are recorded in
+[Progress And Evidence](progress.md). The final coherent workflow squash merge
+is `f38805e`; exact main Linux CI run `29285719629` passed the repository
+format, Clippy, workspace test, build, example, and documentation gates. The
+Stage 6 acceptance gate is therefore Complete / Accepted.
+
+The workflow proves public Dock/Frame/Panel composition, selection and inline
+rename, property editing, asset filtering and drag, viewport manipulation, and
+an application-owned in-memory save snapshot. It does not claim filesystem
+persistence or external asset import/drop transport. Compact and fractional-
+DPI evidence remains `VIS-01`, performance budgets remain `PERF-01`, native
+accessibility remains `A11Y-01`, and facade/prelude curation remains final
+`API-01`.
 
 ## Deferrals
 

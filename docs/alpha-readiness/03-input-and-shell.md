@@ -4,15 +4,15 @@
 
 ## Execution Contract
 
-Campaign status: Stage 5 is **Complete / Accepted** through integrated
-`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
-`DOCK-UI-01` **next**.
+Campaign status: Stage 6 is **Complete / Accepted** through `SHOW-02` squash
+merge `f38805e` and passing main Linux CI run `29285719629`. Stage 7 is
+**Current / Authorized** with `PERF-01` **next**.
 
-Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
-`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
-**Complete / Accepted**.
+Integrated `DOCK-UI-01`, `DOCK-UI-02`, `VIEW-UI-01`, `VIEW-UI-02`,
+`INSP-UI-01`, `INSP-UI-02`, `OUT-UI-01`, `ASSET-UI-01`, `SYS-UI-01`, and
+`SHOW-02` are **Complete / Accepted**.
 
-Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
+Stage 7 is **Current / Authorized**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
@@ -108,13 +108,14 @@ Packet tasks included contract, core, adapter, and supported-shell checks
 appropriate to their owned paths. Event reordering, stale requests, Z2/Z3
 overlap, and shell behavior with no recorded owner would have stopped the
 campaign. Those checks passed; at the Stage 3 gate, the campaign advanced Stage
-4 to Current / Authorized without requiring new approval. Stages 4-5
-subsequently passed, and Stage 6 is now Current / Authorized with
-`DOCK-UI-01` next.
+4 to Current / Authorized without requiring new approval. Stages 4-6
+subsequently passed, and Stage 7 is now Current / Authorized with
+`PERF-01` next.
 
 ## Deferrals
 
 At Stage 3 acceptance, desktop/Unicode editing, presenter extraction, and
-showcase workflow integration remained later-stage work. Stages 4-5
-subsequently accepted the canonical desktop/Unicode, presenter, and composition
-scope; broader showcase workflow integration remains Stage 6 or later.
+showcase workflow integration remained later-stage work. Stages 4-6
+subsequently accepted the canonical desktop/Unicode, presenter, composition,
+and coherent showcase workflow scope; Stage 7 quality and alpha-gate work
+remains open.

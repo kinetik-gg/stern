@@ -2,32 +2,30 @@
 
 [Back to the alpha-readiness index](../alpha-readiness.md)
 
-Campaign status: Stage 5 is **Complete / Accepted** through integrated
-`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
-`DOCK-UI-01` **next**.
+Campaign status: Stage 6 is **Complete / Accepted** through `SHOW-02` squash
+merge `f38805e` and passing main Linux CI run `29285719629`. Stage 7 is
+**Current / Authorized** with `PERF-01` **next**.
 
-Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
-`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
-**Complete / Accepted**.
+Integrated `DOCK-UI-01`, `DOCK-UI-02`, `VIEW-UI-01`, `VIEW-UI-02`,
+`INSP-UI-01`, `INSP-UI-02`, `OUT-UI-01`, `ASSET-UI-01`, `SYS-UI-01`, and
+`SHOW-02` are **Complete / Accepted**.
 
-Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
+Stage 7 is **Current / Authorized**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
-Stages 0-5 are Complete; Stage 5 is Complete / Accepted through `COLL-UI-02`
-squash merge `98f4aec4c091438d8a86fee05c8c65ed9e96a5f2` and passing main CI
-run `29265615424`. Stage 6 is Current / Authorized with `DOCK-UI-01` next.
-Stage 7 remains Authorized / Queued for continuous sequential execution after
-the Stage 6 gate passes. Every remaining packet still has to pass its
-deterministic gates, and any Runway stop condition halts the active packet or
-stage.
+Stages 0-6 are Complete. Stage 6 is Complete / Accepted through `SHOW-02`
+squash merge `f38805ea75e511ce50de4923458296adb16b0c66` and passing main Linux
+CI run `29285719629`. Stage 7 is Current / Authorized with `PERF-01` next.
+Every remaining packet still has to pass its deterministic gates, and any
+Runway stop condition halts the active packet or stage.
 
 Campaign workflow policy: `create-if-available` issues, `create-if-gates-pass` pull requests, and `squash-after-gates` merges. Tagging, package publishing, and an alpha release remain outside this authorization.
 
 ## Stage 0: Plan And Baseline
 
-Status: Complete. This closed the documentation task only; Stages 1-5
-subsequently completed and Stage 6 is Current / Authorized with `DOCK-UI-01`
+Status: Complete. This closed the documentation task only; Stages 1-6
+subsequently completed and Stage 7 is Current / Authorized with `PERF-01`
 next under the recorded campaign authorization.
 
 ### Changed files
@@ -63,10 +61,9 @@ next under the recorded campaign authorization.
 ### Remaining risks and deferred findings
 
 - At the Stage 0 checkpoint, runtime, input, text, presenter, component,
-  quality, and release risks were unresolved. The authorized Stage 1-5 runtime,
-  input, text, presenter, and composition foundations subsequently passed;
-  editor integration remains Stage 6, while quality and release risks remain
-  Stage 7 work.
+  quality, and release risks were unresolved. The authorized runtime, input,
+  text, presenter, composition, and editor work subsequently passed through
+  Stage 6; quality and release risks remain Stage 7 work.
 - Timeline and node-graph packets remain deferred unless explicitly added to alpha scope.
 - Native accessibility may remain a documented semantic-output-only boundary; floating native windows, broad multi-window behavior, additional renderers, and broader production persistence remain deferred.
 - Packageability must not be interpreted as permission to tag, publish, or claim alpha readiness; pull-request merges follow the separate `squash-after-gates` campaign policy.
@@ -114,8 +111,8 @@ Experimental pending accepted behavioral evidence.
 
 No production catalogue entry is Stable by design. Promotion remains an
 evidence-backed curation decision. At the `ALPHA-00` checkpoint, all later audit
-packets remained open. Stages 1-5 subsequently passed; Stage 6 is Current /
-Authorized, while Stage 7 and final `API-01` curation remain open as documented.
+packets remained open. Stages 1-6 subsequently passed; Stage 7 and final
+`API-01` curation remain open as documented.
 
 ### Provisional `API-01`: alpha surface policy
 
@@ -344,8 +341,8 @@ than final output including diagnostics emitted afterward.
 
 Status: Complete / Accepted. `RT-01`, `RT-02`, and `RT-03` passed their bounded
 critics and complete gates. The integrated Stage 2 gate passed at `5cf07b8`;
-Stages 3-5 subsequently passed, and Stage 6 is Current / Authorized with
-`DOCK-UI-01` next.
+Stages 3-6 subsequently passed, and Stage 7 is Current / Authorized with
+`PERF-01` next.
 
 ### `RT-01`: scoped coordinates and clipping
 
@@ -526,8 +523,8 @@ The final Stage 3 matrix was
 [CI run 29140855335](https://github.com/kinetik-gg/kinetik-ui/actions/runs/29140855335);
 PR [#517](https://github.com/kinetik-gg/kinetik-ui/pull/517) passed checks in
 run 29141040177 and produced the accepted merge.
-Stages 4-5 subsequently passed, and Stage 6 is Current / Authorized with
-`DOCK-UI-01` next.
+Stages 4-6 subsequently passed, and Stage 7 is Current / Authorized with
+`PERF-01` next.
 
 ### `IN-01`: ordered platform input
 
@@ -1796,8 +1793,8 @@ command translations retain the generic rectangle quantization band of at most
 1.0001 physical pixels. CPU scene encoding proves submitted topology and
 coordinates, not final GPU raster coverage or cross-GPU pixel identity. The
 duplicate public `TextLayoutCache` remains Stage 7 `API-01`. Presenter,
-external-texture, and composition foundations subsequently passed in Stage 5;
-public editor composition remains Stage 6.
+external-texture, and composition foundations subsequently passed in Stage 5,
+followed by public editor composition in Stage 6.
 
 ### `STAGE-4-CLOSE`: integrated text, renderer, and lifetime acceptance gate
 
@@ -1893,8 +1890,8 @@ audit §11.7 is not globally closed. Vello's resolved gradient ramp remains a
 source-verified dependency risk, and premultiplied payload validity remains
 caller-owned. Stage 5 subsequently accepted the supported presenter/swapchain,
 external-texture, and composition-foundation scope; HDR/wide-gamut/ICC and
-final GPU pixels remain later work, while public editor composition remains
-Stage 6. Broader image/resource/performance/lifecycle findings remain open
+final GPU pixels remain later work. Public editor composition subsequently
+passed in Stage 6. Broader image/resource/performance/lifecycle findings remain open
 unless a separately accepted packet closed them. The repository remains foundation /
 developer preview, not alpha-ready; no tag, publish, deployment, or release is
 authorized.
@@ -1980,8 +1977,8 @@ validation path, and final GPU color/alpha pixels remain unproved.
 Zero-copy, arbitrary texture views, foreign/shared-device import, explicit
 native synchronization, a reusable offscreen presenter, general multi-window
 coordination, HDR/wide-gamut/ICC conversion in the UI renderer, and additional
-presenter backends remain deferred. Stage 5 composition subsequently passed;
-Stage 6 is Current / Authorized and Stage 7 remains queued. The repository
+presenter backends remain deferred. Stages 5-6 subsequently passed; Stage 7 is
+Current / Authorized. The repository
 remains foundation / developer preview, not alpha-ready; no tag, publish,
 deployment, or release is authorized.
 
@@ -1991,8 +1988,8 @@ Status: Complete / Accepted for the shared presenter foundation. Issue #574
 owns this bounded slice. At this checkpoint, `REND-03B` was next and still had
 to replace the Showcase-private presenter plus prove the independent offscreen
 negative path before integrated `REND-03` could close. Those presenter and
-Stage 5 composition checkpoints subsequently passed; Stage 6 is Current /
-Authorized, Stage 7 remains queued, and alpha readiness remains open.
+Stage 5 composition checkpoints subsequently passed; Stage 6 subsequently
+passed, Stage 7 is Current / Authorized, and alpha readiness remains open.
 
 #### Changed files
 
@@ -2139,8 +2136,8 @@ multi-window coordination, additional backends, and transparent production
 recovery remain deferred. The pre-existing root-lock `swash 0.2.8` warning
 remains a Stage 7 release risk.
 
-Stage 5 subsequently completed; Stage 6 is **Current / Authorized** and Stage 7
-remains **Authorized / Queued**. This packet does not declare alpha readiness,
+Stages 5-6 subsequently completed; Stage 7 is **Current / Authorized**. This
+packet does not declare alpha readiness,
 create a tag, publish packages, deploy, or release.
 
 ### Integrated `REND-04`: native texture presentation and evidence closure
@@ -2514,7 +2511,8 @@ release, or alpha-readiness claim occurred.
 
 Status: **Complete / Accepted**. Issues #616 and #618 closed through
 squash-merged PRs #617 and #619. This completes the Stage 5 implementation and
-acceptance gate; Stage 6 is Current / Authorized with `DOCK-UI-01` next.
+acceptance gate; Stage 6 subsequently passed, and Stage 7 is Current /
+Authorized with `PERF-01` next.
 
 #### Changed files
 
@@ -2584,8 +2582,344 @@ Multi/range table selection, editing/clipboard, grouped headers, multi-sort and
 filter execution, auto-fit, keyboard resizing, column reordering, drag/drop,
 custom cell bodies, and painted scrollbars remain explicit non-goals. The Stage
 5 gate does not tag, publish, deploy, release, or claim alpha readiness; the
-repository remains foundation / developer preview while Stage 6 is Current /
-Authorized and Stage 7 remains Authorized / Queued.
+repository remains foundation / developer preview while Stage 6 subsequently
+passed and Stage 7 is Current / Authorized.
+
+## Stage 6: Public Editor Vertical Slice
+
+Status: **Complete / Accepted** through `SHOW-02` squash merge
+`f38805ea75e511ce50de4923458296adb16b0c66` and passing main Linux CI run
+`29285719629`. Optional timeline and node-graph packets remain deferred.
+
+### `DOCK-UI-01`: public painted Dock scene
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/dock.rs`
+- `crates/kinetik-ui-widgets/src/dock/scene.rs`
+- `crates/kinetik-ui-widgets/src/ui.rs`
+- `crates/kinetik-ui-widgets/src/ui/dock.rs`
+- `crates/kinetik-ui-widgets/tests/dock_scene_conformance.rs`
+
+#### Reasoning and contract decisions
+
+The scene reuses the deterministic Dock model and prepares immutable,
+theme-driven Dock/Frame/Panel geometry, clips, IDs, preview data, paint, and
+semantics. Panels remain passive clipped content surfaces. Pointer ordering
+keeps frame activation below caller panel content and tab, close, and splitter
+targets. The advanced API remains module-qualified.
+
+#### Tests run and results
+
+- Eight focused Dock scene tests, the full all-feature widgets suite,
+  warning-denied all-target Clippy, no-deps docs, formatting, and diff checks
+  passed. Independent review ended P0/P1/P2=`0/0/0`.
+- Issue #622 / PR #623 squash-merged as `769589e`; exact main Linux CI run
+  `29268581427` passed.
+
+#### Remaining risks and deferred findings
+
+Controller mutation, keyboard/drag/resize behavior, and snapshot round-trip
+were left to `DOCK-UI-02`. GPU screenshot evidence remains `VIS-01`; native
+floating windows, broad multi-window behavior, and filesystem persistence are
+deferred.
+
+### `DOCK-UI-02`: controller and persistence flow
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/dock.rs`
+- `crates/kinetik-ui-widgets/src/dock/controller.rs`
+- `crates/kinetik-ui-widgets/src/dock/scene.rs`
+- `crates/kinetik-ui-widgets/src/ui/dock.rs`
+- `crates/kinetik-ui-widgets/tests/dock_controller_conformance.rs`
+
+#### Reasoning and contract decisions
+
+The public controller layers selection, focus repair, close intents, keyboard
+navigation, captured tab drag/merge/split, splitter resize, join/swap metadata,
+and typed snapshot round-trip over the accepted scene. Application code still
+owns panel data, command execution, and the unused IDs required by mutations.
+
+#### Tests run and results
+
+- Six focused controller tests, the full all-feature widgets suite,
+  warning-denied all-target Clippy, no-deps docs, formatting, and diff checks
+  passed. Independent review ended P0/P1/P2=`0/0/0`.
+- Issue #624 / PR #625 squash-merged as `39508d0`; exact main Linux CI run
+  `29270494072` passed.
+
+#### Remaining risks and deferred findings
+
+The typed snapshots do not claim production JSON/filesystem persistence.
+Application panel-state serialization, animated previews, native floating
+windows, broad multi-window behavior, and arbitrary custom chrome are deferred.
+
+### `VIEW-UI-01`: public viewport widget
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/lib.rs`
+- `crates/kinetik-ui-widgets/src/ui.rs`
+- `crates/kinetik-ui-widgets/src/ui/viewport.rs`
+- `crates/kinetik-ui-widgets/src/viewport.rs`
+- `crates/kinetik-ui-widgets/src/viewport/widget.rs`
+- `crates/kinetik-ui-widgets/tests/viewport_widget_conformance.rs`
+
+#### Reasoning and contract decisions
+
+One supported widget now composes texture placement, clipping, pointer focus,
+cursor, captured pan, anchored wheel zoom, coordinate conversion, semantics,
+and application-owned actions. Current-frame geometry stays frozen; accepted
+pan/zoom changes update caller state for the next frame and request repaint.
+
+#### Tests run and results
+
+- Six focused viewport widget tests, the full all-feature widgets suite,
+  warning-denied all-target Clippy, no-deps docs, formatting, and diff checks
+  passed. Independent review ended P0/P1/P2=`0/0/0`.
+- Issue #626 / PR #627 squash-merged as `cd8292d`; exact main Linux CI run
+  `29271745172` passed.
+
+#### Remaining risks and deferred findings
+
+Painted selection outlines, transform handles, and snap intent were left to
+`VIEW-UI-02`. Selection-fit policy, inertia, touch/pinch, guides, rulers, and
+domain transform execution remain outside this widget.
+
+### `VIEW-UI-02`: painted viewport transform tools
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/lib.rs`
+- `crates/kinetik-ui-widgets/src/ui.rs`
+- `crates/kinetik-ui-widgets/src/ui/viewport_tools.rs`
+- `crates/kinetik-ui-widgets/src/viewport.rs`
+- `crates/kinetik-ui-widgets/src/viewport/tool_scene.rs`
+- `crates/kinetik-ui-widgets/tests/viewport_tool_scene_conformance.rs`
+
+#### Reasoning and contract decisions
+
+The frozen tool scene paints selection outlines and theme-driven handles,
+routes clipped handle targets above viewport pan, retains capture in
+caller-owned state, and emits phased raw screen/content deltas with causal
+modifiers and snap intent. The toolkit does not mutate domain geometry.
+
+#### Tests run and results
+
+- Five focused viewport-tool tests, the full all-feature widgets suite,
+  warning-denied all-target Clippy, no-deps docs, formatting, and diff checks
+  passed. Independent review ended P0/P1/P2=`0/0/0`.
+- Issue #628 / PR #629 squash-merged as `ea458dc`; exact main Linux CI run
+  `29273075585` passed.
+
+#### Remaining risks and deferred findings
+
+Snapping policy, constraints, undo, persistence, multi-target transforms,
+lasso selection, guides, rulers, and application geometry mutation remain
+application-owned or deferred.
+
+### `INSP-UI-01`: live property grid
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/inspector.rs`
+- `crates/kinetik-ui-widgets/src/inspector/property_grid.rs`
+- `crates/kinetik-ui-widgets/src/ui.rs`
+- `crates/kinetik-ui-widgets/src/ui/property_grid.rs`
+- `crates/kinetik-ui-widgets/tests/property_grid_conformance.rs`
+
+#### Reasoning and contract decisions
+
+The module-qualified grid paints scrollable sections, stable row/value
+scopes, access states, validation/help/status, and reset/keyframe affordances.
+Visible value bodies are caller-composed, and every edit/reset/keyframe result
+is an application-owned intent rather than toolkit domain mutation.
+
+#### Tests run and results
+
+- Four focused property-grid tests, the full all-feature widgets suite,
+  warning-denied all-target Clippy, no-deps docs, formatting, and diff checks
+  passed. Independent review ended P0/P1/P2=`0/0/0`.
+- Issue #630 / PR #631 squash-merged as `5103e76`; exact main Linux CI run
+  `29274760744` passed.
+
+#### Remaining risks and deferred findings
+
+Select, color, asset, and path flows were left to `INSP-UI-02`. Validation
+execution, reset/keyframe storage, undo, multiline help, variable-height
+bodies, and application mutation remain outside the grid.
+
+### `INSP-UI-02`: picker flows
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/inspector.rs`
+- `crates/kinetik-ui-widgets/src/inspector/pickers.rs`
+- `crates/kinetik-ui-widgets/src/ui.rs`
+- `crates/kinetik-ui-widgets/src/ui/inspector_pickers.rs`
+- `crates/kinetik-ui-widgets/tests/inspector_picker_flow_conformance.rs`
+
+#### Reasoning and contract decisions
+
+Select and asset entries use retained overlays; color editing uses an explicit
+Apply/Cancel RGBA draft; path choices use generation- and trigger-checked,
+redacted host requests/results. Opening-frame input is fenced, origin focus is
+restored on resolution, and removed or reordered choices fail closed.
+
+#### Tests run and results
+
+- Six focused picker-flow tests, the full all-feature widgets suite,
+  warning-denied all-target Clippy, no-deps docs, formatting, and diff checks
+  passed. Independent review ended P0/P1/P2=`0/0/0`.
+- Issue #632 / PR #633 squash-merged as `c64d159`; exact main Linux CI run
+  `29276396713` passed.
+
+#### Remaining risks and deferred findings
+
+Native dialog execution, filesystem and asset queries, advanced color tools,
+undo, and domain mutation remain host/application concerns. The path service
+contract does not itself grant filesystem authority.
+
+### `OUT-UI-01`: reusable public outliner
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/outliner.rs`
+- `crates/kinetik-ui-widgets/src/outliner/component.rs`
+- `crates/kinetik-ui-widgets/src/ui.rs`
+- `crates/kinetik-ui-widgets/src/ui/outliner.rs`
+- `crates/kinetik-ui-widgets/tests/outliner_widget_conformance.rs`
+
+#### Reasoning and contract decisions
+
+The fixed-height virtualized outliner composes shared collection, overlay,
+action, and text contracts while retaining only UI interaction state. It emits
+typed rename, visibility, lock, drop, and context-action requests and fails
+closed for disabled, read-only, removed, filtered, or offscreen ownership.
+
+#### Tests run and results
+
+- Ten focused outliner tests, the full all-feature widgets suite,
+  warning-denied all-target Clippy, no-deps docs, formatting, and diff checks
+  passed. Independent review ended P0/P1/P2=`0/0/0`.
+- Issue #634 / PR #635 squash-merged as `35f37ce`; exact main Linux CI run
+  `29279200645` passed.
+
+#### Remaining risks and deferred findings
+
+Rows remain fixed-height. Domain mutation, undo, persistence, filtering policy,
+and cross-component drag/drop execution remain application-owned.
+
+### `ASSET-UI-01`: reusable public asset browser
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/asset_browser.rs`
+- `crates/kinetik-ui-widgets/src/asset_browser/component.rs`
+- `crates/kinetik-ui-widgets/src/ui.rs`
+- `crates/kinetik-ui-widgets/src/ui/asset_browser.rs`
+- `crates/kinetik-ui-widgets/tests/asset_browser_widget_conformance.rs`
+
+#### Reasoning and contract decisions
+
+The public browser provides filtered, stably sorted fixed-size grid/list
+projection, stable selection/focus reconciliation, clipped texture thumbnails
+or fallbacks, real text-field rename, preview, drag, and action-backed context
+requests. Conflict and domain mutation policy remains caller-owned.
+
+#### Tests run and results
+
+- Eight focused widget tests, eleven existing asset-browser contract tests, the
+  full all-feature widgets suite, warning-denied all-target Clippy, no-deps
+  docs, formatting, and diff checks passed. Independent review ended
+  P0/P1/P2=`0/0/0`.
+- Issue #636 / PR #637 squash-merged as `41f889e`; exact main Linux CI run
+  `29281083764` passed.
+
+#### Remaining risks and deferred findings
+
+Projection rebuild remains linear and is measured by `PERF-01`; materialized
+work stays bounded. Filesystem scanning/import, thumbnail generation,
+persistence, undo, and external/cross-component drop execution are deferred or
+application-owned.
+
+### `SYS-UI-01`: persistent system feedback scene
+
+#### Changed files
+
+- `crates/kinetik-ui-widgets/src/chrome.rs`
+- `crates/kinetik-ui-widgets/src/chrome/system_feedback.rs`
+- `crates/kinetik-ui-widgets/src/ui/chrome.rs`
+- `crates/kinetik-ui-widgets/src/ui/chrome/system_feedback.rs`
+- `crates/kinetik-ui-widgets/tests/system_feedback_scene_conformance.rs`
+
+#### Reasoning and contract decisions
+
+One deterministic scene presents application-owned jobs, diagnostics, and
+feedback using real frame time, bounded repaint scheduling, stable IDs, frozen
+validated input, semantics, and matching typed/action-queue requests. Completed
+jobs remain passive until the application removes them.
+
+#### Tests run and results
+
+- Ten focused system-feedback tests, the full all-feature widgets suite,
+  warning-denied all-target Clippy, no-deps docs, formatting, and diff checks
+  passed. Independent review ended P0/P1/P2=`0/0/0`.
+- Issue #638 / PR #639 squash-merged as `2bba661`; exact main Linux CI run
+  `29282543780` passed.
+
+#### Remaining risks and deferred findings
+
+Per-frame allocation and linear diagnostic lookup remain `PERF-01` evidence;
+visual and native-accessibility polish remain `VIS-01` and `A11Y-01`. Worker
+execution, persistence, report transport, and OS notifications are out of
+scope.
+
+### `SHOW-02`: coherent public editor workflow
+
+#### Changed files
+
+- `apps/kinetik-ui-showcase/src/editor/{workflow,root_state,models,showcase}.rs`
+- `apps/kinetik-ui-showcase/src/editor/showcase/{core_chrome,inspector_fixtures,menus,panels,toolbar_workspace}.rs`
+- `apps/kinetik-ui-showcase/src/editor/tests/{workflow,chrome_fixtures,interactions,toolbar_helpers,viewport_icons}.rs`
+- `apps/kinetik-ui-showcase/src/editor/{fixtures_paint,tests}.rs`
+- `apps/kinetik-ui-showcase/src/{editor,app/tests/editor}.rs`
+
+#### Reasoning and contract decisions
+
+The showcase now composes public Dock, outliner, asset-browser, property-grid,
+and viewport APIs while keeping object names, selection, filter text,
+properties, asset drag state, viewport geometry, and save snapshots
+application-owned. Rendered input proves a Player-to-MainCamera selection,
+F2 rename, filtering, two property edits, asset drag, viewport manipulation,
+and an in-memory save. Superseded hand-painted advanced paths were removed.
+
+#### Tests run and results
+
+- Formatting, warning-denied all-target showcase Clippy, showcase check, and
+  the full all-feature showcase suite passed: 130 library tests and 28 binary
+  tests, with zero failures. The focused rendered-input workflow and diff check
+  passed. Independent review accepted the repaired candidate.
+- Issue #640 / PR #641 squash-merged as `f38805e`; exact main Linux CI run
+  `29285719629` passed. Windows/macOS release jobs remained skipped.
+
+#### Remaining risks and deferred findings
+
+Save is intentionally an in-memory snapshot, and the asset workflow proves
+drag rather than external drop/import or assignment. Child-before-controller
+evaluation is an explicit integration invariant. Compact/fractional-DPI
+evidence remains `VIS-01`, performance budgets remain `PERF-01`, native
+accessibility remains `A11Y-01`, and facade/prelude curation remains final
+`API-01`.
+
+### Stage 6 deferred packets
+
+`TL-UI-01`, `TL-UI-02`, `NG-UI-01`, and `NG-UI-02` remain visible and
+excluded from stable alpha. Production filesystem persistence, external asset
+transport, floating native windows, broad multi-window behavior, and additional
+renderer backends also remain outside the accepted Stage 6 contract. No tag,
+package publication, deployment, release, or alpha-readiness claim occurred.
 
 ## Packet Completion Template
 

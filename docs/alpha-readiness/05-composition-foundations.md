@@ -4,25 +4,25 @@
 
 ## Execution Contract
 
-Campaign status: Stage 5 is **Complete / Accepted** through integrated
-`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
-`DOCK-UI-01` **next**.
+Campaign status: Stage 6 is **Complete / Accepted** through `SHOW-02` squash
+merge `f38805e` and passing main Linux CI run `29285719629`. Stage 7 is
+**Current / Authorized** with `PERF-01` **next**.
 
-Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
-`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
-**Complete / Accepted**.
+Integrated `DOCK-UI-01`, `DOCK-UI-02`, `VIEW-UI-01`, `VIEW-UI-02`,
+`INSP-UI-01`, `INSP-UI-02`, `OUT-UI-01`, `ASSET-UI-01`, `SYS-UI-01`, and
+`SHOW-02` are **Complete / Accepted**.
 
-Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
+Stage 7 is **Current / Authorized**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
 | Field | Decision |
 | --- | --- |
-| Status | Complete / Accepted through `COLL-UI-02` squash merge `98f4aec` and passing main CI run `29265615424`; Stage 6 is Current / Authorized with `DOCK-UI-01` next |
+| Status | Complete / Accepted through `COLL-UI-02` squash merge `98f4aec` and passing main CI run `29265615424`; Stage 6 subsequently passed and Stage 7 is Current / Authorized with `PERF-01` next |
 | Scope | Presenter ownership/external textures and measured public composition foundations |
 | Impact / confidence | Critical / Medium overall |
 | Campaign prerequisite | Stage 4 gate, Complete / Accepted; campaign authorization recorded |
-| Token checkpoint | Gate passed; execute bounded Stage 6 packets serially, beginning with `DOCK-UI-01` |
+| Token checkpoint | Gate passed; Stage 6 packets subsequently passed and Stage 7 is Current / Authorized with `PERF-01` next |
 
 ## Packets
 
@@ -70,8 +70,8 @@ The integrated stage gate passed through `COLL-UI-02` squash merge
 and main CI run `29265615424`. The accepted presenter exists outside the
 Showcase, domain GPU texture interoperability is proven for the supported
 boundary, overlays comply with the Stage 2/3 contracts, and collections have
-rendered-input plus semantic evidence. Stage 6 is Current / Authorized with
-`DOCK-UI-01` next. Each later checkpoint still follows the continuous
+rendered-input plus semantic evidence. Stage 6 subsequently passed, and Stage 7
+is Current / Authorized with `PERF-01` next. Each later checkpoint follows the continuous
 campaign policy; an ambiguity or failed gate is a stop condition.
 
 ## Deferrals
