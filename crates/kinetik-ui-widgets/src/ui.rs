@@ -12,6 +12,7 @@ mod layout;
 mod output;
 mod overlays;
 mod passive;
+mod property_grid;
 mod sliders;
 #[cfg(test)]
 mod tests;
