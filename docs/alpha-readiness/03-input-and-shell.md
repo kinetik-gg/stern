@@ -4,14 +4,15 @@
 
 ## Execution Contract
 
-Campaign status: integrated `CHROME-UI-01` is **Complete / Accepted**;
-`COLL-UI-01A` stable collection navigation and reconciliation is **next**,
-followed by the painted list/tree and table packets.
+Campaign status: Stage 5 is **Complete / Accepted** through integrated
+`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
+`DOCK-UI-01` **next**.
 
-Integrated `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` are
+Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
+`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
 **Complete / Accepted**.
 
-Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
+Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
@@ -107,11 +108,13 @@ Packet tasks included contract, core, adapter, and supported-shell checks
 appropriate to their owned paths. Event reordering, stale requests, Z2/Z3
 overlap, and shell behavior with no recorded owner would have stopped the
 campaign. Those checks passed; at the Stage 3 gate, the campaign advanced Stage
-4 to Current / Authorized without requiring new approval. Stage 4 subsequently
-passed, and Stage 5 is now Current / Authorized with `REND-ADR-01`, `REND-03`,
-integrated `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` accepted;
-`COLL-UI-01A` is next.
+4 to Current / Authorized without requiring new approval. Stages 4-5
+subsequently passed, and Stage 6 is now Current / Authorized with
+`DOCK-UI-01` next.
 
 ## Deferrals
 
-At Stage 3 acceptance, desktop/Unicode editing, presenter extraction, and showcase workflow integration remained later-stage work. Stage 4 subsequently accepted the canonical desktop/Unicode scope; presenter extraction and broader showcase workflow integration remain Stage 5 or later.
+At Stage 3 acceptance, desktop/Unicode editing, presenter extraction, and
+showcase workflow integration remained later-stage work. Stages 4-5
+subsequently accepted the canonical desktop/Unicode, presenter, and composition
+scope; broader showcase workflow integration remains Stage 6 or later.

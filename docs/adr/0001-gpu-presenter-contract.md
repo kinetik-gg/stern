@@ -8,9 +8,10 @@ This decision closes `REND-ADR-01`; the reusable presenter and Showcase
 adoption close integrated `REND-03`, and the accepted implementation plus GPU,
 example, and archive evidence close integrated `REND-04`.
 
-Integrated `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` are
-**Complete / Accepted**; `COLL-UI-01A` stable collection navigation and
-reconciliation is **next**.
+Integrated Stage 5 is **Complete / Accepted** through `REND-04`,
+`LAYOUT-UI-01`, `OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and
+`COLL-UI-02`. Stage 6 is **Current / Authorized** with `DOCK-UI-01`
+**next**; Stage 7 remains **Authorized / Queued**.
 
 No tag, package publication, deployment, release, or alpha-readiness claim is
 made by these acceptances.

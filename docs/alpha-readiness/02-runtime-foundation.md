@@ -4,20 +4,21 @@
 
 ## Execution Contract
 
-Campaign status: integrated `CHROME-UI-01` is **Complete / Accepted**;
-`COLL-UI-01A` stable collection navigation and reconciliation is **next**,
-followed by the painted list/tree and table packets.
+Campaign status: Stage 5 is **Complete / Accepted** through integrated
+`COLL-UI-01` and `COLL-UI-02`; Stage 6 is **Current / Authorized** with
+`DOCK-UI-01` **next**.
 
-Integrated `REND-04`, `LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` are
+Integrated `REND-ADR-01`, `REND-03`, `REND-04`, `LAYOUT-UI-01`,
+`OVL-UI-01`, `CHROME-UI-01`, `COLL-UI-01`, and `COLL-UI-02` are
 **Complete / Accepted**.
 
-Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
+Stage 6 is **Current / Authorized**; Stage 7 remains **Authorized / Queued**.
 
 Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
 | Field | Decision |
 | --- | --- |
-| Status | Complete / Accepted at `5cf07b8`; Stages 3-4 subsequently passed and Stage 5 is Current / Authorized with presenter, external-texture, measured-layout, overlay, and chrome work accepted; `COLL-UI-01A` is next |
+| Status | Complete / Accepted at `5cf07b8`; Stages 3-5 subsequently passed and Stage 6 is Current / Authorized with `DOCK-UI-01` next |
 | Scope | Shared coordinate, arbitration, and interaction-ownership invariants |
 | Impact / confidence | Critical / High |
 | Campaign prerequisite | Stage 1 gate; campaign authorization recorded |
@@ -56,14 +57,13 @@ approval.
 `RT-03` uses frame-local widget presence, kept distinct from eligibility and
 duplicate registration, to cancel removed interaction owners at `end_frame`.
 Its independent critic and the integrated Stage 2 gate passed after one
-fixture-only depth-one remedy. Stages 3-4 subsequently passed, and Stage 5 is
-Current / Authorized with `REND-ADR-01`, `REND-03`, integrated `REND-04`,
-`LAYOUT-UI-01`, `OVL-UI-01`, and `CHROME-UI-01` accepted; `COLL-UI-01A` is next
-under the continuous campaign authorization.
+fixture-only depth-one remedy. Stages 3-5 subsequently passed, and Stage 6 is
+Current / Authorized with `DOCK-UI-01` next under the continuous campaign
+authorization.
 
 ## Deferrals
 
 At Stage 2 acceptance, ordered input, shell execution, async incarnation policy,
 and component work remained out of scope. Stages 3-4 subsequently accepted the
-ordered-input, shell, and async portions; component work remains Stage 5 or
-later.
+ordered-input, shell, async, and Stage 5 composition portions; public editor
+component work remains Stage 6 or later.
