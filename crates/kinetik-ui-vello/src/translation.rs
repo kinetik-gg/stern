@@ -14,6 +14,7 @@ use crate::{
         sanitize_path_elements, sanitize_point, sanitize_radius, sanitize_rect, sanitize_shadow,
         sanitize_size, sanitize_stroke, sanitize_transform,
     },
+    texture::{VelloNativeTextureRegistry, VelloNativeTextureScope},
 };
 
 /// Finite-positive command-schema value used only when a registered layout
@@ -24,6 +25,15 @@ pub(crate) const REGISTERED_TEXT_COMPATIBILITY_METRIC_PLACEHOLDER: f32 = 1.0;
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResources) -> Translation {
+    translate_primitives_with_native(primitives, resources, None)
+}
+
+#[allow(clippy::too_many_lines)]
+pub(crate) fn translate_primitives_with_native(
+    primitives: &[Primitive],
+    resources: &RenderResources,
+    native: Option<(&VelloNativeTextureRegistry, &VelloNativeTextureScope)>,
+) -> Translation {
     let primitive_count = primitives.len();
     let mut commands = Vec::with_capacity(primitive_count);
     let mut diagnostics = Vec::with_capacity(primitive_count);
@@ -45,9 +55,10 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                     transform,
                     RenderCommandKind::Rect {
                         rect: rect_bounds,
-                        fill: rect
-                            .fill
-                            .map(|brush| sanitize_brush(brush, &mut diagnostics, "rect_fill")),
+                        fill: rect.fill.map(|brush| {
+                            // Keep this closure body explicit.
+                            sanitize_brush(brush, &mut diagnostics, "rect_fill")
+                        }),
                         stroke: rect.stroke.and_then(|stroke| {
                             sanitize_stroke(stroke, &mut diagnostics, "rect_stroke")
                         }),
@@ -109,9 +120,10 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                     transform,
                     RenderCommandKind::Path {
                         elements,
-                        fill: path
-                            .fill
-                            .map(|brush| sanitize_brush(brush, &mut diagnostics, "path_fill")),
+                        fill: path.fill.map(|brush| {
+                            // Keep this closure body explicit.
+                            sanitize_brush(brush, &mut diagnostics, "path_fill")
+                        }),
                         stroke: path.stroke.and_then(|stroke| {
                             sanitize_stroke(stroke, &mut diagnostics, "path_stroke")
                         }),
@@ -179,9 +191,10 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                     RenderCommandKind::Image {
                         image: image.image,
                         rect,
-                        tint: image
-                            .tint
-                            .map(|tint| sanitize_color(tint, &mut diagnostics, "image_tint")),
+                        tint: image.tint.map(|tint| {
+                            // Keep this closure body explicit.
+                            sanitize_color(tint, &mut diagnostics, "image_tint")
+                        }),
                     },
                 ));
             }
@@ -193,12 +206,30 @@ pub fn translate_primitives(primitives: &[Primitive], resources: &RenderResource
                     diagnostics.push(RenderDiagnostic::InvalidGeometry("texture_source_size"));
                     continue;
                 };
-                match resources.texture(texture.texture) {
+                let resource = resources.texture(texture.texture);
+                let native_metadata = native.and_then(|(registry, scope)| {
+                    registry.resolve_native_texture(scope, texture.texture)?;
+                    registry.native_texture_metadata(scope, texture.texture)
+                });
+                let native_matches = match (resource, native_metadata) {
+                    (Some(resource), Some((extent, sampling))) => {
+                        f64::from(resource.size.width).to_bits() == f64::from(extent[0]).to_bits()
+                            && f64::from(resource.size.height).to_bits()
+                                == f64::from(extent[1]).to_bits()
+                            && sampling == resource.sampling
+                    }
+                    _ => false,
+                };
+                if native_metadata.is_some() && !native_matches {
+                    diagnostics.push(RenderDiagnostic::InvalidGeometry("native_texture_metadata"));
+                }
+                match resource {
                     None => diagnostics.push(RenderDiagnostic::MissingTexture(texture.texture)),
                     Some(resource) if !logical_size_matches(source_size, resource.size) => {
                         diagnostics.push(RenderDiagnostic::InvalidGeometry("texture_source_size"));
                         continue;
                     }
+                    Some(_) if native_matches => {}
                     Some(resource) if resource.snapshot.is_none() => {
                         diagnostics.push(RenderDiagnostic::MissingTextureSnapshot(texture.texture));
                     }

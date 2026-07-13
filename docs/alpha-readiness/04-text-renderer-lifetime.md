@@ -4,7 +4,13 @@
 
 ## Execution Contract
 
-Campaign status: REND-03 is **Complete / Accepted**; REND-04 is **next**.
+Campaign status: REND-04A is **Complete / Accepted**; REND-04B is **next**.
+
+Integrated REND-04 remains **Current / Authorized**.
+
+Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
+
+Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
 | Field | Decision |
 | --- | --- |
@@ -12,7 +18,7 @@ Campaign status: REND-03 is **Complete / Accepted**; REND-04 is **next**.
 | Scope | Async liveness, desktop/Unicode text, bounded caches, and renderer correctness |
 | Impact / confidence | Critical / Medium-high overall |
 | Campaign prerequisite | Stage 3 gate; campaign authorization recorded |
-| Token checkpoint | Stage 4 gate passed; Stage 5 is Current / Authorized with `REND-ADR-01` and `REND-03` accepted and `REND-04` next |
+| Token checkpoint | Stage 4 gate passed; Stage 5 is Current / Authorized with `REND-ADR-01`, `REND-03`, and `REND-04A` accepted and `REND-04B` next |
 
 ## Packets
 
@@ -309,7 +315,7 @@ caret/selection geometry agreement at scale factors 1.25, 1.5, and 1.75.
 
 At this gate, Stage 5 advanced to Current / Authorized with `REND-ADR-01`
 next. ADR 0001 subsequently accepted that decision, `REND-03` is now Complete /
-Accepted, and `REND-04` is next.
+Accepted, `REND-04A` is Complete / Accepted, and `REND-04B` is next.
 Every Stage 5 packet still requires its own deterministic task gate; a failed
 checkpoint or unresolved ownership decision halts the campaign.
 

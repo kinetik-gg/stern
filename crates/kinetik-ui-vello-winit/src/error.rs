@@ -1,5 +1,7 @@
 use std::fmt;
 
+use kinetik_ui_core::TextureId;
+
 /// A channel rejected while validating the presenter's base color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -54,6 +56,32 @@ impl PresenterGpuError {
     }
 }
 
+/// Reason a native texture cannot be registered or replaced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum VelloNativeTextureValidationError {
+    /// Replacement resource ID differs from the registered texture ID.
+    ResourceIdMismatch,
+    /// Native width or height is zero.
+    ZeroExtent,
+    /// Neutral resource width or height is not finite, positive, and integral.
+    NonIntegralResourceExtent,
+    /// Neutral resource extent differs from the native texture extent.
+    ResourceExtentMismatch,
+    /// Native texture format is not `Rgba8Unorm`.
+    UnsupportedFormat,
+    /// Native texture usage does not contain `COPY_SRC`.
+    MissingCopySourceUsage,
+    /// Native texture is not two-dimensional.
+    UnsupportedDimension,
+    /// Native texture has more than one array layer.
+    UnsupportedArrayLayers,
+    /// Native texture has more than one mip level.
+    UnsupportedMipLevels,
+    /// Native texture is multisampled.
+    UnsupportedSampleCount,
+}
+
 /// Error returned by the Vello/Winit presenter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -100,6 +128,39 @@ pub enum VelloPresenterError {
         /// Number of callback events known to have been dropped.
         dropped: u64,
     },
+    /// The neutral texture ID is already registered.
+    NativeTextureAlreadyRegistered {
+        /// Conflicting texture ID.
+        texture: TextureId,
+    },
+    /// The neutral texture ID has no active registration.
+    NativeTextureNotRegistered {
+        /// Missing texture ID.
+        texture: TextureId,
+    },
+    /// The registration belongs to stale presenter, device, or ID state.
+    StaleNativeTextureRegistration {
+        /// Stale texture ID.
+        texture: TextureId,
+    },
+    /// The requested content revision moved backward.
+    NativeTextureRevisionRegressed {
+        /// Registered texture ID.
+        texture: TextureId,
+        /// Current accepted revision.
+        current: u64,
+        /// Rejected requested revision.
+        requested: u64,
+    },
+    /// Native texture metadata violates the supported contract.
+    InvalidNativeTexture {
+        /// Rejected texture ID.
+        texture: TextureId,
+        /// Stable validation reason.
+        reason: VelloNativeTextureValidationError,
+    },
+    /// The checked native registration generation could not advance.
+    NativeTextureGenerationExhausted,
 }
 
 impl VelloPresenterError {
@@ -163,6 +224,44 @@ impl fmt::Display for VelloPresenterError {
                     formatter,
                     "uncaptured GPU error inbox dropped {dropped} event(s)"
                 )
+            }
+            Self::NativeTextureAlreadyRegistered { texture } => {
+                write!(
+                    formatter,
+                    "native texture {} is already registered",
+                    texture.raw()
+                )
+            }
+            Self::NativeTextureNotRegistered { texture } => {
+                write!(
+                    formatter,
+                    "native texture {} is not registered",
+                    texture.raw()
+                )
+            }
+            Self::StaleNativeTextureRegistration { texture } => {
+                write!(
+                    formatter,
+                    "native texture {} registration is stale",
+                    texture.raw()
+                )
+            }
+            Self::NativeTextureRevisionRegressed {
+                texture,
+                current,
+                requested,
+            } => write!(
+                formatter,
+                "native texture {} revision regressed from {current} to {requested}",
+                texture.raw()
+            ),
+            Self::InvalidNativeTexture { texture, reason } => write!(
+                formatter,
+                "native texture {} is invalid: {reason:?}",
+                texture.raw()
+            ),
+            Self::NativeTextureGenerationExhausted => {
+                formatter.write_str("native texture registration generation exhausted")
             }
         }
     }

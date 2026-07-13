@@ -6,6 +6,27 @@ the alpha-readiness campaign. Prelude inclusion is a convenience decision and
 never implies Stable conformance. Candidate-for-alpha-stable is a separate
 product decision from conformance status.
 
+REND-04A: **Complete / Accepted**; REND-04B: **next**; integrated REND-04 remains **Current / Authorized**.
+
+No tag, package publication, deployment, release, or alpha-readiness claim is made by REND-04A.
+
+The application-facing native texture API is qualified-only; none of its symbols are exported by `kinetik_ui::prelude`.
+
+- `kinetik_ui::vello_winit::VelloNativeTextureRegistration`
+- `kinetik_ui::vello_winit::VelloNativeTextureUpdateOutcome`
+- `kinetik_ui::vello_winit::VelloNativeTextureValidationError`
+- `kinetik_ui::vello_winit::VelloWindowPresenter::register_native_texture`
+- `kinetik_ui::vello_winit::VelloWindowPresenter::update_native_texture`
+- `kinetik_ui::vello_winit::VelloWindowPresenter::replace_native_texture`
+- `kinetik_ui::vello_winit::VelloWindowPresenter::remove_native_texture`
+- `kinetik_ui::vello_winit::VelloPresenterError::{NativeTextureAlreadyRegistered, NativeTextureNotRegistered, StaleNativeTextureRegistration, NativeTextureRevisionRegressed, InvalidNativeTexture, NativeTextureGenerationExhausted}`
+- `kinetik_ui::vello_winit::VelloNativeTextureValidationError::{ResourceIdMismatch, ZeroExtent, NonIntegralResourceExtent, ResourceExtentMismatch, UnsupportedFormat, MissingCopySourceUsage, UnsupportedDimension, UnsupportedArrayLayers, UnsupportedMipLevels, UnsupportedSampleCount}`
+- `kinetik_ui::render_vello::VelloNativeTextureRegistry`
+- `kinetik_ui::render_vello::VelloNativeTextureScope`
+- `kinetik_ui::render_vello::VelloNativeTextureScope::new`
+- `kinetik_ui::render_vello::VelloNativeTextureRegistry::{new, begin_native_texture_update, stage_native_texture, dirty_native_texture, replace_native_texture_image, retire_native_texture, commit_native_texture, clear_native_textures}`
+- `kinetik_ui::render_vello::VelloRenderer::submit_frame_with_native_textures`
+
 An API may be classified Stable only after accepted behavioral evidence proves
 every capability axis required by that API: Model, Paint, Input,
 Accessibility, Platform, and Live Workflow as applicable. Metadata-only or
@@ -44,7 +65,7 @@ curation.
 | Render | Provisional Experimental | `kinetik_ui::render`; current common subset is also in `kinetik_ui::prelude` | Yes: backend-independent frame and resource contract | Presenter, resource-lifetime, diagnostic, and external-texture workflow proof |
 | Winit | Provisional Experimental, feature-gated | `kinetik_ui::platform_winit` | Yes: supported window and platform loop | Winit input, IME/clipboard/cursor/platform-request, accessibility boundary, and redraw-loop proof; no new prelude exports before presenter proof |
 | Vello | Provisional Experimental, feature-gated | `kinetik_ui::render_vello` | Yes: supported 2D backend and presenter | Surface acquisition/recovery, resize/scale, presentation, diagnostics, and Vello-backed workflow proof; no new prelude exports before presenter proof |
-| Vello/Winit presenter | Provisional Experimental, feature-gated, qualified only | `kinetik_ui::vello_winit` | Yes: supported one-window live presenter | REND-03 is Complete / Accepted; REND-04 is next for native texture composition; access remains qualified only, and no presenter item enters the prelude |
+| Vello/Winit presenter | Provisional Experimental, feature-gated, qualified only | `kinetik_ui::vello_winit` | Yes: supported one-window live presenter | REND-04A is Complete / Accepted; REND-04B is next for real-GPU evidence; access remains qualified only, and no presenter item enters the prelude |
 | Widgets | Provisional Experimental | Common composition path: `kinetik_ui::widgets`; advanced APIs use the qualified modules listed below | Yes: controls and viewport surface; exact final subset deferred | Public paint/input/accessibility/platform/live-workflow evidence for each selected component |
 
 ### Facade state inventory

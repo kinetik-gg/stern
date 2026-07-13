@@ -4,7 +4,13 @@
 
 ## Execution Contract
 
-Campaign status: REND-03 is **Complete / Accepted**; REND-04 is **next**.
+Campaign status: REND-04A is **Complete / Accepted**; REND-04B is **next**.
+
+Integrated REND-04 remains **Current / Authorized**.
+
+Stage 5 remains **Current / Authorized**; Stages 6-7 remain **Authorized / Queued**.
+
+Kinetik UI remains a foundation/developer-preview; this packet does not tag, publish, deploy, release, or claim alpha readiness.
 
 | Field | Decision |
 | --- | --- |
@@ -100,7 +106,7 @@ overlap, and shell behavior with no recorded owner would have stopped the
 campaign. Those checks passed; at the Stage 3 gate, the campaign advanced Stage
 4 to Current / Authorized without requiring new approval. Stage 4 subsequently
 passed, and Stage 5 is now Current / Authorized with `REND-ADR-01` and
-`REND-03` accepted and `REND-04` next.
+`REND-03` and `REND-04A` accepted and `REND-04B` next.
 
 ## Deferrals
 

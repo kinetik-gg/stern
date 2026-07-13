@@ -8,7 +8,14 @@ This decision closes `REND-ADR-01`; the reusable presenter and Showcase
 adoption now close integrated `REND-03`. External-texture implementation remains
 `REND-04`.
 
-REND-03 is **Complete / Accepted**; REND-04 is **next**.
+REND-04A: **Complete / Accepted**; REND-04B: **next**; integrated REND-04 remains **Current / Authorized**.
+
+No tag, package publication, deployment, release, or alpha-readiness claim is made by REND-04A.
+
+REND-04A freezes the native texture registry, presenter token/revision seam,
+native-first Vello resolution, and device-generation invalidation. REND-04B is
+the next serial evidence packet for real-GPU color/alpha, producer example,
+package archive, and integrated acceptance.
 
 ## Context
 

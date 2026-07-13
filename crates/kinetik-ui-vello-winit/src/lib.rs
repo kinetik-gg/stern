@@ -10,14 +10,17 @@ mod device;
 mod error;
 mod frame;
 mod lifecycle;
+mod native_texture;
 mod presenter;
 mod result;
 
 pub use config::VelloPresenterConfig;
 pub use device::{PresenterDevice, PresenterDeviceScope};
 pub use error::{
-    InvalidColorChannel, PresenterGpuError, PresenterGpuErrorKind, VelloPresenterError,
+    InvalidColorChannel, PresenterGpuError, PresenterGpuErrorKind,
+    VelloNativeTextureValidationError, VelloPresenterError,
 };
+pub use native_texture::{VelloNativeTextureRegistration, VelloNativeTextureUpdateOutcome};
 pub use presenter::VelloWindowPresenter;
 pub use result::{
     VelloAttachOutcome, VelloAttachmentStatus, VelloPresentReport, VelloPresentStatus,

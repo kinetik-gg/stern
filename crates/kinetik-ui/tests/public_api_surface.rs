@@ -472,3 +472,47 @@ fn incremental_text_resource_sync_is_qualified_and_caller_owned() {
             .is_noop()
     );
 }
+
+#[cfg(feature = "vello-winit")]
+#[test]
+fn facade_native_texture_api_is_qualified_only() {
+    use kinetik_ui::vello_winit::{
+        PresenterDeviceScope, VelloNativeTextureRegistration, VelloNativeTextureUpdateOutcome,
+        VelloNativeTextureValidationError, VelloPresenterError, VelloWindowPresenter, wgpu,
+    };
+
+    let register: fn(
+        &mut VelloWindowPresenter,
+        &PresenterDeviceScope,
+        &kinetik_ui::render::TextureResource,
+        &wgpu::Texture,
+        u64,
+    ) -> Result<VelloNativeTextureRegistration, VelloPresenterError> =
+        VelloWindowPresenter::register_native_texture;
+    let update: fn(
+        &mut VelloWindowPresenter,
+        &VelloNativeTextureRegistration,
+        u64,
+    ) -> Result<VelloNativeTextureUpdateOutcome, VelloPresenterError> =
+        VelloWindowPresenter::update_native_texture;
+    let replace: fn(
+        &mut VelloWindowPresenter,
+        &VelloNativeTextureRegistration,
+        &kinetik_ui::render::TextureResource,
+        &wgpu::Texture,
+        u64,
+    ) -> Result<VelloNativeTextureRegistration, VelloPresenterError> =
+        VelloWindowPresenter::replace_native_texture;
+    let remove: fn(
+        &mut VelloWindowPresenter,
+        &VelloNativeTextureRegistration,
+    ) -> Result<(), VelloPresenterError> = VelloWindowPresenter::remove_native_texture;
+    let qualified = [
+        std::any::type_name::<VelloNativeTextureRegistration>(),
+        std::any::type_name::<VelloNativeTextureUpdateOutcome>(),
+        std::any::type_name::<VelloNativeTextureValidationError>(),
+    ];
+
+    assert!(qualified.iter().all(|name| !name.is_empty()));
+    let _ = (register, update, replace, remove);
+}
