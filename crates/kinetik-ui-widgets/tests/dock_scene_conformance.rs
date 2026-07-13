@@ -487,10 +487,16 @@ fn invalid_bounds_and_empty_frames_are_safe() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn pointer_plan_orders_dock_chrome_and_panel_content_without_collisions() {
     let root = WidgetId::from_key("dock-scene-pointer-plan");
     let panel_id = PanelId::from_raw(1);
-    let dock = Dock::new(DockNode::Frame(frame(1, vec![panel(1, "Panel")])));
+    let dock = Dock::new(split(
+        Axis::Horizontal,
+        0.5,
+        DockNode::Frame(frame(1, vec![panel(1, "Panel")])),
+        DockNode::Frame(frame(2, vec![panel(2, "Other")])),
+    ));
     let scene = DockScene::new(
         DockSceneConfig::new(root, Rect::new(0.0, 0.0, 200.0, 140.0)),
         &dock,
@@ -519,13 +525,19 @@ fn pointer_plan_orders_dock_chrome_and_panel_content_without_collisions() {
                 scene.layout().bounds,
                 PointerOrder::new(1),
             ));
-            let content_order = scene.declare_pointer_targets(plan, PointerOrder::new(100));
-            assert!(content_order > PointerOrder::new(100));
-            plan.target(PointerTarget::new(
-                panel_content_id,
-                panel_rect,
-                content_order,
-            ));
+            let next = scene.declare_pointer_targets_with_content(
+                plan,
+                PointerOrder::new(100),
+                |plan, content_order| {
+                    plan.target(PointerTarget::new(
+                        panel_content_id,
+                        panel_rect,
+                        content_order,
+                    ));
+                    PointerOrder::new(content_order.raw() + 1)
+                },
+            );
+            assert!(next > PointerOrder::new(100));
         })
         .expect("dock and panel targets form one valid plan");
     assert_eq!(routes.ordinary, PointerRoute::Target(panel_content_id));
@@ -552,5 +564,35 @@ fn pointer_plan_orders_dock_chrome_and_panel_content_without_collisions() {
     assert_eq!(
         tab_routes.ordinary,
         PointerRoute::Target(scene.tab_widget_id(panel_id))
+    );
+
+    let splitter_input = UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(99.0, 80.0)),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    };
+    let mut splitter_memory = UiMemory::new();
+    let mut splitter_ui = Ui::new(&splitter_input, &mut splitter_memory, &theme);
+    let splitter_routes = splitter_ui
+        .resolve_pointer_targets(|plan| {
+            scene.declare_pointer_targets_with_content(
+                plan,
+                PointerOrder::new(100),
+                |plan, content_order| {
+                    plan.target(PointerTarget::new(
+                        panel_content_id,
+                        panel_rect,
+                        content_order,
+                    ));
+                    PointerOrder::new(content_order.raw() + 1)
+                },
+            );
+        })
+        .expect("splitter target remains above overlapping panel content");
+    assert_eq!(
+        splitter_routes.ordinary,
+        PointerRoute::Target(scene.splitter_widget_id(&DockSplitPath::root()))
     );
 }

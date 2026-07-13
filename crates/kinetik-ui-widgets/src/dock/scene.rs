@@ -257,13 +257,29 @@ impl DockScene {
 
     /// Adds the dock blocker and stable future-controller targets to one plan.
     ///
-    /// Panel content should declare its own higher-order targets beginning at
-    /// the returned order. This packet only prepares Dock/Frame chrome; it does
-    /// not evaluate controller mutations.
+    /// Use [`Self::declare_pointer_targets_with_content`] when active panel
+    /// bodies contain interactive targets that must remain below frame chrome.
+    /// The returned order is suitable for later overlays above the whole dock.
+    /// This packet does not evaluate controller mutations.
     pub fn declare_pointer_targets(
         &self,
         plan: &mut PointerTargetPlan,
         first_order: PointerOrder,
+    ) -> PointerOrder {
+        self.declare_pointer_targets_with_content(plan, first_order, |_, order| order)
+    }
+
+    /// Adds dock targets with caller-declared panel content below frame chrome.
+    ///
+    /// The callback receives the first unused order after the root blocker and
+    /// frame targets. It must return the first unused order after declaring all
+    /// interactive panel content. Tabs, close affordances, and splitters are
+    /// then declared above that content, matching their paint order.
+    pub fn declare_pointer_targets_with_content(
+        &self,
+        plan: &mut PointerTargetPlan,
+        first_order: PointerOrder,
+        panel_content: impl FnOnce(&mut PointerTargetPlan, PointerOrder) -> PointerOrder,
     ) -> PointerOrder {
         if !valid_rect(self.layout.bounds) {
             return first_order;
@@ -277,6 +293,11 @@ impl DockScene {
             plan.target(
                 PointerTarget::new(frame.id, frame.rect, take_order(&mut ordinal)).enabled(enabled),
             );
+        }
+
+        ordinal = ordinal.max(panel_content(plan, PointerOrder::new(ordinal)).raw());
+
+        for frame in &self.layout.frames {
             plan.with_clip(frame.tab_list_rect, |plan| {
                 for tab in &frame.tabs {
                     let mut target = PointerTarget::new(tab.id, tab.rect, take_order(&mut ordinal));
