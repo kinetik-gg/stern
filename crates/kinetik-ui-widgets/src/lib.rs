@@ -51,8 +51,10 @@ pub use collections::{
     TableColumnConstraints, TableHeaderRect, TableLayout, TableSort, TreeExpansion, TreeItem,
     TreeLayout, TreeModel, TreeModelError, TreeRow, TreeRowRect, VirtualList, VirtualListConfig,
     VirtualListItemResponse, VirtualListOutput, VirtualListRow, VirtualListSelectionMode,
-    VirtualRangeRequest, VirtualWindow, VirtualWindowRequest, clamp_virtual_scroll_offset,
-    virtual_content_extent, virtual_max_scroll_offset, virtual_range, virtual_window,
+    VirtualRangeRequest, VirtualTree, VirtualTreeConfig, VirtualTreeItemResponse,
+    VirtualTreeOutput, VirtualTreeRow, VirtualTreeSelectionMode, VirtualWindow,
+    VirtualWindowRequest, clamp_virtual_scroll_offset, virtual_content_extent,
+    virtual_max_scroll_offset, virtual_range, virtual_window,
 };
 pub use components::{
     AssetSlotAsset, AssetSlotConfig, AssetSlotOutput, ColorFieldConfig, ColorFieldOutput,
