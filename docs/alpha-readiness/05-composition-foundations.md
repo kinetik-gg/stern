@@ -22,7 +22,7 @@ Kinetik UI remains a foundation/developer-preview; this packet does not tag, pub
 | Scope | Presenter ownership/external textures and measured public composition foundations |
 | Impact / confidence | Critical / Medium overall |
 | Campaign prerequisite | Stage 4 gate, Complete / Accepted; campaign authorization recorded |
-| Token checkpoint | Gate passed; execute bounded Stage 6 packets serially, beginning with `DOCK-UI-01` |
+| Token checkpoint | Gate passed; Stage 6 packets subsequently passed and Stage 7 is Current / Authorized with `PERF-01` next |
 
 ## Packets
 

@@ -226,8 +226,8 @@ The `TEXT-01` semantic prerequisites of `TEXT-02`, `TEXT-03`, and dependent
 editor packets are satisfied, and accepted `REND-01` unblocked the renderer
 side of 4B. `TEXT-02`, `TEXT-03`, and `REND-02` are Complete / Accepted.
 At this checkpoint, inspector/outliner still waited for their Stage 5
-composition and collection prerequisites. Those prerequisites subsequently
-passed; editor integration remains Stage 6. Checkpoints 4A and 4B are complete,
+composition and collection prerequisites. Those prerequisites and Stage 6
+editor integration subsequently passed. Checkpoints 4A and 4B are complete,
 and the integrated Stage 4 gate is accepted.
 
 ## `REND-02`: authoritative fractional-DPI text projection
@@ -276,8 +276,8 @@ compatibility behavior. Fractional command translations retain the existing
 generic-rectangle band of at most 1.0001 physical pixels. CPU scene encoding
 does not prove GPU raster or pixel identity. Duplicate `TextLayoutCache`
 curation remains Stage 7 `API-01`. The presenter, external-texture, and
-composition foundations subsequently passed in Stage 5; public editor
-composition remains Stage 6.
+composition foundations subsequently passed in Stage 5, followed by public
+editor composition in Stage 6.
 
 ## Integrated Stage 4 Acceptance
 
@@ -335,6 +335,6 @@ rebuild behavior, and payload metrics that are not process RSS remain explicit.
 Vello's resolved gradient ramp remains a source-verified dependency risk, and
 premultiplied payload validity remains caller-owned. Stage 5 subsequently
 accepted the supported presenter/swapchain and external-texture scope;
-HDR/wide-gamut/ICC and final GPU-pixel evidence remain later work, while public
-editor composition remains Stage 6 or later. The repository remains foundation
+HDR/wide-gamut/ICC and final GPU-pixel evidence remain later work. Public
+editor composition subsequently passed in Stage 6. The repository remains foundation
 / developer preview, not alpha-ready.

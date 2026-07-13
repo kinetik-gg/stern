@@ -115,6 +115,7 @@ subsequently passed, and Stage 7 is now Current / Authorized with
 ## Deferrals
 
 At Stage 3 acceptance, desktop/Unicode editing, presenter extraction, and
-showcase workflow integration remained later-stage work. Stages 4-5
-subsequently accepted the canonical desktop/Unicode, presenter, and composition
-scope; broader showcase workflow integration remains Stage 6 or later.
+showcase workflow integration remained later-stage work. Stages 4-6
+subsequently accepted the canonical desktop/Unicode, presenter, composition,
+and coherent showcase workflow scope; Stage 7 quality and alpha-gate work
+remains open.

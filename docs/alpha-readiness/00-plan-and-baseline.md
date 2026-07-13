@@ -67,4 +67,4 @@ Verification is limited to Markdown/file/link/ID review, `git diff --check`, tar
 
 ## Deferrals
 
-Stage 0 closes documentation only and changes neither the product label from foundation/developer preview nor any implementation finding. Implementation now proceeds at Stage 6 under the separate Stage 1-7 campaign authorization.
+Stage 0 closed documentation only and changed neither the product label from foundation/developer preview nor any implementation finding. Implementation subsequently passed Stages 1-6; Stage 7 is Current / Authorized under the separate campaign authorization.

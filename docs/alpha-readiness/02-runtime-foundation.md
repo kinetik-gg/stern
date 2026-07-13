@@ -64,6 +64,6 @@ authorization.
 ## Deferrals
 
 At Stage 2 acceptance, ordered input, shell execution, async incarnation policy,
-and component work remained out of scope. Stages 3-4 subsequently accepted the
-ordered-input, shell, async, and Stage 5 composition portions; public editor
-component work remains Stage 6 or later.
+and component work remained out of scope. Stages 3-6 subsequently accepted the
+ordered-input, shell, async, composition, and public editor portions; Stage 7
+quality and alpha-gate work remains open.

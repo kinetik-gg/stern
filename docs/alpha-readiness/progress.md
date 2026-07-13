@@ -61,10 +61,9 @@ next under the recorded campaign authorization.
 ### Remaining risks and deferred findings
 
 - At the Stage 0 checkpoint, runtime, input, text, presenter, component,
-  quality, and release risks were unresolved. The authorized Stage 1-5 runtime,
-  input, text, presenter, and composition foundations subsequently passed;
-  editor integration remains Stage 6, while quality and release risks remain
-  Stage 7 work.
+  quality, and release risks were unresolved. The authorized runtime, input,
+  text, presenter, composition, and editor work subsequently passed through
+  Stage 6; quality and release risks remain Stage 7 work.
 - Timeline and node-graph packets remain deferred unless explicitly added to alpha scope.
 - Native accessibility may remain a documented semantic-output-only boundary; floating native windows, broad multi-window behavior, additional renderers, and broader production persistence remain deferred.
 - Packageability must not be interpreted as permission to tag, publish, or claim alpha readiness; pull-request merges follow the separate `squash-after-gates` campaign policy.
@@ -1794,8 +1793,8 @@ command translations retain the generic rectangle quantization band of at most
 1.0001 physical pixels. CPU scene encoding proves submitted topology and
 coordinates, not final GPU raster coverage or cross-GPU pixel identity. The
 duplicate public `TextLayoutCache` remains Stage 7 `API-01`. Presenter,
-external-texture, and composition foundations subsequently passed in Stage 5;
-public editor composition remains Stage 6.
+external-texture, and composition foundations subsequently passed in Stage 5,
+followed by public editor composition in Stage 6.
 
 ### `STAGE-4-CLOSE`: integrated text, renderer, and lifetime acceptance gate
 
@@ -1891,8 +1890,8 @@ audit §11.7 is not globally closed. Vello's resolved gradient ramp remains a
 source-verified dependency risk, and premultiplied payload validity remains
 caller-owned. Stage 5 subsequently accepted the supported presenter/swapchain,
 external-texture, and composition-foundation scope; HDR/wide-gamut/ICC and
-final GPU pixels remain later work, while public editor composition remains
-Stage 6. Broader image/resource/performance/lifecycle findings remain open
+final GPU pixels remain later work. Public editor composition subsequently
+passed in Stage 6. Broader image/resource/performance/lifecycle findings remain open
 unless a separately accepted packet closed them. The repository remains foundation /
 developer preview, not alpha-ready; no tag, publish, deployment, or release is
 authorized.
