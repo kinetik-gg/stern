@@ -148,27 +148,59 @@ fn native_encoding_uses_validated_extent_after_tolerant_source_size_match() {
         sampling: RenderImageSampling::Pixelated,
         snapshot: None,
     });
-    let primitives = vec![Primitive::Texture(TexturePrimitive {
+    let tolerant_primitives = vec![Primitive::Texture(TexturePrimitive {
         texture,
         rect: Rect::new(4.0, 6.0, 16.0, 12.0),
         source_size: Size::new(1.0 + f32::EPSILON, 1.0),
     })];
+    let exact_primitives = vec![Primitive::Texture(TexturePrimitive {
+        texture,
+        rect: Rect::new(4.0, 6.0, 16.0, 12.0),
+        source_size: Size::new(1.0, 1.0),
+    })];
     let (scope, registry) = native_registry(texture, [1, 1], RenderImageSampling::Pixelated);
-    let mut renderer = VelloRenderer::new();
+    let mut tolerant_renderer = VelloRenderer::new();
+    let mut exact_renderer = VelloRenderer::new();
 
-    let output = renderer.submit_frame_with_native_textures(
+    let tolerant_output = tolerant_renderer.submit_frame_with_native_textures(
         RenderFrameInput {
             viewport: viewport(),
-            primitives: &primitives,
+            primitives: &tolerant_primitives,
+            resources: &resources,
+        },
+        &registry,
+        &scope,
+    );
+    let exact_output = exact_renderer.submit_frame_with_native_textures(
+        RenderFrameInput {
+            viewport: viewport(),
+            primitives: &exact_primitives,
             resources: &resources,
         },
         &registry,
         &scope,
     );
 
-    assert!(output.diagnostics.is_empty());
-    assert_eq!(renderer.scene().encoding().resources.patches.len(), 1);
-    assert_eq!(renderer.cached_texture_count(), 0);
+    assert!(tolerant_output.diagnostics.is_empty());
+    assert!(exact_output.diagnostics.is_empty());
+    let tolerant_encoding = tolerant_renderer.scene().encoding();
+    let exact_encoding = exact_renderer.scene().encoding();
+    assert_eq!(tolerant_encoding.resources.patches.len(), 1);
+    assert_eq!(exact_encoding.resources.patches.len(), 1);
+    assert_eq!(
+        tolerant_encoding.transforms, exact_encoding.transforms,
+        "a tolerated logical source-size delta must encode from the validated resource extent"
+    );
+    assert_eq!(
+        tolerant_encoding.path_data, exact_encoding.path_data,
+        "the encoded source rectangle must use the validated resource dimensions"
+    );
+    assert_eq!(
+        tolerant_encoding.draw_data, exact_encoding.draw_data,
+        "equivalent validated native draws must retain the same draw payload"
+    );
+    assert_eq!(tolerant_renderer.cached_texture_count(), 0);
+    assert_eq!(exact_renderer.cached_texture_count(), 0);
 }
 
 #[test]
