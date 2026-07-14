@@ -187,13 +187,13 @@ impl Ui<'_> {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: geometry.rect,
             fill: Some(Brush::Solid(if section {
-                self.theme.colors.surface_raised
+                self.theme.colors.surface.raised
             } else {
-                self.theme.colors.surface_sunken
+                self.theme.colors.surface.sunken
             })),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
         }));
@@ -214,13 +214,13 @@ impl Ui<'_> {
             label.push_str(" *");
         }
         let label_color = if access.disabled() {
-            self.theme.colors.text_disabled
+            self.theme.colors.content.disabled
         } else if presentation.accented {
             status_color
         } else if section {
-            self.theme.colors.text
+            self.theme.colors.content.primary
         } else {
-            self.theme.colors.text_muted
+            self.theme.colors.content.muted
         };
         self.paint_property_grid_text(
             Point::new(
@@ -237,7 +237,7 @@ impl Ui<'_> {
                     text_baseline(geometry.label_rect, self.theme.font(TextRole::Label).size),
                 ),
                 "?".to_owned(),
-                self.theme.colors.text_muted,
+                self.theme.colors.content.muted,
             );
         }
         if presentation.accented {
@@ -325,10 +325,10 @@ fn effective_access(row: &PropertyGridRow, grid_disabled: bool) -> PropertyGridA
 
 fn property_status_color(theme: &stern_core::Theme, severity: PropertyGridStatusSeverity) -> Color {
     match severity {
-        PropertyGridStatusSeverity::None => theme.colors.text_muted,
-        PropertyGridStatusSeverity::Info => theme.colors.accent,
-        PropertyGridStatusSeverity::Warning => theme.colors.warning,
-        PropertyGridStatusSeverity::Error => theme.colors.danger,
+        PropertyGridStatusSeverity::None => theme.colors.content.muted,
+        PropertyGridStatusSeverity::Info => theme.colors.status.info.strong,
+        PropertyGridStatusSeverity::Warning => theme.colors.status.warning.strong,
+        PropertyGridStatusSeverity::Error => theme.colors.status.danger.strong,
     }
 }
 

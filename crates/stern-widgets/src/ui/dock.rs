@@ -488,7 +488,7 @@ impl Ui<'_> {
             self.register_id(splitter.id);
             self.primitive(Primitive::Rect(RectPrimitive {
                 rect: splitter.rect,
-                fill: Some(Brush::Solid(self.theme.colors.border)),
+                fill: Some(Brush::Solid(self.theme.colors.border.default)),
                 stroke: None,
                 radius: self.theme.radii.none,
             }));
@@ -502,10 +502,12 @@ impl Ui<'_> {
             };
             self.primitive(Primitive::Rect(RectPrimitive {
                 rect: preview.rect,
-                fill: Some(Brush::Solid(self.theme.colors.accent.with_alpha(alpha))),
+                fill: Some(Brush::Solid(
+                    self.theme.colors.accent.default.with_alpha(alpha),
+                )),
                 stroke: Some(Stroke::new(
                     self.theme.controls.border_width.max(1.0),
-                    Brush::Solid(self.theme.colors.accent),
+                    Brush::Solid(self.theme.colors.accent.default),
                 )),
                 radius,
             }));
@@ -517,10 +519,10 @@ impl Ui<'_> {
     fn paint_dock_root(&mut self, rect: Rect) {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface_sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.workspace)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
         }));
@@ -529,14 +531,14 @@ impl Ui<'_> {
     fn paint_dock_frame(&mut self, frame: &DockSceneFrame, disabled: bool) {
         self.register_id(frame.id);
         let fill = if frame.active {
-            self.theme.colors.surface_raised
+            self.theme.colors.surface.panel_raised
         } else {
-            self.theme.colors.surface_sunken
+            self.theme.colors.surface.panel
         };
         let border = if frame.active {
-            self.theme.colors.focus_ring
+            self.theme.colors.focus.ring
         } else {
-            self.theme.colors.border_subtle
+            self.theme.colors.border.subtle
         };
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: frame.rect,
@@ -551,10 +553,10 @@ impl Ui<'_> {
         self.register_id(frame.tab_list_id);
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: frame.tab_list_rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface_sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
         }));

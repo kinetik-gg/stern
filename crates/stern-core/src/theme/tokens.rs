@@ -1,115 +1,484 @@
 use crate::{Color, CornerRadius, Rect, ShadowPrimitive, Vec2};
 
-/// Semantic color role.
+/// Exact semantic color token key.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SemanticColor {
-    /// Main application surface.
-    Surface,
-    /// Elevated or grouped surface.
+    /// `surface.application`.
+    SurfaceApplication,
+    /// `surface.workspace`.
+    SurfaceWorkspace,
+    /// `surface.panel`.
+    SurfacePanel,
+    /// `surface.panel_raised`.
+    SurfacePanelRaised,
+    /// `surface.raised`.
     SurfaceRaised,
-    /// Hovered surface.
+    /// `surface.control`.
+    SurfaceControl,
+    /// `surface.control_hover`.
+    SurfaceControlHover,
+    /// `surface.control_pressed`.
+    SurfaceControlPressed,
+    /// `surface.control_disabled`.
+    SurfaceControlDisabled,
+    /// `surface.overlay`.
+    SurfaceOverlay,
+    /// `surface.hover`.
     SurfaceHover,
-    /// Active/pressed surface.
-    SurfaceActive,
-    /// Sunken input surface.
+    /// `surface.sunken`.
     SurfaceSunken,
-    /// Primary text.
-    Text,
-    /// Muted secondary text.
-    TextMuted,
-    /// Disabled text.
-    TextDisabled,
-    /// Accent color.
-    Accent,
-    /// Danger/destructive color.
-    Danger,
-    /// Warning color.
-    Warning,
-    /// Success color.
-    Success,
-    /// Normal border.
-    Border,
-    /// Subtle border.
+    /// `content.primary`.
+    ContentPrimary,
+    /// `content.secondary`.
+    ContentSecondary,
+    /// `content.muted`.
+    ContentMuted,
+    /// `content.disabled`.
+    ContentDisabled,
+    /// `content.on_accent`.
+    ContentOnAccent,
+    /// `content.link`.
+    ContentLink,
+    /// `border.subtle`.
     BorderSubtle,
-    /// Focus ring.
+    /// `border.default`.
+    BorderDefault,
+    /// `border.strong`.
+    BorderStrong,
+    /// `border.hover`.
+    BorderHover,
+    /// `border.focused`.
+    BorderFocused,
+    /// `border.disabled`.
+    BorderDisabled,
+    /// `border.invalid`.
+    BorderInvalid,
+    /// `selection.background`.
+    SelectionBackground,
+    /// `selection.foreground`.
+    SelectionForeground,
+    /// `focus.indicator`.
+    FocusIndicator,
+    /// `focus.separator`.
+    FocusSeparator,
+    /// `focus.ring`.
     FocusRing,
-    /// Selection fill.
-    Selection,
-    /// Disabled surface or affordance fill.
-    Disabled,
-    /// Floating overlay surface.
-    Overlay,
-    /// Viewport background.
-    ViewportBackground,
+    /// `overlay.scrim`.
+    OverlayScrim,
+    /// `accent.subtle`.
+    AccentSubtle,
+    /// `accent.default`.
+    AccentDefault,
+    /// `accent.hover`.
+    AccentHover,
+    /// `accent.pressed`.
+    AccentPressed,
+    /// `accent.focus`.
+    AccentFocus,
+    /// `accent.foreground`.
+    AccentForeground,
+    /// `status.info.foreground`.
+    StatusInfoForeground,
+    /// `status.info.surface`.
+    StatusInfoSurface,
+    /// `status.info.border`.
+    StatusInfoBorder,
+    /// `status.info.strong`.
+    StatusInfoStrong,
+    /// `status.success.foreground`.
+    StatusSuccessForeground,
+    /// `status.success.surface`.
+    StatusSuccessSurface,
+    /// `status.success.border`.
+    StatusSuccessBorder,
+    /// `status.success.strong`.
+    StatusSuccessStrong,
+    /// `status.warning.foreground`.
+    StatusWarningForeground,
+    /// `status.warning.surface`.
+    StatusWarningSurface,
+    /// `status.warning.border`.
+    StatusWarningBorder,
+    /// `status.warning.strong`.
+    StatusWarningStrong,
+    /// `status.danger.foreground`.
+    StatusDangerForeground,
+    /// `status.danger.surface`.
+    StatusDangerSurface,
+    /// `status.danger.border`.
+    StatusDangerBorder,
+    /// `status.danger.strong`.
+    StatusDangerStrong,
 }
 
-/// Theme color tokens.
+impl SemanticColor {
+    /// Every stored semantic color token in stable grouped-field order.
+    pub const ALL: &'static [Self] = &[
+        Self::SurfaceApplication,
+        Self::SurfaceWorkspace,
+        Self::SurfacePanel,
+        Self::SurfacePanelRaised,
+        Self::SurfaceRaised,
+        Self::SurfaceControl,
+        Self::SurfaceControlHover,
+        Self::SurfaceControlPressed,
+        Self::SurfaceControlDisabled,
+        Self::SurfaceOverlay,
+        Self::SurfaceHover,
+        Self::SurfaceSunken,
+        Self::ContentPrimary,
+        Self::ContentSecondary,
+        Self::ContentMuted,
+        Self::ContentDisabled,
+        Self::ContentOnAccent,
+        Self::ContentLink,
+        Self::BorderSubtle,
+        Self::BorderDefault,
+        Self::BorderStrong,
+        Self::BorderHover,
+        Self::BorderFocused,
+        Self::BorderDisabled,
+        Self::BorderInvalid,
+        Self::SelectionBackground,
+        Self::SelectionForeground,
+        Self::FocusIndicator,
+        Self::FocusSeparator,
+        Self::FocusRing,
+        Self::OverlayScrim,
+        Self::AccentSubtle,
+        Self::AccentDefault,
+        Self::AccentHover,
+        Self::AccentPressed,
+        Self::AccentFocus,
+        Self::AccentForeground,
+        Self::StatusInfoForeground,
+        Self::StatusInfoSurface,
+        Self::StatusInfoBorder,
+        Self::StatusInfoStrong,
+        Self::StatusSuccessForeground,
+        Self::StatusSuccessSurface,
+        Self::StatusSuccessBorder,
+        Self::StatusSuccessStrong,
+        Self::StatusWarningForeground,
+        Self::StatusWarningSurface,
+        Self::StatusWarningBorder,
+        Self::StatusWarningStrong,
+        Self::StatusDangerForeground,
+        Self::StatusDangerSurface,
+        Self::StatusDangerBorder,
+        Self::StatusDangerStrong,
+    ];
+}
+
+/// Surface color tokens.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ThemeColors {
-    /// Main application surface.
-    pub surface: Color,
-    /// Elevated or grouped surface.
-    pub surface_raised: Color,
-    /// Hovered surface.
-    pub surface_hover: Color,
-    /// Active/pressed surface.
-    pub surface_active: Color,
-    /// Sunken input surface.
-    pub surface_sunken: Color,
-    /// Primary text.
-    pub text: Color,
-    /// Muted secondary text.
-    pub text_muted: Color,
-    /// Disabled text.
-    pub text_disabled: Color,
-    /// Accent color.
-    pub accent: Color,
-    /// Danger/destructive color.
-    pub danger: Color,
-    /// Warning color.
-    pub warning: Color,
-    /// Success color.
-    pub success: Color,
-    /// Normal border.
-    pub border: Color,
-    /// Subtle border.
-    pub border_subtle: Color,
-    /// Focus ring.
-    pub focus_ring: Color,
-    /// Selection fill.
-    pub selection: Color,
-    /// Disabled surface or affordance fill.
-    pub disabled: Color,
+pub struct SurfaceColors {
+    /// Main application shell.
+    pub application: Color,
+    /// Workspace or viewport canvas.
+    pub workspace: Color,
+    /// Passive panel surface.
+    pub panel: Color,
+    /// Elevated panel surface.
+    pub panel_raised: Color,
+    /// General raised surface.
+    pub raised: Color,
+    /// Ordinary control surface.
+    pub control: Color,
+    /// Hovered control surface.
+    pub control_hover: Color,
+    /// Pressed control surface.
+    pub control_pressed: Color,
+    /// Disabled control surface.
+    pub control_disabled: Color,
     /// Floating overlay surface.
     pub overlay: Color,
-    /// Viewport background.
-    pub viewport_background: Color,
+    /// General hovered surface.
+    pub hover: Color,
+    /// Sunken input or collection surface.
+    pub sunken: Color,
+}
+
+/// Content color tokens.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ContentColors {
+    /// Primary content.
+    pub primary: Color,
+    /// Secondary content.
+    pub secondary: Color,
+    /// Muted content.
+    pub muted: Color,
+    /// Disabled content.
+    pub disabled: Color,
+    /// Content painted on an accent or strong status surface.
+    pub on_accent: Color,
+    /// Link content.
+    pub link: Color,
+}
+
+/// Border color tokens.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BorderColors {
+    /// Subtle separator or outline.
+    pub subtle: Color,
+    /// Default outline.
+    pub default: Color,
+    /// Strong outline.
+    pub strong: Color,
+    /// Hovered outline.
+    pub hover: Color,
+    /// Focused outline.
+    pub focused: Color,
+    /// Disabled outline.
+    pub disabled: Color,
+    /// Invalid-value outline.
+    pub invalid: Color,
+}
+
+/// Selection color tokens.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SelectionColors {
+    /// Selection background.
+    pub background: Color,
+    /// Content painted on a selection background.
+    pub foreground: Color,
+}
+
+/// Focus color tokens.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FocusColors {
+    /// Focus indicator.
+    pub indicator: Color,
+    /// Focus separator.
+    pub separator: Color,
+    /// Focus ring.
+    pub ring: Color,
+}
+
+/// Overlay color tokens.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OverlayColors {
+    /// Modal or blocking scrim.
+    pub scrim: Color,
+}
+
+/// Accent color tokens.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AccentColors {
+    /// Subtle accent surface.
+    pub subtle: Color,
+    /// Default accent.
+    pub default: Color,
+    /// Hovered accent.
+    pub hover: Color,
+    /// Pressed accent.
+    pub pressed: Color,
+    /// Accent focus color.
+    pub focus: Color,
+    /// Content painted on an accent surface.
+    pub foreground: Color,
+}
+
+/// One stored status color family.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StatusColorFamilyColors {
+    /// Status content.
+    pub foreground: Color,
+    /// Subtle status surface.
+    pub surface: Color,
+    /// Status outline.
+    pub border: Color,
+    /// Strong status accent.
+    pub strong: Color,
+}
+
+/// Stored status color families.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StatusColors {
+    /// Informational colors.
+    pub info: StatusColorFamilyColors,
+    /// Success colors.
+    pub success: StatusColorFamilyColors,
+    /// Warning colors.
+    pub warning: StatusColorFamilyColors,
+    /// Danger colors.
+    pub danger: StatusColorFamilyColors,
+}
+
+/// Grouped semantic theme color tokens.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ThemeColors {
+    /// Surface colors.
+    pub surface: SurfaceColors,
+    /// Content colors.
+    pub content: ContentColors,
+    /// Border colors.
+    pub border: BorderColors,
+    /// Selection colors.
+    pub selection: SelectionColors,
+    /// Focus colors.
+    pub focus: FocusColors,
+    /// Overlay colors.
+    pub overlay: OverlayColors,
+    /// Accent colors.
+    pub accent: AccentColors,
+    /// Status colors.
+    pub status: StatusColors,
 }
 
 impl ThemeColors {
+    /// Returns the exact normative dark semantic palette.
+    #[must_use]
+    pub const fn default_dark() -> Self {
+        Self {
+            surface: SurfaceColors {
+                application: Color::rgb8(0x11, 0x11, 0x11),
+                workspace: Color::rgb8(0x0B, 0x0B, 0x0B),
+                panel: Color::rgb8(0x14, 0x14, 0x14),
+                panel_raised: Color::rgb8(0x18, 0x18, 0x18),
+                raised: Color::rgb8(0x18, 0x18, 0x18),
+                control: Color::rgb8(0x18, 0x18, 0x18),
+                control_hover: Color::rgb8(0x1C, 0x1C, 0x1C),
+                control_pressed: Color::rgb8(0x2A, 0x2A, 0x2A),
+                control_disabled: Color::rgb8(0x14, 0x14, 0x14),
+                overlay: Color::rgb8(0x18, 0x18, 0x18),
+                hover: Color::rgb8(0x1C, 0x1C, 0x1C),
+                sunken: Color::rgb8(0x0B, 0x0B, 0x0B),
+            },
+            content: ContentColors {
+                primary: Color::rgb8(0xE8, 0xE8, 0xE8),
+                secondary: Color::rgb8(0xB8, 0xB8, 0xB8),
+                muted: Color::rgb8(0x99, 0x99, 0x99),
+                disabled: Color::rgb8(0x66, 0x66, 0x66),
+                on_accent: Color::rgb8(0xFF, 0xFF, 0xFF),
+                link: Color::rgb8(0x25, 0x9C, 0xF0),
+            },
+            border: BorderColors {
+                subtle: Color::rgb8(0x22, 0x22, 0x22),
+                default: Color::rgb8(0x2A, 0x2A, 0x2A),
+                strong: Color::rgb8(0x3D, 0x3D, 0x3D),
+                hover: Color::rgb8(0x3D, 0x3D, 0x3D),
+                focused: Color::rgb8(0x4D, 0xB2, 0xFF),
+                disabled: Color::rgb8(0x22, 0x22, 0x22),
+                invalid: Color::rgb8(0xF1, 0x8A, 0x90),
+            },
+            selection: SelectionColors {
+                background: Color::rgb8(0x0C, 0x8C, 0xE9),
+                foreground: Color::rgb8(0xFF, 0xFF, 0xFF),
+            },
+            focus: FocusColors {
+                indicator: Color::rgb8(0x4D, 0xB2, 0xFF),
+                separator: Color::rgb8(0x0B, 0x0B, 0x0B),
+                ring: Color::rgb8(0x4D, 0xB2, 0xFF),
+            },
+            overlay: OverlayColors {
+                scrim: Color::rgb8(0x0B, 0x0B, 0x0B),
+            },
+            accent: AccentColors {
+                subtle: Color::rgb8(0x0B, 0x2A, 0x3F),
+                default: Color::rgb8(0x0C, 0x8C, 0xE9),
+                hover: Color::rgb8(0x25, 0x9C, 0xF0),
+                pressed: Color::rgb8(0x08, 0x76, 0xC5),
+                focus: Color::rgb8(0x4D, 0xB2, 0xFF),
+                foreground: Color::rgb8(0xFF, 0xFF, 0xFF),
+            },
+            status: StatusColors {
+                info: StatusColorFamilyColors {
+                    foreground: Color::rgb8(0x6C, 0xBF, 0xFF),
+                    surface: Color::rgb8(0x10, 0x18, 0x20),
+                    border: Color::rgb8(0x25, 0x34, 0x3F),
+                    strong: Color::rgb8(0x0C, 0x8C, 0xE9),
+                },
+                success: StatusColorFamilyColors {
+                    foreground: Color::rgb8(0x72, 0xD9, 0x98),
+                    surface: Color::rgb8(0x12, 0x1A, 0x15),
+                    border: Color::rgb8(0x29, 0x37, 0x2E),
+                    strong: Color::rgb8(0x39, 0xB8, 0x68),
+                },
+                warning: StatusColorFamilyColors {
+                    foreground: Color::rgb8(0xF0, 0xC6, 0x6D),
+                    surface: Color::rgb8(0x1A, 0x17, 0x11),
+                    border: Color::rgb8(0x3A, 0x33, 0x26),
+                    strong: Color::rgb8(0xD9, 0xA4, 0x41),
+                },
+                danger: StatusColorFamilyColors {
+                    foreground: Color::rgb8(0xF1, 0x8A, 0x90),
+                    surface: Color::rgb8(0x1B, 0x13, 0x14),
+                    border: Color::rgb8(0x3D, 0x29, 0x2B),
+                    strong: Color::rgb8(0xD9, 0x53, 0x5B),
+                },
+            },
+        }
+    }
+
     /// Returns a semantic color.
     #[must_use]
     pub const fn get(self, role: SemanticColor) -> Color {
         match role {
-            SemanticColor::Surface => self.surface,
-            SemanticColor::SurfaceRaised => self.surface_raised,
-            SemanticColor::SurfaceHover => self.surface_hover,
-            SemanticColor::SurfaceActive => self.surface_active,
-            SemanticColor::SurfaceSunken => self.surface_sunken,
-            SemanticColor::Text => self.text,
-            SemanticColor::TextMuted => self.text_muted,
-            SemanticColor::TextDisabled => self.text_disabled,
-            SemanticColor::Accent => self.accent,
-            SemanticColor::Danger => self.danger,
-            SemanticColor::Warning => self.warning,
-            SemanticColor::Success => self.success,
-            SemanticColor::Border => self.border,
-            SemanticColor::BorderSubtle => self.border_subtle,
-            SemanticColor::FocusRing => self.focus_ring,
-            SemanticColor::Selection => self.selection,
-            SemanticColor::Disabled => self.disabled,
-            SemanticColor::Overlay => self.overlay,
-            SemanticColor::ViewportBackground => self.viewport_background,
+            SemanticColor::SurfaceApplication => self.surface.application,
+            SemanticColor::SurfaceWorkspace => self.surface.workspace,
+            SemanticColor::SurfacePanel => self.surface.panel,
+            SemanticColor::SurfacePanelRaised => self.surface.panel_raised,
+            SemanticColor::SurfaceRaised => self.surface.raised,
+            SemanticColor::SurfaceControl => self.surface.control,
+            SemanticColor::SurfaceControlHover => self.surface.control_hover,
+            SemanticColor::SurfaceControlPressed => self.surface.control_pressed,
+            SemanticColor::SurfaceControlDisabled => self.surface.control_disabled,
+            SemanticColor::SurfaceOverlay => self.surface.overlay,
+            SemanticColor::SurfaceHover => self.surface.hover,
+            SemanticColor::SurfaceSunken => self.surface.sunken,
+            SemanticColor::ContentPrimary => self.content.primary,
+            SemanticColor::ContentSecondary => self.content.secondary,
+            SemanticColor::ContentMuted => self.content.muted,
+            SemanticColor::ContentDisabled => self.content.disabled,
+            SemanticColor::ContentOnAccent => self.content.on_accent,
+            SemanticColor::ContentLink => self.content.link,
+            SemanticColor::BorderSubtle => self.border.subtle,
+            SemanticColor::BorderDefault => self.border.default,
+            SemanticColor::BorderStrong => self.border.strong,
+            SemanticColor::BorderHover => self.border.hover,
+            SemanticColor::BorderFocused => self.border.focused,
+            SemanticColor::BorderDisabled => self.border.disabled,
+            SemanticColor::BorderInvalid => self.border.invalid,
+            SemanticColor::SelectionBackground => self.selection.background,
+            SemanticColor::SelectionForeground => self.selection.foreground,
+            SemanticColor::FocusIndicator => self.focus.indicator,
+            SemanticColor::FocusSeparator => self.focus.separator,
+            SemanticColor::FocusRing => self.focus.ring,
+            SemanticColor::OverlayScrim => self.overlay.scrim,
+            SemanticColor::AccentSubtle => self.accent.subtle,
+            SemanticColor::AccentDefault => self.accent.default,
+            SemanticColor::AccentHover => self.accent.hover,
+            SemanticColor::AccentPressed => self.accent.pressed,
+            SemanticColor::AccentFocus => self.accent.focus,
+            SemanticColor::AccentForeground => self.accent.foreground,
+            SemanticColor::StatusInfoForeground => self.status.info.foreground,
+            SemanticColor::StatusInfoSurface => self.status.info.surface,
+            SemanticColor::StatusInfoBorder => self.status.info.border,
+            SemanticColor::StatusInfoStrong => self.status.info.strong,
+            SemanticColor::StatusSuccessForeground => self.status.success.foreground,
+            SemanticColor::StatusSuccessSurface => self.status.success.surface,
+            SemanticColor::StatusSuccessBorder => self.status.success.border,
+            SemanticColor::StatusSuccessStrong => self.status.success.strong,
+            SemanticColor::StatusWarningForeground => self.status.warning.foreground,
+            SemanticColor::StatusWarningSurface => self.status.warning.surface,
+            SemanticColor::StatusWarningBorder => self.status.warning.border,
+            SemanticColor::StatusWarningStrong => self.status.warning.strong,
+            SemanticColor::StatusDangerForeground => self.status.danger.foreground,
+            SemanticColor::StatusDangerSurface => self.status.danger.surface,
+            SemanticColor::StatusDangerBorder => self.status.danger.border,
+            SemanticColor::StatusDangerStrong => self.status.danger.strong,
         }
     }
 }

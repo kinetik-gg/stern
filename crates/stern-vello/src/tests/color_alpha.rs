@@ -73,7 +73,7 @@ fn sanitize_color_covers_range_nonfinite_and_negative_zero() {
 
 #[test]
 fn default_theme_accent_reaches_production_vello_encoding_exactly() {
-    let accent = default_dark_theme().colors.accent;
+    let accent = default_dark_theme().colors.accent.default;
     assert_eq!(accent, Color::rgb8(0x0C, 0x8C, 0xE9));
     let primitives = [Primitive::Rect(RectPrimitive {
         rect: Rect::new(0.0, 0.0, 4.0, 4.0),

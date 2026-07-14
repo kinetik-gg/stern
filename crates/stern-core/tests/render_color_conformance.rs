@@ -44,11 +44,11 @@ fn color_constants_and_default_theme_accent_are_exact() {
     assert_eq!(Color::WHITE, Color::rgba(1.0, 1.0, 1.0, 1.0));
 
     assert_eq!(
-        default_dark_theme().colors.accent,
+        default_dark_theme().colors.accent.default,
         Color::rgb8(0x0C, 0x8C, 0xE9)
     );
     assert_eq!(
-        default_dark_theme().colors.selection,
-        default_dark_theme().colors.accent
+        default_dark_theme().colors.selection.background,
+        default_dark_theme().colors.accent.default
     );
 }

@@ -155,6 +155,7 @@ impl Ui<'_> {
                     self.theme
                         .colors
                         .overlay
+                        .scrim
                         .with_alpha(self.theme.opacity.overlay_scrim),
                 )),
                 stroke: None,
@@ -169,10 +170,10 @@ impl Ui<'_> {
         }
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: entry.rect,
-            fill: Some(Brush::Solid(self.theme.colors.overlay)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.overlay)),
             stroke: Some(stern_core::Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border),
+                Brush::Solid(self.theme.colors.border.default),
             )),
             radius: self.theme.radii.md,
         }));
@@ -192,7 +193,7 @@ impl Ui<'_> {
                     row.rect.width,
                     height,
                 ),
-                fill: Some(Brush::Solid(self.theme.colors.border_subtle)),
+                fill: Some(Brush::Solid(self.theme.colors.border.subtle)),
                 stroke: None,
                 radius: self.theme.radii.none,
             }));

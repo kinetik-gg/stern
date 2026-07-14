@@ -85,7 +85,7 @@ fn live_state_drives_paint_semantics_access_and_theme() {
     let config = PropertyGridConfig::default();
     let mut memory = UiMemory::new();
     let mut theme = default_dark_theme();
-    theme.colors.surface_sunken = Color::rgba(0.12, 0.23, 0.34, 1.0);
+    theme.colors.surface.sunken = Color::rgba(0.12, 0.23, 0.34, 1.0);
     let (output, frame) = run_grid(
         &rows,
         BOUNDS,
@@ -123,7 +123,7 @@ fn live_state_drives_paint_semantics_access_and_theme() {
     assert!(frame.primitives.iter().any(|primitive| matches!(
         primitive,
         Primitive::Rect(rect)
-            if rect.fill == Some(Brush::Solid(theme.colors.surface_sunken))
+            if rect.fill == Some(Brush::Solid(theme.colors.surface.sunken))
     )));
 
     let semantics = frame.semantics.nodes();

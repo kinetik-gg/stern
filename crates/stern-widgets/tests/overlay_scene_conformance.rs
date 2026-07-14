@@ -3,10 +3,11 @@
 use std::time::Duration;
 
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionId, ActionSource, Brush, FrameContext, Key, KeyEvent,
-    KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput,
-    PointerOrder, PointerTarget, Primitive, Rect, Response, ScaleFactor, SemanticActionKind,
-    SemanticRole, Size, TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId, default_dark_theme,
+    ActionContext, ActionDescriptor, ActionId, ActionSource, Brush, Color, FrameContext, Key,
+    KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState,
+    PointerInput, PointerOrder, PointerTarget, Primitive, Rect, Response, ScaleFactor,
+    SemanticActionKind, SemanticRole, Size, Theme, TimeInfo, UiInput, UiMemory, ViewportInfo,
+    WidgetId, default_dark_theme,
 };
 use stern_widgets::overlays::OverlayNavigationInput;
 use stern_widgets::{
@@ -99,7 +100,21 @@ fn run_frame(
     stern_core::FrameOutput,
 ) {
     let theme = default_dark_theme();
-    let mut ui = Ui::begin_frame(context(input), memory, &theme);
+    run_frame_with_theme(scene, memory, input, lower, &theme)
+}
+
+fn run_frame_with_theme(
+    scene: &mut OverlayScene,
+    memory: &mut UiMemory,
+    input: UiInput,
+    lower: bool,
+    theme: &Theme,
+) -> (
+    Option<Response>,
+    OverlaySceneOutput,
+    stern_core::FrameOutput,
+) {
+    let mut ui = Ui::begin_frame(context(input), memory, theme);
     let lower_id = ui.make_id("lower-button");
     ui.resolve_pointer_targets(|plan| {
         if lower {
@@ -628,8 +643,11 @@ fn every_overlay_kind_paints_an_ordered_themed_surface_and_children() {
         .map(|surface| surface.entry().clone())
         .collect::<Vec<_>>();
     let mut memory = UiMemory::new();
-    let (_, _, frame) = run_frame(&mut scene, &mut memory, UiInput::default(), false);
-    let theme = default_dark_theme();
+    let mut theme = default_dark_theme();
+    theme.colors.surface.overlay = Color::rgb8(1, 2, 3);
+    theme.colors.overlay.scrim = Color::rgb8(4, 5, 6);
+    let (_, _, frame) =
+        run_frame_with_theme(&mut scene, &mut memory, UiInput::default(), false, &theme);
 
     let mut previous = None;
     for entry in &entries {
@@ -639,7 +657,7 @@ fn every_overlay_kind_paints_an_ordered_themed_surface_and_children() {
             .position(|primitive| {
                 matches!(primitive, Primitive::Rect(rect)
                     if rect.rect == entry.rect
-                        && rect.fill == Some(Brush::Solid(theme.colors.overlay)))
+                        && rect.fill == Some(Brush::Solid(theme.colors.surface.overlay)))
             })
             .expect("themed overlay surface");
         if let Some(previous) = previous {
@@ -660,6 +678,17 @@ fn every_overlay_kind_paints_an_ordered_themed_surface_and_children() {
             .iter()
             .any(|primitive| matches!(primitive, Primitive::Shadow(_)))
     );
+    assert!(frame.primitives.iter().any(|primitive| {
+        matches!(primitive, Primitive::Rect(rect)
+        if rect.rect == Rect::new(0.0, 0.0, 640.0, 480.0)
+            && rect.fill == Some(Brush::Solid(
+                theme
+                    .colors
+                    .overlay
+                    .scrim
+                    .with_alpha(theme.opacity.overlay_scrim)
+            )))
+    }));
     assert!(
         frame
             .semantics

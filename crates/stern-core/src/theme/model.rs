@@ -110,9 +110,9 @@ impl Theme {
     pub const fn label(&self, role: TextRole, disabled: bool) -> TextRecipe {
         TextRecipe {
             foreground: if disabled {
-                self.colors.text_disabled
+                self.colors.content.disabled
             } else {
-                self.colors.text
+                self.colors.content.primary
             },
             font: self.typography.get(role),
         }
@@ -128,40 +128,42 @@ impl Theme {
     #[must_use]
     pub fn button_variant(&self, variant: ButtonVariant, state: ComponentState) -> ButtonRecipe {
         let mut background = match variant {
-            ButtonVariant::Standard => self.colors.surface_raised,
-            ButtonVariant::Primary => self.colors.accent,
+            ButtonVariant::Standard => self.colors.surface.control,
+            ButtonVariant::Primary => self.colors.accent.default,
             ButtonVariant::Ghost => Color::TRANSPARENT,
-            ButtonVariant::Danger => self.colors.danger,
+            ButtonVariant::Danger => self.colors.status.danger.strong,
         };
         if state.disabled {
-            background = self.colors.disabled;
+            background = self.colors.surface.control_disabled;
         } else if state.selected || state.pressed {
             background = match variant {
-                ButtonVariant::Standard | ButtonVariant::Ghost => self.colors.surface_active,
-                ButtonVariant::Primary => self.colors.accent.with_alpha(0.86),
-                ButtonVariant::Danger => self.colors.danger.with_alpha(0.86),
+                ButtonVariant::Standard | ButtonVariant::Ghost => {
+                    self.colors.surface.control_pressed
+                }
+                ButtonVariant::Primary => self.colors.accent.default.with_alpha(0.86),
+                ButtonVariant::Danger => self.colors.status.danger.strong.with_alpha(0.86),
             };
         } else if state.hovered {
             background = match variant {
-                ButtonVariant::Standard | ButtonVariant::Ghost => self.colors.surface_hover,
-                ButtonVariant::Primary => self.colors.accent.with_alpha(0.92),
-                ButtonVariant::Danger => self.colors.danger.with_alpha(0.92),
+                ButtonVariant::Standard | ButtonVariant::Ghost => self.colors.surface.control_hover,
+                ButtonVariant::Primary => self.colors.accent.default.with_alpha(0.92),
+                ButtonVariant::Danger => self.colors.status.danger.strong.with_alpha(0.92),
             };
         }
 
         let foreground = if state.disabled {
-            self.colors.text_disabled
+            self.colors.content.disabled
         } else if matches!(variant, ButtonVariant::Primary | ButtonVariant::Danger) {
-            Color::WHITE
+            self.colors.content.on_accent
         } else {
-            self.colors.text
+            self.colors.content.primary
         };
         let border_color = if state.focused {
-            self.colors.focus_ring
+            self.colors.focus.ring
         } else if matches!(variant, ButtonVariant::Ghost) {
-            self.colors.border_subtle
+            self.colors.border.subtle
         } else {
-            self.colors.border
+            self.colors.border.default
         };
 
         ButtonRecipe {
@@ -176,23 +178,23 @@ impl Theme {
     #[must_use]
     pub fn tab(&self, state: ComponentState) -> TabRecipe {
         let background = if state.disabled {
-            self.colors.disabled
+            self.colors.surface.control_disabled
         } else if state.selected || state.pressed {
-            self.colors.surface_active
+            self.colors.surface.control_pressed
         } else if state.hovered {
-            self.colors.surface_hover
+            self.colors.surface.hover
         } else {
-            self.colors.surface
+            self.colors.surface.panel
         };
         let foreground = if state.disabled {
-            self.colors.text_disabled
+            self.colors.content.disabled
         } else {
-            self.colors.text
+            self.colors.content.primary
         };
         let border_color = if state.focused {
-            self.colors.focus_ring
+            self.colors.focus.ring
         } else {
-            self.colors.border
+            self.colors.border.default
         };
 
         TabRecipe {
@@ -200,7 +202,9 @@ impl Theme {
             foreground,
             border: Stroke::new(self.controls.border_width, Brush::Solid(border_color)),
             radius: self.radii.none,
-            indicator: state.selected.then_some(Brush::Solid(self.colors.accent)),
+            indicator: state
+                .selected
+                .then_some(Brush::Solid(self.colors.accent.default)),
             indicator_thickness: 2.0,
         }
     }
@@ -209,25 +213,27 @@ impl Theme {
     #[must_use]
     pub fn row(&self, state: ComponentState) -> RowRecipe {
         let background = if state.disabled {
-            self.colors.disabled
+            self.colors.surface.control_disabled
         } else if state.selected {
-            self.colors.selection
+            self.colors.selection.background
         } else if state.hovered {
-            self.colors.surface_hover
+            self.colors.surface.hover
         } else {
-            self.colors.surface_sunken
+            self.colors.surface.sunken
         };
         let foreground = if state.disabled {
-            self.colors.text_disabled
+            self.colors.content.disabled
+        } else if state.selected {
+            self.colors.selection.foreground
         } else {
-            self.colors.text
+            self.colors.content.primary
         };
         RowRecipe {
             background: Brush::Solid(background),
             foreground,
             border: Stroke::new(
                 self.controls.border_width,
-                Brush::Solid(self.colors.border_subtle),
+                Brush::Solid(self.colors.border.subtle),
             ),
             radius: self.radii.none,
         }
@@ -237,25 +243,25 @@ impl Theme {
     #[must_use]
     pub fn checkbox(&self, state: ComponentState) -> CheckRecipe {
         let fill = if state.disabled {
-            self.colors.disabled
+            self.colors.surface.control_disabled
         } else if state.selected {
-            self.colors.accent
+            self.colors.accent.default
         } else if state.hovered {
-            self.colors.surface_hover
+            self.colors.surface.control_hover
         } else {
-            self.colors.surface_sunken
+            self.colors.surface.sunken
         };
         let border_color = if state.focused {
-            self.colors.focus_ring
+            self.colors.focus.ring
         } else {
-            self.colors.border
+            self.colors.border.default
         };
         CheckRecipe {
             fill: Brush::Solid(fill),
             mark: if state.disabled {
-                self.colors.text_disabled
+                self.colors.content.disabled
             } else {
-                Color::WHITE
+                self.colors.content.on_accent
             },
             border: Stroke::new(self.controls.border_width, Brush::Solid(border_color)),
             radius: self.radii.xs,
@@ -276,23 +282,23 @@ impl Theme {
     #[must_use]
     pub fn toggle(&self, state: ComponentState) -> ToggleRecipe {
         let track = if state.disabled {
-            self.colors.disabled
+            self.colors.surface.control_disabled
         } else if state.selected {
-            self.colors.accent
+            self.colors.accent.default
         } else if state.hovered {
-            self.colors.surface_hover
+            self.colors.surface.control_hover
         } else {
-            self.colors.surface_active
+            self.colors.surface.control_pressed
         };
         let thumb = if state.disabled {
-            self.colors.text_disabled
+            self.colors.content.disabled
         } else {
-            self.colors.text
+            self.colors.content.primary
         };
         let border_color = if state.focused {
-            self.colors.focus_ring
+            self.colors.focus.ring
         } else {
-            self.colors.border
+            self.colors.border.default
         };
         ToggleRecipe {
             track: Brush::Solid(track),
@@ -306,17 +312,17 @@ impl Theme {
     #[must_use]
     pub fn slider(&self, state: ComponentState) -> SliderRecipe {
         let fill = if state.disabled {
-            self.colors.text_disabled
+            self.colors.content.disabled
         } else {
-            self.colors.accent
+            self.colors.accent.default
         };
         let border_color = if state.focused {
-            self.colors.focus_ring
+            self.colors.focus.ring
         } else {
-            self.colors.border
+            self.colors.border.default
         };
         SliderRecipe {
-            track: Brush::Solid(self.colors.surface_sunken),
+            track: Brush::Solid(self.colors.surface.sunken),
             fill: Brush::Solid(fill),
             border: Stroke::new(self.controls.border_width, Brush::Solid(border_color)),
             radius: self.radii.pill,
@@ -327,30 +333,35 @@ impl Theme {
     #[must_use]
     pub fn text_field(&self, state: ComponentState) -> TextFieldRecipe {
         let border_color = if state.focused {
-            self.colors.accent
+            self.colors.border.focused
         } else if state.hovered {
-            self.colors.border
+            self.colors.border.hover
         } else {
-            self.colors.border_subtle
+            self.colors.border.subtle
         };
         TextFieldRecipe {
             background: Brush::Solid(if state.disabled {
-                self.colors.disabled
+                self.colors.surface.control_disabled
             } else {
-                self.colors.surface_sunken
+                self.colors.surface.sunken
             }),
             foreground: if state.disabled {
-                self.colors.text_disabled
+                self.colors.content.disabled
             } else {
-                self.colors.text
+                self.colors.content.primary
             },
             border: Stroke::new(self.controls.border_width, Brush::Solid(border_color)),
             radius: self.radii.sm,
-            selection: Brush::Solid(self.colors.selection.with_alpha(self.opacity.selection)),
+            selection: Brush::Solid(
+                self.colors
+                    .selection
+                    .background
+                    .with_alpha(self.opacity.selection),
+            ),
             caret: if state.disabled {
-                self.colors.text_disabled
+                self.colors.content.disabled
             } else {
-                self.colors.text
+                self.colors.content.primary
             },
             padding_x: self.controls.padding_x * 0.5,
             padding_y: self.controls.padding_y,
@@ -377,8 +388,11 @@ impl Theme {
     #[must_use]
     pub fn panel(&self) -> PanelRecipe {
         PanelRecipe {
-            background: Brush::Solid(self.colors.surface_raised),
-            border: Stroke::new(self.controls.border_width, Brush::Solid(self.colors.border)),
+            background: Brush::Solid(self.colors.surface.panel_raised),
+            border: Stroke::new(
+                self.controls.border_width,
+                Brush::Solid(self.colors.border.default),
+            ),
             radius: self.radii.sm,
             shadow: self.elevation_shadow(self.elevation.raised, self.radii.sm.top_left),
         }
@@ -390,7 +404,7 @@ impl Theme {
         SeparatorRecipe {
             stroke: Stroke::new(
                 self.controls.separator_width,
-                Brush::Solid(self.colors.border_subtle),
+                Brush::Solid(self.colors.border.subtle),
             ),
         }
     }

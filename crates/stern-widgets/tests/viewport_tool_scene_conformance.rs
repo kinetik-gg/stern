@@ -210,7 +210,7 @@ fn scene_uses_theme_clip_hides_move_paint_and_keeps_stable_handle_ids() {
         .expect("selection outline");
     assert_eq!(
         outline.stroke.as_ref().map(|stroke| &stroke.brush),
-        Some(&Brush::Solid(theme.colors.accent))
+        Some(&Brush::Solid(theme.colors.accent.default))
     );
 
     let resize =

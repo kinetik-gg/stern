@@ -156,10 +156,10 @@ impl Ui<'_> {
         if valid_bounds {
             self.primitive(Primitive::Rect(RectPrimitive {
                 rect: bounds,
-                fill: Some(Brush::Solid(self.theme.colors.surface_sunken)),
+                fill: Some(Brush::Solid(self.theme.colors.surface.workspace)),
                 stroke: Some(Stroke::new(
                     self.theme.controls.border_width,
-                    Brush::Solid(self.theme.colors.border_subtle),
+                    Brush::Solid(self.theme.colors.border.subtle),
                 )),
                 radius: self.theme.radii.none,
             }));

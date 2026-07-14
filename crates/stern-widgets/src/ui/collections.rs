@@ -267,10 +267,10 @@ impl Ui<'_> {
     fn paint_virtual_list_surface(&mut self, rect: Rect) {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface_sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
         }));

@@ -463,10 +463,10 @@ impl Ui<'_> {
     fn paint_virtual_table_surface(&mut self, rect: Rect) {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface_sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
         }));
@@ -506,9 +506,9 @@ impl Ui<'_> {
             rect.height,
         );
         let color = if response.state.pressed || response.dragged {
-            self.theme.colors.accent
+            self.theme.colors.accent.default
         } else {
-            self.theme.colors.border_subtle
+            self.theme.colors.border.subtle
         };
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: line,

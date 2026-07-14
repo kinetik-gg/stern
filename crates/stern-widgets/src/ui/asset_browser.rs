@@ -784,10 +784,10 @@ impl Ui<'_> {
     fn paint_asset_browser_surface(&mut self, rect: Rect) {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface_sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
         }));
@@ -814,10 +814,10 @@ impl Ui<'_> {
         }));
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: item.preview_rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface_raised)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.raised)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.sm,
         }));
@@ -828,7 +828,7 @@ impl Ui<'_> {
                 tint: response
                     .state
                     .disabled
-                    .then_some(self.theme.colors.text_disabled),
+                    .then_some(self.theme.colors.content.disabled),
             }));
         } else {
             paint_asset_text(
@@ -837,9 +837,9 @@ impl Ui<'_> {
                 &item.item.fallback.label,
                 TextRole::Label,
                 if response.state.disabled {
-                    self.theme.colors.text_disabled
+                    self.theme.colors.content.disabled
                 } else {
-                    self.theme.colors.text_muted
+                    self.theme.colors.content.muted
                 },
             );
         }
@@ -858,9 +858,9 @@ impl Ui<'_> {
             &item.item.kind,
             TextRole::Body,
             if response.state.disabled {
-                self.theme.colors.text_disabled
+                self.theme.colors.content.disabled
             } else {
-                self.theme.colors.text_muted
+                self.theme.colors.content.muted
             },
         );
     }
@@ -872,7 +872,7 @@ impl Ui<'_> {
     ) {
         let stroke = Stroke::new(
             self.theme.controls.border_width.max(1.0),
-            Brush::Solid(self.theme.colors.accent),
+            Brush::Solid(self.theme.colors.accent.default),
         );
         let rect = match preview.kind {
             AssetBrowserDropTargetKind::Item { target } => {
@@ -885,7 +885,9 @@ impl Ui<'_> {
         };
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(Brush::Solid(self.theme.colors.accent.with_alpha(0.12))),
+            fill: Some(Brush::Solid(
+                self.theme.colors.accent.default.with_alpha(0.12),
+            )),
             stroke: Some(stroke),
             radius: self.theme.radii.sm,
         }));

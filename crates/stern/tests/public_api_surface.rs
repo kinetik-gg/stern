@@ -162,6 +162,51 @@ fn facade_root_and_feature_qualified_paths_compile() {
     }
 }
 
+#[test]
+fn facade_supports_mutation_first_semantic_palette_customization() {
+    use stern::core::{
+        AccentColors, BorderColors, Color, ContentColors, FocusColors, OverlayColors,
+        SelectionColors, SemanticColor, StatusColorFamilyColors, StatusColors, SurfaceColors,
+        ThemeColors, default_dark_theme,
+    };
+
+    let groups = [
+        std::any::type_name::<SurfaceColors>(),
+        std::any::type_name::<ContentColors>(),
+        std::any::type_name::<BorderColors>(),
+        std::any::type_name::<SelectionColors>(),
+        std::any::type_name::<FocusColors>(),
+        std::any::type_name::<OverlayColors>(),
+        std::any::type_name::<AccentColors>(),
+        std::any::type_name::<StatusColorFamilyColors>(),
+        std::any::type_name::<StatusColors>(),
+    ];
+    assert!(groups.iter().all(|name| !name.is_empty()));
+    assert_eq!(SemanticColor::ALL.len(), 53);
+
+    let original = default_dark_theme();
+    let mut colors = ThemeColors::default_dark();
+    colors.surface.application = Color::rgb8(0x12, 0x23, 0x34);
+    colors.content.primary = Color::rgb8(0x45, 0x56, 0x67);
+    colors.accent.default = Color::rgb8(0x78, 0x89, 0x9A);
+
+    let customized = original.with_colors(colors);
+    assert_eq!(
+        customized.color(SemanticColor::SurfaceApplication),
+        Color::rgb8(0x12, 0x23, 0x34)
+    );
+    assert_eq!(
+        customized.color(SemanticColor::ContentPrimary),
+        Color::rgb8(0x45, 0x56, 0x67)
+    );
+    assert_eq!(
+        customized.color(SemanticColor::AccentDefault),
+        Color::rgb8(0x78, 0x89, 0x9A)
+    );
+    assert_eq!(customized.spacing, original.spacing);
+    assert_eq!(customized.controls, original.controls);
+}
+
 #[cfg(feature = "vello-winit")]
 #[test]
 fn facade_vello_winit_module_preserves_direct_crate_identities_without_prelude_exports() {

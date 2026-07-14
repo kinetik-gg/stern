@@ -90,10 +90,10 @@ impl Ui<'_> {
     fn paint_system_feedback_surface(&mut self, surface: &SystemFeedbackSurfaceLayout) {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: surface.rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface_sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
         }));
@@ -103,10 +103,10 @@ impl Ui<'_> {
         let tone = system_feedback_tone(self, row.kind);
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: row.rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.panel)),
             stroke: Some(Stroke::new(
                 self.theme.controls.separator_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
         }));
@@ -141,7 +141,7 @@ impl Ui<'_> {
             family: font.family.to_owned(),
             size: font.size,
             line_height: font.line_height,
-            brush: Brush::Solid(self.theme.colors.text),
+            brush: Brush::Solid(self.theme.colors.content.primary),
         }));
         self.primitive(Primitive::ClipEnd { id: content_clip });
 
@@ -177,7 +177,7 @@ impl Ui<'_> {
         };
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: track,
-            fill: Some(Brush::Solid(self.theme.colors.border_subtle)),
+            fill: Some(Brush::Solid(self.theme.colors.border.subtle)),
             stroke: None,
             radius: self.theme.radii.none,
         }));
@@ -228,22 +228,22 @@ impl Ui<'_> {
 fn system_feedback_tone(ui: &Ui<'_>, kind: SystemFeedbackRowKind) -> Color {
     match kind {
         SystemFeedbackRowKind::Job { phase, .. } => match phase {
-            JobPhase::Queued => ui.theme.colors.text_muted,
-            JobPhase::Running => ui.theme.colors.accent,
-            JobPhase::Cancelling => ui.theme.colors.warning,
-            JobPhase::Succeeded => ui.theme.colors.success,
-            JobPhase::Failed => ui.theme.colors.danger,
+            JobPhase::Queued => ui.theme.colors.content.muted,
+            JobPhase::Running => ui.theme.colors.accent.default,
+            JobPhase::Cancelling => ui.theme.colors.status.warning.strong,
+            JobPhase::Succeeded => ui.theme.colors.status.success.strong,
+            JobPhase::Failed => ui.theme.colors.status.danger.strong,
         },
         SystemFeedbackRowKind::Diagnostic(severity) => match severity {
-            DiagnosticStripSeverity::Error => ui.theme.colors.danger,
-            DiagnosticStripSeverity::Warning => ui.theme.colors.warning,
-            DiagnosticStripSeverity::Info => ui.theme.colors.accent,
+            DiagnosticStripSeverity::Error => ui.theme.colors.status.danger.strong,
+            DiagnosticStripSeverity::Warning => ui.theme.colors.status.warning.strong,
+            DiagnosticStripSeverity::Info => ui.theme.colors.status.info.strong,
         },
         SystemFeedbackRowKind::Feedback(kind) => match kind {
-            FeedbackKind::Info => ui.theme.colors.accent,
-            FeedbackKind::Success => ui.theme.colors.success,
-            FeedbackKind::Warning => ui.theme.colors.warning,
-            FeedbackKind::Error => ui.theme.colors.danger,
+            FeedbackKind::Info => ui.theme.colors.status.info.strong,
+            FeedbackKind::Success => ui.theme.colors.status.success.strong,
+            FeedbackKind::Warning => ui.theme.colors.status.warning.strong,
+            FeedbackKind::Error => ui.theme.colors.status.danger.strong,
         },
     }
 }
