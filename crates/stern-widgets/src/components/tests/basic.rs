@@ -683,13 +683,30 @@ fn rect_width(primitive: &Primitive) -> f32 {
 }
 
 #[test]
-fn panel_emits_shadow_and_surface_before_image_primitives_stay_single() {
-    let panel = panel(Rect::new(0.0, 0.0, 10.0, 10.0), &default_dark_theme());
+fn panel_emits_exact_recipe_rectangle_without_shadow_and_images_stay_single() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 10.0, 10.0);
+    let recipe = theme.panel();
+    let panel = panel(rect, &theme);
 
-    assert!(matches!(panel.primitives[0], Primitive::Shadow(_)));
-    assert!(matches!(panel.primitives[1], Primitive::Rect(_)));
+    assert_eq!(
+        panel.primitives,
+        vec![Primitive::Rect(RectPrimitive {
+            rect,
+            fill: Some(recipe.background),
+            stroke: Some(recipe.border),
+            radius: recipe.radius,
+        })]
+    );
+    assert!(panel.response.is_none());
+    assert!(
+        panel
+            .primitives
+            .iter()
+            .all(|primitive| !matches!(primitive, Primitive::Shadow(_)))
+    );
     assert!(matches!(
-        image(Rect::new(0.0, 0.0, 10.0, 10.0), ImageId::from_raw(1)).primitives[0],
-        Primitive::Image(_)
+        image(rect, ImageId::from_raw(1)).primitives.as_slice(),
+        [Primitive::Image(_)]
     ));
 }

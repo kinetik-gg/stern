@@ -3,9 +3,10 @@
 #![allow(clippy::float_cmp)]
 
 use stern_core::{
-    Axis, Brush, ClipId, CornerRadius, FrameOutput, Point, PointerInput, PointerOrder,
-    PointerRoute, PointerTarget, Primitive, Rect, RectPrimitive, SemanticRole, UiInput, UiMemory,
-    WidgetId, default_dark_theme,
+    Axis, Brush, ClipId, Color, ControlMetrics, CornerRadius, ElevationScale, FrameOutput, Point,
+    PointerInput, PointerOrder, PointerRoute, PointerTarget, Primitive, RadiusScale, Rect,
+    RectPrimitive, SemanticRole, Theme, ThemeColors, UiInput, UiMemory, WidgetId,
+    default_dark_theme,
 };
 use stern_widgets::{
     Ui,
@@ -64,10 +65,14 @@ fn two_frame_dock() -> Dock {
 }
 
 fn paint(scene: &DockScene) -> FrameOutput {
+    let theme = default_dark_theme();
+    paint_with_theme(scene, &theme)
+}
+
+fn paint_with_theme(scene: &DockScene, theme: &Theme) -> FrameOutput {
     let input = UiInput::default();
     let mut memory = UiMemory::new();
-    let theme = default_dark_theme();
-    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let mut ui = Ui::new(&input, &mut memory, theme);
     let _ = ui.dock_scene(scene, |_, _| ());
     ui.finish_output()
 }
@@ -144,6 +149,90 @@ fn nested_splits_prepare_expected_geometry_and_splitter_primitives() {
     for splitter in splitters {
         let primitive = rect_primitive_at(&output.primitives, splitter.rect);
         assert!(primitive.fill.is_some());
+    }
+    assert_eq!(dock.snapshot(), snapshot);
+}
+
+#[test]
+fn customized_two_frame_dock_panels_use_exact_flat_recipe_without_changing_ownership() {
+    let background = Color::rgb8(1, 35, 69);
+    let border = Color::rgb8(87, 65, 43);
+    let border_width = 2.75;
+    let radius = CornerRadius::all(5.5);
+    let base = default_dark_theme();
+    let mut colors = ThemeColors::default_dark();
+    colors.surface.panel_raised = background;
+    colors.border.default = border;
+    let theme = base
+        .with_colors(colors)
+        .with_controls(ControlMetrics {
+            border_width,
+            ..base.controls
+        })
+        .with_radii(RadiusScale::from_values(1.0, 5.5, 7.0, 9.0, 99.0))
+        .with_elevation(ElevationScale {
+            raised: 37.0,
+            ..base.elevation
+        });
+    let recipe = theme.panel();
+    assert_eq!(recipe.shadow, None);
+
+    let dock = two_frame_dock();
+    let snapshot = dock.snapshot();
+    let scene = DockScene::new(
+        DockSceneConfig::new(WidgetId::from_key("dock-scene-flat-panels"), BOUNDS),
+        &dock,
+    );
+    let expected_panels = scene
+        .layout()
+        .frames
+        .iter()
+        .filter_map(|frame| frame.panel.as_ref().map(|panel| (frame, panel)))
+        .collect::<Vec<_>>();
+    assert_eq!(expected_panels.len(), 2);
+
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let mut callbacks = Vec::new();
+    let callback_output = ui.dock_scene(&scene, |_, panel| {
+        callbacks.push((panel.frame, panel.panel, panel.id, panel.rect));
+        panel.rect
+    });
+    let output = ui.finish_output();
+    let expected_callbacks = expected_panels
+        .iter()
+        .map(|(frame, panel)| (frame.frame, panel.panel, panel.id, panel.rect))
+        .collect::<Vec<_>>();
+    let expected_output = expected_panels
+        .iter()
+        .map(|(_, panel)| panel.rect)
+        .collect::<Vec<_>>();
+
+    assert_eq!(callbacks, expected_callbacks);
+    assert_eq!(callback_output, expected_output);
+    assert!(
+        output
+            .primitives
+            .iter()
+            .all(|primitive| !matches!(primitive, Primitive::Shadow(_)))
+    );
+    for (frame, panel) in expected_panels {
+        let surface = rect_primitive_at(&output.primitives, panel.rect);
+        assert_eq!(surface.fill, Some(Brush::Solid(background)));
+        let stroke = surface.stroke.expect("panel border");
+        assert_eq!(stroke.brush, Brush::Solid(border));
+        assert_eq!(stroke.width, border_width);
+        assert_eq!(surface.radius, radius);
+        assert_eq!(surface.fill, Some(recipe.background));
+        assert_eq!(surface.stroke, Some(recipe.border));
+        assert_eq!(surface.radius, recipe.radius);
+
+        let semantic = output.semantics.get(panel.id).expect("panel semantic");
+        assert_eq!(semantic.role, SemanticRole::Panel);
+        assert_eq!(semantic.bounds, panel.rect);
+        assert_eq!(semantic.label.as_deref(), Some(panel.title.as_str()));
+        assert_eq!(output.semantics.parent_of(panel.id), Some(frame.id));
     }
     assert_eq!(dock.snapshot(), snapshot);
 }
