@@ -44,7 +44,7 @@ fn diagnostic(raw: u64, severity: DiagnosticStripSeverity) -> DiagnosticStripIte
     DiagnosticStripItem::new(
         diagnostic_id(raw),
         severity,
-        format!("KUI-{raw}"),
+        format!("STERN-{raw}"),
         format!("Diagnostic {raw}"),
     )
 }

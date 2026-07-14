@@ -328,19 +328,19 @@ fn status_bar_diagnostics_strip_orders_by_severity_and_preserves_insertion_order
         DiagnosticStripItem::new(
             diagnostic_id(1),
             DiagnosticStripSeverity::Warning,
-            "KUI-WARN-A",
+            "STERN-WARN-A",
             "First warning",
         ),
         DiagnosticStripItem::new(
             diagnostic_id(2),
             DiagnosticStripSeverity::Info,
-            "KUI-INFO",
+            "STERN-INFO",
             "Informational note",
         ),
         DiagnosticStripItem::new(
             diagnostic_id(3),
             DiagnosticStripSeverity::Error,
-            "KUI-ERR",
+            "STERN-ERR",
             "Error",
         )
         .with_source(DiagnosticSource::Renderer)
@@ -348,7 +348,7 @@ fn status_bar_diagnostics_strip_orders_by_severity_and_preserves_insertion_order
         DiagnosticStripItem::new(
             diagnostic_id(4),
             DiagnosticStripSeverity::Warning,
-            "KUI-WARN-B",
+            "STERN-WARN-B",
             "Second warning",
         ),
     ]);
@@ -380,25 +380,25 @@ fn status_bar_diagnostics_strip_summary_counts_are_deterministic_for_empty_and_m
         DiagnosticStripItem::new(
             diagnostic_id(1),
             DiagnosticStripSeverity::Warning,
-            "KUI-WARN-A",
+            "STERN-WARN-A",
             "First warning",
         ),
         DiagnosticStripItem::new(
             diagnostic_id(2),
             DiagnosticStripSeverity::Error,
-            "KUI-ERR-A",
+            "STERN-ERR-A",
             "First error",
         ),
         DiagnosticStripItem::new(
             diagnostic_id(3),
             DiagnosticStripSeverity::Error,
-            "KUI-ERR-B",
+            "STERN-ERR-B",
             "Second error",
         ),
         DiagnosticStripItem::new(
             diagnostic_id(4),
             DiagnosticStripSeverity::Info,
-            "KUI-INFO",
+            "STERN-INFO",
             "Info",
         ),
     ]);
