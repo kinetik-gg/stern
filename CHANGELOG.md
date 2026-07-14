@@ -10,6 +10,13 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Replaced the provisional 19-field flat `ThemeColors` palette
+  and broad `SemanticColor` variants with eight non-exhaustive grouped color
+  families, 53 exact role keys, `SemanticColor::ALL`, and the explicit
+  `ThemeColors::default_dark()` starting palette. Existing recipes and widget
+  consumers now resolve deliberate semantic paths; applications must migrate
+  by mutating the grouped palette before calling `Theme::with_colors`. No
+  legacy field/variant mirror remains. See `docs/theme-color-migration.md`.
 - Added stable-ID collection cursor navigation and public fixed-height virtual
   list/tree scenes with bounded large-data materialization, scrolling,
   keyboard focus/reveal, selection, expansion, theme primitives, and ordered

@@ -772,10 +772,10 @@ impl Ui<'_> {
     fn paint_outliner_surface(&mut self, rect: Rect) {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface_sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
         }));
@@ -975,13 +975,15 @@ impl Ui<'_> {
         };
         let stroke = Stroke::new(
             self.theme.controls.border_width.max(1.0),
-            Brush::Solid(self.theme.colors.accent),
+            Brush::Solid(self.theme.colors.accent.default),
         );
         match preview.zone {
             OutlinerDropZoneKind::Inside => {
                 self.primitive(Primitive::Rect(RectPrimitive {
                     rect: zones.rect,
-                    fill: Some(Brush::Solid(self.theme.colors.accent.with_alpha(0.16))),
+                    fill: Some(Brush::Solid(
+                        self.theme.colors.accent.default.with_alpha(0.16),
+                    )),
                     stroke: Some(stroke),
                     radius: self.theme.radii.sm,
                 }));

@@ -87,10 +87,12 @@ pub use test_harness::{
     UiTestHarness,
 };
 pub use theme::{
-    ButtonRecipe, ButtonVariant, CheckRecipe, ComponentState, ControlMetrics, DurationScale,
-    ElevationScale, FontToken, OpacityScale, PanelRecipe, RadiusScale, RowRecipe, SemanticColor,
-    SeparatorRecipe, ShadowRecipe, SliderRecipe, SpacingScale, TabRecipe, TextFieldRecipe,
-    TextRecipe, TextRole, Theme, ThemeColors, ToggleRecipe, TypographyScale, default_dark_theme,
+    AccentColors, BorderColors, ButtonRecipe, ButtonVariant, CheckRecipe, ComponentState,
+    ContentColors, ControlMetrics, DurationScale, ElevationScale, FocusColors, FontToken,
+    OpacityScale, OverlayColors, PanelRecipe, RadiusScale, RowRecipe, SelectionColors,
+    SemanticColor, SeparatorRecipe, ShadowRecipe, SliderRecipe, SpacingScale,
+    StatusColorFamilyColors, StatusColors, SurfaceColors, TabRecipe, TextFieldRecipe, TextRecipe,
+    TextRole, Theme, ThemeColors, ToggleRecipe, TypographyScale, default_dark_theme,
 };
 pub use units::{PhysicalPoint, PhysicalRect, PhysicalSize, ScaleFactor};
 

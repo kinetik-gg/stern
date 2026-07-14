@@ -344,11 +344,11 @@ fn merge_and_edge_previews_have_distinct_geometry_and_theme_paint() {
     let edge_paint = rect_primitive_at(&edge_output.primitives, edge_preview.rect);
     assert_eq!(
         merge_paint.fill,
-        Some(Brush::Solid(theme.colors.accent.with_alpha(0.20)))
+        Some(Brush::Solid(theme.colors.accent.default.with_alpha(0.20)))
     );
     assert_eq!(
         edge_paint.fill,
-        Some(Brush::Solid(theme.colors.accent.with_alpha(0.32)))
+        Some(Brush::Solid(theme.colors.accent.default.with_alpha(0.32)))
     );
     assert_eq!(merge_paint.radius, theme.radii.sm);
     assert_eq!(edge_paint.radius, theme.radii.none);

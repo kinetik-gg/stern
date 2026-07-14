@@ -281,7 +281,7 @@ impl Ui<'_> {
                 fill: None,
                 stroke: Some(Stroke::new(
                     self.theme.controls.border_width,
-                    Brush::Solid(self.theme.colors.accent),
+                    Brush::Solid(self.theme.colors.accent.default),
                 )),
                 radius: self.theme.radii.none,
             }));
@@ -298,16 +298,16 @@ impl Ui<'_> {
             let active = controller.captured_handle() == Some(handle.id);
             let hovered = response.is_some_and(|response| response.state.hovered);
             let fill = if active {
-                self.theme.colors.surface_active
+                self.theme.colors.surface.control_pressed
             } else if hovered {
-                self.theme.colors.surface_hover
+                self.theme.colors.surface.control_hover
             } else {
-                self.theme.colors.surface_raised
+                self.theme.colors.surface.control
             };
             let border = if active || hovered {
-                self.theme.colors.focus_ring
+                self.theme.colors.focus.ring
             } else {
-                self.theme.colors.accent
+                self.theme.colors.accent.default
             };
             self.primitive(Primitive::Rect(RectPrimitive {
                 rect: handle.handle_screen_rect,

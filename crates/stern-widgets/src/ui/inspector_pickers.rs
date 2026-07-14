@@ -303,10 +303,10 @@ impl Ui<'_> {
         }
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: scene.bounds,
-            fill: Some(Brush::Solid(self.theme.colors.overlay)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.overlay)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border),
+                Brush::Solid(self.theme.colors.border.default),
             )),
             radius: self.theme.radii.md,
         }));
@@ -315,7 +315,7 @@ impl Ui<'_> {
             fill: Some(Brush::Solid(scene.draft)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border),
+                Brush::Solid(self.theme.colors.border.default),
             )),
             radius: self.theme.radii.sm,
         }));
@@ -425,10 +425,10 @@ impl Ui<'_> {
         }
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: bounds,
-            fill: Some(Brush::Solid(self.theme.colors.overlay)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.overlay)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border),
+                Brush::Solid(self.theme.colors.border.default),
             )),
             radius: self.theme.radii.md,
         }));
@@ -473,7 +473,7 @@ impl Ui<'_> {
                 family: font.family.to_owned(),
                 size: font.size,
                 line_height: font.line_height,
-                brush: Brush::Solid(self.theme.colors.text),
+                brush: Brush::Solid(self.theme.colors.content.primary),
             }));
         }
     }

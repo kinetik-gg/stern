@@ -58,6 +58,17 @@ The classification and promotion decisions apply to the whole named group;
 individual members may require narrower or additional evidence at final
 curation.
 
+### Qualified semantic theme palette
+
+The grouped semantic palette remains available through the qualified
+`stern::core` module without expanding the default prelude. New application
+code starts from `stern::core::ThemeColors::default_dark()`, mutates public
+fields on the non-exhaustive color groups, and applies the result with the
+existing `Theme::with_colors` boundary. `SemanticColor::ALL` inventories the
+53 exact resolver keys. See
+[Semantic Theme Color Migration](theme-color-migration.md) for the deliberate
+prerelease breaking field and variant cutover.
+
 | Group | Current classification | Canonical path for new code | Public workflow use | Promotion prerequisite |
 | --- | --- | --- | --- | --- |
 | Facade state | Provisional Experimental | `stern::UiState` or `stern::prelude::UiState` | Yes: retained application state | Public frame lifecycle, shaped-text resource registration, and presenter workflow proof |

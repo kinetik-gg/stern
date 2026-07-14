@@ -67,17 +67,17 @@ impl Ui<'_> {
 
     fn paint_chrome_surface(&mut self, kind: ChromeSurfaceKind, rect: Rect) {
         let fill = match kind {
-            ChromeSurfaceKind::TabStrip => self.theme.colors.surface_sunken,
+            ChromeSurfaceKind::TabStrip => self.theme.colors.surface.sunken,
             ChromeSurfaceKind::MenuBar
             | ChromeSurfaceKind::Toolbar
-            | ChromeSurfaceKind::StatusBar => self.theme.colors.surface_raised,
+            | ChromeSurfaceKind::StatusBar => self.theme.colors.surface.panel,
         };
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
             fill: Some(Brush::Solid(fill)),
             stroke: Some(Stroke::new(
                 self.theme.controls.border_width,
-                Brush::Solid(self.theme.colors.border_subtle),
+                Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
         }));

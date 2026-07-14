@@ -482,25 +482,30 @@ Duration
 ### 18.2 Semantic Tokens
 
 ```text
-surface
-surface_hover
-surface_active
-surface_sunken
-text
-text_muted
-text_disabled
-accent
-danger
-warning
-success
-border
-border_subtle
-focus_ring
-selection
-disabled
-overlay
-viewport_background
+surface.application / workspace / panel / panel_raised / raised
+surface.control / control_hover / control_pressed / control_disabled
+surface.overlay / hover / sunken
+content.primary / secondary / muted / disabled / on_accent / link
+border.subtle / default / strong / hover / focused / disabled / invalid
+selection.background / foreground
+focus.indicator / separator / ring
+overlay.scrim
+accent.subtle / default / hover / pressed / focus / foreground
+status.{info,success,warning,danger}.{foreground,surface,border,strong}
 ```
+
+`ThemeColors` stores these renderer-neutral roles in non-exhaustive public
+groups. `ThemeColors::default_dark()` returns the exact normative dark palette;
+there is deliberately no implicit `Default` implementation. Applications
+customize by mutating that starting palette and pass it through
+`Theme::with_colors`.
+
+`SemanticColor` contains one exact flat key for each stored role and exposes a
+stable complete `SemanticColor::ALL` inventory. The enum is non-exhaustive;
+external matching must retain a wildcard arm. `ThemeColors::get` and
+`Theme::color` resolve these keys. See
+[Semantic Theme Color Migration](../theme-color-migration.md) for the
+prerelease breaking migration from the former flat palette.
 
 ### 18.3 Component Recipes
 
