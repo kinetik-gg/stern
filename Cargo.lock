@@ -2163,6 +2163,7 @@ dependencies = [
  "stern-core",
  "stern-render",
  "stern-text",
+ "stern-widgets",
  "vello",
 ]
 
