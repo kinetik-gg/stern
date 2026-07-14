@@ -127,29 +127,50 @@ impl Theme {
     /// Resolves a button recipe for a visual variant and state.
     #[must_use]
     pub fn button_variant(&self, variant: ButtonVariant, state: ComponentState) -> ButtonRecipe {
-        let mut background = match variant {
-            ButtonVariant::Standard => self.colors.surface.control,
-            ButtonVariant::Primary => self.colors.accent.default,
-            ButtonVariant::Ghost => Color::TRANSPARENT,
-            ButtonVariant::Danger => self.colors.status.danger.strong,
-        };
-        if state.disabled {
-            background = self.colors.surface.control_disabled;
-        } else if state.selected || state.pressed {
-            background = match variant {
-                ButtonVariant::Standard | ButtonVariant::Ghost => {
-                    self.colors.surface.control_pressed
+        let background = if state.disabled {
+            self.colors.surface.control_disabled
+        } else {
+            match variant {
+                ButtonVariant::Standard => {
+                    if state.selected || state.pressed {
+                        self.colors.surface.control_pressed
+                    } else if state.hovered {
+                        self.colors.surface.control_hover
+                    } else {
+                        self.colors.surface.control
+                    }
                 }
-                ButtonVariant::Primary => self.colors.accent.default.with_alpha(0.86),
-                ButtonVariant::Danger => self.colors.status.danger.strong.with_alpha(0.86),
-            };
-        } else if state.hovered {
-            background = match variant {
-                ButtonVariant::Standard | ButtonVariant::Ghost => self.colors.surface.control_hover,
-                ButtonVariant::Primary => self.colors.accent.default.with_alpha(0.92),
-                ButtonVariant::Danger => self.colors.status.danger.strong.with_alpha(0.92),
-            };
-        }
+                ButtonVariant::Primary => {
+                    if state.pressed {
+                        self.colors.accent.pressed
+                    } else if state.selected {
+                        self.colors.accent.default
+                    } else if state.hovered {
+                        self.colors.accent.hover
+                    } else {
+                        self.colors.accent.default
+                    }
+                }
+                ButtonVariant::Ghost => {
+                    if state.selected || state.pressed {
+                        self.colors.surface.control_pressed
+                    } else if state.hovered {
+                        self.colors.surface.control_hover
+                    } else {
+                        Color::TRANSPARENT
+                    }
+                }
+                ButtonVariant::Danger => {
+                    if state.selected || state.pressed {
+                        self.colors.status.danger.strong.with_alpha(0.86)
+                    } else if state.hovered {
+                        self.colors.status.danger.strong.with_alpha(0.92)
+                    } else {
+                        self.colors.status.danger.strong
+                    }
+                }
+            }
+        };
 
         let foreground = if state.disabled {
             self.colors.content.disabled

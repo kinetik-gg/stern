@@ -118,6 +118,363 @@ fn button_recipe_uses_state_colors() {
     assert_eq!(primary.foreground, theme.colors.content.on_accent);
 }
 
+const PRESERVED_BUTTON_STATES: [(&str, ComponentState); 7] = [
+    (
+        "normal",
+        ComponentState {
+            hovered: false,
+            pressed: false,
+            focused: false,
+            disabled: false,
+            selected: false,
+        },
+    ),
+    (
+        "hovered",
+        ComponentState {
+            hovered: true,
+            pressed: false,
+            focused: false,
+            disabled: false,
+            selected: false,
+        },
+    ),
+    (
+        "selected",
+        ComponentState {
+            hovered: false,
+            pressed: false,
+            focused: false,
+            disabled: false,
+            selected: true,
+        },
+    ),
+    (
+        "pressed",
+        ComponentState {
+            hovered: false,
+            pressed: true,
+            focused: false,
+            disabled: false,
+            selected: false,
+        },
+    ),
+    (
+        "selected and hovered",
+        ComponentState {
+            hovered: true,
+            pressed: false,
+            focused: false,
+            disabled: false,
+            selected: true,
+        },
+    ),
+    (
+        "pressed and hovered",
+        ComponentState {
+            hovered: true,
+            pressed: true,
+            focused: false,
+            disabled: false,
+            selected: false,
+        },
+    ),
+    (
+        "disabled",
+        ComponentState {
+            hovered: false,
+            pressed: false,
+            focused: false,
+            disabled: true,
+            selected: false,
+        },
+    ),
+];
+
+struct PreservedButtonVariantCase {
+    name: &'static str,
+    variant: ButtonVariant,
+    backgrounds: [Color; 7],
+    enabled_foreground: Color,
+    border: Color,
+}
+
+fn assert_preserved_button_variant(theme: &super::Theme, case: &PreservedButtonVariantCase) {
+    for ((state_name, state), expected_background) in PRESERVED_BUTTON_STATES
+        .iter()
+        .copied()
+        .zip(case.backgrounds)
+    {
+        let recipe = theme.button_variant(case.variant, state);
+        let expected_foreground = if state.disabled {
+            theme.colors.content.disabled
+        } else {
+            case.enabled_foreground
+        };
+        assert_eq!(
+            recipe.background,
+            Brush::Solid(expected_background),
+            "wrong {} {state_name} background",
+            case.name
+        );
+        assert_eq!(
+            recipe.foreground, expected_foreground,
+            "wrong {} {state_name} foreground",
+            case.name
+        );
+        assert_eq!(
+            recipe.border.brush,
+            Brush::Solid(case.border),
+            "wrong {} {state_name} border",
+            case.name
+        );
+        assert_eq!(recipe.border.width, theme.controls.border_width);
+        assert_eq!(recipe.radius, theme.radii.sm);
+    }
+}
+
+#[test]
+fn non_primary_button_variants_preserve_existing_outcomes() {
+    let mut colors = ThemeColors::default_dark();
+    colors.surface.control = Color::rgb8(1, 2, 3);
+    colors.surface.control_hover = Color::rgb8(4, 5, 6);
+    colors.surface.control_pressed = Color::rgb8(7, 8, 9);
+    colors.surface.control_disabled = Color::rgb8(10, 11, 12);
+    colors.status.danger.strong = Color::rgb8(13, 14, 15);
+    colors.content.primary = Color::rgb8(16, 17, 18);
+    colors.content.on_accent = Color::rgb8(19, 20, 21);
+    colors.content.disabled = Color::rgb8(22, 23, 24);
+    colors.border.default = Color::rgb8(25, 26, 27);
+    colors.border.subtle = Color::rgb8(28, 29, 30);
+    let theme = default_dark_theme().with_colors(colors);
+
+    // Danger alpha values are legacy recipe characterization, not status conformance evidence.
+    let danger_hover = colors.status.danger.strong.with_alpha(0.92);
+    let danger_active = colors.status.danger.strong.with_alpha(0.86);
+    let cases = [
+        PreservedButtonVariantCase {
+            name: "Standard",
+            variant: ButtonVariant::Standard,
+            backgrounds: [
+                colors.surface.control,
+                colors.surface.control_hover,
+                colors.surface.control_pressed,
+                colors.surface.control_pressed,
+                colors.surface.control_pressed,
+                colors.surface.control_pressed,
+                colors.surface.control_disabled,
+            ],
+            enabled_foreground: colors.content.primary,
+            border: colors.border.default,
+        },
+        PreservedButtonVariantCase {
+            name: "Ghost",
+            variant: ButtonVariant::Ghost,
+            backgrounds: [
+                Color::TRANSPARENT,
+                colors.surface.control_hover,
+                colors.surface.control_pressed,
+                colors.surface.control_pressed,
+                colors.surface.control_pressed,
+                colors.surface.control_pressed,
+                colors.surface.control_disabled,
+            ],
+            enabled_foreground: colors.content.primary,
+            border: colors.border.subtle,
+        },
+        PreservedButtonVariantCase {
+            name: "Danger",
+            variant: ButtonVariant::Danger,
+            backgrounds: [
+                colors.status.danger.strong,
+                danger_hover,
+                danger_active,
+                danger_active,
+                danger_active,
+                danger_active,
+                colors.surface.control_disabled,
+            ],
+            enabled_foreground: colors.content.on_accent,
+            border: colors.border.default,
+        },
+    ];
+
+    for case in &cases {
+        assert_preserved_button_variant(&theme, case);
+    }
+}
+
+fn assert_primary_button_state(
+    theme: &super::Theme,
+    baseline: &super::ButtonRecipe,
+    name: &str,
+    state: ComponentState,
+    expected_background: Color,
+    expected_foreground: Color,
+) {
+    let recipe = theme.button_variant(ButtonVariant::Primary, state);
+    assert_eq!(
+        recipe.background,
+        Brush::Solid(expected_background),
+        "wrong background for {name}"
+    );
+    assert_eq!(
+        recipe.foreground, expected_foreground,
+        "wrong foreground for {name}"
+    );
+    assert_eq!(recipe.radius, baseline.radius, "wrong radius for {name}");
+    assert_eq!(
+        recipe.border.width, baseline.border.width,
+        "wrong border width for {name}"
+    );
+    assert_eq!(
+        recipe.border.brush, baseline.border.brush,
+        "wrong border brush for {name}"
+    );
+}
+
+type PrimaryButtonCase = (&'static str, ComponentState, Color, Color);
+
+fn primary_button_cases(colors: &ThemeColors) -> [PrimaryButtonCase; 8] {
+    [
+        (
+            "normal",
+            ComponentState::default(),
+            colors.accent.default,
+            colors.content.on_accent,
+        ),
+        (
+            "hovered",
+            ComponentState {
+                hovered: true,
+                ..ComponentState::default()
+            },
+            colors.accent.hover,
+            colors.content.on_accent,
+        ),
+        (
+            "selected",
+            ComponentState {
+                selected: true,
+                ..ComponentState::default()
+            },
+            colors.accent.default,
+            colors.content.on_accent,
+        ),
+        (
+            "pressed",
+            ComponentState {
+                pressed: true,
+                ..ComponentState::default()
+            },
+            colors.accent.pressed,
+            colors.content.on_accent,
+        ),
+        (
+            "disabled",
+            ComponentState {
+                disabled: true,
+                ..ComponentState::default()
+            },
+            colors.surface.control_disabled,
+            colors.content.disabled,
+        ),
+        (
+            "selected and hovered",
+            ComponentState {
+                selected: true,
+                hovered: true,
+                ..ComponentState::default()
+            },
+            colors.accent.default,
+            colors.content.on_accent,
+        ),
+        (
+            "pressed, selected, and hovered",
+            ComponentState {
+                pressed: true,
+                selected: true,
+                hovered: true,
+                ..ComponentState::default()
+            },
+            colors.accent.pressed,
+            colors.content.on_accent,
+        ),
+        (
+            "disabled with every active state",
+            ComponentState {
+                disabled: true,
+                pressed: true,
+                selected: true,
+                hovered: true,
+                ..ComponentState::default()
+            },
+            colors.surface.control_disabled,
+            colors.content.disabled,
+        ),
+    ]
+}
+
+#[test]
+fn primary_button_uses_exact_accent_roles_and_bounded_state_precedence() {
+    let mut colors = ThemeColors::default_dark();
+    colors.accent.default = Color::rgb8(1, 2, 3);
+    colors.accent.hover = Color::rgb8(4, 5, 6);
+    colors.accent.pressed = Color::rgb8(7, 8, 9);
+    colors.focus.ring = Color::rgb8(10, 11, 12);
+    colors.surface.control_disabled = Color::rgb8(13, 14, 15);
+    colors.content.on_accent = Color::rgb8(16, 17, 18);
+    colors.content.disabled = Color::rgb8(19, 20, 21);
+    colors.border.default = Color::rgb8(22, 23, 24);
+    let theme = default_dark_theme().with_colors(colors);
+    let normal = theme.button_variant(ButtonVariant::Primary, ComponentState::default());
+
+    for (name, state, expected_background, expected_foreground) in primary_button_cases(&colors) {
+        assert_primary_button_state(
+            &theme,
+            &normal,
+            name,
+            state,
+            expected_background,
+            expected_foreground,
+        );
+    }
+
+    let focused_hover = theme.button_variant(
+        ButtonVariant::Primary,
+        ComponentState {
+            focused: true,
+            hovered: true,
+            ..ComponentState::default()
+        },
+    );
+    assert_eq!(focused_hover.background, Brush::Solid(colors.accent.hover));
+    assert_eq!(focused_hover.border.brush, Brush::Solid(colors.focus.ring));
+    assert_eq!(focused_hover.border.width, normal.border.width);
+    assert_eq!(focused_hover.radius, normal.radius);
+    assert_eq!(focused_hover.foreground, normal.foreground);
+}
+
+#[test]
+fn selected_row_remains_selected_while_hovered() {
+    let mut colors = ThemeColors::default_dark();
+    colors.selection.background = Color::rgb8(1, 2, 3);
+    colors.selection.foreground = Color::rgb8(4, 5, 6);
+    colors.surface.hover = Color::rgb8(7, 8, 9);
+    colors.content.primary = Color::rgb8(10, 11, 12);
+    let theme = default_dark_theme().with_colors(colors);
+    let selected_row = theme.row(ComponentState {
+        selected: true,
+        hovered: true,
+        ..ComponentState::default()
+    });
+    assert_eq!(
+        selected_row.background,
+        Brush::Solid(colors.selection.background)
+    );
+    assert_eq!(selected_row.foreground, colors.selection.foreground);
+}
+
 #[test]
 fn component_recipes_cover_common_states() {
     let theme = default_dark_theme();

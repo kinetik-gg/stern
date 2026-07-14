@@ -207,6 +207,55 @@ fn facade_supports_mutation_first_semantic_palette_customization() {
     assert_eq!(customized.controls, original.controls);
 }
 
+#[test]
+fn facade_primary_recipe_consumes_custom_accent_state_roles() {
+    let mut colors = stern::core::ThemeColors::default_dark();
+    colors.accent.default = stern::core::Color::rgb8(1, 2, 3);
+    colors.accent.hover = stern::core::Color::rgb8(4, 5, 6);
+    colors.accent.pressed = stern::core::Color::rgb8(7, 8, 9);
+    let theme = stern::core::default_dark_theme().with_colors(colors);
+
+    let cases = [
+        (
+            stern::core::ComponentState::default(),
+            colors.accent.default,
+        ),
+        (
+            stern::core::ComponentState {
+                hovered: true,
+                ..stern::core::ComponentState::default()
+            },
+            colors.accent.hover,
+        ),
+        (
+            stern::core::ComponentState {
+                selected: true,
+                hovered: true,
+                ..stern::core::ComponentState::default()
+            },
+            colors.accent.default,
+        ),
+        (
+            stern::core::ComponentState {
+                pressed: true,
+                selected: true,
+                hovered: true,
+                ..stern::core::ComponentState::default()
+            },
+            colors.accent.pressed,
+        ),
+    ];
+
+    for (state, expected) in cases {
+        assert_eq!(
+            theme
+                .button_variant(stern::core::ButtonVariant::Primary, state)
+                .background,
+            stern::core::Brush::Solid(expected)
+        );
+    }
+}
+
 #[cfg(feature = "vello-winit")]
 #[test]
 fn facade_vello_winit_module_preserves_direct_crate_identities_without_prelude_exports() {
