@@ -1,6 +1,7 @@
-//! DPI snapping conformance tests.
+//! Deterministic conformance for STERN-DPI-001 and 002, with partial
+//! core-boundary evidence for STERN-DPI-003.
 
-use stern_core::{PhysicalRect, Point, Rect, ScaleFactor};
+use stern_core::{PhysicalRect, PhysicalSize, Point, Rect, ScaleFactor, Size};
 
 const EPSILON: f64 = 0.000_1;
 const EPSILON_F32: f32 = 0.000_1;
@@ -66,6 +67,7 @@ fn dpi_snap_point_lands_on_integer_physical_coordinates() {
 #[test]
 fn dpi_snap_rect_edges_land_each_edge_on_physical_grid() {
     for scale in [
+        ScaleFactor::new(1.0),
         ScaleFactor::new(1.25),
         ScaleFactor::new(1.5),
         ScaleFactor::new(2.0),
@@ -79,7 +81,12 @@ fn dpi_snap_rect_edges_land_each_edge_on_physical_grid() {
 
 #[test]
 fn dpi_snap_adjacent_rects_keep_shared_snapped_edges() {
-    for scale in [ScaleFactor::new(1.25), ScaleFactor::new(1.5)] {
+    for scale in [
+        ScaleFactor::new(1.0),
+        ScaleFactor::new(1.25),
+        ScaleFactor::new(1.5),
+        ScaleFactor::new(2.0),
+    ] {
         let left = Rect::new(2.4, 3.2, 7.3, 4.5);
         let right = Rect::new(left.max_x(), 3.2, 5.7, 4.5);
 
@@ -94,6 +101,32 @@ fn dpi_snap_adjacent_rects_keep_shared_snapped_edges() {
         assert_rect_edges_on_physical_grid(snapped_left, scale);
         assert_rect_edges_on_physical_grid(snapped_right, scale);
     }
+}
+
+#[test]
+fn dpi_foundation_dimensions_stay_logical_across_release_scales() {
+    let logical = Size::new(800.0, 600.0);
+
+    for (value, expected) in [
+        (1.0, PhysicalSize::new(800, 600)),
+        (1.25, PhysicalSize::new(1000, 750)),
+        (1.5, PhysicalSize::new(1200, 900)),
+        (2.0, PhysicalSize::new(1600, 1200)),
+    ] {
+        let scale = ScaleFactor::new(value);
+        assert_eq!(scale.logical_size_to_physical(logical), expected);
+        assert_eq!(scale.physical_size_to_logical(expected), logical);
+    }
+}
+
+#[test]
+fn dpi_design_pixel_equals_one_logical_unit_at_one_hundred_percent() {
+    let scale = ScaleFactor::ONE;
+
+    assert_eq!(
+        scale.logical_rect_to_physical(Rect::new(0.0, 0.0, 1.0, 1.0)),
+        PhysicalRect::new(0, 0, 1, 1)
+    );
 }
 
 #[test]

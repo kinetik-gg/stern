@@ -4,9 +4,11 @@ use crate::{
     root_transform, snap_axis_aligned_translation, snap_filled_path_elements_to_device,
     snap_image_rect_to_device, snap_point_to_device, snap_radius_to_device, snap_rect_to_device,
     snap_stroke_center_to_device, snap_stroked_line_to_device,
-    snap_stroked_path_elements_to_device, snap_stroked_rect_to_device,
+    snap_stroked_path_elements_to_device, snap_stroked_rect_to_device, viewport_device_scale,
 };
-use stern_core::{CornerRadius, PathElement, Point, Rect};
+use stern_core::{
+    CornerRadius, PathElement, PhysicalSize, Point, Rect, ScaleFactor, Size, ViewportInfo,
+};
 use vello::kurbo::Affine;
 
 #[test]
@@ -194,10 +196,60 @@ fn renderer_leaves_curved_stroked_paths_unsnapped() {
 
 #[test]
 fn renderer_quantizes_stroke_widths_to_physical_pixels() {
-    assert_approx(quantize_stroke_width_to_device(1.0, 1.0), 1.0);
-    assert_approx(quantize_stroke_width_to_device(1.0, 1.25), 0.8);
-    assert_approx(quantize_stroke_width_to_device(1.0, 1.5), 1.333_333_4);
-    assert_approx(quantize_stroke_width_to_device(2.0, 1.25), 2.4);
+    for scale in [1.0_f64, 1.25, 1.5, 2.0] {
+        for logical_width in [1.0_f32, 2.0] {
+            let expected_physical_width = (f64::from(logical_width) * scale).round().max(1.0);
+            let quantized = quantize_stroke_width_to_device(logical_width, scale);
+            let actual_physical_width = f64::from(quantized) * scale;
+
+            assert!(
+                (actual_physical_width - expected_physical_width).abs() <= 0.000_01,
+                "{actual_physical_width} != {expected_physical_width} at {scale}x"
+            );
+        }
+    }
+}
+
+#[test]
+fn renderer_uses_half_pixel_centers_for_odd_strokes_and_integer_centers_for_even_strokes() {
+    for scale in [1.0_f64, 1.25, 1.5, 2.0] {
+        for logical_width in [1.0_f32, 2.0] {
+            let physical_width = (f64::from(logical_width) * scale).round().max(1.0);
+            let snapped = snap_stroke_center_to_device(10.37, logical_width, scale);
+            let physical_center = f64::from(snapped) * scale;
+            let fractional = physical_center - physical_center.floor();
+            let expected_fractional = if physical_width % 2.0 == 0.0 {
+                0.0
+            } else {
+                0.5
+            };
+            let direct_error = (fractional - expected_fractional).abs();
+            let wrapped_error = (1.0 - direct_error).abs();
+
+            assert!(
+                direct_error.min(wrapped_error) <= 0.000_01,
+                "physical center {physical_center} has wrong parity for width {physical_width}"
+            );
+        }
+    }
+}
+
+#[test]
+fn renderer_derives_device_scale_from_each_release_viewport() {
+    for (scale, physical_size) in [
+        (1.0, PhysicalSize::new(800, 600)),
+        (1.25, PhysicalSize::new(1000, 750)),
+        (1.5, PhysicalSize::new(1200, 900)),
+        (2.0, PhysicalSize::new(1600, 1200)),
+    ] {
+        let viewport = ViewportInfo::new(
+            Size::new(800.0, 600.0),
+            physical_size,
+            ScaleFactor::new(scale),
+        );
+
+        assert_approx64(viewport_device_scale(viewport), scale);
+    }
 }
 
 #[test]
