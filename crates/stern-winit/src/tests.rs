@@ -528,6 +528,56 @@ fn scale_change_cannot_seed_click_history_from_stale_logical_pointer_evidence() 
 }
 
 #[test]
+fn scale_change_fences_same_frame_old_basis_events_without_releasing_buttons() {
+    let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
+    adapter.set_window_focused(true);
+    adapter.set_modifiers(ModifiersState::SHIFT);
+    adapter.pointer_moved(PhysicalPosition::new(12.0, 18.0));
+    adapter.mouse_button(WinitMouseButton::Left, ElementState::Pressed, 1);
+    adapter.set_modifiers(ModifiersState::CONTROL);
+    adapter.mouse_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(
+        4.0, -6.0,
+    )));
+
+    adapter.set_scale_factor(ScaleFactor::new(2.0));
+
+    assert_eq!(
+        adapter.input().events,
+        vec![
+            UiInputEvent::WindowFocusChanged(true),
+            UiInputEvent::ModifiersChanged(Modifiers {
+                shift: true,
+                ..Modifiers::default()
+            }),
+            UiInputEvent::PointerButton {
+                button: CoreMouseButton::Primary,
+                down: true,
+                click_count: 1,
+                position: None,
+            },
+            UiInputEvent::ModifiersChanged(Modifiers {
+                ctrl: true,
+                ..Modifiers::default()
+            }),
+            UiInputEvent::PointerLeft,
+        ]
+    );
+    assert!(adapter.input().pointer.primary.down);
+    assert_eq!(adapter.input().pointer.position, None);
+    assert_eq!(adapter.input().pointer.delta, Vec2::ZERO);
+    assert_eq!(adapter.input().pointer.wheel_delta, Vec2::ZERO);
+    assert!(adapter.input().window_focused);
+    assert!(
+        !adapter
+            .input()
+            .events
+            .iter()
+            .any(|event| matches!(event, UiInputEvent::PointerReleaseAll { .. }))
+    );
+    assert_eq!(adapter.input().validate_event_stream(), Ok(()));
+}
+
+#[test]
 fn automatic_click_sequence_saturates_at_u8_max() {
     let started = Instant::now();
     let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
