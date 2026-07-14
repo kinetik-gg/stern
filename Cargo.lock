@@ -2174,6 +2174,7 @@ dependencies = [
  "stern-core",
  "stern-render",
  "stern-vello",
+ "stern-winit",
  "vello",
  "winit",
 ]

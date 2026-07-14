@@ -19,6 +19,7 @@ winit = "0.30.12"
 
 [dev-dependencies]
 pollster = "0.4.0"
+stern-winit = { version = "=1.0.0-rc.2.dev", path = "../stern-winit" }
 
 [lints]
 workspace = true

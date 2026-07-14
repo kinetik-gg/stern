@@ -167,13 +167,25 @@ impl WinitInputAdapter {
     /// Updates the current scale factor.
     ///
     /// A real sanitized change invalidates automatic click history and records
-    /// pointer leave so no projected position or delta survives from the old
-    /// logical coordinate basis. An equal sanitized value has no input effect.
+    /// pointer leave so no projected position, delta, or wheel input survives
+    /// from the old logical coordinate basis. Earlier coordinate-bearing events
+    /// are fenced from the new basis while button transitions and non-pointer
+    /// event order are preserved. An equal sanitized value has no input effect.
     pub fn set_scale_factor(&mut self, scale_factor: ScaleFactor) {
         let scale_factor = sanitize_scale_factor(scale_factor);
         if self.scale_factor != scale_factor {
             self.click_sequence.reset();
             self.last_pointer_position = None;
+            self.input.events.retain_mut(|event| match event {
+                UiInputEvent::PointerMoved { .. } | UiInputEvent::Wheel { .. } => false,
+                UiInputEvent::PointerButton { position, .. }
+                | UiInputEvent::PointerReleaseAll { position } => {
+                    *position = None;
+                    true
+                }
+                _ => true,
+            });
+            self.input.pointer.wheel_delta = Vec2::ZERO;
             self.input.push_event(UiInputEvent::PointerLeft);
             self.scale_factor = scale_factor;
         }
