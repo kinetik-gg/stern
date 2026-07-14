@@ -515,7 +515,44 @@ fn component_recipes_cover_common_states() {
         theme.text_field(focused).border.brush,
         Brush::Solid(theme.colors.border.focused)
     );
-    assert!(theme.panel().shadow.is_some());
+    assert!(theme.panel().shadow.is_none());
+}
+
+#[test]
+fn passive_panel_recipe_stays_flat_under_nonzero_raised_elevation() {
+    let background = Color::rgb8(1, 2, 3);
+    let border = Color::rgb8(4, 5, 6);
+    let border_width = 2.75;
+    let radius = CornerRadius::all(5.5);
+    let base = default_dark_theme();
+    let mut colors = ThemeColors::default_dark();
+    colors.surface.panel_raised = background;
+    colors.border.default = border;
+    let theme = base
+        .with_colors(colors)
+        .with_controls(ControlMetrics {
+            border_width,
+            ..base.controls
+        })
+        .with_radii(RadiusScale::from_values(1.0, 5.5, 7.0, 9.0, 99.0))
+        .with_elevation(ElevationScale {
+            raised: 37.0,
+            ..base.elevation
+        });
+
+    let recipe = theme.panel();
+
+    assert_eq!(recipe.background, Brush::Solid(background));
+    assert_eq!(recipe.border.brush, Brush::Solid(border));
+    assert_eq!(recipe.border.width, border_width);
+    assert_eq!(recipe.radius, radius);
+    assert_eq!(recipe.shadow, None);
+    assert!(
+        theme
+            .elevation_shadow(theme.elevation.raised, radius.top_left)
+            .is_some(),
+        "positive elevation tokens must still resolve shadows for elevated consumers"
+    );
 }
 
 #[test]

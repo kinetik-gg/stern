@@ -415,7 +415,7 @@ impl Theme {
                 Brush::Solid(self.colors.border.default),
             ),
             radius: self.radii.sm,
-            shadow: self.elevation_shadow(self.elevation.raised, self.radii.sm.top_left),
+            shadow: None,
         }
     }
 

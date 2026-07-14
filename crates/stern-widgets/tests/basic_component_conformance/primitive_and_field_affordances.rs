@@ -1,4 +1,7 @@
 #[allow(unused_imports)]
+use stern_core::RectPrimitive;
+
+#[allow(unused_imports)]
 use super::{
     AssetSlotAsset, AssetSlotConfig, BasicComponentCase, Brush, Color, ColorFieldConfig,
     CursorShape, DropdownItem, DropdownItemId, DropdownModel, IconId, Key, KeyEvent, KeyState,
@@ -84,13 +87,36 @@ fn stage9_basic_components_emit_stable_primitive_categories() {
     ));
 
     let panel = panel(rect, &theme);
-    assert!(matches!(panel.primitives.last(), Some(Primitive::Rect(_))));
+    assert!(matches!(panel.primitives.as_slice(), [Primitive::Rect(_)]));
+}
+
+#[test]
+fn public_passive_panel_preserves_rect_and_emits_exact_flat_recipe() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(13.0, 17.0, 211.0, 89.0);
+    let recipe = theme.panel();
+
+    let output = panel(rect, &theme);
+
+    assert_eq!(
+        output.primitives,
+        vec![Primitive::Rect(RectPrimitive {
+            rect,
+            fill: Some(recipe.background),
+            stroke: Some(recipe.border),
+            radius: recipe.radius,
+        })]
+    );
+    let [Primitive::Rect(surface)] = output.primitives.as_slice() else {
+        panic!("passive panel must emit exactly one rectangle");
+    };
+    assert_eq!(surface.rect, rect);
+    assert!(output.response.is_none());
     assert!(
-        panel
+        output
             .primitives
             .iter()
-            .take(panel.primitives.len().saturating_sub(1))
-            .all(|primitive| matches!(primitive, Primitive::Shadow(_)))
+            .all(|primitive| !matches!(primitive, Primitive::Shadow(_)))
     );
 }
 
