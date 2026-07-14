@@ -6,6 +6,45 @@ import { fileURLToPath } from "node:url";
 
 const TOOL_ROOT = dirname(fileURLToPath(import.meta.url));
 const ACCEPTED_ROOT = resolve(TOOL_ROOT, "../../apps/stern-demo/assets/icons/phosphor");
+const REQUIRED_RELEASE_SCALES = [1, 1.25, 1.5, 2];
+
+function validateReleaseScaleCoverage(root) {
+  const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
+  const declaredScales = new Set(manifest.raster.scaleFactors);
+  const atlasesById = new Map(manifest.atlases.map((atlas) => [atlas.idRaw, atlas]));
+
+  for (const scale of REQUIRED_RELEASE_SCALES) {
+    if (!declaredScales.has(scale)) {
+      throw new Error(`icon manifest is missing required release scale ${scale}`);
+    }
+  }
+
+  for (const icon of manifest.icons) {
+    for (const scale of REQUIRED_RELEASE_SCALES) {
+      const variants = icon.variants.filter((variant) => variant.scaleFactor === scale);
+      for (const logicalSize of manifest.raster.logicalIconSizes) {
+        const variant = variants.find((candidate) => candidate.logicalSize === logicalSize);
+        if (!variant) {
+          throw new Error(`${icon.variant} is missing ${logicalSize}@${scale}x`);
+        }
+
+        const requiredPhysicalSize = Math.ceil(logicalSize * scale);
+        const atlas = atlasesById.get(variant.atlas);
+        if (
+          variant.physicalSize < requiredPhysicalSize ||
+          variant.sourceRect.width < requiredPhysicalSize ||
+          variant.sourceRect.height < requiredPhysicalSize ||
+          !atlas ||
+          atlas.physicalSize < requiredPhysicalSize
+        ) {
+          throw new Error(
+            `${icon.variant} ${logicalSize}@${scale}x requires at least ${requiredPhysicalSize}px`,
+          );
+        }
+      }
+    }
+  }
+}
 
 function filesUnder(root, directory = root) {
   const files = [];
@@ -22,11 +61,13 @@ function filesUnder(root, directory = root) {
 
 const disposableRoot = mkdtempSync(join(tmpdir(), "stern-phosphor-check-"));
 try {
+  validateReleaseScaleCoverage(ACCEPTED_ROOT);
   execFileSync(
     process.execPath,
     [join(TOOL_ROOT, "generate-phosphor-icons.mjs"), "--output", disposableRoot],
     { cwd: TOOL_ROOT, stdio: "inherit", windowsHide: true },
   );
+  validateReleaseScaleCoverage(disposableRoot);
 
   const acceptedFiles = filesUnder(ACCEPTED_ROOT);
   const generatedFiles = filesUnder(disposableRoot);
