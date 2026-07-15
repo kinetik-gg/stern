@@ -10,7 +10,7 @@ pub const fn default_dark_theme() -> Theme {
     let strokes = StrokeScale::from_values(1.0, 1.0, 2.0, 1.0, 1.0);
     Theme {
         colors: ThemeColors::default_dark(),
-        spacing: SpacingScale::new(2.0, 4.0, 8.0, 12.0, 16.0),
+        spacing: SpacingScale::new(0.0, 2.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0),
         radii,
         strokes,
         typography: TypographyScale {
