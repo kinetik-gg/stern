@@ -346,7 +346,12 @@ impl Ui<'_> {
                 let Some(response) = response else {
                     continue;
                 };
-                self.paint_virtual_table_cell(cell.cell.rect, label, response, config.disabled);
+                self.paint_virtual_table_cell(
+                    cell.cell.rect,
+                    label,
+                    response,
+                    config.selection_mode == VirtualTableSelectionMode::Cell,
+                );
                 if table.cell_is_visible(cell) {
                     let selection_response = (config.selection_mode
                         == VirtualTableSelectionMode::Cell)
@@ -532,21 +537,28 @@ impl Ui<'_> {
         rect: Rect,
         label: &str,
         response: Response,
-        disabled: bool,
+        show_focus_annuli: bool,
     ) {
-        let recipe = self.theme.row(ComponentState {
+        let recipe_state = ComponentState {
             hovered: response.state.hovered,
             pressed: response.state.pressed,
             focused: response.state.focused,
-            disabled,
+            disabled: response.state.disabled,
             selected: response.state.selected,
-        });
-        self.primitive(Primitive::Rect(RectPrimitive {
+        };
+        let recipe = self.theme.row(recipe_state);
+        let mut primitive_state = recipe_state;
+        primitive_state.focused &= show_focus_annuli;
+        for primitive in row_surface_primitives(
+            self.theme,
+            &recipe,
+            primitive_state,
             rect,
-            fill: Some(recipe.background),
-            stroke: Some(recipe.border),
-            radius: recipe.radius,
-        }));
+            recipe.radius,
+            RowFocusPlacement::Inward,
+        ) {
+            self.primitive(primitive);
+        }
         self.paint_virtual_table_text(rect, label, recipe.foreground);
     }
 

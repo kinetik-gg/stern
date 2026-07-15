@@ -1087,6 +1087,57 @@ fn row_and_cell_body_selection_never_sort_resize_or_create_header_annuli() {
                 .iter()
                 .all(|header| !header.response.state.focused)
         );
+
+        let header_clip = Rect::new(BOUNDS.x, BOUNDS.y, BOUNDS.width, 20.25);
+        let body_clip = Rect::new(
+            BOUNDS.x,
+            BOUNDS.y + 20.25,
+            BOUNDS.width,
+            BOUNDS.height - 20.25,
+        );
+        let header_begin = selected
+            .frame
+            .primitives
+            .iter()
+            .position(
+                |primitive| matches!(primitive, Primitive::ClipBegin { rect, .. } if *rect == header_clip),
+            )
+            .expect("header clip begin");
+        let header_end = selected.frame.primitives[header_begin + 1..]
+            .iter()
+            .position(|primitive| matches!(primitive, Primitive::ClipEnd { .. }))
+            .map(|index| header_begin + 1 + index)
+            .expect("header clip end");
+        let body_begin = selected
+            .frame
+            .primitives
+            .iter()
+            .position(
+                |primitive| matches!(primitive, Primitive::ClipBegin { rect, .. } if *rect == body_clip),
+            )
+            .expect("body clip begin");
+        let body_end = selected.frame.primitives[body_begin + 1..]
+            .iter()
+            .position(|primitive| matches!(primitive, Primitive::ClipEnd { .. }))
+            .map(|index| body_begin + 1 + index)
+            .expect("body clip end");
+        assert_eq!(
+            selected.frame.primitives[header_begin..=header_end]
+                .iter()
+                .filter(|primitive| matches!(primitive, Primitive::Path(_)))
+                .count(),
+            0,
+            "body focus never enters the header scope"
+        );
+        let expected_body_paths = usize::from(mode == VirtualTableSelectionMode::Cell) * 2;
+        assert_eq!(
+            selected.frame.primitives[body_begin..=body_end]
+                .iter()
+                .filter(|primitive| matches!(primitive, Primitive::Path(_)))
+                .count(),
+            expected_body_paths,
+            "only Cell mode owns one body focus pair"
+        );
         assert_eq!(
             selected
                 .frame
@@ -1094,9 +1145,34 @@ fn row_and_cell_body_selection_never_sort_resize_or_create_header_annuli() {
                 .iter()
                 .filter(|primitive| matches!(primitive, Primitive::Path(_)))
                 .count(),
-            0,
-            "body selection uses the unchanged body-cell painter"
+            expected_body_paths
         );
+        if mode == VirtualTableSelectionMode::Cell {
+            let response = selected
+                .output
+                .selection_responses
+                .iter()
+                .find(|response| response.target == expected_target)
+                .expect("focused body cell")
+                .response;
+            let base = selected
+                .frame
+                .primitives
+                .iter()
+                .position(
+                    |primitive| matches!(primitive, Primitive::Rect(base) if base.rect == response.rect),
+                )
+                .expect("focused body cell base");
+            assert!(body_begin < base && base + 2 < body_end);
+            assert!(matches!(
+                selected.frame.primitives[base + 1],
+                Primitive::Path(_)
+            ));
+            assert!(matches!(
+                selected.frame.primitives[base + 2],
+                Primitive::Path(_)
+            ));
+        }
     }
 }
 
