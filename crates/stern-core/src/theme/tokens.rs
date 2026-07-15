@@ -710,7 +710,52 @@ pub struct DurationScale {
     pub slow: f32,
 }
 
-/// Control sizing and stroke metrics.
+/// Stroke widths reserved for the two-layer focus treatment.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FocusStrokeScale {
+    /// Primary focus indication width.
+    pub primary: f32,
+    /// Contrast separator width between focus and component paint.
+    pub separator: f32,
+}
+
+/// Shared stroke-width foundation roles in logical units.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StrokeScale {
+    /// One-unit structural boundary and divider width.
+    pub hairline: f32,
+    /// Ordinary control and surface boundary width.
+    pub default: f32,
+    /// Strong indicator and emphasis width.
+    pub emphasis: f32,
+    /// Widths reserved for the two-layer focus treatment.
+    pub focus: FocusStrokeScale,
+}
+
+impl StrokeScale {
+    /// Creates a stroke scale in hairline, default, emphasis, focus-primary,
+    /// and focus-separator order.
+    #[must_use]
+    pub const fn from_values(
+        hairline: f32,
+        default: f32,
+        emphasis: f32,
+        focus_primary: f32,
+        focus_separator: f32,
+    ) -> Self {
+        Self {
+            hairline,
+            default,
+            emphasis,
+            focus: FocusStrokeScale {
+                primary: focus_primary,
+                separator: focus_separator,
+            },
+        }
+    }
+}
+
+/// Control sizing and padding metrics.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ControlMetrics {
     /// Default one-line control height.
@@ -725,10 +770,4 @@ pub struct ControlMetrics {
     pub padding_x: f32,
     /// Vertical text/control padding.
     pub padding_y: f32,
-    /// Default border width.
-    pub border_width: f32,
-    /// Focus ring stroke width.
-    pub focus_width: f32,
-    /// Separator stroke width.
-    pub separator_width: f32,
 }

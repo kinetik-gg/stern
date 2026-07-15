@@ -5,8 +5,8 @@ use std::time::Duration;
 use stern_core::{
     Brush, CursorShape, FrameContext, Modifiers, MouseButton, PhysicalSize, PlatformRequest, Point,
     PointerInput, PointerOrder, Primitive, RadiusScale, Rect, RepaintRequest, ScaleFactor,
-    SemanticRole, Size, Theme, TimeInfo, UiInput, UiInputEvent, UiMemory, Vec2, ViewportInfo,
-    WidgetId, default_dark_theme,
+    SemanticRole, Size, StrokeScale, Theme, TimeInfo, UiInput, UiInputEvent, UiMemory, Vec2,
+    ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::{
     PanZoom, Ui, ViewportSelectionTargetDescriptor, ViewportSelectionTargetId, ViewportSurface,
@@ -181,7 +181,10 @@ fn scene_uses_theme_clip_hides_move_paint_and_keeps_stable_handle_ids() {
     let mut controller = ViewportToolController::default();
     let mut pan_zoom = surface().pan_zoom;
     let mut memory = UiMemory::new();
-    let theme = default_dark_theme().with_radii(RadiusScale::from_values(4.0, 11.0, 23.0, 777.0));
+    let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
+    let theme = default_dark_theme()
+        .with_radii(RadiusScale::from_values(4.0, 11.0, 23.0, 777.0))
+        .with_strokes(strokes);
     let run = run_frame_with_theme(
         surface(),
         config,
@@ -191,6 +194,80 @@ fn scene_uses_theme_clip_hides_move_paint_and_keeps_stable_handle_ids() {
         UiInput::default(),
         ScaleFactor::ONE,
         &theme,
+    );
+    let mut focused_controller = ViewportToolController::default();
+    let mut focused_pan_zoom = surface().pan_zoom;
+    let mut focused_memory = UiMemory::new();
+    focused_memory.focus(VIEWPORT);
+    let focused = run_frame_with_theme(
+        surface(),
+        ViewportToolSceneConfig::new([target.clone()]),
+        &mut focused_controller,
+        &mut focused_pan_zoom,
+        &mut focused_memory,
+        UiInput::default(),
+        ScaleFactor::ONE,
+        &theme,
+    );
+
+    assert_eq!(run.scene.outlines(), focused.scene.outlines());
+    assert_eq!(run.scene.handles(), focused.scene.handles());
+    assert_eq!(run.viewport.response.rect, focused.viewport.response.rect);
+    assert_eq!(
+        run.tools
+            .handle_responses
+            .iter()
+            .map(|response| (response.widget_id, response.response.rect))
+            .collect::<Vec<_>>(),
+        focused
+            .tools
+            .handle_responses
+            .iter()
+            .map(|response| (response.widget_id, response.response.rect))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(run.frame.primitives.len(), focused.frame.primitives.len());
+    assert_eq!(
+        run.frame
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                Primitive::Rect(rect) => Some((
+                    rect.rect,
+                    rect.radius,
+                    rect.stroke.map(|stroke| stroke.width),
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        focused
+            .frame
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                Primitive::Rect(rect) => Some((
+                    rect.rect,
+                    rect.radius,
+                    rect.stroke.map(|stroke| stroke.width),
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        run.frame
+            .semantics
+            .nodes()
+            .iter()
+            .map(|node| (node.id, node.bounds))
+            .collect::<Vec<_>>(),
+        focused
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .map(|node| (node.id, node.bounds))
+            .collect::<Vec<_>>()
     );
 
     assert_eq!(run.scene.outlines().len(), 1);
@@ -250,6 +327,10 @@ fn scene_uses_theme_clip_hides_move_paint_and_keeps_stable_handle_ids() {
         })
     {
         assert_eq!(handle.radius, theme.radii.sm);
+        assert_eq!(
+            handle.stroke.map(|stroke| stroke.width),
+            Some(strokes.default)
+        );
     }
     let outline = tool_primitives
         .iter()
@@ -261,6 +342,23 @@ fn scene_uses_theme_clip_hides_move_paint_and_keeps_stable_handle_ids() {
     assert_eq!(
         outline.stroke.as_ref().map(|stroke| &stroke.brush),
         Some(&Brush::Solid(theme.colors.accent.default))
+    );
+    assert_eq!(
+        outline.stroke.map(|stroke| stroke.width),
+        Some(strokes.default)
+    );
+    let viewport_surface = run
+        .frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rect(rect) if rect.rect == BOUNDS && rect.fill.is_some() => Some(rect),
+            _ => None,
+        })
+        .expect("viewport structural surface");
+    assert_eq!(
+        viewport_surface.stroke.map(|stroke| stroke.width),
+        Some(strokes.hairline)
     );
     let viewport_semantics = run
         .frame

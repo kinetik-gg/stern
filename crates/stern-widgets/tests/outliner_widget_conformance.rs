@@ -6,8 +6,8 @@ use stern_core::{
     ActionContext, ActionDescriptor, ActionId, ActionSource, FrameContext, FrameOutput, Key,
     KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState,
     PointerInput, PointerOrder, PointerTarget, Primitive, RadiusScale, Rect, RepaintRequest,
-    Response, ScaleFactor, SemanticRole, Size, Theme, TimeInfo, UiInput, UiMemory, Vec2,
-    ViewportInfo, WidgetId, default_dark_theme,
+    Response, ScaleFactor, SemanticRole, Size, StrokeScale, Theme, TimeInfo, UiInput, UiMemory,
+    Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::outliner::{
     OutlinerConfig, OutlinerOutput, OutlinerRequest, OutlinerSelectionMode, OutlinerState,
@@ -523,11 +523,16 @@ fn f2_and_double_click_inline_rename_emit_begin_draft_commit_or_cancel_without_a
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn visibility_and_lock_controls_emit_typed_requests_without_mutating_app_flags() {
     let model = roots([10]);
     let mut state = OutlinerState::new();
     let mut memory = UiMemory::new();
-    let theme = default_dark_theme().with_radii(RadiusScale::from_values(4.0, 11.0, 23.0, 777.0));
+    let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
+    let mut theme = default_dark_theme()
+        .with_radii(RadiusScale::from_values(4.0, 11.0, 23.0, 777.0))
+        .with_strokes(strokes);
+    theme.border_width = 99.0;
     let idle = run_frame_with_theme(
         &model,
         config(),
@@ -538,6 +543,87 @@ fn visibility_and_lock_controls_emit_typed_requests_without_mutating_app_flags()
         &theme,
     );
     let zones = idle.rows[0].clone();
+    let focused_id = idle.output.responses[0].row.id;
+    memory.focus(focused_id);
+    let focused = run_frame_with_theme(
+        &model,
+        config(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+        &theme,
+    );
+    assert_eq!(idle.rows, focused.rows);
+    assert_eq!(idle.frame.primitives.len(), focused.frame.primitives.len());
+    assert_eq!(
+        idle.output
+            .responses
+            .iter()
+            .map(|response| (response.row.id, response.row.rect))
+            .collect::<Vec<_>>(),
+        focused
+            .output
+            .responses
+            .iter()
+            .map(|response| (response.row.id, response.row.rect))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        idle.frame
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                Primitive::Rect(rect) => Some((
+                    rect.rect,
+                    rect.radius,
+                    rect.stroke.map(|stroke| stroke.width),
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        focused
+            .frame
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                Primitive::Rect(rect) => Some((
+                    rect.rect,
+                    rect.radius,
+                    rect.stroke.map(|stroke| stroke.width),
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        idle.frame
+            .semantics
+            .nodes()
+            .iter()
+            .map(|node| (node.id, node.bounds))
+            .collect::<Vec<_>>(),
+        focused
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .map(|node| (node.id, node.bounds))
+            .collect::<Vec<_>>()
+    );
+    let surface = idle
+        .frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rect(rect) if rect.rect == BOUNDS => Some(rect),
+            _ => None,
+        })
+        .expect("outliner structural surface");
+    assert_eq!(
+        surface.stroke.map(|stroke| stroke.width),
+        Some(strokes.hairline)
+    );
     let visibility_inset = zones
         .visibility_toggle_rect
         .width
@@ -559,6 +645,10 @@ fn visibility_and_lock_controls_emit_typed_requests_without_mutating_app_flags()
         })
         .expect("visibility icon paint");
     assert_eq!(visibility_paint.radius, theme.radii.full);
+    assert_eq!(
+        visibility_paint.stroke.map(|stroke| stroke.width),
+        Some(strokes.default)
+    );
 
     let lock_width = zones.lock_toggle_rect.width * 0.42;
     let lock_height = zones.lock_toggle_rect.height * 0.34;
@@ -578,6 +668,10 @@ fn visibility_and_lock_controls_emit_typed_requests_without_mutating_app_flags()
         })
         .expect("lock body paint");
     assert_eq!(lock_paint.radius, theme.radii.sm);
+    assert_eq!(
+        lock_paint.stroke.map(|stroke| stroke.width),
+        Some(strokes.default)
+    );
     let row_semantics = idle
         .frame
         .semantics

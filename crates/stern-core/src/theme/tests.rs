@@ -1,8 +1,8 @@
 #![allow(clippy::float_cmp)]
 use super::{
     ButtonVariant, ComponentState, ControlMetrics, DurationScale, ElevationLevel, ElevationScale,
-    OpacityScale, RadiusScale, SemanticColor, SpacingScale, TextRole, ThemeColors, TypographyScale,
-    default_dark_theme,
+    OpacityScale, RadiusScale, SemanticColor, SpacingScale, StrokeScale, TextRole, ThemeColors,
+    TypographyScale, default_dark_theme,
 };
 use crate::{Brush, Color, CornerRadius};
 
@@ -31,6 +31,11 @@ fn default_theme_has_dense_editor_spacing() {
     assert_eq!(theme.spacing.md, 8.0);
     assert_eq!(theme.text_size, 12.0);
     assert_eq!(theme.border_width, 1.0);
+    assert_eq!(theme.strokes.hairline, 1.0);
+    assert_eq!(theme.strokes.default, 1.0);
+    assert_eq!(theme.strokes.emphasis, 2.0);
+    assert_eq!(theme.strokes.focus.primary, 1.0);
+    assert_eq!(theme.strokes.focus.separator, 1.0);
     assert_eq!(theme.controls.control_height, 28.0);
     assert_eq!(theme.controls.icon_size, 16.0);
     assert_eq!(theme.font(TextRole::Body).family, "Inter");
@@ -62,6 +67,68 @@ fn radius_scale_defaults_and_customization_are_exact() {
     let customized = theme.with_radii(radii);
     assert_eq!(customized.radii, radii);
     assert_eq!(customized.radius, radii.sm);
+}
+
+#[test]
+fn stroke_scale_defaults_customization_and_legacy_mirror_are_exact() {
+    let base = default_dark_theme();
+    assert_eq!(base.strokes.hairline, 1.0);
+    assert_eq!(base.strokes.default, 1.0);
+    assert_eq!(base.strokes.emphasis, 2.0);
+    assert_eq!(base.strokes.focus.primary, 1.0);
+    assert_eq!(base.strokes.focus.separator, 1.0);
+    assert_eq!(base.border_width, base.strokes.default);
+
+    let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
+    assert_eq!(strokes.hairline, 0.75);
+    assert_eq!(strokes.default, 1.25);
+    assert_eq!(strokes.emphasis, 2.5);
+    assert_eq!(strokes.focus.primary, 3.5);
+    assert_eq!(strokes.focus.separator, 4.5);
+
+    let customized = base.with_strokes(strokes);
+    assert_eq!(customized.strokes, strokes);
+    assert_eq!(customized.border_width, strokes.default);
+}
+
+#[test]
+fn controls_and_legacy_mirror_cannot_mutate_stroke_authority() {
+    let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
+    let controls = ControlMetrics {
+        control_height: 31.0,
+        compact_control_height: 19.0,
+        icon_size: 13.0,
+        check_size: 17.0,
+        padding_x: 9.0,
+        padding_y: 5.0,
+    };
+    let mut theme = default_dark_theme()
+        .with_strokes(strokes)
+        .with_controls(controls);
+    assert_eq!(theme.controls, controls);
+    assert_eq!(theme.strokes, strokes);
+    assert_eq!(theme.border_width, strokes.default);
+
+    theme.border_width = 99.0;
+    assert_eq!(theme.strokes, strokes);
+    assert_eq!(
+        theme.button(ComponentState::default()).border.width,
+        strokes.default
+    );
+    assert_eq!(
+        theme.row(ComponentState::default()).border.width,
+        strokes.hairline
+    );
+    assert_eq!(theme.separator().stroke.width, strokes.hairline);
+    assert_eq!(
+        theme
+            .tab(ComponentState {
+                selected: true,
+                ..ComponentState::default()
+            })
+            .indicator_thickness,
+        strokes.emphasis
+    );
 }
 
 #[test]
@@ -113,9 +180,10 @@ fn token_overrides_are_structural_and_predictable() {
         ..default_dark_theme().typography
     };
     let controls = ControlMetrics {
-        border_width: 2.0,
+        padding_x: 10.0,
         ..default_dark_theme().controls
     };
+    let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
     let theme = default_dark_theme()
         .with_spacing(SpacingScale::new(1.0, 3.0, 6.0, 9.0, 12.0))
         .with_radii(RadiusScale::from_values(2.0, 3.0, 4.0, 999.0))
@@ -132,6 +200,7 @@ fn token_overrides_are_structural_and_predictable() {
             normal: 180.0,
             ..default_dark_theme().duration
         })
+        .with_strokes(strokes)
         .with_controls(controls);
 
     assert_eq!(theme.spacing.xs, 1.0);
@@ -142,8 +211,9 @@ fn token_overrides_are_structural_and_predictable() {
     assert_eq!(theme.opacity.hover, 0.2);
     assert_eq!(theme.elevation.low, 3.0);
     assert_eq!(theme.duration.normal, 180.0);
-    assert_eq!(theme.controls.border_width, 2.0);
-    assert_eq!(theme.border_width, 2.0);
+    assert_eq!(theme.controls.padding_x, 10.0);
+    assert_eq!(theme.strokes, strokes);
+    assert_eq!(theme.border_width, strokes.default);
     assert_eq!(theme.colors, default_dark_theme().colors);
 }
 
@@ -313,7 +383,7 @@ fn assert_preserved_button_variant(theme: &super::Theme, case: &PreservedButtonV
             "wrong {} {state_name} border",
             case.name
         );
-        assert_eq!(recipe.border.width, theme.controls.border_width);
+        assert_eq!(recipe.border.width, theme.strokes.default);
         assert_eq!(recipe.radius, theme.radii.sm);
     }
 }
@@ -604,6 +674,42 @@ fn component_recipes_cover_common_states() {
 }
 
 #[test]
+fn canonical_recipes_route_distinct_stroke_roles_without_focused_state_width_changes() {
+    let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
+    let theme = default_dark_theme().with_strokes(strokes);
+    let unfocused = ComponentState::default();
+    let focused = ComponentState {
+        focused: true,
+        ..ComponentState::default()
+    };
+
+    for state in [unfocused, focused] {
+        assert_eq!(theme.button(state).border.width, strokes.default);
+        assert_eq!(theme.tab(state).border.width, strokes.default);
+        assert_eq!(theme.checkbox(state).border.width, strokes.default);
+        assert_eq!(theme.radio_button(state).border.width, strokes.default);
+        assert_eq!(theme.toggle(state).border.width, strokes.default);
+        assert_eq!(theme.slider(state).border.width, strokes.default);
+        assert_eq!(theme.text_field(state).border.width, strokes.default);
+        assert_eq!(theme.panel().border.width, strokes.default);
+        assert_eq!(theme.row(state).border.width, strokes.hairline);
+    }
+
+    assert_eq!(theme.separator().stroke.width, strokes.hairline);
+    assert_eq!(
+        theme
+            .tab(ComponentState {
+                selected: true,
+                ..ComponentState::default()
+            })
+            .indicator_thickness,
+        strokes.emphasis
+    );
+    assert_eq!(theme.strokes.focus.primary, 3.5);
+    assert_eq!(theme.strokes.focus.separator, 4.5);
+}
+
+#[test]
 fn passive_panel_recipe_stays_flat_under_nonzero_elevation() {
     let background = Color::rgb8(1, 2, 3);
     let border = Color::rgb8(4, 5, 6);
@@ -615,10 +721,7 @@ fn passive_panel_recipe_stays_flat_under_nonzero_elevation() {
     colors.border.default = border;
     let theme = base
         .with_colors(colors)
-        .with_controls(ControlMetrics {
-            border_width,
-            ..base.controls
-        })
+        .with_strokes(StrokeScale::from_values(1.0, border_width, 2.0, 1.0, 1.0))
         .with_radii(RadiusScale::from_values(5.5, 7.0, 9.0, 99.0))
         .with_elevation(ElevationScale {
             low: 37.0,

@@ -269,7 +269,7 @@ impl Ui<'_> {
             rect,
             fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.hairline,
                 Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,

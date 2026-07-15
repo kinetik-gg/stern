@@ -1,8 +1,8 @@
 use super::{
     ButtonRecipe, ButtonVariant, CheckRecipe, ComponentState, ControlMetrics, DurationScale,
     ElevationLevel, ElevationScale, FontToken, OpacityScale, PanelRecipe, RadiusScale, RowRecipe,
-    SemanticColor, SeparatorRecipe, ShadowRecipe, SliderRecipe, SpacingScale, TabRecipe,
-    TextFieldRecipe, TextRecipe, TextRole, ThemeColors, ToggleRecipe, TypographyScale,
+    SemanticColor, SeparatorRecipe, ShadowRecipe, SliderRecipe, SpacingScale, StrokeScale,
+    TabRecipe, TextFieldRecipe, TextRecipe, TextRole, ThemeColors, ToggleRecipe, TypographyScale,
 };
 use crate::{Brush, Color, CornerRadius, Stroke, Vec2};
 
@@ -15,6 +15,8 @@ pub struct Theme {
     pub spacing: SpacingScale,
     /// Radius tokens.
     pub radii: RadiusScale,
+    /// Stroke-width tokens.
+    pub strokes: StrokeScale,
     /// Typography tokens.
     pub typography: TypographyScale,
     /// Opacity tokens.
@@ -27,7 +29,10 @@ pub struct Theme {
     pub controls: ControlMetrics,
     /// Default corner radius.
     pub radius: CornerRadius,
-    /// Default border width.
+    /// Legacy one-way mirror of [`Self::strokes`]'s `default` role.
+    ///
+    /// Recipes and widgets read [`Self::strokes`] directly. Prefer
+    /// [`Self::with_strokes`] so this compatibility value stays synchronized.
     pub border_width: f32,
     /// Default text size.
     pub text_size: f32,
@@ -68,6 +73,14 @@ impl Theme {
         self
     }
 
+    /// Returns this theme with a replaced stroke scale.
+    #[must_use]
+    pub const fn with_strokes(mut self, strokes: StrokeScale) -> Self {
+        self.border_width = strokes.default;
+        self.strokes = strokes;
+        self
+    }
+
     /// Returns this theme with a replaced typography scale.
     #[must_use]
     pub const fn with_typography(mut self, typography: TypographyScale) -> Self {
@@ -97,10 +110,9 @@ impl Theme {
         self
     }
 
-    /// Returns this theme with replaced control metrics.
+    /// Returns this theme with replaced control sizing and padding metrics.
     #[must_use]
     pub const fn with_controls(mut self, controls: ControlMetrics) -> Self {
-        self.border_width = controls.border_width;
         self.controls = controls;
         self
     }
@@ -190,7 +202,7 @@ impl Theme {
         ButtonRecipe {
             background: Brush::Solid(background),
             foreground,
-            border: Stroke::new(self.controls.border_width, Brush::Solid(border_color)),
+            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
             radius: self.radii.sm,
         }
     }
@@ -221,12 +233,12 @@ impl Theme {
         TabRecipe {
             background: Brush::Solid(background),
             foreground,
-            border: Stroke::new(self.controls.border_width, Brush::Solid(border_color)),
+            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
             radius: self.radii.none,
             indicator: state
                 .selected
                 .then_some(Brush::Solid(self.colors.accent.default)),
-            indicator_thickness: 2.0,
+            indicator_thickness: self.strokes.emphasis,
         }
     }
 
@@ -253,7 +265,7 @@ impl Theme {
             background: Brush::Solid(background),
             foreground,
             border: Stroke::new(
-                self.controls.border_width,
+                self.strokes.hairline,
                 Brush::Solid(self.colors.border.subtle),
             ),
             radius: self.radii.none,
@@ -284,7 +296,7 @@ impl Theme {
             } else {
                 self.colors.content.on_accent
             },
-            border: Stroke::new(self.controls.border_width, Brush::Solid(border_color)),
+            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
             radius: self.radii.sm,
             size: self.controls.check_size,
         }
@@ -324,7 +336,7 @@ impl Theme {
         ToggleRecipe {
             track: Brush::Solid(track),
             thumb: Brush::Solid(thumb),
-            border: Stroke::new(self.controls.border_width, Brush::Solid(border_color)),
+            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
             padding: 2.0,
         }
     }
@@ -345,7 +357,7 @@ impl Theme {
         SliderRecipe {
             track: Brush::Solid(self.colors.surface.sunken),
             fill: Brush::Solid(fill),
-            border: Stroke::new(self.controls.border_width, Brush::Solid(border_color)),
+            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
             radius: self.radii.full,
         }
     }
@@ -371,7 +383,7 @@ impl Theme {
             } else {
                 self.colors.content.primary
             },
-            border: Stroke::new(self.controls.border_width, Brush::Solid(border_color)),
+            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
             radius: self.radii.sm,
             selection: Brush::Solid(
                 self.colors
@@ -414,7 +426,7 @@ impl Theme {
         PanelRecipe {
             background: Brush::Solid(self.colors.surface.panel_raised),
             border: Stroke::new(
-                self.controls.border_width,
+                self.strokes.default,
                 Brush::Solid(self.colors.border.default),
             ),
             radius: self.radii.sm,
@@ -427,7 +439,7 @@ impl Theme {
     pub fn separator(&self) -> SeparatorRecipe {
         SeparatorRecipe {
             stroke: Stroke::new(
-                self.controls.separator_width,
+                self.strokes.hairline,
                 Brush::Solid(self.colors.border.subtle),
             ),
         }

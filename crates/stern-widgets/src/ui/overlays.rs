@@ -172,7 +172,7 @@ impl Ui<'_> {
             rect: entry.rect,
             fill: Some(Brush::Solid(self.theme.colors.surface.overlay)),
             stroke: Some(stern_core::Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.default,
                 Brush::Solid(self.theme.colors.border.default),
             )),
             radius: self.theme.radii.md,
@@ -185,7 +185,7 @@ impl Ui<'_> {
         response: Option<&stern_core::Response>,
     ) {
         if row.kind == OverlaySceneRowKind::Separator {
-            let height = self.theme.controls.separator_width.max(1.0);
+            let height = self.theme.strokes.hairline;
             self.primitive(Primitive::Rect(RectPrimitive {
                 rect: Rect::new(
                     row.rect.x,

@@ -506,7 +506,7 @@ impl Ui<'_> {
                     self.theme.colors.accent.default.with_alpha(alpha),
                 )),
                 stroke: Some(Stroke::new(
-                    self.theme.controls.border_width.max(1.0),
+                    self.theme.strokes.default,
                     Brush::Solid(self.theme.colors.accent.default),
                 )),
                 radius,
@@ -521,7 +521,7 @@ impl Ui<'_> {
             rect,
             fill: Some(Brush::Solid(self.theme.colors.surface.workspace)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.hairline,
                 Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
@@ -544,7 +544,7 @@ impl Ui<'_> {
             rect: frame.rect,
             fill: Some(Brush::Solid(fill)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.hairline,
                 Brush::Solid(border),
             )),
             radius: self.theme.radii.none,
@@ -555,7 +555,7 @@ impl Ui<'_> {
             rect: frame.tab_list_rect,
             fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.hairline,
                 Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,

@@ -6,8 +6,8 @@ use stern_core::{
     ActionContext, ActionDescriptor, ActionId, ActionSource, Brush, Color, FrameContext, Key,
     KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState,
     PointerInput, PointerOrder, PointerTarget, Primitive, RadiusScale, Rect, Response, ScaleFactor,
-    SemanticActionKind, SemanticRole, ShadowPrimitive, Size, Theme, TimeInfo, UiInput, UiMemory,
-    Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    SemanticActionKind, SemanticRole, ShadowPrimitive, Size, StrokeScale, Theme, TimeInfo, UiInput,
+    UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::overlays::OverlayNavigationInput;
 use stern_widgets::{
@@ -318,6 +318,114 @@ fn clipped_overflow_rows_emit_no_responses_or_semantics() {
             .children,
         vec![visible]
     );
+}
+
+#[test]
+#[allow(clippy::float_cmp)]
+fn overlay_stroke_roles_preserve_focused_geometry_order_hits_and_semantics() {
+    let mut menu = Menu::new();
+    menu.push(MenuItem::Action(action("first", "First")));
+    menu.push(MenuItem::Separator);
+    menu.push(MenuItem::Action(action("second", "Second")));
+    let mut scene = OverlayScene::new();
+    scene.push(menu_surface(22, OverlayKind::Menu, menu));
+    let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
+    let theme = default_dark_theme().with_strokes(strokes);
+    let focused_id = WidgetId::from_raw(22)
+        .child("overlay-scene")
+        .child(("overlay-action", "first"));
+
+    let mut unfocused_memory = UiMemory::new();
+    let (_, unfocused_output, unfocused_frame) = run_frame_with_theme(
+        &mut scene,
+        &mut unfocused_memory,
+        UiInput::default(),
+        false,
+        &theme,
+    );
+    let mut focused_memory = UiMemory::new();
+    focused_memory.focus(focused_id);
+    let (_, focused_output, focused_frame) = run_frame_with_theme(
+        &mut scene,
+        &mut focused_memory,
+        UiInput::default(),
+        false,
+        &theme,
+    );
+
+    let response_rects = |output: &OverlaySceneOutput| {
+        output
+            .responses
+            .iter()
+            .map(|response| (response.id, response.rect))
+            .collect::<Vec<_>>()
+    };
+    let rect_geometry = |frame: &stern_core::FrameOutput| {
+        frame
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                Primitive::Rect(rect) => Some((
+                    rect.rect,
+                    rect.radius,
+                    rect.stroke.map(|stroke| stroke.width),
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let semantic_geometry = |frame: &stern_core::FrameOutput| {
+        frame
+            .semantics
+            .nodes()
+            .iter()
+            .map(|node| (node.id, node.bounds))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        unfocused_frame.primitives.len(),
+        focused_frame.primitives.len()
+    );
+    assert_eq!(
+        rect_geometry(&unfocused_frame),
+        rect_geometry(&focused_frame)
+    );
+    assert_eq!(
+        response_rects(&unfocused_output),
+        response_rects(&focused_output)
+    );
+    assert_eq!(
+        semantic_geometry(&unfocused_frame),
+        semantic_geometry(&focused_frame)
+    );
+
+    let overlay_rect = scene.surfaces()[0].entry().rect;
+    let surface = unfocused_frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rect(rect) if rect.rect == overlay_rect => Some(rect),
+            _ => None,
+        })
+        .expect("overlay surface");
+    assert_eq!(
+        surface.stroke.map(|stroke| stroke.width),
+        Some(strokes.default)
+    );
+    let separator = unfocused_frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rect(rect)
+                if rect.fill == Some(Brush::Solid(theme.colors.border.subtle))
+                    && rect.rect.height == strokes.hairline =>
+            {
+                Some(rect)
+            }
+            _ => None,
+        })
+        .expect("overlay separator");
+    assert_eq!(separator.rect.height, strokes.hairline);
 }
 
 #[test]

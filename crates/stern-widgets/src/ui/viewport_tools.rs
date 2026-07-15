@@ -280,7 +280,7 @@ impl Ui<'_> {
                 rect: outline.screen_rect,
                 fill: None,
                 stroke: Some(Stroke::new(
-                    self.theme.controls.border_width,
+                    self.theme.strokes.default,
                     Brush::Solid(self.theme.colors.accent.default),
                 )),
                 radius: self.theme.radii.none,
@@ -313,7 +313,7 @@ impl Ui<'_> {
                 rect: handle.handle_screen_rect,
                 fill: Some(Brush::Solid(fill)),
                 stroke: Some(Stroke::new(
-                    self.theme.controls.border_width,
+                    self.theme.strokes.default,
                     Brush::Solid(border),
                 )),
                 radius: self.theme.radii.sm,

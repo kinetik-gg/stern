@@ -774,7 +774,7 @@ impl Ui<'_> {
             rect,
             fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.hairline,
                 Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
@@ -855,10 +855,7 @@ impl Ui<'_> {
     fn paint_outliner_disclosure(&mut self, rect: Rect, expanded: bool, color: stern_core::Color) {
         let center = rect.center();
         let half = rect.width.min(rect.height) * 0.16;
-        let stroke = Stroke::new(
-            self.theme.controls.border_width.max(1.0),
-            Brush::Solid(color),
-        );
+        let stroke = Stroke::new(self.theme.strokes.default, Brush::Solid(color));
         let (first, middle, last) = if expanded {
             (
                 Point::new(center.x - half, center.y - half * 0.5),
@@ -886,7 +883,7 @@ impl Ui<'_> {
 
     fn paint_outliner_visibility(&mut self, rect: Rect, visible: bool, color: stern_core::Color) {
         let stroke = Stroke::new(
-            self.theme.controls.border_width.max(1.0),
+            self.theme.strokes.default,
             Brush::Solid(if visible {
                 color
             } else {
@@ -917,7 +914,7 @@ impl Ui<'_> {
 
     fn paint_outliner_lock(&mut self, rect: Rect, locked: bool, color: stern_core::Color) {
         let stroke = Stroke::new(
-            self.theme.controls.border_width.max(1.0),
+            self.theme.strokes.default,
             Brush::Solid(if locked {
                 color
             } else {
@@ -974,7 +971,7 @@ impl Ui<'_> {
             return;
         };
         let stroke = Stroke::new(
-            self.theme.controls.border_width.max(1.0),
+            self.theme.strokes.default,
             Brush::Solid(self.theme.colors.accent.default),
         );
         match preview.zone {
