@@ -1,7 +1,7 @@
 use super::{
     ButtonRecipe, ButtonVariant, CheckRecipe, ComponentState, ControlMetrics, DurationScale,
     ElevationLevel, ElevationScale, FocusRingRecipe, FontToken, OpacityScale, PanelRecipe,
-    RadiusScale, RowRecipe, SemanticColor, SeparatorRecipe, ShadowRecipe, SliderRecipe,
+    RadiusScale, RowRecipe, SemanticColor, SeparatorRecipe, ShadowRecipe, SizeScale, SliderRecipe,
     SpacingScale, StrokeScale, TabRecipe, TextFieldRecipe, TextRecipe, TextRole, ThemeColors,
     ToggleRecipe, TypographyScale,
 };
@@ -14,6 +14,8 @@ pub struct Theme {
     pub colors: ThemeColors,
     /// Spacing tokens.
     pub spacing: SpacingScale,
+    /// Size tokens.
+    pub sizes: SizeScale,
     /// Radius tokens.
     pub radii: RadiusScale,
     /// Stroke-width tokens.
@@ -63,6 +65,13 @@ impl Theme {
     #[must_use]
     pub const fn with_spacing(mut self, spacing: SpacingScale) -> Self {
         self.spacing = spacing;
+        self
+    }
+
+    /// Returns this theme with a replaced size scale.
+    #[must_use]
+    pub const fn with_sizes(mut self, sizes: SizeScale) -> Self {
+        self.sizes = sizes;
         self
     }
 

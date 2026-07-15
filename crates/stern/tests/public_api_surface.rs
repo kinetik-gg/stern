@@ -255,6 +255,52 @@ fn qualified_core_facades_expose_exact_spacing_construction_and_lookup() {
 }
 
 #[test]
+#[allow(clippy::float_cmp)]
+fn qualified_core_facades_expose_exact_size_construction_and_lookup() {
+    let direct_control: stern_core::ControlSizeScale =
+        stern_core::ControlSizeScale::new(101.0, 103.0, 107.0, 109.0);
+    let direct_row: stern_core::RowSizeScale = stern_core::RowSizeScale::new(113.0, 127.0);
+    let direct_icon: stern_core::IconSizeScale =
+        stern_core::IconSizeScale::new(149.0, 151.0, 157.0);
+    let direct_handle: stern_core::HandleSizeScale = stern_core::HandleSizeScale::new(163.0, 167.0);
+    let direct: stern_core::SizeScale = stern_core::SizeScale::new(
+        direct_control,
+        direct_row,
+        131.0,
+        137.0,
+        139.0,
+        direct_icon,
+        direct_handle,
+    );
+    assert_eq!(direct.get(stern_core::SizeToken::ControlXs), 101.0);
+    assert_eq!(direct.get(stern_core::SizeToken::PanelHeader), 137.0);
+    assert_eq!(direct.get(stern_core::SizeToken::HandleHit), 167.0);
+
+    let facade_control: stern::core::ControlSizeScale =
+        stern::core::ControlSizeScale::new(201.0, 203.0, 207.0, 209.0);
+    let facade_row: stern::core::RowSizeScale = stern::core::RowSizeScale::new(211.0, 223.0);
+    let facade_icon: stern::core::IconSizeScale =
+        stern::core::IconSizeScale::new(239.0, 241.0, 251.0);
+    let facade_handle: stern::core::HandleSizeScale =
+        stern::core::HandleSizeScale::new(257.0, 263.0);
+    let facade: stern::core::SizeScale = stern::core::SizeScale::new(
+        facade_control,
+        facade_row,
+        227.0,
+        229.0,
+        233.0,
+        facade_icon,
+        facade_handle,
+    );
+    let theme = stern::core::default_dark_theme().with_sizes(facade);
+    assert_eq!(theme.sizes.get(stern::core::SizeToken::RowStandard), 223.0);
+    assert_eq!(theme.sizes.get(stern::core::SizeToken::WorkspaceBar), 233.0);
+    assert_eq!(theme.sizes.get(stern::core::SizeToken::IconLg), 251.0);
+    assert_eq!(stern_core::SizeToken::ALL.len(), 14);
+    assert_eq!(stern::core::SizeToken::ALL.len(), 14);
+}
+
+#[test]
 fn facade_exposes_exact_radius_construction_and_qualified_fields() {
     use stern::core::{ComponentState, CornerRadius, RadiusScale, default_dark_theme};
 

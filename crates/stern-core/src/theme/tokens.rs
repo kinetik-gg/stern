@@ -649,6 +649,197 @@ impl SpacingScale {
     }
 }
 
+/// Exact control-height size tokens in logical units.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ControlSizeScale {
+    /// Extra-small control height.
+    pub xs: f32,
+    /// Small control height.
+    pub sm: f32,
+    /// Medium control height.
+    pub md: f32,
+    /// Large control height.
+    pub lg: f32,
+}
+
+impl ControlSizeScale {
+    /// Creates a control size scale in ascending size order.
+    #[must_use]
+    pub const fn new(xs: f32, sm: f32, md: f32, lg: f32) -> Self {
+        Self { xs, sm, md, lg }
+    }
+}
+
+/// Exact row-height size tokens in logical units.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RowSizeScale {
+    /// Compact collection row height.
+    pub compact: f32,
+    /// Standard collection row height.
+    pub standard: f32,
+}
+
+impl RowSizeScale {
+    /// Creates a row size scale in compact and standard order.
+    #[must_use]
+    pub const fn new(compact: f32, standard: f32) -> Self {
+        Self { compact, standard }
+    }
+}
+
+/// Exact icon side-length size tokens in logical units.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IconSizeScale {
+    /// Small icon side length.
+    pub sm: f32,
+    /// Medium icon side length.
+    pub md: f32,
+    /// Large icon side length.
+    pub lg: f32,
+}
+
+impl IconSizeScale {
+    /// Creates an icon size scale in ascending size order.
+    #[must_use]
+    pub const fn new(sm: f32, md: f32, lg: f32) -> Self {
+        Self { sm, md, lg }
+    }
+}
+
+/// Exact handle visual and interaction size tokens in logical units.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HandleSizeScale {
+    /// Visible handle thickness.
+    pub visual: f32,
+    /// Non-overlapping handle hit target.
+    pub hit: f32,
+}
+
+impl HandleSizeScale {
+    /// Creates a handle size scale in visual and hit-target order.
+    #[must_use]
+    pub const fn new(visual: f32, hit: f32) -> Self {
+        Self { visual, hit }
+    }
+}
+
+/// Typed identity for every exact size token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SizeToken {
+    /// `size.control.xs`.
+    ControlXs,
+    /// `size.control.sm`.
+    ControlSm,
+    /// `size.control.md`.
+    ControlMd,
+    /// `size.control.lg`.
+    ControlLg,
+    /// `size.row.compact`.
+    RowCompact,
+    /// `size.row.standard`.
+    RowStandard,
+    /// `size.tab`.
+    Tab,
+    /// `size.panelHeader`.
+    PanelHeader,
+    /// `size.workspaceBar`.
+    WorkspaceBar,
+    /// `size.icon.sm`.
+    IconSm,
+    /// `size.icon.md`.
+    IconMd,
+    /// `size.icon.lg`.
+    IconLg,
+    /// `size.handle.visual`.
+    HandleVisual,
+    /// `size.handle.hit`.
+    HandleHit,
+}
+
+impl SizeToken {
+    /// Every exact size token in normative grouped-field order.
+    pub const ALL: &'static [Self] = &[
+        Self::ControlXs,
+        Self::ControlSm,
+        Self::ControlMd,
+        Self::ControlLg,
+        Self::RowCompact,
+        Self::RowStandard,
+        Self::Tab,
+        Self::PanelHeader,
+        Self::WorkspaceBar,
+        Self::IconSm,
+        Self::IconMd,
+        Self::IconLg,
+        Self::HandleVisual,
+        Self::HandleHit,
+    ];
+}
+
+/// Exact grouped size-token foundation in logical units.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SizeScale {
+    /// Control heights.
+    pub control: ControlSizeScale,
+    /// Collection row heights.
+    pub row: RowSizeScale,
+    /// Tab height.
+    pub tab: f32,
+    /// Panel-header height.
+    pub panel_header: f32,
+    /// Workspace-bar height.
+    pub workspace_bar: f32,
+    /// Icon side lengths.
+    pub icon: IconSizeScale,
+    /// Handle visual and interaction sizes.
+    pub handle: HandleSizeScale,
+}
+
+impl SizeScale {
+    /// Creates the grouped size foundation in stored field order.
+    #[must_use]
+    pub const fn new(
+        control: ControlSizeScale,
+        row: RowSizeScale,
+        tab: f32,
+        panel_header: f32,
+        workspace_bar: f32,
+        icon: IconSizeScale,
+        handle: HandleSizeScale,
+    ) -> Self {
+        Self {
+            control,
+            row,
+            tab,
+            panel_header,
+            workspace_bar,
+            icon,
+            handle,
+        }
+    }
+
+    /// Resolves the configured value for an exact size token.
+    #[must_use]
+    pub const fn get(self, token: SizeToken) -> f32 {
+        match token {
+            SizeToken::ControlXs => self.control.xs,
+            SizeToken::ControlSm => self.control.sm,
+            SizeToken::ControlMd => self.control.md,
+            SizeToken::ControlLg => self.control.lg,
+            SizeToken::RowCompact => self.row.compact,
+            SizeToken::RowStandard => self.row.standard,
+            SizeToken::Tab => self.tab,
+            SizeToken::PanelHeader => self.panel_header,
+            SizeToken::WorkspaceBar => self.workspace_bar,
+            SizeToken::IconSm => self.icon.sm,
+            SizeToken::IconMd => self.icon.md,
+            SizeToken::IconLg => self.icon.lg,
+            SizeToken::HandleVisual => self.handle.visual,
+            SizeToken::HandleHit => self.handle.hit,
+        }
+    }
+}
+
 /// Radius token scale.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RadiusScale {
