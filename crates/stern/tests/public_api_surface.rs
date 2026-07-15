@@ -566,6 +566,36 @@ fn qualified_facade_stroke_types_construct_and_expose_exact_roles() {
 }
 
 #[test]
+#[allow(clippy::float_cmp)]
+fn qualified_facade_exposes_focus_ring_recipe_without_prelude_expansion() {
+    use stern::core::{
+        Brush, Color, FocusRingRecipe, Rect, StrokeScale, ThemeColors, default_dark_theme,
+    };
+
+    let mut colors = ThemeColors::default_dark();
+    colors.focus.indicator = Color::rgb8(0x12, 0x34, 0x56);
+    colors.focus.separator = Color::rgb8(0xA1, 0xB2, 0xC3);
+    let theme = default_dark_theme()
+        .with_colors(colors)
+        .with_strokes(StrokeScale::from_values(0.5, 1.5, 2.5, 3.5, 4.5));
+    let recipe: FocusRingRecipe = theme.focus_ring(true).expect("visible focus ring");
+    let primitives = recipe.primitives(Rect::new(10.0, 20.0, 30.0, 40.0), theme.radii.sm);
+
+    assert_eq!(recipe.primary.width, 3.5);
+    assert_eq!(
+        recipe.primary.brush,
+        Brush::Solid(Color::rgb8(0x12, 0x34, 0x56))
+    );
+    assert_eq!(recipe.separator.width, 4.5);
+    assert_eq!(
+        recipe.separator.brush,
+        Brush::Solid(Color::rgb8(0xA1, 0xB2, 0xC3))
+    );
+    assert_eq!(primitives.len(), 2);
+    assert_eq!(theme.focus_ring(false), None);
+}
+
+#[test]
 fn retained_text_layout_lifecycle_surface_is_additive() {
     use stern::text;
 

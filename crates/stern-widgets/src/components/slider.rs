@@ -1,3 +1,4 @@
+use super::common::push_focus_ring;
 use super::{
     ComponentState, CursorShape, DEFAULT_SLIDER_PAGE_DIVISIONS, DEFAULT_SLIDER_STEP_DIVISIONS, Key,
     KeyState, Primitive, Rect, RectPrimitive, Theme, UiInput, UiMemory, WidgetId, WidgetOutput,
@@ -152,26 +153,31 @@ pub fn slider_with_label_and_step(
         disabled,
         selected: false,
     });
+    let mut primitives = Vec::with_capacity(4);
+    push_focus_ring(
+        &mut primitives,
+        theme,
+        response_reported_focus(&response),
+        rect,
+        recipe.radius,
+    );
+    primitives.extend([
+        Primitive::Rect(RectPrimitive {
+            rect,
+            fill: Some(recipe.track),
+            stroke: Some(recipe.border),
+            radius: recipe.radius,
+        }),
+        Primitive::Rect(RectPrimitive {
+            rect: fill_rect,
+            fill: Some(recipe.fill),
+            stroke: None,
+            radius: recipe.radius,
+        }),
+    ]);
 
     with_hover_cursor(
-        WidgetOutput::new(
-            Some(response),
-            vec![
-                Primitive::Rect(RectPrimitive {
-                    rect,
-                    fill: Some(recipe.track),
-                    stroke: Some(recipe.border),
-                    radius: recipe.radius,
-                }),
-                Primitive::Rect(RectPrimitive {
-                    rect: fill_rect,
-                    fill: Some(recipe.fill),
-                    stroke: None,
-                    radius: recipe.radius,
-                }),
-            ],
-        )
-        .with_semantic(with_response_state(
+        WidgetOutput::new(Some(response), primitives).with_semantic(with_response_state(
             slider_semantics(id, rect, label, display_value, semantic_range, disabled),
             &response,
         )),

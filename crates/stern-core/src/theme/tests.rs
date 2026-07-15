@@ -664,7 +664,7 @@ fn component_recipes_cover_common_states() {
     );
     assert_eq!(
         theme.slider(focused).border.brush,
-        Brush::Solid(theme.colors.focus.ring)
+        Brush::Solid(theme.colors.border.default)
     );
     assert_eq!(
         theme.text_field(focused).border.brush,

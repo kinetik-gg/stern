@@ -217,7 +217,12 @@ fn update_radio_group_output_selection(output: &mut WidgetOutput, theme: &Theme,
         selected,
     });
 
-    if let Some(Primitive::Rect(primitive)) = output.primitives.first_mut() {
+    if let Some(primitive) = output.primitives.iter_mut().find_map(|primitive| {
+        let Primitive::Rect(primitive) = primitive else {
+            return None;
+        };
+        primitive.stroke.is_some().then_some(primitive)
+    }) {
         primitive.fill = Some(recipe.fill);
         primitive.stroke = Some(recipe.border);
         primitive.radius = recipe.radius;

@@ -558,7 +558,10 @@ fn focused_slider_keyboard_activation_does_not_write_from_stale_pointer() {
     assert!(response.clicked);
     assert!(response.keyboard_activated);
     assert!((value - 2.0).abs() < f32::EPSILON);
-    assert_approx(rect_width(&output.primitives[1]), rect.width);
+    assert_approx(
+        rect_width(output.primitives.last().expect("slider fill primitive")),
+        rect.width,
+    );
     assert!(matches!(
         output.semantics[0].state.value,
         Some(SemanticValue::Number { current, min, max })

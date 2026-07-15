@@ -1,5 +1,6 @@
 use super::{
-    CursorShape, PlatformRequest, Point, Primitive, Rect, Response, SemanticNode, TextRole, Theme,
+    CornerRadius, CursorShape, PlatformRequest, Point, Primitive, Rect, Response, SemanticNode,
+    TextRole, Theme,
 };
 
 /// Output emitted by a widget.
@@ -72,6 +73,18 @@ pub(super) fn suppress_disabled_interaction_reporting(response: &mut Response) {
         response.state.focused = false;
         response.state.active = false;
         response.state.pressed = false;
+    }
+}
+
+pub(super) fn push_focus_ring(
+    primitives: &mut Vec<Primitive>,
+    theme: &Theme,
+    visible: bool,
+    rect: Rect,
+    radius: CornerRadius,
+) {
+    if let Some(recipe) = theme.focus_ring(visible) {
+        primitives.extend(recipe.primitives(rect, radius));
     }
 }
 

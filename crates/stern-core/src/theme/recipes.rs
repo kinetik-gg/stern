@@ -1,5 +1,5 @@
 use super::{FontToken, ShadowRecipe};
-use crate::{Brush, Color, CornerRadius, Stroke};
+use crate::{Brush, Color, CornerRadius, Primitive, Rect, RectPrimitive, Stroke};
 
 /// Component state used by style recipes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -15,6 +15,46 @@ pub struct ComponentState {
     pub disabled: bool,
     /// Selected state.
     pub selected: bool,
+}
+
+/// Independent two-tone focus-ring paint recipe.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FocusRingRecipe {
+    /// Outer primary focus indicator stroke.
+    pub primary: Stroke,
+    /// Inner contrast separator stroke.
+    pub separator: Stroke,
+}
+
+impl FocusRingRecipe {
+    /// Builds exact nested outer-primary then inner-separator filled contours.
+    #[must_use]
+    pub fn primitives(self, rect: Rect, radius: CornerRadius) -> [Primitive; 2] {
+        let total_width = self.separator.width + self.primary.width;
+        [
+            Primitive::Rect(RectPrimitive {
+                rect: rect.outset(total_width),
+                fill: Some(self.primary.brush),
+                stroke: None,
+                radius: expanded_radius(radius, total_width),
+            }),
+            Primitive::Rect(RectPrimitive {
+                rect: rect.outset(self.separator.width),
+                fill: Some(self.separator.brush),
+                stroke: None,
+                radius: expanded_radius(radius, self.separator.width),
+            }),
+        ]
+    }
+}
+
+const fn expanded_radius(radius: CornerRadius, amount: f32) -> CornerRadius {
+    CornerRadius {
+        top_left: radius.top_left + amount,
+        top_right: radius.top_right + amount,
+        bottom_right: radius.bottom_right + amount,
+        bottom_left: radius.bottom_left + amount,
+    }
 }
 
 /// Button visual variant.

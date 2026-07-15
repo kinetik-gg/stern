@@ -7,7 +7,8 @@ use crate::{
     snap_stroked_path_elements_to_device, snap_stroked_rect_to_device, viewport_device_scale,
 };
 use stern_core::{
-    CornerRadius, PathElement, PhysicalSize, Point, Rect, ScaleFactor, Size, ViewportInfo,
+    CornerRadius, PathElement, PhysicalSize, Point, Primitive, Rect, ScaleFactor, Size,
+    ViewportInfo, default_dark_theme,
 };
 use vello::kurbo::Affine;
 
@@ -206,6 +207,68 @@ fn renderer_quantizes_stroke_widths_to_physical_pixels() {
                 (actual_physical_width - expected_physical_width).abs() <= 0.000_01,
                 "{actual_physical_width} != {expected_physical_width} at {scale}x"
             );
+        }
+    }
+}
+
+#[test]
+fn nested_focus_contours_snap_contiguously_at_release_scales() {
+    let base = Rect::new(10.0, 20.0, 20.0, 20.0);
+    let recipe = default_dark_theme()
+        .focus_ring(true)
+        .expect("visible focus ring");
+    let [outer, inner] = recipe.primitives(base, CornerRadius::all(4.0));
+    let Primitive::Rect(outer) = outer else {
+        panic!("outer focus contour must be a rectangle");
+    };
+    let Primitive::Rect(inner) = inner else {
+        panic!("inner focus contour must be a rectangle");
+    };
+
+    for scale in [1.0_f64, 1.25, 1.5, 2.0] {
+        let snapped_outer = snap_rect_to_device(outer.rect, scale);
+        let snapped_inner = snap_rect_to_device(inner.rect, scale);
+        let snapped_base = snap_rect_to_device(base, scale);
+
+        assert!(
+            snapped_outer.contains_rect(snapped_inner),
+            "outer contour must contain inner contour at {scale}x"
+        );
+        assert!(
+            snapped_inner.contains_rect(snapped_base),
+            "inner contour must contain base at {scale}x"
+        );
+
+        for rect in [snapped_outer, snapped_inner, snapped_base] {
+            for edge in [rect.min_x(), rect.min_y(), rect.max_x(), rect.max_y()] {
+                let physical = f64::from(edge) * scale;
+                assert!(
+                    (physical - physical.round()).abs() <= 0.000_01,
+                    "edge {edge} is off the physical grid at {scale}x"
+                );
+            }
+        }
+
+        for (band, outer, inner) in [
+            ("primary", snapped_outer, snapped_inner),
+            ("separator", snapped_inner, snapped_base),
+        ] {
+            for logical_width in [
+                inner.min_x() - outer.min_x(),
+                inner.min_y() - outer.min_y(),
+                outer.max_x() - inner.max_x(),
+                outer.max_y() - inner.max_y(),
+            ] {
+                let physical_width = f64::from(logical_width) * scale;
+                assert!(
+                    (physical_width - physical_width.round()).abs() <= 0.000_01,
+                    "{band} band is not pixel-aligned at {scale}x"
+                );
+                assert!(
+                    physical_width >= 1.0 - 0.000_01,
+                    "{band} band must cover at least one physical pixel at {scale}x"
+                );
+            }
         }
     }
 }

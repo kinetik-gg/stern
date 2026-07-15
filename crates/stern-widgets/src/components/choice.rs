@@ -1,10 +1,17 @@
+use super::common::push_focus_ring;
 use super::{
-    ComponentState, CornerRadius, CursorShape, Primitive, Rect, RectPrimitive, SemanticRole, Theme,
-    UiInput, UiMemory, WidgetId, WidgetOutput, checkbox_semantics, clicked_select_state,
-    clicked_toggle_state, response_reported_focus, response_reported_pressed, selectable,
-    suppress_disabled_interaction_reporting, toggle_semantics, with_hover_cursor,
-    with_response_state,
+    ComponentState, CornerRadius, CursorShape, Primitive, Rect, RectPrimitive, Theme, UiInput,
+    UiMemory, WidgetId, WidgetOutput, checkbox_semantics, clicked_select_state,
+    clicked_toggle_state, radio_button_semantics, response_reported_focus,
+    response_reported_pressed, selectable, suppress_disabled_interaction_reporting,
+    toggle_semantics, with_hover_cursor, with_response_state,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CheckControlKind {
+    Checkbox,
+    Radio,
+}
 
 /// Returns the deterministic activation target for a choice control and its label.
 #[must_use]
@@ -65,34 +72,79 @@ pub fn checkbox_with_label_target(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
+    check_control_with_label_target(
+        id,
+        rect,
+        label_rect,
+        label,
+        checked,
+        input,
+        memory,
+        theme,
+        disabled,
+        CheckControlKind::Checkbox,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_control_with_label_target(
+    id: WidgetId,
+    rect: Rect,
+    label_rect: Rect,
+    label: impl Into<String>,
+    selected: bool,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    disabled: bool,
+    kind: CheckControlKind,
+) -> WidgetOutput {
     let target_rect = choice_label_target_rect(rect, label_rect);
-    let mut response = selectable(id, target_rect, input, memory, checked, disabled);
+    let mut response = selectable(id, target_rect, input, memory, selected, disabled);
     suppress_disabled_interaction_reporting(&mut response);
-    let selected = clicked_toggle_state(checked, response.clicked);
-    response.state.selected = selected;
-    let recipe = theme.checkbox(ComponentState {
+    let display_selected = match kind {
+        CheckControlKind::Checkbox => clicked_toggle_state(selected, response.clicked),
+        CheckControlKind::Radio => clicked_select_state(selected, response.clicked),
+    };
+    response.state.selected = display_selected;
+    let state = ComponentState {
         hovered: response.state.hovered,
         pressed: response_reported_pressed(&response),
         focused: response_reported_focus(&response),
         disabled,
-        selected,
-    });
+        selected: display_selected,
+    };
+    let recipe = match kind {
+        CheckControlKind::Checkbox => theme.checkbox(state),
+        CheckControlKind::Radio => theme.radio_button(state),
+    };
     let box_rect = Rect::new(rect.x, rect.y, recipe.size, recipe.size);
+    let mut primitives = Vec::with_capacity(3);
+    push_focus_ring(
+        &mut primitives,
+        theme,
+        response_reported_focus(&response),
+        box_rect,
+        recipe.radius,
+    );
+    primitives.push(Primitive::Rect(RectPrimitive {
+        rect: box_rect,
+        fill: Some(recipe.fill),
+        stroke: Some(recipe.border),
+        radius: recipe.radius,
+    }));
+    let semantics = match kind {
+        CheckControlKind::Checkbox => {
+            checkbox_semantics(id, target_rect, label, display_selected, disabled)
+        }
+        CheckControlKind::Radio => {
+            radio_button_semantics(id, target_rect, label, display_selected, disabled)
+        }
+    };
 
     with_hover_cursor(
-        WidgetOutput::new(
-            Some(response),
-            vec![Primitive::Rect(RectPrimitive {
-                rect: box_rect,
-                fill: Some(recipe.fill),
-                stroke: Some(recipe.border),
-                radius: recipe.radius,
-            })],
-        )
-        .with_semantic(with_response_state(
-            checkbox_semantics(id, target_rect, label, selected, disabled),
-            &response,
-        )),
+        WidgetOutput::new(Some(response), primitives)
+            .with_semantic(with_response_state(semantics, &response)),
         &response,
         CursorShape::PointingHand,
     )
@@ -158,44 +210,18 @@ pub fn radio_button_with_label_target(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    let mut output = checkbox_with_label_target(
-        id, rect, label_rect, label, selected, input, memory, theme, disabled,
-    );
-    let display_selected = clicked_select_state(
+    check_control_with_label_target(
+        id,
+        rect,
+        label_rect,
+        label,
         selected,
-        output
-            .response
-            .as_ref()
-            .is_some_and(|response| response.clicked),
-    );
-    if let Some(response) = output.response.as_mut() {
-        response.state.selected = display_selected;
-    }
-    let recipe = theme.radio_button(ComponentState {
-        hovered: output
-            .response
-            .as_ref()
-            .is_some_and(|response| response.state.hovered),
-        pressed: output
-            .response
-            .as_ref()
-            .is_some_and(response_reported_pressed),
-        focused: output
-            .response
-            .as_ref()
-            .is_some_and(response_reported_focus),
+        input,
+        memory,
+        theme,
         disabled,
-        selected: display_selected,
-    });
-    if let Some(Primitive::Rect(primitive)) = output.primitives.first_mut() {
-        primitive.radius = recipe.radius;
-    }
-    for node in &mut output.semantics {
-        node.role = SemanticRole::RadioButton;
-        node.state.selected = display_selected;
-        node.state.checked = Some(display_selected);
-    }
-    output
+        CheckControlKind::Radio,
+    )
 }
 
 /// Emits a toggle control.
@@ -266,31 +292,37 @@ pub fn toggle_with_label_target(
     } else {
         rect.x
     };
+    let radius = CornerRadius::all(rect.height * 0.5);
+    let mut primitives = Vec::with_capacity(4);
+    push_focus_ring(
+        &mut primitives,
+        theme,
+        response_reported_focus(&response),
+        rect,
+        radius,
+    );
+    primitives.extend([
+        Primitive::Rect(RectPrimitive {
+            rect,
+            fill: Some(recipe.track),
+            stroke: Some(recipe.border),
+            radius,
+        }),
+        Primitive::Rect(RectPrimitive {
+            rect: Rect::new(
+                knob_x + recipe.padding,
+                rect.y + recipe.padding,
+                rect.height - recipe.padding * 2.0,
+                rect.height - recipe.padding * 2.0,
+            ),
+            fill: Some(recipe.thumb),
+            stroke: None,
+            radius: CornerRadius::all((rect.height - recipe.padding * 2.0) * 0.5),
+        }),
+    ]);
 
     with_hover_cursor(
-        WidgetOutput::new(
-            Some(response),
-            vec![
-                Primitive::Rect(RectPrimitive {
-                    rect,
-                    fill: Some(recipe.track),
-                    stroke: Some(recipe.border),
-                    radius: CornerRadius::all(rect.height * 0.5),
-                }),
-                Primitive::Rect(RectPrimitive {
-                    rect: Rect::new(
-                        knob_x + recipe.padding,
-                        rect.y + recipe.padding,
-                        rect.height - recipe.padding * 2.0,
-                        rect.height - recipe.padding * 2.0,
-                    ),
-                    fill: Some(recipe.thumb),
-                    stroke: None,
-                    radius: CornerRadius::all((rect.height - recipe.padding * 2.0) * 0.5),
-                }),
-            ],
-        )
-        .with_semantic(with_response_state(
+        WidgetOutput::new(Some(response), primitives).with_semantic(with_response_state(
             toggle_semantics(id, target_rect, label, selected, disabled),
             &response,
         )),

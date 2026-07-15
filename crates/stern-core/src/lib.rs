@@ -89,10 +89,11 @@ pub use test_harness::{
 pub use theme::{
     AccentColors, BorderColors, ButtonRecipe, ButtonVariant, CheckRecipe, ComponentState,
     ContentColors, ControlMetrics, DurationScale, ElevationLevel, ElevationScale, FocusColors,
-    FocusStrokeScale, FontToken, OpacityScale, OverlayColors, PanelRecipe, RadiusScale, RowRecipe,
-    SelectionColors, SemanticColor, SeparatorRecipe, ShadowRecipe, SliderRecipe, SpacingScale,
-    StatusColorFamilyColors, StatusColors, StrokeScale, SurfaceColors, TabRecipe, TextFieldRecipe,
-    TextRecipe, TextRole, Theme, ThemeColors, ToggleRecipe, TypographyScale, default_dark_theme,
+    FocusRingRecipe, FocusStrokeScale, FontToken, OpacityScale, OverlayColors, PanelRecipe,
+    RadiusScale, RowRecipe, SelectionColors, SemanticColor, SeparatorRecipe, ShadowRecipe,
+    SliderRecipe, SpacingScale, StatusColorFamilyColors, StatusColors, StrokeScale, SurfaceColors,
+    TabRecipe, TextFieldRecipe, TextRecipe, TextRole, Theme, ThemeColors, ToggleRecipe,
+    TypographyScale, default_dark_theme,
 };
 pub use units::{PhysicalPoint, PhysicalRect, PhysicalSize, ScaleFactor};
 

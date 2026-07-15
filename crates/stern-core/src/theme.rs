@@ -10,8 +10,8 @@ mod tokens;
 pub use defaults::default_dark_theme;
 pub use model::Theme;
 pub use recipes::{
-    ButtonRecipe, ButtonVariant, CheckRecipe, ComponentState, PanelRecipe, RowRecipe,
-    SeparatorRecipe, SliderRecipe, TabRecipe, TextFieldRecipe, TextRecipe, ToggleRecipe,
+    ButtonRecipe, ButtonVariant, CheckRecipe, ComponentState, FocusRingRecipe, PanelRecipe,
+    RowRecipe, SeparatorRecipe, SliderRecipe, TabRecipe, TextFieldRecipe, TextRecipe, ToggleRecipe,
 };
 pub use tokens::{
     AccentColors, BorderColors, ContentColors, ControlMetrics, DurationScale, ElevationLevel,

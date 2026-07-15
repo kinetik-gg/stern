@@ -1,8 +1,9 @@
 use super::{
     ButtonRecipe, ButtonVariant, CheckRecipe, ComponentState, ControlMetrics, DurationScale,
-    ElevationLevel, ElevationScale, FontToken, OpacityScale, PanelRecipe, RadiusScale, RowRecipe,
-    SemanticColor, SeparatorRecipe, ShadowRecipe, SliderRecipe, SpacingScale, StrokeScale,
-    TabRecipe, TextFieldRecipe, TextRecipe, TextRole, ThemeColors, ToggleRecipe, TypographyScale,
+    ElevationLevel, ElevationScale, FocusRingRecipe, FontToken, OpacityScale, PanelRecipe,
+    RadiusScale, RowRecipe, SemanticColor, SeparatorRecipe, ShadowRecipe, SliderRecipe,
+    SpacingScale, StrokeScale, TabRecipe, TextFieldRecipe, TextRecipe, TextRole, ThemeColors,
+    ToggleRecipe, TypographyScale,
 };
 use crate::{Brush, Color, CornerRadius, Stroke, Vec2};
 
@@ -128,6 +129,24 @@ impl Theme {
             },
             font: self.typography.get(role),
         }
+    }
+
+    /// Resolves the independent two-tone focus ring when it is visible.
+    #[must_use]
+    pub const fn focus_ring(&self, visible: bool) -> Option<FocusRingRecipe> {
+        if !visible {
+            return None;
+        }
+        Some(FocusRingRecipe {
+            primary: Stroke::new(
+                self.strokes.focus.primary,
+                Brush::Solid(self.colors.focus.indicator),
+            ),
+            separator: Stroke::new(
+                self.strokes.focus.separator,
+                Brush::Solid(self.colors.focus.separator),
+            ),
+        })
     }
 
     /// Resolves the standard button recipe for a state.
@@ -284,11 +303,6 @@ impl Theme {
         } else {
             self.colors.surface.sunken
         };
-        let border_color = if state.focused {
-            self.colors.focus.ring
-        } else {
-            self.colors.border.default
-        };
         CheckRecipe {
             fill: Brush::Solid(fill),
             mark: if state.disabled {
@@ -296,7 +310,10 @@ impl Theme {
             } else {
                 self.colors.content.on_accent
             },
-            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
+            border: Stroke::new(
+                self.strokes.default,
+                Brush::Solid(self.colors.border.default),
+            ),
             radius: self.radii.sm,
             size: self.controls.check_size,
         }
@@ -328,15 +345,13 @@ impl Theme {
         } else {
             self.colors.content.primary
         };
-        let border_color = if state.focused {
-            self.colors.focus.ring
-        } else {
-            self.colors.border.default
-        };
         ToggleRecipe {
             track: Brush::Solid(track),
             thumb: Brush::Solid(thumb),
-            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
+            border: Stroke::new(
+                self.strokes.default,
+                Brush::Solid(self.colors.border.default),
+            ),
             padding: 2.0,
         }
     }
@@ -349,15 +364,13 @@ impl Theme {
         } else {
             self.colors.accent.default
         };
-        let border_color = if state.focused {
-            self.colors.focus.ring
-        } else {
-            self.colors.border.default
-        };
         SliderRecipe {
             track: Brush::Solid(self.colors.surface.sunken),
             fill: Brush::Solid(fill),
-            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
+            border: Stroke::new(
+                self.strokes.default,
+                Brush::Solid(self.colors.border.default),
+            ),
             radius: self.radii.full,
         }
     }
