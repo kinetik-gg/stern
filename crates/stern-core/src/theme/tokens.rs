@@ -723,6 +723,59 @@ impl HandleSizeScale {
     }
 }
 
+/// Typed identity for every exact size token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SizeToken {
+    /// `size.control.xs`.
+    ControlXs,
+    /// `size.control.sm`.
+    ControlSm,
+    /// `size.control.md`.
+    ControlMd,
+    /// `size.control.lg`.
+    ControlLg,
+    /// `size.row.compact`.
+    RowCompact,
+    /// `size.row.standard`.
+    RowStandard,
+    /// `size.tab`.
+    Tab,
+    /// `size.panelHeader`.
+    PanelHeader,
+    /// `size.workspaceBar`.
+    WorkspaceBar,
+    /// `size.icon.sm`.
+    IconSm,
+    /// `size.icon.md`.
+    IconMd,
+    /// `size.icon.lg`.
+    IconLg,
+    /// `size.handle.visual`.
+    HandleVisual,
+    /// `size.handle.hit`.
+    HandleHit,
+}
+
+impl SizeToken {
+    /// Every exact size token in normative grouped-field order.
+    pub const ALL: &'static [Self] = &[
+        Self::ControlXs,
+        Self::ControlSm,
+        Self::ControlMd,
+        Self::ControlLg,
+        Self::RowCompact,
+        Self::RowStandard,
+        Self::Tab,
+        Self::PanelHeader,
+        Self::WorkspaceBar,
+        Self::IconSm,
+        Self::IconMd,
+        Self::IconLg,
+        Self::HandleVisual,
+        Self::HandleHit,
+    ];
+}
+
 /// Exact grouped size-token foundation in logical units.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SizeScale {
@@ -762,6 +815,27 @@ impl SizeScale {
             workspace_bar,
             icon,
             handle,
+        }
+    }
+
+    /// Resolves the configured value for an exact size token.
+    #[must_use]
+    pub const fn get(self, token: SizeToken) -> f32 {
+        match token {
+            SizeToken::ControlXs => self.control.xs,
+            SizeToken::ControlSm => self.control.sm,
+            SizeToken::ControlMd => self.control.md,
+            SizeToken::ControlLg => self.control.lg,
+            SizeToken::RowCompact => self.row.compact,
+            SizeToken::RowStandard => self.row.standard,
+            SizeToken::Tab => self.tab,
+            SizeToken::PanelHeader => self.panel_header,
+            SizeToken::WorkspaceBar => self.workspace_bar,
+            SizeToken::IconSm => self.icon.sm,
+            SizeToken::IconMd => self.icon.md,
+            SizeToken::IconLg => self.icon.lg,
+            SizeToken::HandleVisual => self.handle.visual,
+            SizeToken::HandleHit => self.handle.hit,
         }
     }
 }
