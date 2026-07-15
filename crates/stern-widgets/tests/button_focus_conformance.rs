@@ -60,7 +60,7 @@ fn base_index(primitives: &[Primitive], rect: Rect) -> usize {
         .expect("button base surface")
 }
 
-fn annuli<'a>(output: &'a WidgetOutput, rect: Rect) -> [&'a Primitive; 2] {
+fn annuli(output: &WidgetOutput, rect: Rect) -> [&Primitive; 2] {
     let base = base_index(&output.primitives, rect);
     [&output.primitives[base + 1], &output.primitives[base + 2]]
 }
@@ -143,6 +143,7 @@ fn focused_memory(id: WidgetId) -> UiMemory {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn labeled_bitmap_and_vector_or_missing_icon_buttons_share_exact_inward_surfaces() {
     let theme = default_dark_theme();
     let rect = Rect::new(10.25, 20.5, 38.0, 24.0);
@@ -335,8 +336,8 @@ fn eighteen_unit_property_affordance_preserves_radius_content_and_contained_annu
         PropertyGridAffordanceLayout::new(18.0, 4.0),
     );
     let reset_rect = rects.reset_rect.expect("reset rect");
-    assert_eq!(reset_rect.width, 18.0);
-    assert_eq!(reset_rect.height, 18.0);
+    assert!((reset_rect.width - 18.0).abs() <= f32::EPSILON);
+    assert!((reset_rect.height - 18.0).abs() <= f32::EPSILON);
     let focused = property_grid_row_affordance_controls(
         root,
         &row,

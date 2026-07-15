@@ -668,6 +668,6 @@ fn all_four_chrome_button_row_kinds_use_clip_contained_inward_focus() {
     memory.focus(overflow);
     let (_, _, frame) = run_frame(&compact, &mut memory, UiInput::default(), false);
     let rect = frame.semantics.get(overflow).expect("overflow row").bounds;
-    assert_eq!(rect.max_x(), 70.0);
+    assert!((rect.max_x() - 70.0).abs() <= f32::EPSILON);
     assert_chrome_button_focus(&frame, rect);
 }

@@ -496,7 +496,7 @@ impl Ui<'_> {
         let recipe = self.theme.button(state);
         for primitive in button_surface_primitives(
             self.theme,
-            recipe,
+            &recipe,
             state,
             control.rect,
             recipe.radius,

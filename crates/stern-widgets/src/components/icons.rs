@@ -271,7 +271,7 @@ pub fn image_icon_selectable_button_sized(
 
     let mut primitives = button_surface_primitives(
         theme,
-        recipe,
+        &recipe,
         state,
         rect,
         recipe.radius,
@@ -328,7 +328,7 @@ fn icon_button_with_optional_library(
     );
     let mut primitives = button_surface_primitives(
         theme,
-        recipe,
+        &recipe,
         state,
         rect,
         recipe.radius,

@@ -966,10 +966,10 @@ fn picker_first_last_adjacent_and_action_controls_use_inward_focus() {
             .unwrap_or_else(|| panic!("{label} semantics"));
         (node.id, node.bounds)
     });
-    assert_eq!(controls[0].1.max_x() + 4.0, controls[1].1.min_x());
-    assert_eq!(controls[1].1.max_x(), OVERLAY.max_x() - 4.0);
-    assert_eq!(controls[2].1.min_x(), OVERLAY.min_x() + 4.0);
-    assert_eq!(controls[2].1.max_x() + 4.0, controls[3].1.min_x());
+    assert!((controls[0].1.max_x() + 4.0 - controls[1].1.min_x()).abs() <= f32::EPSILON);
+    assert!((controls[1].1.max_x() - (OVERLAY.max_x() - 4.0)).abs() <= f32::EPSILON);
+    assert!((controls[2].1.min_x() - (OVERLAY.min_x() + 4.0)).abs() <= f32::EPSILON);
+    assert!((controls[2].1.max_x() + 4.0 - controls[3].1.min_x()).abs() <= f32::EPSILON);
 
     for (id, rect) in controls {
         let mut memory = UiMemory::new();

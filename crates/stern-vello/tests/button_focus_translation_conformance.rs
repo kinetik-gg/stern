@@ -1,6 +1,6 @@
 //! Production Vello translation evidence for actual focused button surfaces.
 
-#![allow(clippy::float_cmp)]
+#![allow(clippy::float_cmp, clippy::too_many_lines)]
 
 use stern_core::{
     Brush, PathElement, PathPrimitive, PhysicalSize, Point, Primitive, Rect, ScaleFactor, Size,

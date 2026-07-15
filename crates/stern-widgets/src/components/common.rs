@@ -11,7 +11,7 @@ pub(crate) enum ButtonFocusPlacement {
 
 pub(crate) fn button_surface_primitives(
     theme: &Theme,
-    recipe: ButtonRecipe,
+    recipe: &ButtonRecipe,
     state: ComponentState,
     rect: Rect,
     radius: CornerRadius,
@@ -221,7 +221,7 @@ mod button_focus_tests {
         let recipe = theme.button_variant(ButtonVariant::Standard, focused);
         let primitives = button_surface_primitives(
             &theme,
-            recipe,
+            &recipe,
             focused,
             rect,
             radius,
@@ -243,10 +243,12 @@ mod button_focus_tests {
         assert_eq!(primitives[1], expected[0]);
         assert_eq!(primitives[2], expected[1]);
 
+        let unfocused_state = ComponentState::default();
+        let unfocused_recipe = theme.button_variant(ButtonVariant::Standard, unfocused_state);
         let unfocused = button_surface_primitives(
             &theme,
-            theme.button_variant(ButtonVariant::Standard, ComponentState::default()),
-            ComponentState::default(),
+            &unfocused_recipe,
+            unfocused_state,
             rect,
             radius,
             ButtonFocusPlacement::Inward,
@@ -257,10 +259,11 @@ mod button_focus_tests {
             disabled: true,
             ..ComponentState::default()
         };
+        let disabled_recipe = theme.button_variant(ButtonVariant::Standard, disabled);
         assert_eq!(
             button_surface_primitives(
                 &theme,
-                theme.button_variant(ButtonVariant::Standard, disabled),
+                &disabled_recipe,
                 disabled,
                 rect,
                 radius,
@@ -284,7 +287,7 @@ mod button_focus_tests {
         assert_eq!(recipe.background, Brush::Solid(Color::TRANSPARENT));
         let output = button_surface_primitives(
             &theme,
-            recipe,
+            &recipe,
             baseline,
             rect,
             radius,
@@ -315,9 +318,10 @@ mod button_focus_tests {
                 ..ComponentState::default()
             },
         ] {
+            let state_recipe = theme.button_variant(ButtonVariant::Ghost, state);
             let state_output = button_surface_primitives(
                 &theme,
-                theme.button_variant(ButtonVariant::Ghost, state),
+                &state_recipe,
                 state,
                 rect,
                 radius,

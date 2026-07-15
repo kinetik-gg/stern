@@ -48,7 +48,7 @@ pub fn button(
     let text = text.into();
     let mut primitives = button_surface_primitives(
         theme,
-        recipe,
+        &recipe,
         state,
         rect,
         recipe.radius,

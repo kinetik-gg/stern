@@ -258,7 +258,7 @@ fn affordance_button(
 
     widget.primitives.extend(button_surface_primitives(
         theme,
-        recipe,
+        &recipe,
         state,
         rect,
         CornerRadius::all(3.0),
