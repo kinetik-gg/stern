@@ -8,10 +8,13 @@ use stern_core::{
 };
 
 use super::Ui;
-use crate::collections::{
-    CollectionCursor, CollectionCursorMove, CollectionCursorTarget, CollectionProjection, ItemId,
-    Selection, TreeExpansion, TreeRow, VirtualTree, VirtualTreeConfig, VirtualTreeItemResponse,
-    VirtualTreeOutput, VirtualTreeRow, VirtualTreeSelectionMode,
+use crate::{
+    collections::{
+        CollectionCursor, CollectionCursorMove, CollectionCursorTarget, CollectionProjection,
+        ItemId, Selection, TreeExpansion, TreeRow, VirtualTree, VirtualTreeConfig,
+        VirtualTreeItemResponse, VirtualTreeOutput, VirtualTreeRow, VirtualTreeSelectionMode,
+    },
+    components::{RowFocusPlacement, row_surface_primitives},
 };
 
 impl Ui<'_> {
@@ -341,7 +344,7 @@ impl Ui<'_> {
         disclosure_response: Option<Response>,
         disabled: bool,
     ) {
-        let recipe = self.theme.row(ComponentState {
+        let state = ComponentState {
             hovered: response.state.hovered
                 || disclosure_response.is_some_and(|response| response.state.hovered),
             pressed: response.state.pressed
@@ -349,13 +352,18 @@ impl Ui<'_> {
             focused: response.state.focused,
             disabled,
             selected: response.state.selected,
-        });
-        self.primitive(Primitive::Rect(RectPrimitive {
+        };
+        let recipe = self.theme.row(state);
+        for primitive in row_surface_primitives(
+            self.theme,
+            &recipe,
+            state,
             rect,
-            fill: Some(recipe.background),
-            stroke: Some(recipe.border),
-            radius: recipe.radius,
-        }));
+            recipe.radius,
+            RowFocusPlacement::Inward,
+        ) {
+            self.primitive(primitive);
+        }
 
         if row.has_children {
             self.paint_virtual_tree_disclosure(disclosure_rect, row.expanded, recipe.foreground);
