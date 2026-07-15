@@ -7,8 +7,8 @@ use std::time::Duration;
 use stern_core::{
     Brush, Color, ComponentState, FrameContext, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
     PathElement, PhysicalSize, Point, PointerButtonState, PointerInput, PointerOrder, Primitive,
-    Rect, ScaleFactor, SemanticNode, SemanticRole, Size, TimeInfo, Transform, UiInput, UiMemory,
-    Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    Rect, RepaintRequest, ScaleFactor, SemanticNode, SemanticRole, Size, TimeInfo, Transform,
+    UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::{
     CollectionProjection, ItemId, SortDirection, TableColumn, TableLayout, TableSort, Ui,
@@ -372,7 +372,71 @@ fn assert_focused_cell(run: &Run, target: VirtualTableTarget) -> [Primitive; 2] 
             .count(),
         2
     );
+    assert_enabled_focus_owner(run, target);
     expected
+}
+
+fn assert_enabled_focus_owner(run: &Run, target: VirtualTableTarget) {
+    let VirtualTableTarget::Cell { row, column } = target else {
+        panic!("Cell mode focus must have a stable cell target")
+    };
+    let response = selection_response(run, target);
+    assert!(!response.state.disabled);
+    assert_eq!(
+        run.output
+            .selection_responses
+            .iter()
+            .filter(|candidate| candidate.response.state.focused)
+            .map(|candidate| candidate.target)
+            .collect::<Vec<_>>(),
+        vec![target]
+    );
+    let focused_semantics = run
+        .frame
+        .semantics
+        .nodes()
+        .iter()
+        .filter(|node| node.state.focused)
+        .collect::<Vec<_>>();
+    if let Some(cell) = run.frame.semantics.get(response.id) {
+        assert_eq!(focused_semantics.len(), 1);
+        assert_eq!(focused_semantics[0].id, response.id);
+        assert_eq!(cell.role, SemanticRole::Cell);
+        assert!(!cell.state.disabled);
+        assert!(cell.focusable);
+        assert_eq!(cell.state.selected, response.state.selected);
+        assert_eq!(cell.state.pressed, response.state.pressed);
+        assert!(cell.state.focused);
+    } else {
+        assert!(
+            focused_semantics.is_empty(),
+            "a fully clipped owner has no semantic node and never transfers focus"
+        );
+    }
+    if let Some(row) = run
+        .frame
+        .semantics
+        .get(run.root.child(("virtual-table-row", row.raw())))
+    {
+        assert!(!row.state.focused);
+        assert!(!row.focusable);
+    }
+    for candidate in &run.output.selection_responses {
+        if candidate.target != target {
+            assert!(!candidate.response.state.focused);
+            if let Some(sibling) = run.frame.semantics.get(candidate.response.id) {
+                assert!(!sibling.state.focused);
+            }
+        }
+    }
+    for header in &run.output.headers {
+        assert!(!header.response.state.focused);
+    }
+    assert_eq!(
+        response.id,
+        run.root
+            .child(("virtual-table-cell", row.raw(), column.raw()))
+    );
 }
 
 fn output_without_focus(mut output: VirtualTableOutput) -> VirtualTableOutput {
@@ -604,50 +668,106 @@ fn focused_cell_is_exactly_the_unfocused_frame_plus_two_paths_and_focus_bits() {
 }
 
 #[test]
-fn disabled_retained_cell_focus_is_inert_non_focusable_actionless_and_ring_free() {
+fn disabled_cells_are_inert_and_ring_free_with_focus_observable_only_when_retained() {
     let items = projection(3);
     let enabled = config(VirtualTableSelectionMode::Cell);
-    let target = cell_target(0, 0);
-    let mut selection = VirtualTableSelection::new();
-    let mut memory = UiMemory::new();
-    let selected = select_cell(&items, enabled, &mut selection, &mut memory, 0, 0);
-    let cell_id = selection_response(&selected, target).id;
-    assert!(memory.is_focused(cell_id));
-    let disabled = run_frame(
-        &items,
-        VirtualTableConfig {
-            disabled: true,
-            ..config(VirtualTableSelectionMode::Cell)
-        },
-        &mut selection,
-        &mut memory,
-        pointer_input(cell_point(0, 0), true, false),
-    );
-    let response = selection_response(&disabled, target);
-    assert!(response.state.focused);
-    assert!(response.state.disabled);
-    assert!(!response.state.pressed);
-    assert_eq!(
-        disabled
-            .frame
-            .primitives
-            .iter()
-            .filter(|primitive| matches!(primitive, Primitive::Path(_)))
-            .count(),
-        0
-    );
-    let semantic = disabled
-        .frame
-        .semantics
-        .get(cell_id)
-        .expect("disabled cell");
-    assert_eq!(semantic.role, SemanticRole::Cell);
-    assert!(semantic.state.focused);
-    assert!(semantic.state.disabled);
-    assert!(!semantic.focusable);
-    assert!(semantic.actions.is_empty());
-    assert_eq!(disabled.output.sort_requested, None);
-    assert_eq!(disabled.output.resize_requested, None);
+    for row in 0..3 {
+        for column in 0..3 {
+            let target = cell_target(row, column);
+            let mut seeded_selection = VirtualTableSelection::new();
+            let selected = select_cell(
+                &items,
+                enabled.clone(),
+                &mut seeded_selection,
+                &mut UiMemory::new(),
+                row,
+                column,
+            );
+            let cell_id = selection_response(&selected, target).id;
+            for retained_focus in [false, true] {
+                let mut selection = seeded_selection.clone();
+                let mut memory = UiMemory::new();
+                if retained_focus {
+                    memory.focus(cell_id);
+                }
+                let disabled = run_frame(
+                    &items,
+                    config(VirtualTableSelectionMode::Cell).disabled(true),
+                    &mut selection,
+                    &mut memory,
+                    pointer_input(cell_point(row, column), true, false),
+                );
+                assert_eq!(selection.target(), Some(target));
+                assert_eq!(memory.is_focused(cell_id), retained_focus);
+                let response = selection_response(&disabled, target);
+                assert_eq!(response.id, cell_id);
+                assert_eq!(response.state.focused, retained_focus);
+                assert!(response.state.selected);
+                assert!(response.state.disabled);
+                assert!(!response.state.hovered);
+                assert!(!response.state.pressed);
+                assert_eq!(
+                    disabled
+                        .frame
+                        .primitives
+                        .iter()
+                        .filter(|primitive| matches!(primitive, Primitive::Path(_)))
+                        .count(),
+                    0
+                );
+                assert!(!disabled.output.selection_changed);
+                assert_eq!(disabled.output.sort_requested, None);
+                assert_eq!(disabled.output.resize_requested, None);
+                assert_eq!(disabled.output.scroll.delta, Vec2::ZERO);
+                assert_eq!(disabled.frame.repaint, RepaintRequest::None);
+                assert!(disabled.frame.actions.is_empty());
+                assert!(disabled.frame.platform_requests.is_empty());
+
+                let semantic = disabled
+                    .frame
+                    .semantics
+                    .get(cell_id)
+                    .expect("disabled cell");
+                assert_eq!(semantic.role, SemanticRole::Cell);
+                assert_eq!(semantic.state.focused, retained_focus);
+                assert!(semantic.state.selected);
+                assert!(semantic.state.disabled);
+                assert!(!semantic.state.pressed);
+                assert!(!semantic.focusable);
+                assert!(semantic.actions.is_empty());
+                let focused_semantics = disabled
+                    .frame
+                    .semantics
+                    .nodes()
+                    .iter()
+                    .filter(|node| node.state.focused)
+                    .collect::<Vec<_>>();
+                assert_eq!(focused_semantics.len(), usize::from(retained_focus));
+                if retained_focus {
+                    assert_eq!(focused_semantics[0].id, cell_id);
+                }
+                for candidate in &disabled.output.selection_responses {
+                    assert!(candidate.response.state.disabled);
+                    assert!(!candidate.response.state.pressed);
+                    if candidate.target != target {
+                        assert!(!candidate.response.state.focused);
+                    }
+                }
+                let VirtualTableTarget::Cell { row, .. } = target else {
+                    unreachable!()
+                };
+                let row_semantic = disabled
+                    .frame
+                    .semantics
+                    .get(disabled.root.child(("virtual-table-row", row.raw())))
+                    .expect("disabled row");
+                assert!(row_semantic.state.disabled);
+                assert!(!row_semantic.state.focused);
+                assert!(!row_semantic.focusable);
+                assert!(row_semantic.actions.is_empty());
+            }
+        }
+    }
 }
 
 #[test]
