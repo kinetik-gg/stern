@@ -34,6 +34,8 @@ const EXPECTED_ROLES: [SpacingRole; 9] = [
     SpacingRole::SectionGap,
 ];
 
+const LEGACY_GENERIC_FIELD_NAMES: [&str; 5] = ["xs", "sm", "md", "lg", "xl"];
+
 const SENTINELS: SpacingScale = SpacingScale::new(
     101.0, 103.0, 107.0, 109.0, 113.0, 127.0, 131.0, 137.0, 139.0,
 );
@@ -199,6 +201,44 @@ fn spacing_replacement_preserves_every_non_spacing_theme_field() {
 }
 
 #[test]
+fn legacy_generic_field_audit_is_scoped_to_spacing_scale() {
+    let unrelated_size_fields = r"
+        pub struct ControlSizeScale {
+            pub xs: f32,
+            pub sm: f32,
+            pub md: f32,
+            pub lg: f32,
+            pub xl: f32,
+        }
+
+        pub struct SpacingScale {
+            pub zero: f32,
+            pub one: f32,
+        }
+    ";
+    assert!(legacy_generic_spacing_fields(unrelated_size_fields).is_empty());
+
+    let mutated_spacing_scale = r"
+        pub struct ControlSizeScale {
+            pub xs: f32,
+        }
+
+        pub struct SpacingScale {
+            pub zero: f32,
+            pub xs : core::primitive::f32,
+            pub sm: f32,
+            pub md: f32,
+            pub lg: f32,
+            pub xl: f32,
+        }
+    ";
+    assert_eq!(
+        legacy_generic_spacing_fields(mutated_spacing_scale),
+        vec!["xs", "sm", "md", "lg", "xl"]
+    );
+}
+
+#[test]
 fn production_source_contains_no_legacy_fields_or_five_value_constructors() {
     let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = crate_root
@@ -233,15 +273,10 @@ fn production_source_contains_no_legacy_fields_or_five_value_constructors() {
         "spacing.md",
         "spacing.lg",
         "spacing.xl",
-        "pub xs: f32",
-        "pub sm: f32",
-        "pub md: f32",
-        "pub lg: f32",
-        "pub xl: f32",
     ];
 
-    for path in sources {
-        let source = fs::read_to_string(&path).expect("production Rust source must be readable");
+    for path in &sources {
+        let source = fs::read_to_string(path).expect("production Rust source must be readable");
         for legacy in legacy_accesses {
             assert!(
                 !source.contains(legacy),
@@ -258,6 +293,51 @@ fn production_source_contains_no_legacy_fields_or_five_value_constructors() {
             );
         }
     }
+
+    let tokens_path = crate_root.join("src/theme/tokens.rs");
+    let tokens_source = fs::read_to_string(&tokens_path).expect("theme tokens must be readable");
+    let legacy_fields = legacy_generic_spacing_fields(&tokens_source);
+    assert!(
+        legacy_fields.is_empty(),
+        "legacy generic fields {legacy_fields:?} remain in the SpacingScale declaration"
+    );
+}
+
+fn legacy_generic_spacing_fields(source: &str) -> Vec<&'static str> {
+    let compact_body: String = spacing_scale_body(source)
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect();
+    LEGACY_GENERIC_FIELD_NAMES
+        .into_iter()
+        .filter(|field| compact_body.contains(&format!("pub{field}:")))
+        .collect()
+}
+
+fn spacing_scale_body(source: &str) -> &str {
+    const DECLARATION: &str = "pub struct SpacingScale";
+    let declaration_start = source
+        .find(DECLARATION)
+        .expect("SpacingScale declaration must exist");
+    let opening_brace = source[declaration_start..]
+        .find('{')
+        .map(|offset| declaration_start + offset)
+        .expect("SpacingScale declaration must have a body");
+    let body_start = opening_brace + 1;
+    let mut depth = 1_usize;
+    for (offset, character) in source[body_start..].char_indices() {
+        match character {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &source[body_start..body_start + offset];
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("SpacingScale declaration body must close");
 }
 
 fn collect_production_rust_sources(directory: &Path, output: &mut Vec<std::path::PathBuf>) {

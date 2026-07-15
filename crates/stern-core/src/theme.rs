@@ -14,9 +14,10 @@ pub use recipes::{
     RowRecipe, SeparatorRecipe, SliderRecipe, TabRecipe, TextFieldRecipe, TextRecipe, ToggleRecipe,
 };
 pub use tokens::{
-    AccentColors, BorderColors, ContentColors, ControlMetrics, DurationScale, ElevationLevel,
-    ElevationScale, FocusColors, FocusStrokeScale, FontToken, OpacityScale, OverlayColors,
-    RadiusScale, SelectionColors, SemanticColor, ShadowRecipe, SpacingRole, SpacingScale,
-    SpacingStep, StatusColorFamilyColors, StatusColors, StrokeScale, SurfaceColors, TextRole,
-    ThemeColors, TypographyScale,
+    AccentColors, BorderColors, ContentColors, ControlMetrics, ControlSizeScale, DurationScale,
+    ElevationLevel, ElevationScale, FocusColors, FocusStrokeScale, FontToken, HandleSizeScale,
+    IconSizeScale, OpacityScale, OverlayColors, RadiusScale, RowSizeScale, SelectionColors,
+    SemanticColor, ShadowRecipe, SizeScale, SizeToken, SpacingRole, SpacingScale, SpacingStep,
+    StatusColorFamilyColors, StatusColors, StrokeScale, SurfaceColors, TextRole, ThemeColors,
+    TypographyScale,
 };

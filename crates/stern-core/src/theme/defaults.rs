@@ -1,6 +1,7 @@
 use super::{
-    ControlMetrics, DurationScale, ElevationScale, FontToken, OpacityScale, RadiusScale,
-    SpacingScale, StrokeScale, Theme, ThemeColors, TypographyScale,
+    ControlMetrics, ControlSizeScale, DurationScale, ElevationScale, FontToken, HandleSizeScale,
+    IconSizeScale, OpacityScale, RadiusScale, RowSizeScale, SizeScale, SpacingScale, StrokeScale,
+    Theme, ThemeColors, TypographyScale,
 };
 
 /// Returns the default dark editor theme.
@@ -11,6 +12,15 @@ pub const fn default_dark_theme() -> Theme {
     Theme {
         colors: ThemeColors::default_dark(),
         spacing: SpacingScale::new(0.0, 2.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0),
+        sizes: SizeScale::new(
+            ControlSizeScale::new(20.0, 24.0, 28.0, 32.0),
+            RowSizeScale::new(24.0, 28.0),
+            28.0,
+            30.0,
+            40.0,
+            IconSizeScale::new(12.0, 16.0, 20.0),
+            HandleSizeScale::new(1.0, 7.0),
+        ),
         radii,
         strokes,
         typography: TypographyScale {

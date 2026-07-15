@@ -1,7 +1,8 @@
 #![allow(clippy::float_cmp)]
 use super::{
-    ButtonVariant, ComponentState, ControlMetrics, DurationScale, ElevationLevel, ElevationScale,
-    OpacityScale, RadiusScale, SemanticColor, SpacingScale, StrokeScale, TextRole, ThemeColors,
+    ButtonVariant, ComponentState, ControlMetrics, ControlSizeScale, DurationScale, ElevationLevel,
+    ElevationScale, HandleSizeScale, IconSizeScale, OpacityScale, RadiusScale, RowSizeScale,
+    SemanticColor, SizeScale, SizeToken, SpacingScale, StrokeScale, TextRole, ThemeColors,
     TypographyScale, default_dark_theme,
 };
 use crate::{Brush, Color, CornerRadius};
@@ -44,6 +45,111 @@ fn default_theme_has_dense_editor_spacing() {
     assert_eq!(theme.font(TextRole::Title).family, "Inter");
     assert_eq!(theme.font(TextRole::Monospace).family, "Geist Mono");
     assert_eq!(theme.font(TextRole::Body).line_height, 17.0);
+}
+
+fn sentinel_sizes() -> SizeScale {
+    SizeScale::new(
+        ControlSizeScale::new(101.0, 103.0, 107.0, 109.0),
+        RowSizeScale::new(113.0, 127.0),
+        131.0,
+        137.0,
+        139.0,
+        IconSizeScale::new(149.0, 151.0, 157.0),
+        HandleSizeScale::new(163.0, 167.0),
+    )
+}
+
+#[test]
+fn size_scale_defaults_and_typed_lookup_are_exact() {
+    let sizes = default_dark_theme().sizes;
+    let expected = [
+        20.0, 24.0, 28.0, 32.0, 24.0, 28.0, 28.0, 30.0, 40.0, 12.0, 16.0, 20.0, 1.0, 7.0,
+    ];
+
+    assert_eq!(SizeToken::ALL.len(), expected.len());
+    for (token, expected) in SizeToken::ALL.iter().copied().zip(expected) {
+        assert_eq!(sizes.get(token), expected, "wrong value for {token:?}");
+    }
+    assert_ne!(sizes.handle.visual, sizes.handle.hit);
+}
+
+#[test]
+fn size_replacement_is_isolated_from_theme_and_control_metrics() {
+    let mut baseline = default_dark_theme();
+    baseline.colors.surface.application = Color::rgb8(1, 2, 3);
+    baseline.spacing = SpacingScale::new(
+        173.0, 179.0, 181.0, 191.0, 193.0, 197.0, 199.0, 211.0, 223.0,
+    );
+    baseline.radii = RadiusScale::from_values(227.0, 229.0, 233.0, 239.0);
+    baseline.strokes = StrokeScale::from_values(241.0, 251.0, 257.0, 263.0, 269.0);
+    baseline.typography.body.size = 271.0;
+    baseline.opacity.hover = 277.0;
+    baseline.elevation.low = 281.0;
+    baseline.duration.normal = 283.0;
+    baseline.controls = ControlMetrics {
+        control_height: 293.0,
+        compact_control_height: 307.0,
+        icon_size: 311.0,
+        check_size: 313.0,
+        padding_x: 317.0,
+        padding_y: 331.0,
+    };
+    baseline.radius = CornerRadius::all(337.0);
+    baseline.border_width = 347.0;
+    baseline.text_size = 349.0;
+
+    let sizes = sentinel_sizes();
+    let customized = baseline.with_sizes(sizes);
+
+    assert_eq!(customized.sizes, sizes);
+    assert_eq!(customized.colors, baseline.colors);
+    assert_eq!(customized.spacing, baseline.spacing);
+    assert_eq!(customized.radii, baseline.radii);
+    assert_eq!(customized.strokes, baseline.strokes);
+    assert_eq!(customized.typography, baseline.typography);
+    assert_eq!(customized.opacity, baseline.opacity);
+    assert_eq!(customized.elevation, baseline.elevation);
+    assert_eq!(customized.duration, baseline.duration);
+    assert_eq!(customized.controls, baseline.controls);
+    assert_eq!(customized.radius, baseline.radius);
+    assert_eq!(customized.border_width, baseline.border_width);
+    assert_eq!(customized.text_size, baseline.text_size);
+
+    let respaced = customized.with_spacing(SpacingScale::new(
+        353.0, 359.0, 367.0, 373.0, 379.0, 383.0, 389.0, 397.0, 401.0,
+    ));
+    assert_eq!(respaced.sizes, sizes);
+    assert_eq!(respaced.controls, baseline.controls);
+}
+
+#[test]
+fn control_metrics_defaults_and_customization_remain_independent() {
+    let defaults = default_dark_theme();
+    assert_eq!(
+        defaults.controls,
+        ControlMetrics {
+            control_height: 28.0,
+            compact_control_height: 22.0,
+            icon_size: 16.0,
+            check_size: 14.0,
+            padding_x: 8.0,
+            padding_y: 4.0,
+        }
+    );
+
+    let controls = ControlMetrics {
+        control_height: 409.0,
+        compact_control_height: 419.0,
+        icon_size: 421.0,
+        check_size: 431.0,
+        padding_x: 433.0,
+        padding_y: 439.0,
+    };
+    let customized = defaults
+        .with_controls(controls)
+        .with_sizes(sentinel_sizes());
+    assert_eq!(customized.controls, controls);
+    assert_eq!(customized.sizes, sentinel_sizes());
 }
 
 #[test]
