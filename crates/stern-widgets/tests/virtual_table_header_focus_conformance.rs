@@ -504,8 +504,10 @@ fn modifier_and_repeat_inputs_do_not_change_idle_focus_geometry() {
     );
     let expected = assert_header_focus(&idle, column, false);
 
-    let mut modified = Modifiers::default();
-    modified.ctrl = true;
+    let modified = Modifiers {
+        ctrl: true,
+        ..Modifiers::default()
+    };
     for input in [
         key_input(Key::Enter, Modifiers::default(), true),
         key_input(Key::Space, modified, false),
@@ -593,8 +595,10 @@ fn pointer_and_keyboard_sorting_emit_one_exact_descriptor_without_pointer_focus_
         assert_eq!(keyboard_memory.focused(), Some(response.id));
     }
 
-    let mut modified = Modifiers::default();
-    modified.shift = true;
+    let modified = Modifiers {
+        shift: true,
+        ..Modifiers::default()
+    };
     for input in [
         key_input(Key::Enter, Modifiers::default(), true),
         key_input(Key::Space, modified, false),
