@@ -10,6 +10,13 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Replaced `SpacingScale::{xs, sm, md, lg, xl}` and its
+  five-value constructor with the exact nine-step `zero` through `eight`
+  ladder, plus typed `SpacingStep` and `SpacingRole` inventories. Semantic
+  roles resolve from the configured ladder; no legacy fields, aliases, or
+  forwarding methods remain. Existing prerelease consumers must pass all nine
+  values to `SpacingScale::new` and select exact or semantic roles. See
+  `docs/spacing-migration.md`.
 - **Breaking:** Removed `ControlMetrics::{border_width, focus_width,
   separator_width}` and added the exact shared `StrokeScale` ladder at
   `Theme::strokes`. Existing theme customization should migrate width roles to

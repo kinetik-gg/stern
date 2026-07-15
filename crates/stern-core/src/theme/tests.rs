@@ -28,7 +28,7 @@ fn resolves_semantic_colors() {
 fn default_theme_has_dense_editor_spacing() {
     let theme = default_dark_theme();
 
-    assert_eq!(theme.spacing.md, 8.0);
+    assert_eq!(theme.spacing.four, 8.0);
     assert_eq!(theme.text_size, 12.0);
     assert_eq!(theme.border_width, 1.0);
     assert_eq!(theme.strokes.hairline, 1.0);
@@ -185,7 +185,9 @@ fn token_overrides_are_structural_and_predictable() {
     };
     let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
     let theme = default_dark_theme()
-        .with_spacing(SpacingScale::new(1.0, 3.0, 6.0, 9.0, 12.0))
+        .with_spacing(SpacingScale::new(
+            1.0, 3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 21.0, 24.0,
+        ))
         .with_radii(RadiusScale::from_values(2.0, 3.0, 4.0, 999.0))
         .with_typography(typography)
         .with_opacity(OpacityScale {
@@ -203,8 +205,8 @@ fn token_overrides_are_structural_and_predictable() {
         .with_strokes(strokes)
         .with_controls(controls);
 
-    assert_eq!(theme.spacing.xs, 1.0);
-    assert_eq!(theme.spacing.md, 6.0);
+    assert_eq!(theme.spacing.zero, 1.0);
+    assert_eq!(theme.spacing.two, 6.0);
     assert_eq!(theme.radii.sm, CornerRadius::all(2.0));
     assert_eq!(theme.radius, CornerRadius::all(2.0));
     assert_eq!(theme.text_size, 13.0);

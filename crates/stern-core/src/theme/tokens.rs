@@ -483,26 +483,169 @@ impl ThemeColors {
     }
 }
 
-/// Spacing token scale.
+/// Exact compact spacing-step identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SpacingStep {
+    /// `spacing.0`.
+    Zero,
+    /// `spacing.1`.
+    One,
+    /// `spacing.2`.
+    Two,
+    /// `spacing.3`.
+    Three,
+    /// `spacing.4`.
+    Four,
+    /// `spacing.5`.
+    Five,
+    /// `spacing.6`.
+    Six,
+    /// `spacing.7`.
+    Seven,
+    /// `spacing.8`.
+    Eight,
+}
+
+impl SpacingStep {
+    /// Every spacing step in ascending ladder order.
+    pub const ALL: &'static [Self] = &[
+        Self::Zero,
+        Self::One,
+        Self::Two,
+        Self::Three,
+        Self::Four,
+        Self::Five,
+        Self::Six,
+        Self::Seven,
+        Self::Eight,
+    ];
+}
+
+/// Semantic spacing role resolved from the configured compact ladder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SpacingRole {
+    /// Gap between an icon and its label.
+    IconLabelGap,
+    /// Gap between tightly grouped controls.
+    TightControlGap,
+    /// Inline padding for compact controls.
+    CompactInlineControlPadding,
+    /// Inline padding for default controls.
+    DefaultInlineControlPadding,
+    /// Block-axis padding for controls.
+    BlockControlPadding,
+    /// Gap between inspector labels and values.
+    InspectorLabelValueGap,
+    /// Gap between ordinary groups.
+    GroupGap,
+    /// Panel content inset.
+    PanelPadding,
+    /// Gap between sections.
+    SectionGap,
+}
+
+impl SpacingRole {
+    /// Every semantic spacing role in normative specification order.
+    pub const ALL: &'static [Self] = &[
+        Self::IconLabelGap,
+        Self::TightControlGap,
+        Self::CompactInlineControlPadding,
+        Self::DefaultInlineControlPadding,
+        Self::BlockControlPadding,
+        Self::InspectorLabelValueGap,
+        Self::GroupGap,
+        Self::PanelPadding,
+        Self::SectionGap,
+    ];
+
+    /// Returns the compact ladder step that supplies this role.
+    #[must_use]
+    pub const fn step(self) -> SpacingStep {
+        match self {
+            Self::IconLabelGap | Self::TightControlGap | Self::BlockControlPadding => {
+                SpacingStep::Two
+            }
+            Self::CompactInlineControlPadding => SpacingStep::Three,
+            Self::DefaultInlineControlPadding
+            | Self::InspectorLabelValueGap
+            | Self::GroupGap
+            | Self::PanelPadding => SpacingStep::Four,
+            Self::SectionGap => SpacingStep::Six,
+        }
+    }
+}
+
+/// Exact nine-step compact spacing token scale.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SpacingScale {
-    /// Extra-small spacing.
-    pub xs: f32,
-    /// Small spacing.
-    pub sm: f32,
-    /// Medium spacing.
-    pub md: f32,
-    /// Large spacing.
-    pub lg: f32,
-    /// Extra-large spacing.
-    pub xl: f32,
+    /// `spacing.0`.
+    pub zero: f32,
+    /// `spacing.1`.
+    pub one: f32,
+    /// `spacing.2`.
+    pub two: f32,
+    /// `spacing.3`.
+    pub three: f32,
+    /// `spacing.4`.
+    pub four: f32,
+    /// `spacing.5`.
+    pub five: f32,
+    /// `spacing.6`.
+    pub six: f32,
+    /// `spacing.7`.
+    pub seven: f32,
+    /// `spacing.8`.
+    pub eight: f32,
 }
 
 impl SpacingScale {
-    /// Creates a spacing scale.
+    /// Creates a spacing scale in ascending step order.
+    #[allow(clippy::too_many_arguments)]
     #[must_use]
-    pub const fn new(xs: f32, sm: f32, md: f32, lg: f32, xl: f32) -> Self {
-        Self { xs, sm, md, lg, xl }
+    pub const fn new(
+        zero: f32,
+        one: f32,
+        two: f32,
+        three: f32,
+        four: f32,
+        five: f32,
+        six: f32,
+        seven: f32,
+        eight: f32,
+    ) -> Self {
+        Self {
+            zero,
+            one,
+            two,
+            three,
+            four,
+            five,
+            six,
+            seven,
+            eight,
+        }
+    }
+
+    /// Resolves the configured value for an exact spacing step.
+    #[must_use]
+    pub const fn get(self, step: SpacingStep) -> f32 {
+        match step {
+            SpacingStep::Zero => self.zero,
+            SpacingStep::One => self.one,
+            SpacingStep::Two => self.two,
+            SpacingStep::Three => self.three,
+            SpacingStep::Four => self.four,
+            SpacingStep::Five => self.five,
+            SpacingStep::Six => self.six,
+            SpacingStep::Seven => self.seven,
+            SpacingStep::Eight => self.eight,
+        }
+    }
+
+    /// Resolves a semantic spacing role through its configured ladder step.
+    #[must_use]
+    pub const fn resolve(self, role: SpacingRole) -> f32 {
+        self.get(role.step())
     }
 }
 
