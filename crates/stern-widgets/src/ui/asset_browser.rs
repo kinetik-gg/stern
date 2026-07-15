@@ -21,6 +21,7 @@ use crate::{
     InlineEditCancelReason, InlineEditCommitReason, InlineEditFocusLossPolicy, InlineEditRequest,
     ItemId, Menu, MenuOverlay, OverlayDismissal, OverlayKind, OverlayScene, OverlaySceneIntent,
     OverlaySceneSurface, PopoverPlacement, Selection, TextFieldAccess, collection_context_actions,
+    components::{RowFocusPlacement, row_surface_primitives},
 };
 
 impl Ui<'_> {
@@ -799,19 +800,24 @@ impl Ui<'_> {
         response: Response,
         paint_name: bool,
     ) {
-        let recipe = self.theme.row(ComponentState {
+        let state = ComponentState {
             hovered: response.state.hovered,
             pressed: response.state.pressed,
             focused: response.state.focused,
             disabled: response.state.disabled,
             selected: response.state.selected,
-        });
-        self.primitive(Primitive::Rect(RectPrimitive {
-            rect: item.rect,
-            fill: Some(recipe.background),
-            stroke: Some(recipe.border),
-            radius: recipe.radius,
-        }));
+        };
+        let recipe = self.theme.row(state);
+        for primitive in row_surface_primitives(
+            self.theme,
+            &recipe,
+            state,
+            item.rect,
+            recipe.radius,
+            RowFocusPlacement::Inward,
+        ) {
+            self.primitive(primitive);
+        }
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: item.preview_rect,
             fill: Some(Brush::Solid(self.theme.colors.surface.raised)),
