@@ -14,7 +14,7 @@ use stern_core::{
 use stern_widgets::{
     CollectionProjection, ItemId, SortDirection, TableColumn, TableLayout, TableSort, Ui,
     VirtualTableConfig, VirtualTableOutput, VirtualTableRow, VirtualTableSelection,
-    VirtualTableSelectionMode,
+    VirtualTableSelectionMode, VirtualTableTarget,
 };
 
 const BOUNDS: Rect = Rect::new(3.25, 7.75, 240.0, 84.0);
@@ -160,6 +160,7 @@ impl HeaderInteraction {
 struct Run {
     root: WidgetId,
     output: VirtualTableOutput,
+    callbacks: Vec<ItemId>,
     frame: stern_core::FrameOutput,
 }
 
@@ -180,7 +181,9 @@ fn run_frame(
         table.declare_pointer_targets(plan, PointerOrder::new(100));
     })
     .expect("valid table pointer plan");
+    let mut callbacks = Vec::new();
     let output = ui.virtual_table(&table, selection, |item| {
+        callbacks.push(item.id);
         VirtualTableRow::new([
             format!("Row {} name", item.id.raw()),
             format!("Row {} kind", item.id.raw()),
@@ -190,6 +193,7 @@ fn run_frame(
     Run {
         root,
         output,
+        callbacks,
         frame: ui.finish_output(),
     }
 }
@@ -347,6 +351,7 @@ fn semantics_without_focus(run: &Run) -> Vec<SemanticNode> {
 }
 
 fn assert_focus_only_transition(focused: &Run, unfocused: &Run) {
+    assert_eq!(focused.callbacks, unfocused.callbacks);
     assert_eq!(
         output_without_header_focus(focused.output.clone()),
         unfocused.output
@@ -818,8 +823,9 @@ fn header_semantics_mirror_owned_focus_press_and_disabled_retention_without_sele
 
 #[test]
 fn resize_ownership_isolated_from_header_focus_sort_semantics_and_annuli() {
-    let items = projection(2);
-    let resize_config = config(None).resizable(true);
+    let items = projection(10);
+    let bounds = Rect::new(BOUNDS.x, BOUNDS.y, 160.0, 64.0);
+    let resize_config = config_with(bounds, None, [10, 20, 30]).resizable(true);
     let seed = run_frame(
         &items,
         resize_config.clone(),
@@ -828,18 +834,41 @@ fn resize_ownership_isolated_from_header_focus_sort_semantics_and_annuli() {
         UiInput::default(),
     );
     let column = id(10);
-    let header = seed
+    let seed_header = seed
         .output
         .headers
         .iter()
         .find(|header| header.column == column)
         .expect("resizable header");
-    let header_id = header.response.id;
-    let resize = header.resize_response.expect("resize response");
-    assert_ne!(header_id, resize.id);
-    let point = resize.rect.center();
+    let header_id = seed_header.response.id;
+    let resize_id = seed_header.resize_response.expect("resize response").id;
+    assert_ne!(header_id, resize_id);
+    let retained_scroll = Vec2::new(30.0, 40.0);
     let mut memory = UiMemory::new();
     memory.focus(header_id);
+    memory.set_scroll_offset(seed.root, retained_scroll);
+    let scrolled = run_frame(
+        &items,
+        resize_config.clone(),
+        &mut VirtualTableSelection::new(),
+        &mut memory,
+        UiInput::default(),
+    );
+    assert_eq!(scrolled.output.window.offset, retained_scroll);
+    assert_eq!(scrolled.output.scroll.offset, retained_scroll);
+    let resize = scrolled
+        .output
+        .headers
+        .iter()
+        .find(|header| header.column == column)
+        .and_then(|header| header.resize_response)
+        .expect("scrolled resize response");
+    assert_ne!(header_id, resize.id);
+    assert_eq!(resize.id, resize_id);
+    let point = Point::new(
+        resize.rect.center().x - retained_scroll.x,
+        resize.rect.center().y,
+    );
 
     let pressed = run_frame(
         &items,
@@ -849,6 +878,9 @@ fn resize_ownership_isolated_from_header_focus_sort_semantics_and_annuli() {
         drag_input(point, true, true, false, 0.0),
     );
     assert_eq!(pressed.output.sort_requested, None);
+    assert_eq!(pressed.output.window.offset, retained_scroll);
+    assert_eq!(pressed.output.scroll.offset, retained_scroll);
+    assert_eq!(memory.scroll_offset(seed.root), retained_scroll);
     assert!(header_response(&pressed, column).state.focused);
     assert_header_focus(&pressed, column, false);
     let moved_point = Point::new(point.x + 12.0, point.y);
@@ -866,6 +898,9 @@ fn resize_ownership_isolated_from_header_focus_sort_semantics_and_annuli() {
     );
     assert!(!moved.output.selection_changed);
     assert_eq!(moved.output.cursor_target, None);
+    assert_eq!(moved.output.window.offset, retained_scroll);
+    assert_eq!(moved.output.scroll.offset, retained_scroll);
+    assert_eq!(memory.scroll_offset(seed.root), retained_scroll);
     assert_eq!(memory.focused(), Some(header_id));
     assert_header_focus(&moved, column, false);
     let _ = run_frame(
@@ -877,7 +912,7 @@ fn resize_ownership_isolated_from_header_focus_sort_semantics_and_annuli() {
     );
 
     let mut resize_focused_memory = UiMemory::new();
-    resize_focused_memory.focus(resize.id);
+    resize_focused_memory.focus(resize_id);
     let resize_focused = run_frame(
         &items,
         resize_config,
@@ -901,7 +936,7 @@ fn resize_ownership_isolated_from_header_focus_sort_semantics_and_annuli() {
             .count(),
         0
     );
-    assert!(resize_focused.frame.semantics.get(resize.id).is_none());
+    assert!(resize_focused.frame.semantics.get(resize_id).is_none());
     assert!(
         resize_focused
             .frame
@@ -913,68 +948,156 @@ fn resize_ownership_isolated_from_header_focus_sort_semantics_and_annuli() {
 }
 
 #[test]
-fn column_reorder_preserves_identity_focus_and_body_selection_never_creates_header_annuli() {
+fn column_reorder_preserves_semantic_identity_order_content_geometry_and_retained_focus() {
     let items = projection(4);
+    let column = id(20);
+    let sort = Some(TableSort {
+        column,
+        direction: SortDirection::Ascending,
+    });
     let seed = run_frame(
         &items,
-        config(None),
+        config(sort),
         &mut VirtualTableSelection::new(),
         &mut UiMemory::new(),
         UiInput::default(),
     );
-    let column = id(20);
     let header_id = header_response(&seed, column).id;
     let mut memory = UiMemory::new();
     memory.focus(header_id);
+    let original = run_frame(
+        &items,
+        config(sort),
+        &mut VirtualTableSelection::new(),
+        &mut memory,
+        UiInput::default(),
+    );
+    let original_semantic = original
+        .frame
+        .semantics
+        .get(header_id)
+        .expect("original sorted header semantics")
+        .clone();
     let reordered = run_frame(
         &items,
-        config_with(BOUNDS, None, [30, 10, 20]),
+        config_with(BOUNDS, sort, [30, 10, 20]),
         &mut VirtualTableSelection::new(),
         &mut memory,
         UiInput::default(),
     );
     assert_eq!(header_response(&reordered, column).id, header_id);
     assert_eq!(memory.focused(), Some(header_id));
-    assert_header_focus(&reordered, column, false);
-
-    let mut selection = VirtualTableSelection::new();
-    let mut body_memory = UiMemory::new();
-    let body_config = config(None).selection_mode(VirtualTableSelectionMode::Cell);
-    let body_point = Point::new(BOUNDS.x + 10.0, BOUNDS.y + 30.0);
-    let _ = run_frame(
-        &items,
-        body_config.clone(),
-        &mut selection,
-        &mut body_memory,
-        pointer_input(body_point, true),
-    );
-    let selected = run_frame(
-        &items,
-        body_config,
-        &mut selection,
-        &mut body_memory,
-        release_input(body_point),
-    );
-    assert!(selected.output.selection_changed);
-    assert_eq!(selected.output.sort_requested, None);
-    assert_eq!(selected.output.resize_requested, None);
-    assert!(
-        selected
+    assert_header_focus(&reordered, column, true);
+    let header_row = reordered
+        .frame
+        .semantics
+        .get(reordered.root.child("virtual-table-header-row"))
+        .expect("reordered header row semantics");
+    assert_eq!(
+        header_row.children,
+        reordered
             .output
             .headers
             .iter()
-            .all(|header| !header.response.state.focused)
+            .map(|header| header.response.id)
+            .collect::<Vec<_>>()
     );
     assert_eq!(
-        selected
-            .frame
-            .primitives
-            .iter()
-            .filter(|primitive| matches!(primitive, Primitive::Path(_)))
-            .count(),
-        0,
-        "body selection uses the unchanged body-cell painter"
+        header_row.children,
+        vec![
+            reordered.root.child(("virtual-table-header", 30_u64)),
+            reordered.root.child(("virtual-table-header", 10_u64)),
+            header_id,
+        ]
     );
+    let reordered_response = header_response(&reordered, column);
+    let reordered_semantic = reordered
+        .frame
+        .semantics
+        .get(header_id)
+        .expect("reordered sorted header semantics");
+    assert_eq!(reordered_semantic.id, original_semantic.id);
+    assert_eq!(reordered_semantic.role, original_semantic.role);
+    assert_eq!(reordered_semantic.label, original_semantic.label);
+    assert_eq!(reordered_semantic.label.as_deref(), Some("Kind ↑"));
+    assert_eq!(
+        reordered_semantic.state.value,
+        original_semantic.state.value
+    );
+    assert_eq!(reordered_semantic.bounds, reordered_response.rect);
+    assert_eq!(
+        reordered_semantic.bounds,
+        Rect::new(BOUNDS.x + 160.0, BOUNDS.y, 80.0, 20.25)
+    );
+    assert!(reordered_semantic.state.focused);
+    assert!(!reordered_semantic.state.selected);
+}
+
+#[test]
+fn row_and_cell_body_selection_never_sort_resize_or_create_header_annuli() {
+    let items = projection(4);
+    let body_point = Point::new(BOUNDS.x + 10.0, BOUNDS.y + 30.0);
+    for (mode, expected_target) in [
+        (
+            VirtualTableSelectionMode::Row,
+            VirtualTableTarget::Row(id(1)),
+        ),
+        (
+            VirtualTableSelectionMode::Cell,
+            VirtualTableTarget::Cell {
+                row: id(1),
+                column: id(10),
+            },
+        ),
+    ] {
+        let mut selection = VirtualTableSelection::new();
+        let mut body_memory = UiMemory::new();
+        let body_config = config(None).selection_mode(mode);
+        let _ = run_frame(
+            &items,
+            body_config.clone(),
+            &mut selection,
+            &mut body_memory,
+            pointer_input(body_point, true),
+        );
+        let selected = run_frame(
+            &items,
+            body_config,
+            &mut selection,
+            &mut body_memory,
+            release_input(body_point),
+        );
+        assert_eq!(selection.target(), Some(expected_target));
+        assert!(selected.output.selection_changed);
+        assert_eq!(selected.output.sort_requested, None);
+        assert_eq!(selected.output.resize_requested, None);
+        assert!(selected.output.cursor_target.is_some());
+        assert!(
+            selected
+                .output
+                .selection_responses
+                .iter()
+                .any(|response| response.target == expected_target
+                    && response.response.state.selected)
+        );
+        assert!(
+            selected
+                .output
+                .headers
+                .iter()
+                .all(|header| !header.response.state.focused)
+        );
+        assert_eq!(
+            selected
+                .frame
+                .primitives
+                .iter()
+                .filter(|primitive| matches!(primitive, Primitive::Path(_)))
+                .count(),
+            0,
+            "body selection uses the unchanged body-cell painter"
+        );
+    }
 }
 
 fn assert_header_clip_transform(run: &Run, bounds: Rect, offset_x: f32) {
@@ -1049,22 +1172,75 @@ fn fractional_scroll_keeps_partial_and_fully_clipped_focus_in_exact_header_clip_
 #[test]
 fn ten_thousand_rows_compare_identically_modulo_two_header_paths_and_focus_bits() {
     let items = projection(10_000);
+    let table_config = config(None).selection_mode(VirtualTableSelectionMode::Cell);
+    let body_point = Point::new(BOUNDS.x + 10.0, BOUNDS.y + 30.0);
+    let target = VirtualTableTarget::Cell {
+        row: id(1),
+        column: id(10),
+    };
+    let mut selection = VirtualTableSelection::new();
+    let mut memory = UiMemory::new();
+    let _ = run_frame(
+        &items,
+        table_config.clone(),
+        &mut selection,
+        &mut memory,
+        pointer_input(body_point, true),
+    );
+    let selected = run_frame(
+        &items,
+        table_config.clone(),
+        &mut selection,
+        &mut memory,
+        release_input(body_point),
+    );
+    assert_eq!(selection.target(), Some(target));
+    assert_eq!(
+        selected.output.cursor_target.map(|cursor| cursor.target),
+        Some(target)
+    );
+    memory.clear_focus();
     let baseline = run_frame(
         &items,
-        config(None),
-        &mut VirtualTableSelection::new(),
-        &mut UiMemory::new(),
+        table_config.clone(),
+        &mut selection,
+        &mut memory,
         UiInput::default(),
     );
+    assert!(!baseline.callbacks.is_empty());
+    assert!(baseline.callbacks.len() < 10_000);
+    assert_eq!(
+        baseline.output.cursor_target.map(|cursor| cursor.target),
+        Some(target)
+    );
+    assert!(
+        baseline
+            .output
+            .selection_responses
+            .iter()
+            .any(|response| response.target == target && response.response.state.selected)
+    );
     let column = id(30);
-    let mut memory = UiMemory::new();
     memory.focus(header_response(&baseline, column).id);
     let focused = run_frame(
         &items,
-        config(None),
-        &mut VirtualTableSelection::new(),
+        table_config,
+        &mut selection,
         &mut memory,
         UiInput::default(),
+    );
+    assert_eq!(selection.target(), Some(target));
+    assert_eq!(
+        focused.output.cursor_target.map(|cursor| cursor.target),
+        Some(target)
+    );
+    assert_eq!(focused.callbacks, baseline.callbacks);
+    assert!(
+        focused
+            .output
+            .selection_responses
+            .iter()
+            .any(|response| response.target == target && response.response.state.selected)
     );
     assert_header_focus(&focused, column, false);
     assert_focus_only_transition(&focused, &baseline);
