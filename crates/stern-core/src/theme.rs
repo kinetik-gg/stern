@@ -15,7 +15,8 @@ pub use recipes::{
 };
 pub use tokens::{
     AccentColors, BorderColors, ContentColors, ControlMetrics, DurationScale, ElevationLevel,
-    ElevationScale, FocusColors, FontToken, OpacityScale, OverlayColors, RadiusScale,
-    SelectionColors, SemanticColor, ShadowRecipe, SpacingScale, StatusColorFamilyColors,
-    StatusColors, SurfaceColors, TextRole, ThemeColors, TypographyScale,
+    ElevationScale, FocusColors, FocusStrokeScale, FontToken, OpacityScale, OverlayColors,
+    RadiusScale, SelectionColors, SemanticColor, ShadowRecipe, SpacingScale,
+    StatusColorFamilyColors, StatusColors, StrokeScale, SurfaceColors, TextRole, ThemeColors,
+    TypographyScale,
 };

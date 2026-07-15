@@ -10,6 +10,12 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Removed `ControlMetrics::{border_width, focus_width,
+  separator_width}` and added the exact shared `StrokeScale` ladder at
+  `Theme::strokes`. Existing theme customization should migrate width roles to
+  `Theme::with_strokes`; `Theme::border_width` remains only as a one-way legacy
+  mirror of `strokes.default`. External `Theme` struct literals must initialize
+  the new `strokes` field. See `docs/stroke-migration.md`.
 - **Breaking:** Replaced `RadiusScale::{xs, pill}` and the provisional radius
   defaults with the exact `none`, `sm`, `md`, `lg`, and `full` ladder. The
   four-argument `RadiusScale::from_values(sm, md, lg, full)` now fixes `none`

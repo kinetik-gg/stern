@@ -323,7 +323,7 @@ impl Ui<'_> {
             rect,
             fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.hairline,
                 Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
@@ -385,10 +385,7 @@ impl Ui<'_> {
     ) {
         let center = rect.center();
         let half = rect.width.min(rect.height) * 0.16;
-        let stroke = Stroke::new(
-            self.theme.controls.border_width.max(1.0),
-            Brush::Solid(color),
-        );
+        let stroke = Stroke::new(self.theme.strokes.default, Brush::Solid(color));
         let (first, middle, last) = if expanded {
             (
                 Point::new(center.x - half, center.y - half * 0.5),

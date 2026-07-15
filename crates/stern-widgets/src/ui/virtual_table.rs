@@ -465,7 +465,7 @@ impl Ui<'_> {
             rect,
             fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.hairline,
                 Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
@@ -498,7 +498,7 @@ impl Ui<'_> {
     }
 
     fn paint_virtual_table_resize_handle(&mut self, rect: Rect, response: Response) {
-        let width = self.theme.controls.border_width.max(1.0);
+        let width = self.theme.strokes.default;
         let line = Rect::new(
             rect.x + (rect.width - width) * 0.5,
             rect.y,

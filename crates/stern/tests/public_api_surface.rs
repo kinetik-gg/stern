@@ -549,6 +549,23 @@ fn legacy_and_duplicate_contracts_remain_importable_for_stage_one() {
 }
 
 #[test]
+#[allow(clippy::float_cmp)]
+fn qualified_facade_stroke_types_construct_and_expose_exact_roles() {
+    let strokes: stern::core::StrokeScale =
+        stern::core::StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
+    let focus: stern::core::FocusStrokeScale = strokes.focus;
+    let theme = stern::core::default_dark_theme().with_strokes(strokes);
+
+    assert_eq!(strokes.hairline, 0.75);
+    assert_eq!(strokes.default, 1.25);
+    assert_eq!(strokes.emphasis, 2.5);
+    assert_eq!(focus.primary, 3.5);
+    assert_eq!(focus.separator, 4.5);
+    assert_eq!(theme.strokes, strokes);
+    assert_eq!(theme.border_width, strokes.default);
+}
+
+#[test]
 fn retained_text_layout_lifecycle_surface_is_additive() {
     use stern::text;
 

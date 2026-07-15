@@ -3,10 +3,9 @@
 #![allow(clippy::float_cmp)]
 
 use stern_core::{
-    Axis, Brush, ClipId, Color, ControlMetrics, CornerRadius, ElevationScale, FrameOutput, Point,
-    PointerInput, PointerOrder, PointerRoute, PointerTarget, Primitive, RadiusScale, Rect,
-    RectPrimitive, SemanticRole, Theme, ThemeColors, UiInput, UiMemory, WidgetId,
-    default_dark_theme,
+    Axis, Brush, ClipId, Color, CornerRadius, ElevationScale, FrameOutput, Point, PointerInput,
+    PointerOrder, PointerRoute, PointerTarget, Primitive, RadiusScale, Rect, RectPrimitive,
+    SemanticRole, StrokeScale, Theme, ThemeColors, UiInput, UiMemory, WidgetId, default_dark_theme,
 };
 use stern_widgets::{
     Ui,
@@ -75,6 +74,39 @@ fn paint_with_theme(scene: &DockScene, theme: &Theme) -> FrameOutput {
     let mut ui = Ui::new(&input, &mut memory, theme);
     let _ = ui.dock_scene(scene, |_, _| ());
     ui.finish_output()
+}
+
+fn paint_with_theme_and_focus(scene: &DockScene, theme: &Theme, focused: WidgetId) -> FrameOutput {
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    memory.focus(focused);
+    let mut ui = Ui::new(&input, &mut memory, theme);
+    let _ = ui.dock_scene(scene, |_, _| ());
+    ui.finish_output()
+}
+
+fn rect_geometry(frame: &FrameOutput) -> Vec<(Rect, CornerRadius, Option<f32>)> {
+    frame
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Rect(rect) => Some((
+                rect.rect,
+                rect.radius,
+                rect.stroke.map(|stroke| stroke.width),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+fn semantic_geometry(frame: &FrameOutput) -> Vec<(WidgetId, Rect)> {
+    frame
+        .semantics
+        .nodes()
+        .iter()
+        .map(|node| (node.id, node.bounds))
+        .collect()
 }
 
 fn rect_primitive_at(primitives: &[Primitive], rect: Rect) -> &RectPrimitive {
@@ -157,6 +189,7 @@ fn nested_splits_prepare_expected_geometry_and_splitter_primitives() {
 fn customized_two_frame_dock_panels_use_exact_flat_recipe_without_changing_ownership() {
     let background = Color::rgb8(1, 35, 69);
     let border = Color::rgb8(87, 65, 43);
+    let hairline_width = 0.75;
     let border_width = 2.75;
     let radius = CornerRadius::all(5.5);
     let base = default_dark_theme();
@@ -165,10 +198,13 @@ fn customized_two_frame_dock_panels_use_exact_flat_recipe_without_changing_owner
     colors.border.default = border;
     let theme = base
         .with_colors(colors)
-        .with_controls(ControlMetrics {
+        .with_strokes(StrokeScale::from_values(
+            hairline_width,
             border_width,
-            ..base.controls
-        })
+            3.75,
+            4.75,
+            5.75,
+        ))
         .with_radii(RadiusScale::from_values(5.5, 7.0, 9.0, 99.0))
         .with_elevation(ElevationScale {
             low: 37.0,
@@ -190,6 +226,13 @@ fn customized_two_frame_dock_panels_use_exact_flat_recipe_without_changing_owner
         .filter_map(|frame| frame.panel.as_ref().map(|panel| (frame, panel)))
         .collect::<Vec<_>>();
     assert_eq!(expected_panels.len(), 2);
+
+    let structural_frame = paint_with_theme(&scene, &theme);
+    let structural_surface = rect_primitive_at(&structural_frame.primitives, BOUNDS);
+    assert_eq!(
+        structural_surface.stroke.map(|stroke| stroke.width),
+        Some(hairline_width)
+    );
 
     let input = UiInput::default();
     let mut memory = UiMemory::new();
@@ -235,6 +278,60 @@ fn customized_two_frame_dock_panels_use_exact_flat_recipe_without_changing_owner
         assert_eq!(output.semantics.parent_of(panel.id), Some(frame.id));
     }
     assert_eq!(dock.snapshot(), snapshot);
+}
+
+#[test]
+fn dock_stroke_roles_preserve_focused_geometry_order_hits_and_semantics() {
+    let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
+    let theme = default_dark_theme().with_strokes(strokes);
+    let dock = two_frame_dock();
+    let scene = DockScene::new(
+        DockSceneConfig::new(WidgetId::from_key("dock-stroke-roles"), BOUNDS),
+        &dock,
+    );
+    let selected_tab = scene
+        .layout()
+        .frames
+        .iter()
+        .flat_map(|frame| &frame.tabs)
+        .find(|tab| tab.selected)
+        .expect("selected tab");
+
+    let unfocused = paint_with_theme(&scene, &theme);
+    let focused = paint_with_theme_and_focus(&scene, &theme, selected_tab.id);
+    assert_eq!(unfocused.primitives.len(), focused.primitives.len());
+    assert_eq!(rect_geometry(&unfocused), rect_geometry(&focused));
+    assert_eq!(semantic_geometry(&unfocused), semantic_geometry(&focused));
+    assert_eq!(
+        focused
+            .semantics
+            .get(selected_tab.id)
+            .expect("focused tab semantics")
+            .bounds,
+        selected_tab.rect
+    );
+
+    let root = rect_primitive_at(&unfocused.primitives, scene.layout().bounds);
+    assert_eq!(
+        root.stroke.map(|stroke| stroke.width),
+        Some(strokes.hairline)
+    );
+    let tab_surface = rect_primitive_at(&unfocused.primitives, selected_tab.rect);
+    assert_eq!(
+        tab_surface.stroke.map(|stroke| stroke.width),
+        Some(strokes.default)
+    );
+    let indicator_rect = Rect::new(
+        selected_tab.rect.x,
+        selected_tab.rect.max_y() - strokes.emphasis,
+        selected_tab.rect.width,
+        strokes.emphasis,
+    );
+    let indicator = rect_primitive_at(&unfocused.primitives, indicator_rect);
+    assert_eq!(
+        indicator.fill,
+        Some(Brush::Solid(theme.colors.accent.default))
+    );
 }
 
 #[test]

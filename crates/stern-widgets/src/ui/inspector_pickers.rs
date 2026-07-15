@@ -305,7 +305,7 @@ impl Ui<'_> {
             rect: scene.bounds,
             fill: Some(Brush::Solid(self.theme.colors.surface.overlay)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.default,
                 Brush::Solid(self.theme.colors.border.default),
             )),
             radius: self.theme.radii.md,
@@ -314,7 +314,7 @@ impl Ui<'_> {
             rect: Rect::new(scene.bounds.x + 8.0, scene.bounds.y + 8.0, 32.0, 20.0),
             fill: Some(Brush::Solid(scene.draft)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.default,
                 Brush::Solid(self.theme.colors.border.default),
             )),
             radius: self.theme.radii.sm,
@@ -427,7 +427,7 @@ impl Ui<'_> {
             rect: bounds,
             fill: Some(Brush::Solid(self.theme.colors.surface.overlay)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.default,
                 Brush::Solid(self.theme.colors.border.default),
             )),
             radius: self.theme.radii.md,

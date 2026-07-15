@@ -5,8 +5,8 @@ use std::time::Duration;
 use stern_core::{
     Color, FrameContext, FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
     PhysicalSize, Point, PointerButtonState, PointerInput, PointerOrder, PointerTarget, Primitive,
-    RadiusScale, Rect, Response, ScaleFactor, SemanticRole, Size, Theme, TimeInfo, UiInput,
-    UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    RadiusScale, Rect, Response, ScaleFactor, SemanticRole, Size, StrokeScale, Theme, TimeInfo,
+    UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_text::TextEditState;
 use stern_widgets::inspector::{
@@ -348,6 +348,10 @@ fn assert_exact_medium_surface_shadow(frame: &FrameOutput, bounds: Rect, theme: 
 
     assert!(shadow_position < surface_position);
     assert_eq!(surface.radius, theme.radii.md);
+    assert_eq!(
+        surface.stroke.map(|stroke| stroke.width),
+        Some(theme.strokes.default)
+    );
     assert_ne!(surface.radius, theme.radii.lg);
     assert_eq!(shadow.offset, Vec2::new(0.0, 6.0));
     assert_eq!(shadow.blur_radius, 18.0);
@@ -357,8 +361,12 @@ fn assert_exact_medium_surface_shadow(frame: &FrameOutput, bounds: Rect, theme: 
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn select_asset_and_color_picker_surfaces_use_exact_medium_elevation() {
-    let theme = default_dark_theme().with_radii(RadiusScale::from_values(4.0, 11.0, 23.0, 777.0));
+    let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
+    let theme = default_dark_theme()
+        .with_radii(RadiusScale::from_values(4.0, 11.0, 23.0, 777.0))
+        .with_strokes(strokes);
     let model = choices();
     let select_field = requested_select(&model, SelectFieldConfig::default());
     let mut select_state = InspectorPickerState::new();
@@ -368,15 +376,65 @@ fn select_asset_and_color_picker_surfaces_use_exact_medium_elevation() {
         &model,
         OVERLAY
     ));
-    let select_frame = run_scene_with_theme(
+    let select_run = run_scene_with_theme(
         &mut select_state,
         &mut UiMemory::new(),
         UiInput::default(),
         false,
         &theme,
-    )
-    .frame;
-    assert_exact_medium_surface_shadow(&select_frame, OVERLAY, &theme);
+    );
+    assert_exact_medium_surface_shadow(&select_run.frame, OVERLAY, &theme);
+    let focused = select_run
+        .frame
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| node.focusable)
+        .expect("focusable picker control")
+        .id;
+    let mut focused_memory = UiMemory::new();
+    focused_memory.focus(focused);
+    let focused_select_run = run_scene_with_theme(
+        &mut select_state,
+        &mut focused_memory,
+        UiInput::default(),
+        false,
+        &theme,
+    );
+    let rect_geometry = |frame: &FrameOutput| {
+        frame
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                Primitive::Rect(rect) => Some((
+                    rect.rect,
+                    rect.radius,
+                    rect.stroke.map(|stroke| stroke.width),
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        rect_geometry(&select_run.frame),
+        rect_geometry(&focused_select_run.frame)
+    );
+    assert_eq!(
+        select_run
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .map(|node| (node.id, node.bounds))
+            .collect::<Vec<_>>(),
+        focused_select_run
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .map(|node| (node.id, node.bounds))
+            .collect::<Vec<_>>()
+    );
 
     let asset_field = requested_asset(AssetSlotConfig::default());
     let items = [AssetPickerItem::new(item(10), "asset-a", "Material A")];
@@ -404,6 +462,22 @@ fn select_asset_and_color_picker_surfaces_use_exact_medium_elevation() {
     )
     .frame;
     assert_exact_medium_surface_shadow(&color_frame, OVERLAY, &theme);
+    let swatch = color_frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rect(rect)
+                if rect.fill == Some(stern_core::Brush::Solid(Color::rgb8(10, 20, 30))) =>
+            {
+                Some(rect)
+            }
+            _ => None,
+        })
+        .expect("color picker swatch");
+    assert_eq!(
+        swatch.stroke.map(|stroke| stroke.width),
+        Some(strokes.default)
+    );
 }
 
 #[test]

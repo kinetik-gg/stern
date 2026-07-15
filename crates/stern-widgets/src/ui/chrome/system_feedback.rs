@@ -92,7 +92,7 @@ impl Ui<'_> {
             rect: surface.rect,
             fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
             stroke: Some(Stroke::new(
-                self.theme.controls.border_width,
+                self.theme.strokes.hairline,
                 Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
@@ -105,7 +105,7 @@ impl Ui<'_> {
             rect: row.rect,
             fill: Some(Brush::Solid(self.theme.colors.surface.panel)),
             stroke: Some(Stroke::new(
-                self.theme.controls.separator_width,
+                self.theme.strokes.hairline,
                 Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
