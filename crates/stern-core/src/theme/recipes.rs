@@ -192,29 +192,32 @@ fn inset_boundary(rect: Rect, radius: CornerRadius, amount: f32) -> RoundedBound
     )
 }
 
+#[allow(clippy::cast_possible_truncation)]
 fn rounded_boundary(rect: Rect, radius: CornerRadius) -> RoundedBoundary {
-    let top = radius.top_left + radius.top_right;
-    let bottom = radius.bottom_left + radius.bottom_right;
-    let left = radius.top_left + radius.bottom_left;
-    let right = radius.top_right + radius.bottom_right;
-    let mut factor = 1.0_f32;
+    let top = f64::from(radius.top_left) + f64::from(radius.top_right);
+    let bottom = f64::from(radius.bottom_left) + f64::from(radius.bottom_right);
+    let left = f64::from(radius.top_left) + f64::from(radius.bottom_left);
+    let right = f64::from(radius.top_right) + f64::from(radius.bottom_right);
+    let mut factor = 1.0_f64;
     for (extent, sum) in [
-        (rect.width, top),
-        (rect.width, bottom),
-        (rect.height, left),
-        (rect.height, right),
+        (f64::from(rect.width), top),
+        (f64::from(rect.width), bottom),
+        (f64::from(rect.height), left),
+        (f64::from(rect.height), right),
     ] {
         if sum > 0.0 {
             factor = factor.min(extent / sum);
         }
     }
+    // Every sanitized radius is finite and nonnegative, and `factor` is at most
+    // one, so these deliberate narrowing conversions remain finite and in range.
     RoundedBoundary {
         rect,
         radius: CornerRadius {
-            top_left: radius.top_left * factor,
-            top_right: radius.top_right * factor,
-            bottom_right: radius.bottom_right * factor,
-            bottom_left: radius.bottom_left * factor,
+            top_left: (f64::from(radius.top_left) * factor) as f32,
+            top_right: (f64::from(radius.top_right) * factor) as f32,
+            bottom_right: (f64::from(radius.bottom_right) * factor) as f32,
+            bottom_left: (f64::from(radius.bottom_left) * factor) as f32,
         },
     }
 }

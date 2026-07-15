@@ -511,3 +511,58 @@ fn annulus_sanitization_normalizes_radii_and_collapses_tiny_geometry_finitely() 
         }
     }
 }
+
+#[test]
+fn radius_normalization_preserves_large_finite_proportions_without_pair_overflow() {
+    let unit = f32::from_bits(0x7E00_0000);
+    let radius = CornerRadius {
+        top_left: unit * 7.0,
+        top_right: unit * 3.0,
+        bottom_right: unit * 2.0,
+        bottom_left: unit,
+    };
+    assert!(
+        [
+            radius.top_left,
+            radius.top_right,
+            radius.bottom_right,
+            radius.bottom_left,
+        ]
+        .iter()
+        .all(|value| value.is_finite())
+    );
+    assert!((radius.top_left + radius.top_right).is_infinite());
+    assert!((radius.top_left + radius.bottom_left).is_infinite());
+
+    let rect = Rect::new(2.25, 4.75, 100.0, 90.0);
+    let primitives = sentinel_recipe(2.0, 1.0).outward_annulus_primitives(rect, radius);
+    let normalized = CornerRadius {
+        top_left: 70.0,
+        top_right: 30.0,
+        bottom_right: 20.0,
+        bottom_left: 10.0,
+    };
+    assert_counter_clockwise_contour(&path(&primitives[0]).elements[10..], rect, normalized);
+    assert_eq!(
+        path(&primitives[0]).elements[10..],
+        path(&primitives[1]).elements[10..]
+    );
+
+    let scale = f64::from(normalized.top_left) / f64::from(radius.top_left);
+    for (output, input) in [
+        (normalized.top_right, radius.top_right),
+        (normalized.bottom_right, radius.bottom_right),
+        (normalized.bottom_left, radius.bottom_left),
+    ] {
+        let ratio = f64::from(output) / f64::from(input);
+        assert!((ratio / scale - 1.0).abs() <= 1.0e-12);
+    }
+    assert!(normalized.top_left > 0.0);
+    assert!(normalized.top_right > 0.0);
+    assert!(normalized.bottom_right > 0.0);
+    assert!(normalized.bottom_left > 0.0);
+    assert!(normalized.top_left + normalized.top_right <= rect.width);
+    assert!(normalized.bottom_left + normalized.bottom_right <= rect.width);
+    assert!(normalized.top_left + normalized.bottom_left <= rect.height);
+    assert!(normalized.top_right + normalized.bottom_right <= rect.height);
+}
