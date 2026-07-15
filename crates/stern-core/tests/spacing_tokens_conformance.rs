@@ -290,7 +290,6 @@ fn is_nonproduction_directory(path: &Path) -> bool {
                 | "fixtures"
                 | "snapshots"
                 | "goldens"
-                | "generated"
                 | "target"
                 | ".runway"
         )
@@ -300,7 +299,7 @@ fn is_nonproduction_directory(path: &Path) -> bool {
 fn is_nonproduction_rust_file(path: &Path) -> bool {
     matches!(
         path.file_stem().and_then(|name| name.to_str()),
-        Some("test" | "tests" | "generated")
+        Some("test" | "tests")
     )
 }
 
