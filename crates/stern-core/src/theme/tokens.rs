@@ -653,13 +653,13 @@ impl SpacingScale {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ControlSizeScale {
     /// Extra-small control height.
-    pub xs: core::primitive::f32,
+    pub xs: f32,
     /// Small control height.
-    pub sm: core::primitive::f32,
+    pub sm: f32,
     /// Medium control height.
-    pub md: core::primitive::f32,
+    pub md: f32,
     /// Large control height.
-    pub lg: core::primitive::f32,
+    pub lg: f32,
 }
 
 impl ControlSizeScale {
@@ -691,11 +691,11 @@ impl RowSizeScale {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct IconSizeScale {
     /// Small icon side length.
-    pub sm: core::primitive::f32,
+    pub sm: f32,
     /// Medium icon side length.
-    pub md: core::primitive::f32,
+    pub md: f32,
     /// Large icon side length.
-    pub lg: core::primitive::f32,
+    pub lg: f32,
 }
 
 impl IconSizeScale {
