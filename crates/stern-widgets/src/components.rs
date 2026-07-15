@@ -51,7 +51,8 @@ mod vector_color_fields;
 mod tests;
 
 pub(crate) use common::{
-    ButtonFocusPlacement, TabFocusPlacement, button_surface_primitives, tab_surface_primitives,
+    ButtonFocusPlacement, RowFocusPlacement, TabFocusPlacement, button_surface_primitives,
+    row_surface_primitives, tab_surface_primitives,
 };
 use common::{
     clicked_select_state, clicked_toggle_state, control_text_origin, label_baseline,

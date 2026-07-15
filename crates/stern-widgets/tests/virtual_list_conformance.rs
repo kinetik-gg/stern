@@ -1,12 +1,14 @@
 //! Public fixed-height virtual-list composition conformance tests.
 
+#![allow(clippy::float_cmp)]
+
 use std::time::Duration;
 
 use stern_core::{
-    FrameContext, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point,
-    PointerButtonState, PointerInput, PointerOrder, PointerTarget, Primitive, Rect, RepaintRequest,
-    Response, ScaleFactor, SemanticRole, Size, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo,
-    WidgetId, default_dark_theme,
+    Brush, Color, FrameContext, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PathElement,
+    PhysicalSize, Point, PointerButtonState, PointerInput, PointerOrder, PointerTarget, Primitive,
+    Rect, RepaintRequest, Response, ScaleFactor, SemanticRole, Size, TimeInfo, Transform, UiInput,
+    UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::{
     CollectionCursor, CollectionProjection, ItemId, Selection, Ui, VirtualListConfig,
@@ -126,6 +128,93 @@ fn run_frame(
     }
 }
 
+fn path_bounds(elements: &[PathElement]) -> Rect {
+    let mut min_x = f32::INFINITY;
+    let mut min_y = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut max_y = f32::NEG_INFINITY;
+    for point in elements.iter().flat_map(|element| match *element {
+        PathElement::MoveTo(point) | PathElement::LineTo(point) => vec![point],
+        PathElement::QuadTo { ctrl, to } => vec![ctrl, to],
+        PathElement::CubicTo { ctrl1, ctrl2, to } => vec![ctrl1, ctrl2, to],
+        PathElement::Close => Vec::new(),
+    }) {
+        min_x = min_x.min(point.x);
+        min_y = min_y.min(point.y);
+        max_x = max_x.max(point.x);
+        max_y = max_y.max(point.y);
+    }
+    Rect::new(min_x, min_y, max_x - min_x, max_y - min_y)
+}
+
+fn assert_virtual_row_focus(frame: &stern_core::FrameOutput, rect: Rect) -> usize {
+    let theme = default_dark_theme();
+    let base_index = frame
+        .primitives
+        .iter()
+        .position(|primitive| matches!(primitive, Primitive::Rect(base) if base.rect == rect))
+        .expect("virtual row base");
+    let Primitive::Rect(base) = &frame.primitives[base_index] else {
+        unreachable!()
+    };
+    assert_eq!(base.radius, theme.radii.none);
+    assert_eq!(
+        base.stroke.expect("neutral row boundary").brush,
+        Brush::Solid(theme.colors.border.subtle)
+    );
+    assert_eq!(
+        base.stroke.expect("neutral row boundary").width,
+        theme.strokes.hairline
+    );
+    let expected = theme
+        .focus_ring(true)
+        .expect("focus recipe")
+        .inward_annulus_primitives(rect, base.radius, base.stroke.unwrap().width);
+    assert_eq!(frame.primitives[base_index + 1], expected[0]);
+    assert_eq!(frame.primitives[base_index + 2], expected[1]);
+    for primitive in &frame.primitives[base_index + 1..=base_index + 2] {
+        let Primitive::Path(path) = primitive else {
+            panic!("virtual-list focus must remain a compound path");
+        };
+        assert_eq!(path.elements.len(), 20);
+        assert_eq!(path.stroke, None);
+        assert!(rect.contains_rect(path_bounds(&path.elements)));
+    }
+    assert!(matches!(
+        frame.primitives[base_index + 3],
+        Primitive::Text(_)
+    ));
+    base_index
+}
+
+fn linear_channel(channel: f32) -> f32 {
+    if channel <= 0.040_45 {
+        channel / 12.92
+    } else {
+        ((channel + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn contrast_ratio(foreground: Color, background: Color) -> f32 {
+    let luminance = |color: Color| {
+        0.2126 * linear_channel(color.r)
+            + 0.7152 * linear_channel(color.g)
+            + 0.0722 * linear_channel(color.b)
+    };
+    let foreground = luminance(foreground);
+    let background = luminance(background);
+    (foreground.max(background) + 0.05) / (foreground.min(background) + 0.05)
+}
+
+fn primitive_without_focus_paths(frame: &stern_core::FrameOutput) -> Vec<Primitive> {
+    frame
+        .primitives
+        .iter()
+        .filter(|primitive| !matches!(primitive, Primitive::Path(_)))
+        .cloned()
+        .collect()
+}
+
 #[allow(clippy::cast_precision_loss)]
 fn click_row(
     row: usize,
@@ -188,6 +277,298 @@ fn ten_thousand_rows_materialize_only_the_bounded_window() {
     let root = run.frame.semantics.get(run.list_id).expect("list root");
     assert_eq!(root.role, SemanticRole::List);
     assert_eq!(root.children.len(), 3);
+}
+
+#[test]
+fn focused_first_middle_and_last_virtual_rows_add_only_exact_inward_annuli() {
+    let items = projection(&[0, 1, 2, 3, 4]);
+    for (target, target_y) in [(0_u64, 0.0_f32), (2, 40.0), (4, 80.0)] {
+        for selected in [false, true] {
+            let mut unfocused_cursor = CollectionCursor::new();
+            let mut unfocused_selection = Selection::new();
+            if selected {
+                unfocused_selection.replace(id(target));
+            }
+            let mut unfocused_memory = UiMemory::new();
+            let unfocused = run_frame(
+                &items,
+                config(),
+                &mut unfocused_cursor,
+                &mut unfocused_selection,
+                &mut unfocused_memory,
+                UiInput::default(),
+                false,
+            );
+
+            let mut focused_cursor = CollectionCursor::new();
+            let mut focused_selection = Selection::new();
+            if selected {
+                focused_selection.replace(id(target));
+            }
+            let mut focused_memory = UiMemory::new();
+            focused_memory.focus(unfocused.list_id.child(("virtual-list-row", target)));
+            let focused = run_frame(
+                &items,
+                config(),
+                &mut focused_cursor,
+                &mut focused_selection,
+                &mut focused_memory,
+                UiInput::default(),
+                false,
+            );
+
+            assert_eq!(focused.output.window, unfocused.output.window);
+            assert_eq!(focused.callbacks, unfocused.callbacks);
+            assert_eq!(focused.frame.repaint, unfocused.frame.repaint);
+            assert_eq!(focused.output.cursor_target, unfocused.output.cursor_target);
+            assert_eq!(
+                focused.output.selection_changed,
+                unfocused.output.selection_changed
+            );
+            assert_eq!(
+                focused
+                    .output
+                    .responses
+                    .iter()
+                    .map(|item| (item.id, item.response.id, item.response.rect))
+                    .collect::<Vec<_>>(),
+                unfocused
+                    .output
+                    .responses
+                    .iter()
+                    .map(|item| (item.id, item.response.id, item.response.rect))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                focused
+                    .frame
+                    .semantics
+                    .nodes()
+                    .iter()
+                    .map(|node| (node.id, node.bounds, node.label.clone()))
+                    .collect::<Vec<_>>(),
+                unfocused
+                    .frame
+                    .semantics
+                    .nodes()
+                    .iter()
+                    .map(|node| (node.id, node.bounds, node.label.clone()))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                primitive_without_focus_paths(&focused.frame),
+                unfocused.frame.primitives
+            );
+            assert_eq!(
+                focused
+                    .frame
+                    .primitives
+                    .iter()
+                    .filter(|primitive| matches!(primitive, Primitive::Path(_)))
+                    .count(),
+                2
+            );
+            let rect = Rect::new(0.0, target_y, 120.0, 20.0);
+            assert_virtual_row_focus(&focused.frame, rect);
+        }
+    }
+}
+
+#[test]
+fn virtual_selected_rows_enumerate_the_white_on_blue_contrast_exception() {
+    let theme = default_dark_theme();
+    assert_eq!(
+        theme.colors.selection.background,
+        Color::rgb8(0x0C, 0x8C, 0xE9)
+    );
+    assert_eq!(theme.colors.selection.foreground, Color::WHITE);
+    let ratio = contrast_ratio(
+        theme.colors.selection.foreground,
+        theme.colors.selection.background,
+    );
+    assert!((ratio - 3.53).abs() < 0.01);
+    assert!(
+        ratio < 4.5,
+        "known exception is not AA normal-text compliance"
+    );
+
+    let items = projection(&[0, 1, 2]);
+    let seed = run_frame(
+        &items,
+        config(),
+        &mut CollectionCursor::new(),
+        &mut Selection::new(),
+        &mut UiMemory::new(),
+        UiInput::default(),
+        false,
+    );
+    for (name, input, focused) in [
+        ("selected-only", UiInput::default(), false),
+        (
+            "selected-hovered",
+            pointer_input(10.0, 10.0, false, false, Modifiers::default()),
+            false,
+        ),
+        (
+            "selected-pressed",
+            pointer_input(10.0, 10.0, true, false, Modifiers::default()),
+            false,
+        ),
+        ("selected-focused", UiInput::default(), true),
+        (
+            "selected-focused-hovered",
+            pointer_input(10.0, 10.0, false, false, Modifiers::default()),
+            true,
+        ),
+    ] {
+        let mut cursor = CollectionCursor::new();
+        let mut selection = Selection::new();
+        selection.replace(id(0));
+        let mut memory = UiMemory::new();
+        if focused {
+            memory.focus(seed.list_id.child(("virtual-list-row", 0_u64)));
+        }
+        let run = run_frame(
+            &items,
+            config(),
+            &mut cursor,
+            &mut selection,
+            &mut memory,
+            input,
+            false,
+        );
+        let base = run
+            .frame
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Rect(base) if base.rect == Rect::new(0.0, 0.0, 120.0, 20.0) => {
+                    Some(base)
+                }
+                _ => None,
+            })
+            .expect("selected row base");
+        assert_eq!(
+            base.fill,
+            Some(Brush::Solid(theme.colors.selection.background)),
+            "{name}"
+        );
+        assert_eq!(
+            base.stroke.expect("neutral row boundary").brush,
+            Brush::Solid(theme.colors.border.subtle),
+            "{name}"
+        );
+        let text = run
+            .frame
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Text(text) if text.text == "Row 0" => Some(text),
+                _ => None,
+            })
+            .expect("selected row text");
+        assert_eq!(
+            text.brush,
+            Brush::Solid(theme.colors.selection.foreground),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn disabled_virtual_rows_suppress_focus_annuli_and_remain_non_focusable() {
+    let items = projection(&[0, 1]);
+    let mut seed_cursor = CollectionCursor::new();
+    let mut seed_selection = Selection::new();
+    let seed = run_frame(
+        &items,
+        config(),
+        &mut seed_cursor,
+        &mut seed_selection,
+        &mut UiMemory::new(),
+        UiInput::default(),
+        false,
+    );
+    let row_id = seed.list_id.child(("virtual-list-row", 0_u64));
+    let mut memory = UiMemory::new();
+    memory.focus(row_id);
+    let disabled = run_frame(
+        &items,
+        config().disabled(true),
+        &mut CollectionCursor::new(),
+        &mut Selection::new(),
+        &mut memory,
+        UiInput::default(),
+        false,
+    );
+    assert!(disabled.output.responses[0].response.state.focused);
+    assert!(
+        disabled
+            .frame
+            .primitives
+            .iter()
+            .all(|primitive| !matches!(primitive, Primitive::Path(_)))
+    );
+    let semantics = disabled.frame.semantics.get(row_id).expect("disabled row");
+    assert!(!semantics.focusable);
+    assert!(semantics.state.disabled);
+}
+
+#[test]
+fn fractional_scroll_keeps_logical_focus_contained_under_the_existing_clip_transform() {
+    let items = projection(&(0..20).collect::<Vec<_>>());
+    let mut cursor = CollectionCursor::new();
+    let mut selection = Selection::new();
+    let mut memory = UiMemory::new();
+    let seed = run_frame(
+        &items,
+        config(),
+        &mut cursor,
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        false,
+    );
+    memory.focus(seed.list_id.child(("virtual-list-row", 0_u64)));
+    let _ = run_frame(
+        &items,
+        config(),
+        &mut cursor,
+        &mut selection,
+        &mut memory,
+        wheel_input(-10.5),
+        false,
+    );
+    let scrolled = run_frame(
+        &items,
+        config(),
+        &mut cursor,
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        false,
+    );
+    assert_eq!(
+        scrolled.output.window.clamped_scroll_offset.to_bits(),
+        10.5_f32.to_bits()
+    );
+    assert!(matches!(
+        scrolled.frame.primitives[1],
+        Primitive::ClipBegin { rect, .. } if rect == BOUNDS
+    ));
+    assert_eq!(
+        scrolled.frame.primitives[2],
+        Primitive::TransformBegin(Transform::translation(Vec2::new(0.0, -10.5)))
+    );
+    assert!(matches!(
+        scrolled.frame.primitives[scrolled.frame.primitives.len() - 2],
+        Primitive::TransformEnd
+    ));
+    assert!(matches!(
+        scrolled.frame.primitives[scrolled.frame.primitives.len() - 1],
+        Primitive::ClipEnd { .. }
+    ));
+    assert_virtual_row_focus(&scrolled.frame, Rect::new(0.0, 0.0, 120.0, 20.0));
 }
 
 #[test]

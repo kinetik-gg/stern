@@ -2,7 +2,7 @@ use super::{
     ComponentState, CornerRadius, CursorShape, PlatformRequest, Point, Primitive, Rect,
     RectPrimitive, Response, SemanticNode, TextRole, Theme,
 };
-use stern_core::{ButtonRecipe, TabRecipe};
+use stern_core::{ButtonRecipe, RowRecipe, TabRecipe};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ButtonFocusPlacement {
@@ -62,6 +62,39 @@ pub(crate) fn tab_surface_primitives(
     {
         let annuli = match placement {
             TabFocusPlacement::Inward => {
+                focus.inward_annulus_primitives(rect, radius, recipe.border.width)
+            }
+        };
+        primitives.extend(annuli);
+    }
+    primitives
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RowFocusPlacement {
+    Inward,
+}
+
+pub(crate) fn row_surface_primitives(
+    theme: &Theme,
+    recipe: &RowRecipe,
+    state: ComponentState,
+    rect: Rect,
+    radius: CornerRadius,
+    placement: RowFocusPlacement,
+) -> Vec<Primitive> {
+    let mut primitives = vec![Primitive::Rect(RectPrimitive {
+        rect,
+        fill: Some(recipe.background),
+        stroke: Some(recipe.border),
+        radius,
+    })];
+    if state.focused
+        && !state.disabled
+        && let Some(focus) = theme.focus_ring(true)
+    {
+        let annuli = match placement {
+            RowFocusPlacement::Inward => {
                 focus.inward_annulus_primitives(rect, radius, recipe.border.width)
             }
         };
@@ -478,6 +511,138 @@ mod tab_focus_tests {
             for primitive in &output[1..] {
                 let Primitive::Path(path) = primitive else {
                     panic!("tab focus must remain a hollow compound path");
+                };
+                assert_eq!(path.elements.len(), 20);
+                assert_eq!(path.stroke, None);
+                assert!(path.elements.iter().all(|element| match *element {
+                    PathElement::MoveTo(point) | PathElement::LineTo(point) =>
+                        point.x.is_finite() && point.y.is_finite(),
+                    PathElement::QuadTo { ctrl, to } =>
+                        ctrl.x.is_finite()
+                            && ctrl.y.is_finite()
+                            && to.x.is_finite()
+                            && to.y.is_finite(),
+                    PathElement::CubicTo { ctrl1, ctrl2, to } =>
+                        ctrl1.x.is_finite()
+                            && ctrl1.y.is_finite()
+                            && ctrl2.x.is_finite()
+                            && ctrl2.y.is_finite()
+                            && to.x.is_finite()
+                            && to.y.is_finite(),
+                    PathElement::Close => true,
+                }));
+                assert!(rect.contains_rect(path_bounds(&path.elements)));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod row_focus_tests {
+    use super::{RowFocusPlacement, row_surface_primitives};
+    use stern_core::{ComponentState, PathElement, Primitive, Rect, default_dark_theme};
+
+    fn path_bounds(elements: &[PathElement]) -> Rect {
+        let mut min_x = f32::INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+        for point in elements.iter().flat_map(|element| match *element {
+            PathElement::MoveTo(point) | PathElement::LineTo(point) => vec![point],
+            PathElement::QuadTo { ctrl, to } => vec![ctrl, to],
+            PathElement::CubicTo { ctrl1, ctrl2, to } => vec![ctrl1, ctrl2, to],
+            PathElement::Close => Vec::new(),
+        }) {
+            min_x = min_x.min(point.x);
+            min_y = min_y.min(point.y);
+            max_x = max_x.max(point.x);
+            max_y = max_y.max(point.y);
+        }
+        Rect::new(min_x, min_y, max_x - min_x, max_y - min_y)
+    }
+
+    #[test]
+    fn row_surface_uses_exact_inward_order_and_suppresses_disabled_focus() {
+        let theme = default_dark_theme();
+        let rect = Rect::new(4.25, 6.75, 92.5, 22.25);
+        let focused = ComponentState {
+            focused: true,
+            selected: true,
+            ..ComponentState::default()
+        };
+        let recipe = theme.row(focused);
+        let primitives = row_surface_primitives(
+            &theme,
+            &recipe,
+            focused,
+            rect,
+            recipe.radius,
+            RowFocusPlacement::Inward,
+        );
+        let expected = theme
+            .focus_ring(true)
+            .expect("focus recipe")
+            .inward_annulus_primitives(rect, recipe.radius, recipe.border.width);
+
+        assert_eq!(primitives.len(), 3);
+        let Primitive::Rect(base) = &primitives[0] else {
+            panic!("neutral row base first");
+        };
+        assert_eq!(base.rect, rect);
+        assert_eq!(base.fill, Some(recipe.background));
+        assert_eq!(base.stroke, Some(recipe.border));
+        assert_eq!(base.radius, recipe.radius);
+        assert_eq!(primitives[1], expected[0]);
+        assert_eq!(primitives[2], expected[1]);
+
+        for state in [
+            ComponentState::default(),
+            ComponentState {
+                focused: true,
+                disabled: true,
+                ..ComponentState::default()
+            },
+        ] {
+            let recipe = theme.row(state);
+            assert_eq!(
+                row_surface_primitives(
+                    &theme,
+                    &recipe,
+                    state,
+                    rect,
+                    recipe.radius,
+                    RowFocusPlacement::Inward,
+                )
+                .len(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn narrow_and_degenerate_row_annuli_remain_finite_contained_compound_paths() {
+        let theme = default_dark_theme();
+        let state = ComponentState {
+            focused: true,
+            ..ComponentState::default()
+        };
+        let recipe = theme.row(state);
+        for rect in [
+            Rect::new(0.25, 0.75, 3.5, 2.0),
+            Rect::new(4.25, 8.75, 0.0, 0.0),
+        ] {
+            let output = row_surface_primitives(
+                &theme,
+                &recipe,
+                state,
+                rect,
+                recipe.radius,
+                RowFocusPlacement::Inward,
+            );
+            assert_eq!(output.len(), 3);
+            for primitive in &output[1..] {
+                let Primitive::Path(path) = primitive else {
+                    panic!("row focus must remain a hollow compound path");
                 };
                 assert_eq!(path.elements.len(), 20);
                 assert_eq!(path.stroke, None);

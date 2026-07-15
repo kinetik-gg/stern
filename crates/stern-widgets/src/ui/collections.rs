@@ -7,10 +7,13 @@ use stern_core::{
 };
 
 use super::Ui;
-use crate::collections::{
-    CollectionCursor, CollectionCursorMove, CollectionCursorTarget, CollectionProjectedItem,
-    CollectionProjection, Selection, VirtualList, VirtualListConfig, VirtualListItemResponse,
-    VirtualListOutput, VirtualListRow, VirtualListSelectionMode,
+use crate::{
+    collections::{
+        CollectionCursor, CollectionCursorMove, CollectionCursorTarget, CollectionProjectedItem,
+        CollectionProjection, Selection, VirtualList, VirtualListConfig, VirtualListItemResponse,
+        VirtualListOutput, VirtualListRow, VirtualListSelectionMode,
+    },
+    components::{RowFocusPlacement, row_surface_primitives},
 };
 
 impl Ui<'_> {
@@ -283,19 +286,24 @@ impl Ui<'_> {
         response: stern_core::Response,
         disabled: bool,
     ) {
-        let recipe = self.theme.row(ComponentState {
+        let state = ComponentState {
             hovered: response.state.hovered,
             pressed: response.state.pressed,
             focused: response.state.focused,
             disabled,
             selected: response.state.selected,
-        });
-        self.primitive(Primitive::Rect(RectPrimitive {
+        };
+        let recipe = self.theme.row(state);
+        for primitive in row_surface_primitives(
+            self.theme,
+            &recipe,
+            state,
             rect,
-            fill: Some(recipe.background),
-            stroke: Some(recipe.border),
-            radius: recipe.radius,
-        }));
+            recipe.radius,
+            RowFocusPlacement::Inward,
+        ) {
+            self.primitive(primitive);
+        }
 
         let font = self.theme.font(TextRole::Label);
         let extra = (rect.height - font.line_height).max(0.0) * 0.5;
