@@ -36,7 +36,11 @@ fn button_emits_surface_and_text_and_clicks() {
     input.pointer.primary = PointerButtonState::new(false, false, true);
     let output = button(id, rect, "Run", &input, &mut memory, &theme, false);
 
-    assert_eq!(output.primitives.len(), 2);
+    assert_eq!(output.primitives.len(), 4);
+    assert!(matches!(output.primitives[0], Primitive::Rect(_)));
+    assert!(matches!(output.primitives[1], Primitive::Path(_)));
+    assert!(matches!(output.primitives[2], Primitive::Path(_)));
+    assert!(matches!(output.primitives[3], Primitive::Text(_)));
     assert!(output.response.expect("button response").clicked);
 }
 
