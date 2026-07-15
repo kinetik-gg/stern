@@ -671,3 +671,141 @@ fn all_four_chrome_button_row_kinds_use_clip_contained_inward_focus() {
     assert!((rect.max_x() - 70.0).abs() <= f32::EPSILON);
     assert_chrome_button_focus(&frame, rect);
 }
+
+fn assert_chrome_tab_focus_pair(
+    focused: &stern_core::FrameOutput,
+    unfocused: &stern_core::FrameOutput,
+    id: WidgetId,
+    strip_rect: Rect,
+    selected: bool,
+) {
+    let theme = default_dark_theme();
+    let rect = focused.semantics.get(id).expect("focused tab").bounds;
+    let base = focused
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(primitive, Primitive::Rect(base) if base.rect == rect && base.stroke.is_some())
+        })
+        .expect("chrome tab base");
+    let unfocused_base = unfocused
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(primitive, Primitive::Rect(base) if base.rect == rect && base.stroke.is_some())
+        })
+        .expect("unfocused chrome tab base");
+    assert_eq!(
+        focused.primitives[base],
+        unfocused.primitives[unfocused_base]
+    );
+    let Primitive::Rect(surface) = &focused.primitives[base] else {
+        unreachable!()
+    };
+    assert_eq!(surface.radius, theme.radii.none);
+    assert_eq!(
+        surface.stroke.expect("neutral border").brush,
+        stern_core::Brush::Solid(theme.colors.border.default)
+    );
+    assert_eq!(
+        surface.fill,
+        Some(stern_core::Brush::Solid(if selected {
+            theme.colors.surface.control_pressed
+        } else {
+            theme.colors.surface.panel
+        }))
+    );
+    let expected = theme
+        .focus_ring(true)
+        .expect("focus recipe")
+        .inward_annulus_primitives(
+            rect,
+            surface.radius,
+            surface.stroke.expect("neutral border").width,
+        );
+    assert_eq!(focused.primitives[base + 1], expected[0]);
+    assert_eq!(focused.primitives[base + 2], expected[1]);
+    for primitive in &focused.primitives[base + 1..base + 3] {
+        let Primitive::Path(path) = primitive else {
+            panic!("chrome tab focus path");
+        };
+        assert_eq!(path.stroke, None);
+        for point in path.elements.iter().flat_map(|element| match *element {
+            stern_core::PathElement::MoveTo(point) | stern_core::PathElement::LineTo(point) => {
+                vec![point]
+            }
+            stern_core::PathElement::QuadTo { ctrl, to } => vec![ctrl, to],
+            stern_core::PathElement::CubicTo { ctrl1, ctrl2, to } => vec![ctrl1, ctrl2, to],
+            stern_core::PathElement::Close => Vec::new(),
+        }) {
+            assert!(point.x >= rect.min_x() && point.x <= rect.max_x());
+            assert!(point.y >= rect.min_y() && point.y <= rect.max_y());
+            assert!(point.x >= strip_rect.min_x() && point.x <= strip_rect.max_x());
+            assert!(point.y >= strip_rect.min_y() && point.y <= strip_rect.max_y());
+        }
+    }
+    assert!(matches!(focused.primitives[base + 3], Primitive::Text(_)));
+    let mut stripped = focused.primitives.clone();
+    stripped.drain(base + 1..base + 3);
+    assert_eq!(stripped, unfocused.primitives);
+    let focused_node = focused.semantics.get(id).expect("focused tab semantic");
+    let unfocused_node = unfocused.semantics.get(id).expect("unfocused tab semantic");
+    assert!(focused_node.state.focused);
+    assert_eq!(focused_node.role, SemanticRole::Tab);
+    assert_eq!(focused_node.bounds, unfocused_node.bounds);
+    assert_eq!(focused_node.state.selected, unfocused_node.state.selected);
+}
+
+#[test]
+fn first_last_and_close_truncated_chrome_tabs_use_neutral_contained_inward_focus() {
+    let menu = menu_bar();
+    let toolbar = toolbar();
+    let tabs = tab_strip();
+    let status = status_bar();
+    let scene = ChromeScene::new(config(140.0), &menu, &toolbar, &tabs, &status);
+    let strip_id = scene.surface_widget_id(ChromeSurfaceKind::TabStrip);
+    let mut memory = UiMemory::new();
+    let (_, _, unfocused) = run_frame(&scene, &mut memory, UiInput::default(), false);
+    let strip_rect = unfocused.semantics.get(strip_id).expect("tab strip").bounds;
+    let cases = [
+        (
+            scene.item_widget_id(&ChromeSceneItemKey::Tab(PanelId::from_raw(100))),
+            true,
+        ),
+        (
+            scene.item_widget_id(&ChromeSceneItemKey::Tab(PanelId::from_raw(101))),
+            false,
+        ),
+    ];
+    let first_rect = unfocused
+        .semantics
+        .get(cases[0].0)
+        .expect("first tab")
+        .bounds;
+    let last_rect = unfocused
+        .semantics
+        .get(cases[1].0)
+        .expect("last tab")
+        .bounds;
+    assert!((first_rect.min_x() - strip_rect.min_x()).abs() <= f32::EPSILON);
+    assert!(
+        first_rect.width < 70.0,
+        "close affordance truncates the body"
+    );
+    assert!((last_rect.max_x() - strip_rect.max_x()).abs() <= f32::EPSILON);
+    assert!(first_rect.max_x() <= last_rect.min_x());
+
+    for (id, selected) in cases {
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let (_, _, focused) = run_frame(&scene, &mut memory, UiInput::default(), false);
+        assert_chrome_tab_focus_pair(&focused, &unfocused, id, strip_rect, selected);
+    }
+    assert!(unfocused.primitives.iter().all(|primitive| {
+        !matches!(
+            primitive,
+            Primitive::Rect(rect)
+                if rect.fill == Some(stern_core::Brush::Solid(default_dark_theme().colors.accent.default))
+        )
+    }));
+}

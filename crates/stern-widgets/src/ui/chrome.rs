@@ -11,7 +11,9 @@ use crate::chrome::{
     ChromeScene, ChromeSceneIntent, ChromeSceneOutput, ChromeSceneRow, ChromeSceneRowKind,
     ChromeSurfaceKind,
 };
-use crate::components::{ButtonFocusPlacement, button_surface_primitives};
+use crate::components::{
+    ButtonFocusPlacement, TabFocusPlacement, button_surface_primitives, tab_surface_primitives,
+};
 
 impl Ui<'_> {
     /// Paints and evaluates one public editor-chrome scene.
@@ -96,24 +98,15 @@ impl Ui<'_> {
             ChromeSceneRowKind::Status => self.theme.label(TextRole::Label, true).foreground,
             ChromeSceneRowKind::Tab { .. } => {
                 let recipe = self.theme.tab(state);
-                self.primitive(Primitive::Rect(RectPrimitive {
-                    rect: row.rect,
-                    fill: Some(recipe.background),
-                    stroke: Some(recipe.border),
-                    radius: recipe.radius,
-                }));
-                if let Some(indicator) = recipe.indicator {
-                    self.primitive(Primitive::Rect(RectPrimitive {
-                        rect: Rect::new(
-                            row.rect.x,
-                            row.rect.max_y() - recipe.indicator_thickness,
-                            row.rect.width,
-                            recipe.indicator_thickness,
-                        ),
-                        fill: Some(indicator),
-                        stroke: None,
-                        radius: self.theme.radii.none,
-                    }));
+                for primitive in tab_surface_primitives(
+                    self.theme,
+                    &recipe,
+                    state,
+                    row.rect,
+                    recipe.radius,
+                    TabFocusPlacement::Inward,
+                ) {
+                    self.primitive(primitive);
                 }
                 recipe.foreground
             }

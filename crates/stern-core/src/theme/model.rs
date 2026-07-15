@@ -241,20 +241,15 @@ impl Theme {
         } else {
             self.colors.content.primary
         };
-        let border_color = if state.focused {
-            self.colors.focus.ring
-        } else {
-            self.colors.border.default
-        };
-
         TabRecipe {
             background: Brush::Solid(background),
             foreground,
-            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
+            border: Stroke::new(
+                self.strokes.default,
+                Brush::Solid(self.colors.border.default),
+            ),
             radius: self.radii.none,
-            indicator: state
-                .selected
-                .then_some(Brush::Solid(self.colors.accent.default)),
+            indicator: None,
             indicator_thickness: self.strokes.emphasis,
         }
     }

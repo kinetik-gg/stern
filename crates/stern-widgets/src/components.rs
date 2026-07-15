@@ -50,7 +50,9 @@ mod vector_color_fields;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use common::{ButtonFocusPlacement, button_surface_primitives};
+pub(crate) use common::{
+    ButtonFocusPlacement, TabFocusPlacement, button_surface_primitives, tab_surface_primitives,
+};
 use common::{
     clicked_select_state, clicked_toggle_state, control_text_origin, label_baseline,
     response_reported_focus, response_reported_pressed, suppress_disabled_interaction_reporting,

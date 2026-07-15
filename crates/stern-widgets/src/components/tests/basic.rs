@@ -205,7 +205,15 @@ fn tab_and_row_surfaces_are_not_button_clones() {
 
     assert!(tab.response.expect("tab response").state.selected);
     assert!(row.response.expect("row response").state.selected);
-    assert_ne!(tab.primitives.len(), row.primitives.len());
+    assert_eq!(tab.primitives.len(), 2);
+    let Primitive::Rect(tab_surface) = &tab.primitives[0] else {
+        panic!("tab surface");
+    };
+    let Primitive::Rect(row_surface) = &row.primitives[0] else {
+        panic!("row surface");
+    };
+    assert_ne!(tab_surface, row_surface);
+    assert!(matches!(tab.primitives[1], Primitive::Text(_)));
 }
 
 #[test]

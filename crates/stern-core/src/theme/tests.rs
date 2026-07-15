@@ -648,10 +648,7 @@ fn component_recipes_cover_common_states() {
         ..ComponentState::default()
     };
 
-    assert_eq!(
-        theme.tab(selected).indicator,
-        Some(Brush::Solid(theme.colors.accent.default))
-    );
+    assert_eq!(theme.tab(selected).indicator, None);
     assert_eq!(
         theme.row(selected).background,
         Brush::Solid(theme.colors.selection.background)

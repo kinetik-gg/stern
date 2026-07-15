@@ -5,6 +5,7 @@ use stern_core::{
 };
 
 use super::Ui;
+use crate::components::{TabFocusPlacement, tab_surface_primitives};
 use crate::dock::{
     Dock, DockController, DockControllerConfig, DockControllerFocus, DockControllerOutput,
     DockDropTarget, DockNeighborDirection, DockScene, DockSceneFrame, DockScenePanel,
@@ -598,29 +599,23 @@ impl Ui<'_> {
 
     fn paint_dock_tab(&mut self, tab: &DockSceneTab, disabled: bool) {
         self.register_id(tab.id);
-        let recipe = self.theme.tab(ComponentState {
+        let focused = self.memory().is_focused(tab.id);
+        let state = ComponentState {
+            focused,
             disabled,
             selected: tab.selected,
             ..ComponentState::default()
-        });
-        self.primitive(Primitive::Rect(RectPrimitive {
-            rect: tab.rect,
-            fill: Some(recipe.background),
-            stroke: Some(recipe.border),
-            radius: recipe.radius,
-        }));
-        if let Some(indicator) = recipe.indicator {
-            self.primitive(Primitive::Rect(RectPrimitive {
-                rect: Rect::new(
-                    tab.rect.x,
-                    tab.rect.max_y() - recipe.indicator_thickness,
-                    tab.rect.width,
-                    recipe.indicator_thickness,
-                ),
-                fill: Some(indicator),
-                stroke: None,
-                radius: self.theme.radii.none,
-            }));
+        };
+        let recipe = self.theme.tab(state);
+        for primitive in tab_surface_primitives(
+            self.theme,
+            &recipe,
+            state,
+            tab.rect,
+            recipe.radius,
+            TabFocusPlacement::Inward,
+        ) {
+            self.primitive(primitive);
         }
 
         let tab_clip = ClipId::from_raw(tab.id.child("clip").raw());

@@ -11,7 +11,8 @@ use stern_widgets::{
     Ui,
     dock::{
         Dock, DockChromeStyle, DockDropTarget, DockNode, DockPathElement, DockPlacement, DockScene,
-        DockSceneConfig, DockScenePreviewKind, DockSplitPath, Frame, FrameId, Panel, PanelId,
+        DockSceneConfig, DockScenePreviewKind, DockSceneTab, DockSplitPath, Frame, FrameId, Panel,
+        PanelId,
     },
 };
 
@@ -107,6 +108,104 @@ fn semantic_geometry(frame: &FrameOutput) -> Vec<(WidgetId, Rect)> {
         .iter()
         .map(|node| (node.id, node.bounds))
         .collect()
+}
+
+fn dock_tab_surface_index(primitives: &[Primitive], rect: Rect) -> usize {
+    primitives
+        .iter()
+        .position(|primitive| {
+            matches!(primitive, Primitive::Rect(base) if base.rect == rect && base.stroke.is_some())
+        })
+        .expect("dock tab base")
+}
+
+fn assert_dock_tab_focus_pair(
+    focused: &FrameOutput,
+    unfocused: &FrameOutput,
+    tab: &DockSceneTab,
+    strip_rect: Rect,
+    theme: &Theme,
+) {
+    let base = dock_tab_surface_index(&focused.primitives, tab.rect);
+    let unfocused_base = dock_tab_surface_index(&unfocused.primitives, tab.rect);
+    assert_eq!(
+        focused.primitives[base],
+        unfocused.primitives[unfocused_base]
+    );
+    let Primitive::Rect(surface) = &focused.primitives[base] else {
+        unreachable!()
+    };
+    assert_eq!(surface.radius, theme.radii.none);
+    assert_eq!(
+        surface.stroke.expect("neutral border").brush,
+        Brush::Solid(theme.colors.border.default)
+    );
+    assert_eq!(
+        surface.fill,
+        Some(Brush::Solid(if tab.selected {
+            theme.colors.surface.control_pressed
+        } else {
+            theme.colors.surface.panel
+        }))
+    );
+    let expected = theme
+        .focus_ring(true)
+        .expect("focus recipe")
+        .inward_annulus_primitives(
+            tab.rect,
+            surface.radius,
+            surface.stroke.expect("neutral border").width,
+        );
+    assert_eq!(focused.primitives[base + 1], expected[0]);
+    assert_eq!(focused.primitives[base + 2], expected[1]);
+    for primitive in &focused.primitives[base + 1..base + 3] {
+        let Primitive::Path(path) = primitive else {
+            panic!("dock tab focus path");
+        };
+        assert_eq!(path.stroke, None);
+        for point in path.elements.iter().flat_map(|element| match *element {
+            stern_core::PathElement::MoveTo(point) | stern_core::PathElement::LineTo(point) => {
+                vec![point]
+            }
+            stern_core::PathElement::QuadTo { ctrl, to } => vec![ctrl, to],
+            stern_core::PathElement::CubicTo { ctrl1, ctrl2, to } => vec![ctrl1, ctrl2, to],
+            stern_core::PathElement::Close => Vec::new(),
+        }) {
+            assert!(point.x >= tab.rect.min_x() && point.x <= tab.rect.max_x());
+            assert!(point.y >= tab.rect.min_y() && point.y <= tab.rect.max_y());
+            assert!(point.x >= strip_rect.min_x() && point.x <= strip_rect.max_x());
+            assert!(point.y >= strip_rect.min_y() && point.y <= strip_rect.max_y());
+        }
+    }
+    assert!(matches!(
+        focused.primitives[base + 3],
+        Primitive::ClipBegin { rect, .. } if rect == tab.rect
+    ));
+    assert!(matches!(
+        &focused.primitives[base + 4],
+        Primitive::Text(text) if text.text == tab.title
+    ));
+    if tab.close_rect.is_some() {
+        assert!(matches!(
+            &focused.primitives[base + 5],
+            Primitive::Text(text) if text.text == "×"
+        ));
+    }
+    let mut stripped = focused.primitives.clone();
+    stripped.drain(base + 1..base + 3);
+    assert_eq!(stripped, unfocused.primitives);
+    let focused_node = focused
+        .semantics
+        .get(tab.id)
+        .expect("focused dock tab semantic");
+    let unfocused_node = unfocused
+        .semantics
+        .get(tab.id)
+        .expect("unfocused dock tab semantic");
+    assert!(focused_node.state.focused);
+    assert_eq!(focused_node.role, SemanticRole::Tab);
+    assert_eq!(focused_node.bounds, unfocused_node.bounds);
+    assert_eq!(focused_node.state.selected, unfocused_node.state.selected);
 }
 
 fn rect_primitive_at(primitives: &[Primitive], rect: Rect) -> &RectPrimitive {
@@ -285,52 +384,62 @@ fn dock_stroke_roles_preserve_focused_geometry_order_hits_and_semantics() {
     let strokes = StrokeScale::from_values(0.75, 1.25, 2.5, 3.5, 4.5);
     let theme = default_dark_theme().with_strokes(strokes);
     let dock = two_frame_dock();
-    let scene = DockScene::new(
-        DockSceneConfig::new(WidgetId::from_key("dock-stroke-roles"), BOUNDS),
-        &dock,
-    );
-    let selected_tab = scene
-        .layout()
-        .frames
-        .iter()
-        .flat_map(|frame| &frame.tabs)
-        .find(|tab| tab.selected)
-        .expect("selected tab");
-
+    let root_id = WidgetId::from_key("dock-stroke-roles");
+    let scene = DockScene::new(DockSceneConfig::new(root_id, BOUNDS), &dock);
     let unfocused = paint_with_theme(&scene, &theme);
-    let focused = paint_with_theme_and_focus(&scene, &theme, selected_tab.id);
-    assert_eq!(unfocused.primitives.len(), focused.primitives.len());
-    assert_eq!(rect_geometry(&unfocused), rect_geometry(&focused));
-    assert_eq!(semantic_geometry(&unfocused), semantic_geometry(&focused));
-    assert_eq!(
-        focused
-            .semantics
-            .get(selected_tab.id)
-            .expect("focused tab semantics")
-            .bounds,
-        selected_tab.rect
-    );
+    let frame = &scene.layout().frames[0];
+    let first = &frame.tabs[0];
+    let last = frame.tabs.last().expect("last tab");
+    assert!(!first.selected);
+    assert!(last.selected);
+    assert!(first.close_rect.is_some() && last.close_rect.is_some());
+    assert!((first.rect.min_x() - frame.tab_list_rect.min_x()).abs() <= f32::EPSILON);
+    assert!((last.rect.max_x() - frame.tab_list_rect.max_x()).abs() <= f32::EPSILON);
+    assert!(first.rect.max_x() <= last.rect.min_x());
+
+    for tab in [first, last] {
+        let focused = paint_with_theme_and_focus(&scene, &theme, tab.id);
+        assert_eq!(focused.primitives.len(), unfocused.primitives.len() + 2);
+        assert_eq!(rect_geometry(&unfocused), rect_geometry(&focused));
+        assert_eq!(semantic_geometry(&unfocused), semantic_geometry(&focused));
+        assert_dock_tab_focus_pair(&focused, &unfocused, tab, frame.tab_list_rect, &theme);
+    }
 
     let root = rect_primitive_at(&unfocused.primitives, scene.layout().bounds);
     assert_eq!(
         root.stroke.map(|stroke| stroke.width),
         Some(strokes.hairline)
     );
-    let tab_surface = rect_primitive_at(&unfocused.primitives, selected_tab.rect);
+    let tab_surface = rect_primitive_at(&unfocused.primitives, last.rect);
     assert_eq!(
         tab_surface.stroke.map(|stroke| stroke.width),
         Some(strokes.default)
     );
-    let indicator_rect = Rect::new(
-        selected_tab.rect.x,
-        selected_tab.rect.max_y() - strokes.emphasis,
-        selected_tab.rect.width,
-        strokes.emphasis,
-    );
-    let indicator = rect_primitive_at(&unfocused.primitives, indicator_rect);
+    assert!(unfocused.primitives.iter().all(|primitive| {
+        !matches!(
+            primitive,
+            Primitive::Rect(rect)
+                if rect.fill == Some(Brush::Solid(theme.colors.accent.default))
+        )
+    }));
+
+    let disabled_scene =
+        DockScene::new(DockSceneConfig::new(root_id, BOUNDS).disabled(true), &dock);
+    let disabled = paint_with_theme_and_focus(&disabled_scene, &theme, last.id);
+    let disabled_base = dock_tab_surface_index(&disabled.primitives, last.rect);
+    assert!(matches!(
+        disabled.primitives[disabled_base + 1],
+        Primitive::ClipBegin { rect, .. } if rect == last.rect
+    ));
+    let disabled_node = disabled
+        .semantics
+        .get(last.id)
+        .expect("disabled focused tab semantic");
+    assert!(disabled_node.state.focused);
+    assert!(disabled_node.state.disabled);
     assert_eq!(
-        indicator.fill,
-        Some(Brush::Solid(theme.colors.accent.default))
+        rect_primitive_at(&disabled.primitives, last.rect).fill,
+        Some(Brush::Solid(theme.colors.surface.control_disabled))
     );
 }
 
