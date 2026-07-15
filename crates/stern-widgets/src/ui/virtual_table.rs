@@ -7,12 +7,15 @@ use stern_core::{
 };
 
 use super::Ui;
-use crate::collections::{
-    CollectionProjectedItem, CollectionProjection, ItemId, SortDirection, TableColumn,
-    TableColumnResizeRequest, TableSort, VirtualTable, VirtualTableConfig, VirtualTableCursorMove,
-    VirtualTableCursorTarget, VirtualTableHeaderResponse, VirtualTableMaterializedRow,
-    VirtualTableOutput, VirtualTableRow, VirtualTableSelection, VirtualTableSelectionMode,
-    VirtualTableSelectionResponse, VirtualTableTarget,
+use crate::{
+    collections::{
+        CollectionProjectedItem, CollectionProjection, ItemId, SortDirection, TableColumn,
+        TableColumnResizeRequest, TableSort, VirtualTable, VirtualTableConfig,
+        VirtualTableCursorMove, VirtualTableCursorTarget, VirtualTableHeaderResponse,
+        VirtualTableMaterializedRow, VirtualTableOutput, VirtualTableRow, VirtualTableSelection,
+        VirtualTableSelectionMode, VirtualTableSelectionResponse, VirtualTableTarget,
+    },
+    components::{RowFocusPlacement, row_surface_primitives},
 };
 
 impl Ui<'_> {
@@ -231,6 +234,7 @@ impl Ui<'_> {
                     column,
                     config.layout.sort,
                     config.disabled,
+                    response,
                 ));
             }
             output.headers.push(VirtualTableHeaderResponse {
@@ -480,19 +484,24 @@ impl Ui<'_> {
         sort: Option<TableSort>,
     ) {
         let selected = sort.is_some_and(|sort| sort.column == column.id);
-        let recipe = self.theme.row(ComponentState {
+        let state = ComponentState {
             hovered: response.state.hovered,
             pressed: response.state.pressed,
             focused: response.state.focused,
             disabled: response.state.disabled,
             selected,
-        });
-        self.primitive(Primitive::Rect(RectPrimitive {
+        };
+        let recipe = self.theme.row(state);
+        for primitive in row_surface_primitives(
+            self.theme,
+            &recipe,
+            state,
             rect,
-            fill: Some(recipe.background),
-            stroke: Some(recipe.border),
-            radius: recipe.radius,
-        }));
+            recipe.radius,
+            RowFocusPlacement::Inward,
+        ) {
+            self.primitive(primitive);
+        }
         let label = table_header_label(column, sort);
         self.paint_virtual_table_text(rect, &label, recipe.foreground);
     }
@@ -661,10 +670,14 @@ fn virtual_table_header_semantics(
     column: &TableColumn,
     sort: Option<TableSort>,
     disabled: bool,
+    response: Response,
 ) -> SemanticNode {
     let mut node = SemanticNode::new(id, SemanticRole::Cell, rect)
         .with_label(table_header_label(column, sort));
+    node.focusable = !disabled;
     node.state.disabled = disabled;
+    node.state.focused = response.state.focused;
+    node.state.pressed = !disabled && response.state.pressed;
     if let Some(sort) = sort.filter(|sort| sort.column == column.id) {
         node.state.value = Some(SemanticValue::Text(match sort.direction {
             SortDirection::Ascending => "Sorted ascending".to_owned(),
@@ -672,6 +685,8 @@ fn virtual_table_header_semantics(
         }));
     }
     if !disabled {
+        node.actions
+            .push(SemanticAction::new(SemanticActionKind::Focus, "Focus"));
         node.actions.push(SemanticAction::new(
             SemanticActionKind::Invoke,
             format!("Sort by {}", column.header),
