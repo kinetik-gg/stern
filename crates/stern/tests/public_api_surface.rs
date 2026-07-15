@@ -231,6 +231,30 @@ fn facade_exposes_typed_elevation_construction_and_resolution() {
 }
 
 #[test]
+#[allow(clippy::float_cmp)]
+fn qualified_core_facades_expose_exact_spacing_construction_and_lookup() {
+    let direct = stern_core::SpacingScale::new(
+        101.0, 103.0, 107.0, 109.0, 113.0, 127.0, 131.0, 137.0, 139.0,
+    );
+    assert_eq!(direct.get(stern_core::SpacingStep::Eight), 139.0);
+    assert_eq!(
+        direct.resolve(stern_core::SpacingRole::CompactInlineControlPadding),
+        109.0
+    );
+
+    let facade = stern::core::SpacingScale::new(
+        201.0, 203.0, 207.0, 209.0, 211.0, 223.0, 227.0, 229.0, 233.0,
+    );
+    assert_eq!(facade.get(stern::core::SpacingStep::Zero), 201.0);
+    assert_eq!(
+        facade.resolve(stern::core::SpacingRole::InspectorLabelValueGap),
+        211.0
+    );
+    assert_eq!(stern_core::SpacingStep::ALL.len(), 9);
+    assert_eq!(stern::core::SpacingRole::ALL.len(), 9);
+}
+
+#[test]
 fn facade_exposes_exact_radius_construction_and_qualified_fields() {
     use stern::core::{ComponentState, CornerRadius, RadiusScale, default_dark_theme};
 
