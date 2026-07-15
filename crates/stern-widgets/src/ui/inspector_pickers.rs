@@ -6,7 +6,10 @@ use stern_core::{
 };
 
 use super::Ui;
-use crate::components::{AssetSlotOutput, ColorFieldOutput, PathFieldOutput, SelectFieldOutput};
+use crate::components::{
+    AssetSlotOutput, ButtonFocusPlacement, ColorFieldOutput, PathFieldOutput, SelectFieldOutput,
+    button_surface_primitives,
+};
 use crate::inspector::pickers::{
     AssetPickerItem, ColorPickerAction, ColorPickerChannel, ColorPickerScene,
     InspectorPickerCancelReason, InspectorPickerCommit, InspectorPickerKind, InspectorPickerOutput,
@@ -483,19 +486,24 @@ impl Ui<'_> {
         control: &crate::inspector::pickers::ColorPickerControl,
         response: &stern_core::Response,
     ) {
-        let recipe = self.theme.button(ComponentState {
+        let state = ComponentState {
             hovered: response.state.hovered,
             pressed: response.state.pressed,
             focused: response.state.focused,
             disabled: false,
             selected: false,
-        });
-        self.primitive(Primitive::Rect(RectPrimitive {
-            rect: control.rect,
-            fill: Some(recipe.background),
-            stroke: Some(recipe.border),
-            radius: recipe.radius,
-        }));
+        };
+        let recipe = self.theme.button(state);
+        for primitive in button_surface_primitives(
+            self.theme,
+            recipe,
+            state,
+            control.rect,
+            recipe.radius,
+            ButtonFocusPlacement::Inward,
+        ) {
+            self.primitive(primitive);
+        }
         let font = self.theme.font(TextRole::Label);
         let visible_label = match control.action {
             ColorPickerAction::Adjust(_, delta) if delta < 0.0 => "-",

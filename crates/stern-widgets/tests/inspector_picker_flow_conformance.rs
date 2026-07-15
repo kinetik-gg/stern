@@ -897,3 +897,88 @@ fn disabled_read_only_empty_and_invalid_requests_fail_closed() {
     }
     assert_eq!(text.text, "keep.scene");
 }
+
+fn assert_picker_button_focus(frame: &FrameOutput, rect: Rect) {
+    let theme = default_dark_theme();
+    let base = frame
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(primitive, Primitive::Rect(base) if base.rect == rect && base.stroke.is_some())
+        })
+        .expect("picker control base");
+    let Primitive::Rect(base_surface) = &frame.primitives[base] else {
+        unreachable!()
+    };
+    assert_eq!(
+        base_surface.stroke.expect("neutral border").brush,
+        stern_core::Brush::Solid(theme.colors.border.default)
+    );
+    for (primitive, brush) in [
+        (
+            &frame.primitives[base + 1],
+            theme.focus_ring(true).unwrap().primary.brush,
+        ),
+        (
+            &frame.primitives[base + 2],
+            theme.focus_ring(true).unwrap().separator.brush,
+        ),
+    ] {
+        let Primitive::Path(path) = primitive else {
+            panic!("picker focus must be an inward compound path");
+        };
+        assert_eq!(path.fill, Some(brush));
+        assert_eq!(path.stroke, None);
+        for point in path.elements.iter().flat_map(|element| match *element {
+            stern_core::PathElement::MoveTo(point) | stern_core::PathElement::LineTo(point) => {
+                vec![point]
+            }
+            stern_core::PathElement::QuadTo { ctrl, to } => vec![ctrl, to],
+            stern_core::PathElement::CubicTo { ctrl1, ctrl2, to } => vec![ctrl1, ctrl2, to],
+            stern_core::PathElement::Close => Vec::new(),
+        }) {
+            assert!(point.x >= rect.min_x() && point.x <= rect.max_x());
+            assert!(point.y >= rect.min_y() && point.y <= rect.max_y());
+            assert!(point.x >= OVERLAY.min_x() && point.x <= OVERLAY.max_x());
+            assert!(point.y >= OVERLAY.min_y() && point.y <= OVERLAY.max_y());
+        }
+    }
+    assert!(matches!(frame.primitives[base + 3], Primitive::Text(_)));
+}
+
+#[test]
+fn picker_first_last_adjacent_and_action_controls_use_inward_focus() {
+    let field = requested_color(Color::rgb8(10, 20, 30), ColorFieldConfig::default());
+    let mut state = InspectorPickerState::new();
+    assert!(open_color(&mut state, &field, OVERLAY));
+    let idle = run_scene(&mut state, &mut UiMemory::new(), UiInput::default(), false);
+    let controls = ["Decrease Red", "Increase Red", "Cancel", "Apply"].map(|label| {
+        let node = idle
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .find(|node| {
+                node.role == SemanticRole::Button
+                    && node.label.as_deref() == Some(label)
+                    && OVERLAY.contains_rect(node.bounds)
+            })
+            .unwrap_or_else(|| panic!("{label} semantics"));
+        (node.id, node.bounds)
+    });
+    assert_eq!(controls[0].1.max_x() + 4.0, controls[1].1.min_x());
+    assert_eq!(controls[1].1.max_x(), OVERLAY.max_x() - 4.0);
+    assert_eq!(controls[2].1.min_x(), OVERLAY.min_x() + 4.0);
+    assert_eq!(controls[2].1.max_x() + 4.0, controls[3].1.min_x());
+
+    for (id, rect) in controls {
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let focused = run_scene(&mut state, &mut memory, UiInput::default(), false);
+        assert_picker_button_focus(&focused.frame, rect);
+        assert_eq!(
+            focused.frame.semantics.get(id).expect("control").bounds,
+            rect
+        );
+    }
+}

@@ -1,7 +1,41 @@
 use super::{
-    CornerRadius, CursorShape, PlatformRequest, Point, Primitive, Rect, Response, SemanticNode,
-    TextRole, Theme,
+    ComponentState, CornerRadius, CursorShape, PlatformRequest, Point, Primitive, Rect,
+    RectPrimitive, Response, SemanticNode, TextRole, Theme,
 };
+use stern_core::ButtonRecipe;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ButtonFocusPlacement {
+    Inward,
+}
+
+pub(crate) fn button_surface_primitives(
+    theme: &Theme,
+    recipe: ButtonRecipe,
+    state: ComponentState,
+    rect: Rect,
+    radius: CornerRadius,
+    placement: ButtonFocusPlacement,
+) -> Vec<Primitive> {
+    let mut primitives = vec![Primitive::Rect(RectPrimitive {
+        rect,
+        fill: Some(recipe.background),
+        stroke: Some(recipe.border),
+        radius,
+    })];
+    if state.focused
+        && !state.disabled
+        && let Some(focus) = theme.focus_ring(true)
+    {
+        let annuli = match placement {
+            ButtonFocusPlacement::Inward => {
+                focus.inward_annulus_primitives(rect, radius, recipe.border.width)
+            }
+        };
+        primitives.extend(annuli);
+    }
+    primitives
+}
 
 /// Output emitted by a widget.
 #[derive(Debug, Clone, PartialEq)]
@@ -128,4 +162,168 @@ pub(super) fn clicked_toggle_state(selected: bool, clicked: bool) -> bool {
 
 pub(super) fn clicked_select_state(selected: bool, clicked: bool) -> bool {
     selected || clicked
+}
+
+#[cfg(test)]
+mod button_focus_tests {
+    use super::{ButtonFocusPlacement, button_surface_primitives};
+    use stern_core::{
+        Brush, ButtonVariant, Color, ComponentState, CornerRadius, PathElement, Point, Primitive,
+        Rect, default_dark_theme,
+    };
+
+    fn endpoint(element: &PathElement) -> Option<Point> {
+        match *element {
+            PathElement::MoveTo(point)
+            | PathElement::LineTo(point)
+            | PathElement::QuadTo { to: point, .. }
+            | PathElement::CubicTo { to: point, .. } => Some(point),
+            PathElement::Close => None,
+        }
+    }
+
+    fn winding_at(elements: &[PathElement], point: Point) -> i32 {
+        let mut winding = 0;
+        let mut current = Point::ZERO;
+        let mut start = Point::ZERO;
+        for element in elements {
+            if let PathElement::MoveTo(to) = *element {
+                current = to;
+                start = to;
+                continue;
+            }
+            let to = if matches!(element, PathElement::Close) {
+                start
+            } else {
+                endpoint(element).expect("drawable path endpoint")
+            };
+            let cross = (to.x - current.x) * (point.y - current.y)
+                - (point.x - current.x) * (to.y - current.y);
+            if current.y <= point.y && to.y > point.y && cross > 0.0 {
+                winding += 1;
+            } else if current.y > point.y && to.y <= point.y && cross < 0.0 {
+                winding -= 1;
+            }
+            current = to;
+        }
+        winding
+    }
+
+    #[test]
+    fn button_surface_uses_exact_inward_order_and_suppresses_disabled_focus() {
+        let theme = default_dark_theme();
+        let rect = Rect::new(4.25, 6.75, 18.0, 18.0);
+        let radius = CornerRadius::all(3.0);
+        let focused = ComponentState {
+            focused: true,
+            ..ComponentState::default()
+        };
+        let recipe = theme.button_variant(ButtonVariant::Standard, focused);
+        let primitives = button_surface_primitives(
+            &theme,
+            recipe,
+            focused,
+            rect,
+            radius,
+            ButtonFocusPlacement::Inward,
+        );
+        let expected = theme
+            .focus_ring(true)
+            .expect("focus recipe")
+            .inward_annulus_primitives(rect, radius, recipe.border.width);
+
+        assert_eq!(primitives.len(), 3);
+        let Primitive::Rect(base) = &primitives[0] else {
+            panic!("neutral base first");
+        };
+        assert_eq!(base.rect, rect);
+        assert_eq!(base.fill, Some(recipe.background));
+        assert_eq!(base.stroke, Some(recipe.border));
+        assert_eq!(base.radius, radius);
+        assert_eq!(primitives[1], expected[0]);
+        assert_eq!(primitives[2], expected[1]);
+
+        let unfocused = button_surface_primitives(
+            &theme,
+            theme.button_variant(ButtonVariant::Standard, ComponentState::default()),
+            ComponentState::default(),
+            rect,
+            radius,
+            ButtonFocusPlacement::Inward,
+        );
+        assert_eq!(unfocused.len(), 1);
+        let disabled = ComponentState {
+            focused: true,
+            disabled: true,
+            ..ComponentState::default()
+        };
+        assert_eq!(
+            button_surface_primitives(
+                &theme,
+                theme.button_variant(ButtonVariant::Standard, disabled),
+                disabled,
+                rect,
+                radius,
+                ButtonFocusPlacement::Inward,
+            )
+            .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn ghost_surface_keeps_a_transparent_hole_and_focus_is_state_independent() {
+        let theme = default_dark_theme();
+        let rect = Rect::new(10.25, 20.5, 36.0, 22.0);
+        let radius = theme.radii.sm;
+        let baseline = ComponentState {
+            focused: true,
+            ..ComponentState::default()
+        };
+        let recipe = theme.button_variant(ButtonVariant::Ghost, baseline);
+        assert_eq!(recipe.background, Brush::Solid(Color::TRANSPARENT));
+        let output = button_surface_primitives(
+            &theme,
+            recipe,
+            baseline,
+            rect,
+            radius,
+            ButtonFocusPlacement::Inward,
+        );
+        for primitive in &output[1..] {
+            let Primitive::Path(path) = primitive else {
+                panic!("focus paint must be a hollow compound path");
+            };
+            assert_eq!(winding_at(&path.elements, rect.center()), 0);
+            assert_eq!(path.stroke, None);
+        }
+
+        for state in [
+            ComponentState {
+                focused: true,
+                hovered: true,
+                ..ComponentState::default()
+            },
+            ComponentState {
+                focused: true,
+                pressed: true,
+                ..ComponentState::default()
+            },
+            ComponentState {
+                focused: true,
+                selected: true,
+                ..ComponentState::default()
+            },
+        ] {
+            let state_output = button_surface_primitives(
+                &theme,
+                theme.button_variant(ButtonVariant::Ghost, state),
+                state,
+                rect,
+                radius,
+                ButtonFocusPlacement::Inward,
+            );
+            assert_eq!(state_output[1..], output[1..]);
+        }
+    }
 }

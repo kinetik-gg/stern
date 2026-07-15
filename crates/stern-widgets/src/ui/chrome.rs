@@ -11,6 +11,7 @@ use crate::chrome::{
     ChromeScene, ChromeSceneIntent, ChromeSceneOutput, ChromeSceneRow, ChromeSceneRowKind,
     ChromeSurfaceKind,
 };
+use crate::components::{ButtonFocusPlacement, button_surface_primitives};
 
 impl Ui<'_> {
     /// Paints and evaluates one public editor-chrome scene.
@@ -121,12 +122,16 @@ impl Ui<'_> {
             | ChromeSceneRowKind::TabClose
             | ChromeSceneRowKind::Overflow => {
                 let recipe = self.theme.button(state);
-                self.primitive(Primitive::Rect(RectPrimitive {
-                    rect: row.rect,
-                    fill: Some(recipe.background),
-                    stroke: Some(recipe.border),
-                    radius: recipe.radius,
-                }));
+                for primitive in button_surface_primitives(
+                    self.theme,
+                    recipe,
+                    state,
+                    row.rect,
+                    recipe.radius,
+                    ButtonFocusPlacement::Inward,
+                ) {
+                    self.primitive(primitive);
+                }
                 recipe.foreground
             }
         };

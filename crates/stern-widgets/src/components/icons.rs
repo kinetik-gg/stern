@@ -1,9 +1,10 @@
 use super::{
-    BTreeMap, Brush, ComponentState, CursorShape, IconId, ImageId, ImagePrimitive, LinePrimitive,
-    PathElement, PathPrimitive, Point, Primitive, Rect, RectPrimitive, Stroke, Theme, UiInput,
-    UiMemory, WidgetId, WidgetOutput, clicked_select_state, fit_box, focusable,
-    icon_button_semantics, response_reported_focus, response_reported_pressed,
-    suppress_disabled_interaction_reporting, with_hover_cursor, with_response_state,
+    BTreeMap, Brush, ButtonFocusPlacement, ComponentState, CursorShape, IconId, ImageId,
+    ImagePrimitive, LinePrimitive, PathElement, PathPrimitive, Point, Primitive, Rect, Stroke,
+    Theme, UiInput, UiMemory, WidgetId, WidgetOutput, button_surface_primitives,
+    clicked_select_state, fit_box, focusable, icon_button_semantics, response_reported_focus,
+    response_reported_pressed, suppress_disabled_interaction_reporting, with_hover_cursor,
+    with_response_state,
 };
 
 /// One path inside a theme-colored vector icon.
@@ -250,13 +251,14 @@ pub fn image_icon_selectable_button_sized(
     let mut response = focusable(id, rect, input, memory, disabled);
     let selected = clicked_select_state(selected, response.clicked);
     response.state.selected = selected;
-    let recipe = theme.button(ComponentState {
+    let state = ComponentState {
         hovered: response.state.hovered,
         pressed: response.state.pressed,
         focused: response.state.focused,
         disabled,
         selected,
-    });
+    };
+    let recipe = theme.button(state);
     let icon_size = sanitized_icon_size(icon_size, theme.controls.icon_size);
     let icon_rect = fit_box(
         rect,
@@ -267,24 +269,22 @@ pub fn image_icon_selectable_button_sized(
     let mut semantics = icon_button_semantics(id, rect, label, disabled);
     semantics.state.selected = selected;
 
+    let mut primitives = button_surface_primitives(
+        theme,
+        recipe,
+        state,
+        rect,
+        recipe.radius,
+        ButtonFocusPlacement::Inward,
+    );
+    primitives.push(Primitive::Image(ImagePrimitive {
+        image,
+        rect: icon_rect,
+        tint: None,
+    }));
     with_hover_cursor(
-        WidgetOutput::new(
-            Some(response),
-            vec![
-                Primitive::Rect(RectPrimitive {
-                    rect,
-                    fill: Some(recipe.background),
-                    stroke: Some(recipe.border),
-                    radius: recipe.radius,
-                }),
-                Primitive::Image(ImagePrimitive {
-                    image,
-                    rect: icon_rect,
-                    tint: None,
-                }),
-            ],
-        )
-        .with_semantic(with_response_state(semantics, &response)),
+        WidgetOutput::new(Some(response), primitives)
+            .with_semantic(with_response_state(semantics, &response)),
         &response,
         CursorShape::PointingHand,
     )
@@ -312,25 +312,28 @@ fn icon_button_with_optional_library(
 ) -> WidgetOutput {
     let mut response = focusable(id, rect, input, memory, disabled);
     suppress_disabled_interaction_reporting(&mut response);
-    let recipe = theme.button(ComponentState {
+    let state = ComponentState {
         hovered: response.state.hovered,
         pressed: response_reported_pressed(&response),
         focused: response_reported_focus(&response),
         disabled,
         selected: false,
-    });
+    };
+    let recipe = theme.button(state);
     let icon_rect = fit_box(
         rect,
         stern_core::Size::new(theme.controls.icon_size, theme.controls.icon_size),
         stern_core::Alignment::Center,
         stern_core::Alignment::Center,
     );
-    let mut primitives = vec![Primitive::Rect(RectPrimitive {
+    let mut primitives = button_surface_primitives(
+        theme,
+        recipe,
+        state,
         rect,
-        fill: Some(recipe.background),
-        stroke: Some(recipe.border),
-        radius: recipe.radius,
-    })];
+        recipe.radius,
+        ButtonFocusPlacement::Inward,
+    );
     if let Some(graphic) = icons.and_then(|icons| icons.icon(icon)) {
         primitives.extend(icon_graphic_primitives(
             graphic,

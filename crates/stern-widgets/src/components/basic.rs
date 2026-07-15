@@ -1,10 +1,10 @@
 use super::{
-    Brush, ComponentState, CornerRadius, CursorShape, Point, Primitive, Rect, RectPrimitive,
-    SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, TextPrimitive, TextRole, Theme,
-    UiInput, UiMemory, WidgetId, WidgetOutput, button_semantics, clicked_select_state,
-    control_text_origin, focusable, label_baseline, response_reported_focus,
-    response_reported_pressed, selectable, suppress_disabled_interaction_reporting,
-    with_hover_cursor, with_response_state,
+    Brush, ButtonFocusPlacement, ComponentState, CornerRadius, CursorShape, Point, Primitive, Rect,
+    RectPrimitive, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, TextPrimitive,
+    TextRole, Theme, UiInput, UiMemory, WidgetId, WidgetOutput, button_semantics,
+    button_surface_primitives, clicked_select_state, control_text_origin, focusable,
+    label_baseline, response_reported_focus, response_reported_pressed, selectable,
+    suppress_disabled_interaction_reporting, with_hover_cursor, with_response_state,
 };
 
 /// Emits a text label.
@@ -37,37 +37,35 @@ pub fn button(
 ) -> WidgetOutput {
     let mut response = focusable(id, rect, input, memory, disabled);
     suppress_disabled_interaction_reporting(&mut response);
-    let recipe = theme.button(ComponentState {
+    let state = ComponentState {
         hovered: response.state.hovered,
         pressed: response_reported_pressed(&response),
         focused: response_reported_focus(&response),
         disabled,
         selected: false,
-    });
+    };
+    let recipe = theme.button(state);
     let text = text.into();
+    let mut primitives = button_surface_primitives(
+        theme,
+        recipe,
+        state,
+        rect,
+        recipe.radius,
+        ButtonFocusPlacement::Inward,
+    );
+    primitives.push(Primitive::Text(TextPrimitive {
+        layout: None,
+        origin: control_text_origin(rect, theme),
+        text: text.clone(),
+        family: theme.font(TextRole::Label).family.to_owned(),
+        size: theme.font(TextRole::Label).size,
+        line_height: theme.font(TextRole::Label).line_height,
+        brush: Brush::Solid(recipe.foreground),
+    }));
 
     with_hover_cursor(
-        WidgetOutput::new(
-            Some(response),
-            vec![
-                Primitive::Rect(RectPrimitive {
-                    rect,
-                    fill: Some(recipe.background),
-                    stroke: Some(recipe.border),
-                    radius: recipe.radius,
-                }),
-                Primitive::Text(TextPrimitive {
-                    layout: None,
-                    origin: control_text_origin(rect, theme),
-                    text: text.clone(),
-                    family: theme.font(TextRole::Label).family.to_owned(),
-                    size: theme.font(TextRole::Label).size,
-                    line_height: theme.font(TextRole::Label).line_height,
-                    brush: Brush::Solid(recipe.foreground),
-                }),
-            ],
-        )
-        .with_semantic(with_response_state(
+        WidgetOutput::new(Some(response), primitives).with_semantic(with_response_state(
             button_semantics(id, rect, text, disabled),
             &response,
         )),

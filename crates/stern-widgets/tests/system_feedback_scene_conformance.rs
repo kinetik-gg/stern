@@ -648,6 +648,94 @@ fn paint_is_clipped_and_semantics_expose_job_progress_and_actions() {
     }));
 }
 
+fn assert_feedback_button_focus(frame: &FrameOutput, rect: Rect) {
+    let theme = default_dark_theme();
+    let base = frame
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(primitive, Primitive::Rect(base) if base.rect == rect && base.stroke.is_some())
+        })
+        .expect("feedback action base");
+    let Primitive::Rect(base_surface) = &frame.primitives[base] else {
+        unreachable!()
+    };
+    assert_eq!(
+        base_surface.stroke.expect("neutral border").brush,
+        stern_core::Brush::Solid(theme.colors.border.default)
+    );
+    for (primitive, brush) in [
+        (
+            &frame.primitives[base + 1],
+            theme.focus_ring(true).unwrap().primary.brush,
+        ),
+        (
+            &frame.primitives[base + 2],
+            theme.focus_ring(true).unwrap().separator.brush,
+        ),
+    ] {
+        let Primitive::Path(path) = primitive else {
+            panic!("feedback focus must be an inward compound path");
+        };
+        assert_eq!(path.fill, Some(brush));
+        assert_eq!(path.stroke, None);
+        for point in path.elements.iter().flat_map(|element| match *element {
+            stern_core::PathElement::MoveTo(point) | stern_core::PathElement::LineTo(point) => {
+                vec![point]
+            }
+            stern_core::PathElement::QuadTo { ctrl, to } => vec![ctrl, to],
+            stern_core::PathElement::CubicTo { ctrl1, ctrl2, to } => vec![ctrl1, ctrl2, to],
+            stern_core::PathElement::Close => Vec::new(),
+        }) {
+            assert!(point.x >= rect.min_x() && point.x <= rect.max_x());
+            assert!(point.y >= rect.min_y() && point.y <= rect.max_y());
+        }
+    }
+    assert!(matches!(frame.primitives[base + 3], Primitive::Text(_)));
+}
+
+#[test]
+fn every_system_feedback_action_kind_uses_right_edge_safe_inward_focus() {
+    let (jobs, diagnostics, feedback) = actionable_models();
+    let scene = prepared_scene(actionable_config(), &jobs, &diagnostics, &feedback).expect("scene");
+    let targets = [
+        SystemFeedbackTarget::JobCancel(job_id(7)),
+        SystemFeedbackTarget::DiagnosticAction {
+            diagnostic_id: diagnostic_id(7),
+            kind: DiagnosticActionKind::Dismiss,
+        },
+        SystemFeedbackTarget::DiagnosticAction {
+            diagnostic_id: diagnostic_id(7),
+            kind: DiagnosticActionKind::Report,
+        },
+        SystemFeedbackTarget::FeedbackAction(feedback_id(7)),
+        SystemFeedbackTarget::FeedbackDismiss(feedback_id(7)),
+    ];
+    for target in targets {
+        let id = scene.target_widget_id(target);
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let run = run_frame(
+            actionable_config(),
+            &jobs,
+            &diagnostics,
+            &feedback,
+            &mut memory,
+            UiInput::default(),
+            FRAME_NOW,
+            false,
+        );
+        let rect = run
+            .frame
+            .semantics
+            .get(id)
+            .expect("action semantics")
+            .bounds;
+        assert_feedback_button_focus(&run.frame, rect);
+        assert!(rect.max_x() <= 240.0);
+    }
+}
+
 #[test]
 fn feedback_surfaces_block_pointer_input_from_lower_content() {
     let jobs = JobList::from_rows([JobRow::new(job_id(1), "Done", JobPhase::Succeeded)]);

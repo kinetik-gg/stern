@@ -12,6 +12,7 @@ use crate::chrome::{
     SystemFeedbackSceneConfig, SystemFeedbackSceneError, SystemFeedbackSurface,
     SystemFeedbackSurfaceLayout, SystemFeedbackTarget,
 };
+use crate::components::{ButtonFocusPlacement, button_surface_primitives};
 
 impl Ui<'_> {
     /// Prepares jobs, diagnostics, and feedback using this frame's real time snapshot.
@@ -204,12 +205,16 @@ impl Ui<'_> {
             selected: false,
         };
         let recipe = self.theme.button(state);
-        self.primitive(Primitive::Rect(RectPrimitive {
-            rect: action.rect,
-            fill: Some(recipe.background),
-            stroke: Some(recipe.border),
-            radius: recipe.radius,
-        }));
+        for primitive in button_surface_primitives(
+            self.theme,
+            recipe,
+            state,
+            action.rect,
+            recipe.radius,
+            ButtonFocusPlacement::Inward,
+        ) {
+            self.primitive(primitive);
+        }
         let font = self.theme.font(TextRole::Label);
         let baseline =
             action.rect.y + (action.rect.height - font.line_height).max(0.0) * 0.5 + font.size;

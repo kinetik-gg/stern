@@ -210,9 +210,7 @@ impl Theme {
         } else {
             self.colors.content.primary
         };
-        let border_color = if state.focused {
-            self.colors.focus.ring
-        } else if matches!(variant, ButtonVariant::Ghost) {
+        let border_color = if matches!(variant, ButtonVariant::Ghost) {
             self.colors.border.subtle
         } else {
             self.colors.border.default

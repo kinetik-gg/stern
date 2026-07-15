@@ -1,10 +1,13 @@
 use stern_core::{
     Brush, ComponentState, CornerRadius, CursorShape, PlatformRequest, Point, Primitive, Rect,
-    RectPrimitive, Response, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
-    SemanticValue, TextPrimitive, TextRole, Theme, UiInput, UiMemory, WidgetId, focusable,
+    Response, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, SemanticValue,
+    TextPrimitive, TextRole, Theme, UiInput, UiMemory, WidgetId, focusable,
 };
 
-use crate::WidgetOutput;
+use crate::{
+    WidgetOutput,
+    components::{ButtonFocusPlacement, button_surface_primitives},
+};
 
 use super::layout::PropertyGridRowRect;
 use super::row::PropertyGridRow;
@@ -244,20 +247,23 @@ fn affordance_button(
     let mut response = focusable(id, rect, input, memory, disabled);
     suppress_disabled_interaction_reporting(&mut response);
     response.state.selected = selected;
-    let recipe = theme.button(ComponentState {
+    let state = ComponentState {
         hovered: response.state.hovered,
         pressed: response.state.pressed && !response.state.disabled,
         focused: response.state.focused && !response.state.disabled,
         disabled,
         selected,
-    });
+    };
+    let recipe = theme.button(state);
 
-    widget.primitives.push(Primitive::Rect(RectPrimitive {
+    widget.primitives.extend(button_surface_primitives(
+        theme,
+        recipe,
+        state,
         rect,
-        fill: Some(recipe.background),
-        stroke: Some(recipe.border),
-        radius: CornerRadius::all(3.0),
-    }));
+        CornerRadius::all(3.0),
+        ButtonFocusPlacement::Inward,
+    ));
     widget.primitives.push(Primitive::Text(TextPrimitive {
         layout: None,
         origin: Point::new(

@@ -592,3 +592,82 @@ fn invalid_or_empty_surface_bounds_emit_nothing_and_do_not_capture_lower_input()
     assert!(frame.primitives.is_empty());
     assert!(frame.semantics.is_empty());
 }
+
+fn assert_chrome_button_focus(frame: &stern_core::FrameOutput, rect: Rect) {
+    let theme = default_dark_theme();
+    let base = frame
+        .primitives
+        .iter()
+        .position(|primitive| {
+            matches!(primitive, Primitive::Rect(base) if base.rect == rect && base.stroke.is_some())
+        })
+        .expect("chrome button base");
+    let Primitive::Rect(base_surface) = &frame.primitives[base] else {
+        unreachable!()
+    };
+    assert_eq!(
+        base_surface.stroke.expect("neutral border").brush,
+        stern_core::Brush::Solid(theme.colors.border.default)
+    );
+    for (primitive, brush) in [
+        (
+            &frame.primitives[base + 1],
+            theme.focus_ring(true).unwrap().primary.brush,
+        ),
+        (
+            &frame.primitives[base + 2],
+            theme.focus_ring(true).unwrap().separator.brush,
+        ),
+    ] {
+        let Primitive::Path(path) = primitive else {
+            panic!("chrome focus must be an inward compound path");
+        };
+        assert_eq!(path.fill, Some(brush));
+        assert_eq!(path.stroke, None);
+        for point in path.elements.iter().flat_map(|element| match *element {
+            stern_core::PathElement::MoveTo(point) | stern_core::PathElement::LineTo(point) => {
+                vec![point]
+            }
+            stern_core::PathElement::QuadTo { ctrl, to } => vec![ctrl, to],
+            stern_core::PathElement::CubicTo { ctrl1, ctrl2, to } => vec![ctrl1, ctrl2, to],
+            stern_core::PathElement::Close => Vec::new(),
+        }) {
+            assert!(point.x >= rect.min_x() && point.x <= rect.max_x());
+            assert!(point.y >= rect.min_y() && point.y <= rect.max_y());
+        }
+    }
+    assert!(matches!(frame.primitives[base + 3], Primitive::Text(_)));
+}
+
+#[test]
+fn all_four_chrome_button_row_kinds_use_clip_contained_inward_focus() {
+    let menu = menu_bar();
+    let toolbar = toolbar();
+    let tabs = tab_strip();
+    let status = status_bar();
+    let full = ChromeScene::new(config(240.0), &menu, &toolbar, &tabs, &status);
+    let full_ids = [
+        full.item_widget_id(&ChromeSceneItemKey::Menu(MenuBarMenuId::from_raw(1))),
+        full.item_widget_id(&ChromeSceneItemKey::Toolbar {
+            group: ToolbarGroupId::from_raw(10),
+            action: ActionId::new("file.open"),
+        }),
+        full.tab_close_widget_id(PanelId::from_raw(100)),
+    ];
+    for id in full_ids {
+        let mut memory = UiMemory::new();
+        memory.focus(id);
+        let (_, _, frame) = run_frame(&full, &mut memory, UiInput::default(), false);
+        let rect = frame.semantics.get(id).expect("focused chrome row").bounds;
+        assert_chrome_button_focus(&frame, rect);
+    }
+
+    let compact = ChromeScene::new(config(70.0), &menu, &toolbar, &tabs, &status);
+    let overflow = compact.overflow_widget_id(ChromeSurfaceKind::Toolbar);
+    let mut memory = UiMemory::new();
+    memory.focus(overflow);
+    let (_, _, frame) = run_frame(&compact, &mut memory, UiInput::default(), false);
+    let rect = frame.semantics.get(overflow).expect("overflow row").bounds;
+    assert_eq!(rect.max_x(), 70.0);
+    assert_chrome_button_focus(&frame, rect);
+}
