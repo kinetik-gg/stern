@@ -337,6 +337,12 @@ impl Ui<'_> {
             if prepared_rename == Some(zones.row.id) {
                 continue;
             }
+            let disabled = config.disabled || zones.row.flags.disabled;
+            semantic.state.disabled = disabled;
+            if disabled {
+                semantic.focusable = false;
+                semantic.actions.clear();
+            }
             if let Some(response) = output
                 .responses
                 .iter()
