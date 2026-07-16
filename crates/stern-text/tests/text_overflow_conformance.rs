@@ -131,11 +131,25 @@ fn wrapping_and_multiline_requests_preserve_existing_behavior() {
     assert_eq!(requested_layout, visible_layout);
     assert!(requested_layout.line_count > 1);
 
-    for source in ["line one\nline two", "line one\rline two"] {
+    for (separator, source) in [
+        ("LF", "line one\nline two"),
+        ("CR", "line one\rline two"),
+        ("FS", "line one\u{001c}line two"),
+        ("GS", "line one\u{001d}line two"),
+        ("RS", "line one\u{001e}line two"),
+        ("NEL", "line one\u{0085}line two"),
+        ("PS", "line one\u{2029}line two"),
+    ] {
         let visible = key(source, 48.0, false);
         let requested = visible.clone().with_overflow(TextOverflow::EndEllipsis);
         let (requested_layout, visible_layout) = shape_pair(&requested, &visible);
-        assert_eq!(requested_layout, visible_layout, "source {source:?}");
-        assert!(!requested_layout.is_elided());
+        assert_eq!(
+            requested_layout, visible_layout,
+            "{separator} source {source:?}"
+        );
+        assert!(
+            !requested_layout.is_elided(),
+            "{separator} source {source:?}"
+        );
     }
 }
