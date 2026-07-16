@@ -864,3 +864,38 @@ fn layoutless_ui_and_invalid_outer_bounds_preserve_fail_safe_output() {
         assert!(store.is_empty());
     }
 }
+
+#[test]
+fn over_budget_property_source_rejects_without_store_mutation_or_identity_leak() {
+    const RETAINED_PAYLOAD_CEILING: usize = 32 * 1024 * 1024;
+
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let warm = PropertyGridRow::property(ItemId::from_raw(121), "Warm retained property", 0);
+    let _ = retained_default(&mut store, &mut memory, &[warm]);
+    let accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
+
+    let source = "x".repeat(RETAINED_PAYLOAD_CEILING + 1);
+    let row = PropertyGridRow::property(ItemId::from_raw(122), &source, 0);
+    let (output, frame) = retained_default(&mut store, &mut memory, &[row]);
+    let label = label_text(&frame, &source);
+
+    assert_eq!(label.layout, None);
+    assert_eq!(label.text, source);
+    assert_eq!(
+        (
+            store.len(),
+            store.retained_payload_bytes(),
+            store.change_cursor()
+        ),
+        accounting
+    );
+    assert_eq!(output.values.len(), 1);
+    assert!(frame.semantics.nodes().iter().any(|node| {
+        node.role == SemanticRole::Row && node.label.as_deref() == Some(source.as_str())
+    }));
+}
