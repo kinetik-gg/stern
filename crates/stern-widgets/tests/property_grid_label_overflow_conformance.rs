@@ -758,3 +758,109 @@ fn offscreen_rows_do_not_register_layouts_and_sections_keep_generic_policy() {
     let layoutless_frame = ui.finish_output();
     assert_eq!(label_text(&layoutless_frame, section_source).layout, None);
 }
+
+#[test]
+fn ineligible_widths_and_multiline_sources_keep_registered_full_source_policy() {
+    let narrow_source = "Complete narrow property source remains visible";
+    let narrow_row = PropertyGridRow::property(ItemId::from_raw(101), narrow_source, 0);
+    let mut narrow_store = TextLayoutStore::new();
+    let mut narrow_memory = UiMemory::new();
+    let (narrow_output, narrow_frame) = retained_grid(
+        &mut narrow_store,
+        &mut narrow_memory,
+        std::slice::from_ref(&narrow_row),
+        BOUNDS,
+        PropertyGridConfig::new(layout(5.0)).with_overscan(0),
+        &UiInput::default(),
+        &default_dark_theme(),
+    );
+    let narrow_label = label_text(&narrow_frame, narrow_source);
+    let narrow_layout = narrow_store
+        .stored_layout(narrow_label.layout.expect("registered narrow policy"))
+        .expect("resident narrow policy");
+    assert_eq!(narrow_layout.key.width_bits, 0.0_f32.to_bits());
+    assert_eq!(narrow_layout.key.overflow, TextOverflow::EndEllipsis);
+    assert_eq!(narrow_layout.key.text, narrow_source);
+    assert!(!narrow_layout.layout.is_elided());
+    assert_eq!(marker_count(&narrow_store, narrow_label), 0);
+    assert!(narrow_frame.semantics.nodes().iter().any(|node| {
+        node.label.as_deref() == Some(narrow_source)
+            && node.bounds == narrow_output.visible_rows[0].rect
+    }));
+
+    for (index, source) in [
+        "First complete line\nSecond complete line",
+        "First complete line\r\nSecond complete line",
+        "First complete paragraph\u{2029}Second complete paragraph",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let row = PropertyGridRow::property(ItemId::from_raw(102 + index as u64), source, 0);
+        let mut store = TextLayoutStore::new();
+        let mut memory = UiMemory::new();
+        let (_, frame) = retained_default(&mut store, &mut memory, &[row]);
+        let label = label_text(&frame, source);
+        let stored = store
+            .stored_layout(label.layout.expect("registered multiline policy"))
+            .expect("resident multiline policy");
+        assert_eq!(stored.key.text, source);
+        assert_eq!(stored.key.overflow, TextOverflow::EndEllipsis);
+        assert!(!stored.layout.is_elided());
+        assert_eq!(marker_count(&store, label), 0);
+        assert!(frame.semantics.nodes().iter().any(|node| {
+            node.role == SemanticRole::Row && node.label.as_deref() == Some(source)
+        }));
+    }
+}
+
+#[test]
+fn layoutless_ui_and_invalid_outer_bounds_preserve_fail_safe_output() {
+    let source = "Complete layoutless property source";
+    let row = PropertyGridRow::property(ItemId::from_raw(111), source, 0);
+    let input = UiInput::default();
+    let theme = default_dark_theme();
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::new(&input, &mut memory, &theme);
+    let output = ui
+        .property_grid(
+            "grid",
+            BOUNDS,
+            std::slice::from_ref(&row),
+            PropertyGridConfig::default(),
+            |_, cell| cell.row.id,
+        )
+        .expect("valid layoutless property row");
+    let frame = ui.finish_output();
+    assert_eq!(output.values[0].value, row.id);
+    assert_eq!(label_text(&frame, source).layout, None);
+    assert_eq!(label_text(&frame, source).text, source);
+    assert!(frame.semantics.nodes().iter().any(|node| {
+        node.role == SemanticRole::Row && node.label.as_deref() == Some(source)
+    }));
+
+    for bounds in [
+        Rect::ZERO,
+        Rect::new(0.0, 0.0, -1.0, 20.0),
+        Rect::new(f32::NAN, 0.0, 20.0, 20.0),
+        Rect::new(0.0, f32::INFINITY, 20.0, 20.0),
+    ] {
+        let mut store = TextLayoutStore::new();
+        let mut memory = UiMemory::new();
+        let (output, frame) = retained_grid(
+            &mut store,
+            &mut memory,
+            std::slice::from_ref(&row),
+            bounds,
+            PropertyGridConfig::default(),
+            &UiInput::default(),
+            &default_dark_theme(),
+        );
+        assert!(output.visible_rows.is_empty());
+        assert!(output.values.is_empty());
+        assert!(output.intents.is_empty());
+        assert!(frame.primitives.is_empty());
+        assert!(frame.semantics.nodes().is_empty());
+        assert!(store.is_empty());
+    }
+}
