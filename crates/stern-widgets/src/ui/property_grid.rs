@@ -5,6 +5,7 @@ use stern_core::{
     Response, ScrollResponse, SemanticNode, SemanticRole, SemanticValue, Size, Stroke,
     TextPrimitive, TextRole, Vec2, WidgetId, scrollable,
 };
+use stern_text::{TextLayoutKey, TextOverflow, TextStyle};
 
 use super::Ui;
 use crate::inspector::{
@@ -222,14 +223,24 @@ impl Ui<'_> {
         } else {
             self.theme.colors.content.muted
         };
-        self.paint_property_grid_text(
-            Point::new(
-                geometry.label_rect.x + if section { 8.0 } else { 6.0 },
-                text_baseline(geometry.label_rect, self.theme.font(TextRole::Label).size),
-            ),
-            label,
-            label_color,
+        let label_origin = Point::new(
+            geometry.label_rect.x + if section { 8.0 } else { 6.0 },
+            text_baseline(geometry.label_rect, self.theme.font(TextRole::Label).size),
         );
+        if section {
+            self.paint_property_grid_text(label_origin, label, label_color);
+        } else {
+            let reserved_right = if row.state.help_text.is_some() {
+                22.0_f32
+            } else if presentation.accented {
+                10.0_f32
+            } else {
+                0.0_f32
+            };
+            let label_width =
+                ((geometry.label_rect.width - 6.0_f32) - reserved_right).max(0.0_f32);
+            self.paint_property_grid_label(label_origin, label, label_color, label_width);
+        }
         if row.state.help_text.is_some() {
             self.paint_property_grid_text(
                 Point::new(
@@ -260,6 +271,30 @@ impl Ui<'_> {
 
     fn paint_property_grid_text(&mut self, origin: Point, text: String, color: Color) {
         let primitive = self.property_grid_text_primitive(origin, text, color);
+        self.primitive(primitive);
+    }
+
+    fn paint_property_grid_label(
+        &mut self,
+        origin: Point,
+        text: String,
+        color: Color,
+        label_width: f32,
+    ) {
+        let mut primitive = self.property_grid_text_primitive(origin, text, color);
+        if let (Some(text_layouts), Primitive::Text(text)) =
+            (self.text_layouts.as_deref_mut(), &mut primitive)
+        {
+            text.layout = text_layouts.try_layout_id(
+                TextLayoutKey::new(
+                    text.text.clone(),
+                    TextStyle::new(text.family.clone(), text.size, text.line_height),
+                    label_width,
+                    false,
+                )
+                .with_overflow(TextOverflow::EndEllipsis),
+            );
+        }
         self.primitive(primitive);
     }
 
