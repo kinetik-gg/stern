@@ -1,5 +1,8 @@
 use super::common::assert_approx;
-use crate::{RenderFrameInput, RenderResources, TextLayoutResource, VelloRenderer};
+use crate::{
+    RenderFrameInput, RenderResources, TextLayoutResource, VelloRenderer,
+    project_text_point_to_device, root_transform, snap_axis_aligned_translation,
+};
 use stern_core::{
     ActionContext, ActionDescriptor, Brush, Color, PhysicalSize, Point, Primitive, Rect,
     ScaleFactor, Size, TextLayoutId, TextPrimitive, Transform, UiInput, UiMemory, Vec2,
@@ -149,22 +152,26 @@ fn retained_standard_and_action_buttons_encode_exact_ellipsis_resources_at_all_s
     let _ = ui.action_button("action", action_rect, &action, ActionContext::Global);
     let frame = ui.finish_output();
 
-    let standard_id = frame
+    let standard_text = frame
         .primitives
         .iter()
         .find_map(|primitive| match primitive {
-            Primitive::Text(text) if text.text == standard_source => text.layout,
+            Primitive::Text(text) if text.text == standard_source => Some(text),
             _ => None,
         })
         .expect("registered retained standard button label");
-    let action_id = frame
+    let action_text = frame
         .primitives
         .iter()
         .find_map(|primitive| match primitive {
-            Primitive::Text(text) if text.text == action_source => text.layout,
+            Primitive::Text(text) if text.text == action_source => Some(text),
             _ => None,
         })
         .expect("registered retained action button label");
+    let standard_id = standard_text
+        .layout
+        .expect("standard button retained identity");
+    let action_id = action_text.layout.expect("action button retained identity");
     assert_ne!(standard_id, action_id);
 
     let standard = store
@@ -195,6 +202,32 @@ fn retained_standard_and_action_buttons_encode_exact_ellipsis_resources_at_all_s
         .iter()
         .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
         .collect::<Vec<_>>();
+    let standard_logical_points = standard
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| {
+            run.glyphs.iter().map(|glyph| {
+                Point::new(
+                    standard_text.origin.x + glyph.x,
+                    standard_text.origin.y + glyph.y,
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let action_logical_points = action
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| {
+            run.glyphs.iter().map(|glyph| {
+                Point::new(
+                    action_text.origin.x + glyph.x,
+                    action_text.origin.y + glyph.y,
+                )
+            })
+        })
+        .collect::<Vec<_>>();
     let standard_markers = standard
         .layout
         .runs
@@ -218,7 +251,15 @@ fn retained_standard_and_action_buttons_encode_exact_ellipsis_resources_at_all_s
 
     let mut expected_ids = standard_ids.clone();
     expected_ids.extend_from_slice(&action_ids);
+    let mut logical_points = standard_logical_points;
+    logical_points.extend_from_slice(&action_logical_points);
+    assert_eq!(logical_points.len(), expected_ids.len());
     let action_marker_index = standard_ids.len() + action_markers[0];
+    let store_accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
     let mut resources = RenderResources::new();
     let mut sync = TextLayoutResourceSync::new();
     let report = resources.reconcile_text_layouts(&store, &mut sync);
@@ -243,8 +284,9 @@ fn retained_standard_and_action_buttons_encode_exact_ellipsis_resources_at_all_s
 
     let mut renderer = VelloRenderer::new();
     for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+        let device_scale = f64::from(scale);
         let output = renderer.submit_frame(RenderFrameInput {
-            viewport: viewport(f64::from(scale)),
+            viewport: viewport(device_scale),
             primitives: &frame.primitives,
             resources: &resources,
         });
@@ -258,6 +300,15 @@ fn retained_standard_and_action_buttons_encode_exact_ellipsis_resources_at_all_s
 
         assert!(output.diagnostics.is_empty());
         assert_eq!(encoded_ids, expected_ids);
+        let effective = snap_axis_aligned_translation(root_transform(device_scale));
+        assert_eq!(
+            effective.as_coeffs(),
+            [device_scale, 0.0, 0.0, device_scale, 0.0, 0.0]
+        );
+        for (encoded, logical) in encoding.resources.glyphs.iter().zip(&logical_points) {
+            let expected = project_text_point_to_device(effective, *logical);
+            assert_eq!(Point::new(encoded.x, encoded.y), expected);
+        }
         assert_eq!(
             encoded_ids[standard_markers[0]],
             standard_ids[standard_markers[0]]
@@ -291,6 +342,16 @@ fn retained_standard_and_action_buttons_encode_exact_ellipsis_resources_at_all_s
                 .key
                 .width_bits,
             expected_width_bits
+        );
+        assert_eq!(standard_text.layout, Some(standard_id));
+        assert_eq!(action_text.layout, Some(action_id));
+        assert_eq!(
+            (
+                store.len(),
+                store.retained_payload_bytes(),
+                store.change_cursor()
+            ),
+            store_accounting
         );
         assert_eq!(renderer.cached_text_layout_count(), 0);
         assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
