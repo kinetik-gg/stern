@@ -371,6 +371,7 @@ fn compare_keys(left: &TextLayoutKey, right: &TextLayoutKey) -> Ordering {
         })
         .then_with(|| left.width_bits.cmp(&right.width_bits))
         .then_with(|| left.wrap.cmp(&right.wrap))
+        .then_with(|| left.overflow.cmp(&right.overflow))
 }
 
 #[allow(
