@@ -67,11 +67,12 @@ fn focused_choice_and_slider_outputs_prepend_exact_rings_without_changing_bounds
     let check_id = WidgetId::from_key("focused-check");
     let check_control = Rect::new(10.0, 20.0, 20.0, 20.0);
     let check_label = Rect::new(36.0, 20.0, 70.0, 20.0);
+    let check_size = theme.checkbox(Default::default()).size;
     let check_base = Rect::new(
         check_control.x,
         check_control.y,
-        theme.controls.check_size,
-        theme.controls.check_size,
+        check_size,
+        check_size,
     );
     let mut focused = focused_memory(check_id);
     let focused_check = checkbox_with_label_target(
@@ -116,11 +117,12 @@ fn focused_choice_and_slider_outputs_prepend_exact_rings_without_changing_bounds
     let radio_id = WidgetId::from_key("focused-radio");
     let radio_control = Rect::new(10.0, 50.0, 20.0, 20.0);
     let radio_label = Rect::new(36.0, 50.0, 70.0, 20.0);
+    let radio_size = theme.radio_button(Default::default()).size;
     let radio_base = Rect::new(
         radio_control.x,
         radio_control.y,
-        theme.controls.check_size,
-        theme.controls.check_size,
+        radio_size,
+        radio_size,
     );
     let mut focused = focused_memory(radio_id);
     let focused_radio = radio_button_with_label_target(
@@ -239,12 +241,8 @@ fn focused_hovered_selected_checkbox_preserves_focus_layers_and_selected_paint()
     let theme = sentinel_theme();
     let id = WidgetId::from_key("focused-hovered-selected-check");
     let rect = Rect::new(10.0, 20.0, 20.0, 20.0);
-    let base_rect = Rect::new(
-        rect.x,
-        rect.y,
-        theme.controls.check_size,
-        theme.controls.check_size,
-    );
+    let check_size = theme.checkbox(Default::default()).size;
+    let base_rect = Rect::new(rect.x, rect.y, check_size, check_size);
     let mut focused_state = focused_memory(id);
     let focused = checkbox_with_label_target(
         id,
@@ -402,11 +400,12 @@ fn focused_radio_group_normalization_preserves_ring_layers_and_radio_shape() {
     assert_eq!(group.selected, 3);
     assert_eq!(group.selected_index, Some(2));
     assert_eq!(output.primitives.len(), 5);
+    let radio_size = theme.radio_button(Default::default()).size;
     let base_rect = Rect::new(
         choices[2].rect.x,
         choices[2].rect.y,
-        theme.controls.check_size,
-        theme.controls.check_size,
+        radio_size,
+        radio_size,
     );
     let expected = theme
         .focus_ring(true)
