@@ -305,9 +305,7 @@ pub fn select_field(
     memory: &mut UiMemory,
     theme: &Theme,
 ) -> SelectFieldOutput {
-    select_field_with_text_layouts(
-        id, rect, label, model, config, input, memory, theme, None,
-    )
+    select_field_with_text_layouts(id, rect, label, model, config, input, memory, theme, None)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -349,12 +347,8 @@ pub(crate) fn select_field_with_text_layouts(
         (rect.width - recipe.padding_x * 2.0 - arrow_width).max(0.0),
         rect.height,
     );
-    let mut value_primitive = field_text_primitive(
-        text_rect,
-        presentation.label.clone(),
-        &recipe,
-        theme,
-    );
+    let mut value_primitive =
+        field_text_primitive(text_rect, presentation.label.clone(), &recipe, theme);
     if let (Some(text_layouts), Primitive::Text(text)) = (text_layouts, &mut value_primitive) {
         text.layout = text_layouts.try_layout_id(
             TextLayoutKey::new(
