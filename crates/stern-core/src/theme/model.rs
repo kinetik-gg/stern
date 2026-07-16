@@ -7,6 +7,8 @@ use super::{
 };
 use crate::{Brush, Color, CornerRadius, Stroke, Vec2};
 
+const SELECTION_INDICATOR_SIZE: f32 = 14.0;
+
 /// Complete theme.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Theme {
@@ -317,7 +319,7 @@ impl Theme {
                 Brush::Solid(self.colors.border.default),
             ),
             radius: self.radii.sm,
-            size: self.controls.check_size,
+            size: SELECTION_INDICATOR_SIZE,
         }
     }
 
