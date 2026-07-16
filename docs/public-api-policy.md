@@ -204,14 +204,32 @@ unchanged, its retained helper is crate-private, the public low-level
 `select_field(...)` remains layoutless, and no root, prelude, or facade export
 is added.
 
+Canonical retained `Ui::property_grid` now applies the same policy only to
+`PropertyGridRowKind::Property` main labels at the exact existing label inset
+and fixed help/status reservation. Complete required presentation text and
+undecorated semantic text remain distinct; help/status glyphs and section
+titles retain their existing generic visible/layoutless paths. This adoption
+also adds no public API: the existing `Ui::property_grid` signature,
+`PropertyGridConfig`, row/layout models, callbacks, output, access, intents,
+semantics, exports, and qualified facade remain unchanged. No public overflow
+configuration, copied-value API, tooltip API, helper, alias, prelude item,
+`TextPrimitive` field, or renderer command is added, and generic retained-text
+attachment keeps its existing fallback contract.
+
 This advances only `STERN-TYP-004` to stronger bounded Partial. Component
-evidence covers selection and placeholder states, disabled/read-only/open
-presentation, exact retained identity and rejection, and registered Vello
-topology. It makes no claim about copied values, tooltips, editable selection,
-other truncating components, start/middle/multiline ellipsis, baseline
-behavior, browser output, GPU output, or manual review. No typography parity
-record is Accepted, and every other typography requirement preserves its prior
-status.
+evidence covers selection and placeholder states, property-label state and
+fixed-column topology, disabled/read-only/open presentation, exact retained
+identity and rejection, and registered Vello topology. `STERN-DEN-004` advances
+only to bounded Partial for finite-positive computed property-label spans;
+nonpositive spans make no endpoint or non-overlap claim. Existing Partial
+evidence for `STERN-TYP-000`, `STERN-TYP-002`, and `STERN-TYP-006` is
+preserved, while `STERN-TYP-001` and `STERN-TYP-003` do not advance. This makes
+no claim about copied values, tooltips, editable selection, other truncating
+components, start/middle/multiline ellipsis, baseline behavior, browser output,
+GPU output, or manual review. `STERN-TYP-005`, `STERN-TYP-007`,
+`STERN-INSPECT-001`, `STERN-PROP-001`, `STERN-TIP-001`, `STERN-TIP-002`, and
+`STERN-OVERLAY-COMP-002` do not advance. No typography parity record is
+Accepted.
 
 ### Qualified size foundation
 
