@@ -3,15 +3,16 @@
 use std::time::Duration;
 
 use stern_core::{
-    FrameContext, FrameOutput, MouseButton, PhysicalSize, Point, PointerButtonState, PointerInput,
-    PointerOrder, Primitive, Rect, ScaleFactor, SemanticRole, Size, TextPrimitive, TimeInfo,
-    Transform, UiInput, UiInputEvent, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    FrameContext, FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton,
+    PhysicalSize, Point, PointerButtonState, PointerInput, PointerOrder, Primitive, Rect,
+    ScaleFactor, SemanticRole, Size, TextPrimitive, TimeInfo, Transform, UiInput, UiInputEvent,
+    UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_text::{TextFeatureSet, TextLayoutStore, TextOverflow};
 use stern_widgets::{
     CollectionProjectedItem, CollectionProjection, ItemId, SortDirection, TableColumn,
     TableColumnConstraints, TableLayout, TableSort, Ui, VirtualTableConfig, VirtualTableOutput,
-    VirtualTableRow, VirtualTableSelection, VirtualTableSelectionMode,
+    VirtualTableRow, VirtualTableSelection, VirtualTableSelectionMode, VirtualTableTarget,
 };
 
 const BOUNDS: Rect = Rect::new(7.0, 11.0, 320.0, 88.0);
@@ -191,6 +192,21 @@ fn drag_input(point: Point, pressed: bool, delta_x: f32) -> UiInput {
         });
     }
     input
+}
+
+fn key_input(key: Key) -> UiInput {
+    UiInput {
+        keyboard: KeyboardInput {
+            modifiers: Modifiers::default(),
+            events: vec![KeyEvent::new(
+                key,
+                KeyState::Pressed,
+                Modifiers::default(),
+                false,
+            )],
+        },
+        ..UiInput::default()
+    }
 }
 
 fn assert_header_visible_policy(store: &TextLayoutStore, frame: &FrameOutput, source: &str) {
@@ -1157,4 +1173,178 @@ fn headers_remain_complete_source_visible_consumers_through_focus_sort_narrow_an
     );
     assert_eq!(moved.output.sort_requested, None);
     assert_header_visible_policy(&store, &moved.frame, "Header 0");
+}
+
+#[test]
+fn projection_reorder_and_both_navigation_modes_preserve_stable_semantic_identity() {
+    for mode in [
+        VirtualTableSelectionMode::Row,
+        VirtualTableSelectionMode::Cell,
+    ] {
+        let source = projection(&[1, 2, 3]);
+        let mut store = TextLayoutStore::new();
+        let mut memory = UiMemory::new();
+        let mut selection = VirtualTableSelection::new();
+        let table_config = || config(BOUNDS, [80.0, 80.0], mode);
+        let row = |item: CollectionProjectedItem| {
+            VirtualTableRow::new([
+                format!("Row {} first", item.id.raw()),
+                format!("Row {} second", item.id.raw()),
+            ])
+        };
+        let seed = run_table(
+            Some(&mut store),
+            &source,
+            table_config(),
+            &mut selection,
+            &mut memory,
+            UiInput::default(),
+            row,
+        );
+        let first = seed.output.selection_responses[0].response;
+        let point = first.rect.center();
+        let _ = run_table(
+            Some(&mut store),
+            &source,
+            table_config(),
+            &mut selection,
+            &mut memory,
+            pointer_input(point, true, false),
+            row,
+        );
+        let selected = run_table(
+            Some(&mut store),
+            &source,
+            table_config(),
+            &mut selection,
+            &mut memory,
+            pointer_input(point, false, true),
+            row,
+        );
+        assert!(
+            selected.output.selection_responses[0]
+                .response
+                .state
+                .selected
+        );
+
+        let moved_down = run_table(
+            Some(&mut store),
+            &source,
+            table_config(),
+            &mut selection,
+            &mut memory,
+            key_input(Key::ArrowDown),
+            row,
+        );
+        let expected_after_down = match mode {
+            VirtualTableSelectionMode::Row => VirtualTableTarget::Row(id(2)),
+            VirtualTableSelectionMode::Cell => VirtualTableTarget::Cell {
+                row: id(2),
+                column: id(10),
+            },
+        };
+        assert_eq!(selection.target(), Some(expected_after_down));
+        assert_eq!(
+            moved_down.output.cursor_target.map(|cursor| cursor.target),
+            Some(expected_after_down)
+        );
+
+        let expected_final = if mode == VirtualTableSelectionMode::Cell {
+            let moved_right = run_table(
+                Some(&mut store),
+                &source,
+                table_config(),
+                &mut selection,
+                &mut memory,
+                key_input(Key::ArrowRight),
+                row,
+            );
+            let target = VirtualTableTarget::Cell {
+                row: id(2),
+                column: id(11),
+            };
+            assert_eq!(
+                moved_right.output.cursor_target.map(|cursor| cursor.target),
+                Some(target)
+            );
+            target
+        } else {
+            expected_after_down
+        };
+        let final_label = if mode == VirtualTableSelectionMode::Cell {
+            "Row 2 second"
+        } else {
+            "Row 2 first"
+        };
+        let semantic_before = body_semantics(&moved_down.frame, final_label)
+            .first()
+            .map(|node| node.id)
+            .expect("semantic identity before projection reorder");
+
+        let reordered_projection = projection(&[3, 2, 1]);
+        let reordered = run_table(
+            Some(&mut store),
+            &reordered_projection,
+            table_config(),
+            &mut selection,
+            &mut memory,
+            UiInput::default(),
+            row,
+        );
+        assert_eq!(selection.target(), Some(expected_final));
+        let semantic_after = body_semantics(&reordered.frame, final_label);
+        assert_eq!(semantic_after.len(), 1);
+        assert_eq!(semantic_after[0].id, semantic_before);
+        assert_eq!(semantic_after[0].label.as_deref(), Some(final_label));
+        assert!(reordered.frame.actions.is_empty());
+    }
+}
+
+#[test]
+fn missing_cells_keep_empty_explicit_policy_and_extra_cells_remain_unpainted() {
+    let items = projection(&[1]);
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let mut selection = VirtualTableSelection::new();
+    let missing = run_table(
+        Some(&mut store),
+        &items,
+        config(BOUNDS, [80.0, 80.0], VirtualTableSelectionMode::Cell),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |_| VirtualTableRow::new(["Only caller-owned cell"]),
+    );
+    assert_eq!(
+        body_semantics(&missing.frame, "Only caller-owned cell").len(),
+        1
+    );
+    let empty_texts = body_texts(&missing.frame, "");
+    let empty_semantics = body_semantics(&missing.frame, "");
+    assert_eq!(empty_texts.len(), 1);
+    assert_eq!(empty_semantics.len(), 1);
+    let empty_layout = store
+        .stored_layout(empty_texts[0].layout.expect("explicit missing-cell policy"))
+        .expect("resident missing-cell policy");
+    assert_eq!(empty_layout.key.text, "");
+    assert_eq!(empty_layout.key.overflow, TextOverflow::EndEllipsis);
+    assert!(!empty_layout.layout.is_elided());
+    assert_eq!(marker_count(&store, empty_texts[0]), 0);
+
+    let extra = "Caller extra cell must remain unpainted";
+    let extra_run = run_table(
+        Some(&mut store),
+        &items,
+        config(BOUNDS, [80.0, 80.0], VirtualTableSelectionMode::Cell),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |_| VirtualTableRow::new(["First", "Second", extra]),
+    );
+    assert!(body_texts(&extra_run.frame, extra).is_empty());
+    assert!(body_semantics(&extra_run.frame, extra).is_empty());
+    assert!(store.layouts().all(|entry| entry.key.text != extra));
+    assert_eq!(body_semantics(&extra_run.frame, "First").len(), 1);
+    assert_eq!(body_semantics(&extra_run.frame, "Second").len(), 1);
 }
