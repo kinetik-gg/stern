@@ -7,7 +7,7 @@ use stern_render::{
     ImageResource, RenderImage, RenderImageSampling, RenderResources, TextLayoutResourceSync,
     TextLayoutResourceSyncKind, TextLayoutResourceSyncReport, TextureResource,
 };
-use stern_text::{TextFeatureSet, TextLayoutKey, TextLayoutStore, TextStyle};
+use stern_text::{TextFeatureSet, TextLayoutKey, TextLayoutStore, TextOverflow, TextStyle};
 
 const MAX_TEXT_PAYLOAD_BYTES: usize = 32 * 1024 * 1024;
 
@@ -145,6 +145,53 @@ fn reconciliation_retains_distinct_feature_bearing_layout_resources() {
     assert!(Arc::ptr_eq(
         &resources.text_layout_resource(numeric_id).unwrap().layout,
         &numeric_layout
+    ));
+}
+
+#[test]
+fn reconciliation_preserves_complete_source_and_overflow_policy() {
+    let source = "Renderer resources keep this complete source even when its presentation elides";
+    let visible_key = key(source);
+    let ellipsized_key = visible_key.clone().with_overflow(TextOverflow::EndEllipsis);
+    let mut store = TextLayoutStore::new();
+    let visible_id = store.layout_id(visible_key);
+    let ellipsized_id = store.layout_id(ellipsized_key);
+    let mut resources = RenderResources::new();
+    let mut sync = TextLayoutResourceSync::new();
+
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(report.kind, TextLayoutResourceSyncKind::Full);
+    assert_eq!((report.added, report.retained), (2, 2));
+    assert_ne!(visible_id, ellipsized_id);
+
+    let visible = resources.text_layout_resource(visible_id).unwrap();
+    assert_eq!(visible.key.text, source);
+    assert_eq!(visible.key.overflow, TextOverflow::Visible);
+    assert!(!visible.layout.is_elided());
+    let visible_layout = Arc::clone(&visible.layout);
+
+    let ellipsized = resources.text_layout_resource(ellipsized_id).unwrap();
+    assert_eq!(ellipsized.key.text, source);
+    assert_eq!(ellipsized.key.overflow, TextOverflow::EndEllipsis);
+    assert!(ellipsized.layout.is_elided());
+    let ellipsized_layout = Arc::clone(&ellipsized.layout);
+    assert_eq!(
+        resources.retained_text_layout_payload_bytes(),
+        Some(store.retained_payload_bytes())
+    );
+
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert!(report.is_noop());
+    assert!(Arc::ptr_eq(
+        &resources.text_layout_resource(visible_id).unwrap().layout,
+        &visible_layout
+    ));
+    assert!(Arc::ptr_eq(
+        &resources
+            .text_layout_resource(ellipsized_id)
+            .unwrap()
+            .layout,
+        &ellipsized_layout
     ));
 }
 
