@@ -937,6 +937,231 @@ impl FontFamilyScale {
     }
 }
 
+/// Exact semantic font-size token identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FontSizeToken {
+    /// `font.size.ui`.
+    Ui,
+    /// `font.size.dense`.
+    Dense,
+    /// `font.size.metadata`.
+    Metadata,
+    /// `font.size.section`.
+    Section,
+    /// `font.size.dialog`.
+    Dialog,
+    /// `font.size.heading`.
+    Heading,
+}
+
+impl FontSizeToken {
+    /// Every font-size token in normative specification order.
+    pub const ALL: &'static [Self] = &[
+        Self::Ui,
+        Self::Dense,
+        Self::Metadata,
+        Self::Section,
+        Self::Dialog,
+        Self::Heading,
+    ];
+}
+
+/// Exact customizable font-size scale.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FontSizeScale {
+    /// `font.size.ui`.
+    pub ui: f32,
+    /// `font.size.dense`.
+    pub dense: f32,
+    /// `font.size.metadata`.
+    pub metadata: f32,
+    /// `font.size.section`.
+    pub section: f32,
+    /// `font.size.dialog`.
+    pub dialog: f32,
+    /// `font.size.heading`.
+    pub heading: f32,
+}
+
+impl FontSizeScale {
+    /// Creates a font-size scale in normative specification order.
+    #[must_use]
+    pub const fn new(
+        ui: f32,
+        dense: f32,
+        metadata: f32,
+        section: f32,
+        dialog: f32,
+        heading: f32,
+    ) -> Self {
+        Self {
+            ui,
+            dense,
+            metadata,
+            section,
+            dialog,
+            heading,
+        }
+    }
+
+    /// Resolves a semantic font-size token.
+    #[must_use]
+    pub const fn get(self, token: FontSizeToken) -> f32 {
+        match token {
+            FontSizeToken::Ui => self.ui,
+            FontSizeToken::Dense => self.dense,
+            FontSizeToken::Metadata => self.metadata,
+            FontSizeToken::Section => self.section,
+            FontSizeToken::Dialog => self.dialog,
+            FontSizeToken::Heading => self.heading,
+        }
+    }
+}
+
+/// Exact semantic font line-height token identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FontLineHeightToken {
+    /// `font.lineHeight.ui`.
+    Ui,
+    /// `font.lineHeight.dense`.
+    Dense,
+    /// `font.lineHeight.metadata`.
+    Metadata,
+}
+
+impl FontLineHeightToken {
+    /// Every font line-height token in normative specification order.
+    pub const ALL: &'static [Self] = &[Self::Ui, Self::Dense, Self::Metadata];
+}
+
+/// Exact customizable font line-height scale.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FontLineHeightScale {
+    /// `font.lineHeight.ui`.
+    pub ui: f32,
+    /// `font.lineHeight.dense`.
+    pub dense: f32,
+    /// `font.lineHeight.metadata`.
+    pub metadata: f32,
+}
+
+impl FontLineHeightScale {
+    /// Creates a font line-height scale in normative specification order.
+    #[must_use]
+    pub const fn new(ui: f32, dense: f32, metadata: f32) -> Self {
+        Self {
+            ui,
+            dense,
+            metadata,
+        }
+    }
+
+    /// Resolves a semantic font line-height token.
+    #[must_use]
+    pub const fn get(self, token: FontLineHeightToken) -> f32 {
+        match token {
+            FontLineHeightToken::Ui => self.ui,
+            FontLineHeightToken::Dense => self.dense,
+            FontLineHeightToken::Metadata => self.metadata,
+        }
+    }
+}
+
+/// Exact semantic font-weight token identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FontWeightToken {
+    /// `font.weight.regular`.
+    Regular,
+    /// `font.weight.medium`.
+    Medium,
+    /// `font.weight.semibold`.
+    Semibold,
+    /// `font.weight.bold`.
+    Bold,
+}
+
+impl FontWeightToken {
+    /// Every font-weight token in normative specification order.
+    pub const ALL: &'static [Self] = &[
+        Self::Regular,
+        Self::Medium,
+        Self::Semibold,
+        Self::Bold,
+    ];
+}
+
+/// Exact customizable font-weight scale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontWeightScale {
+    /// `font.weight.regular`.
+    pub regular: u16,
+    /// `font.weight.medium`.
+    pub medium: u16,
+    /// `font.weight.semibold`.
+    pub semibold: u16,
+    /// `font.weight.bold`.
+    pub bold: u16,
+}
+
+impl FontWeightScale {
+    /// Creates a font-weight scale in normative specification order.
+    #[must_use]
+    pub const fn new(regular: u16, medium: u16, semibold: u16, bold: u16) -> Self {
+        Self {
+            regular,
+            medium,
+            semibold,
+            bold,
+        }
+    }
+
+    /// Resolves a semantic font-weight token.
+    #[must_use]
+    pub const fn get(self, token: FontWeightToken) -> u16 {
+        match token {
+            FontWeightToken::Regular => self.regular,
+            FontWeightToken::Medium => self.medium,
+            FontWeightToken::Semibold => self.semibold,
+            FontWeightToken::Bold => self.bold,
+        }
+    }
+}
+
+/// Exact semantic font-feature token identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FontFeatureToken {
+    /// `font.feature.numeric`.
+    Numeric,
+}
+
+impl FontFeatureToken {
+    /// Every font-feature token in normative specification order.
+    pub const ALL: &'static [Self] = &[Self::Numeric];
+}
+
+/// Exact customizable font-feature scale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontFeatureScale {
+    /// `font.feature.numeric`.
+    pub numeric: &'static str,
+}
+
+impl FontFeatureScale {
+    /// Creates a font-feature scale in normative specification order.
+    #[must_use]
+    pub const fn new(numeric: &'static str) -> Self {
+        Self { numeric }
+    }
+
+    /// Resolves a semantic font-feature token.
+    #[must_use]
+    pub const fn get(self, token: FontFeatureToken) -> &'static str {
+        match token {
+            FontFeatureToken::Numeric => self.numeric,
+        }
+    }
+}
+
 /// Logical size and line height stored for a semantic text role.
 ///
 /// These values are recipe geometry, not measured visible glyph bounds.
