@@ -637,6 +637,37 @@ fn qualified_facade_stroke_types_construct_and_expose_exact_roles() {
 
 #[test]
 #[allow(clippy::float_cmp)]
+fn qualified_facade_constructs_and_resolves_semantic_font_families() {
+    use stern::core::{
+        FontFamilyRole, FontFamilyScale, FontToken, TextRole, TextRoleMetrics, TypographyScale,
+        default_dark_theme,
+    };
+
+    let typography = TypographyScale {
+        families: FontFamilyScale::new("facade-ui", "facade-brand", "facade-mono"),
+        body: TextRoleMetrics::new(11.0, 17.0),
+        label: TextRoleMetrics::new(12.0, 18.0),
+        caption: TextRoleMetrics::new(13.0, 19.0),
+        title: TextRoleMetrics::new(14.0, 20.0),
+        monospace: TextRoleMetrics::new(15.0, 21.0),
+    };
+    let theme = default_dark_theme().with_typography(typography);
+    let title: FontToken = theme.font(TextRole::Title);
+    let monospace: FontToken = theme.font(TextRole::Monospace);
+
+    assert_eq!(FontFamilyRole::ALL.len(), 3);
+    assert_eq!(theme.font_family(FontFamilyRole::Ui), "facade-ui");
+    assert_eq!(theme.font_family(FontFamilyRole::Brand), "facade-brand");
+    assert_eq!(theme.font_family(FontFamilyRole::Mono), "facade-mono");
+    assert_eq!(title.family, "facade-ui");
+    assert_eq!((title.size, title.line_height), (14.0, 20.0));
+    assert_eq!(monospace.family, "facade-mono");
+    assert_eq!((monospace.size, monospace.line_height), (15.0, 21.0));
+    assert_eq!(theme.text_size, typography.body.size);
+}
+
+#[test]
+#[allow(clippy::float_cmp)]
 fn qualified_facade_exposes_focus_ring_recipe_without_prelude_expansion() {
     use stern::core::{
         Brush, Color, CornerRadius, FocusRingRecipe, Primitive, Rect, StrokeScale, ThemeColors,
