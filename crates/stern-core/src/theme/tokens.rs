@@ -1096,8 +1096,6 @@ pub struct ControlMetrics {
     pub control_height: f32,
     /// Compact control height.
     pub compact_control_height: f32,
-    /// Icon glyph side length.
-    pub icon_size: f32,
     /// Checkbox and radio side length.
     pub check_size: f32,
     /// Horizontal text/control padding.
