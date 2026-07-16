@@ -62,9 +62,18 @@ fn default_typography_exposes_exact_semantic_families_and_role_metrics() {
     assert_eq!(theme.font_family(FontFamilyRole::Ui), "Inter");
     assert_eq!(theme.font_family(FontFamilyRole::Brand), "Space Grotesk");
     assert_eq!(theme.font_family(FontFamilyRole::Mono), "Space Mono");
-    assert_ne!(theme.font_family(FontFamilyRole::Ui), theme.font_family(FontFamilyRole::Brand));
-    assert_ne!(theme.font_family(FontFamilyRole::Ui), theme.font_family(FontFamilyRole::Mono));
-    assert_ne!(theme.font_family(FontFamilyRole::Brand), theme.font_family(FontFamilyRole::Mono));
+    assert_ne!(
+        theme.font_family(FontFamilyRole::Ui),
+        theme.font_family(FontFamilyRole::Brand)
+    );
+    assert_ne!(
+        theme.font_family(FontFamilyRole::Ui),
+        theme.font_family(FontFamilyRole::Mono)
+    );
+    assert_ne!(
+        theme.font_family(FontFamilyRole::Brand),
+        theme.font_family(FontFamilyRole::Mono)
+    );
 
     let expected = [
         (TextRole::Body, "Inter", 12.0, 17.0),
@@ -77,7 +86,10 @@ fn default_typography_exposes_exact_semantic_families_and_role_metrics() {
         let token = theme.font(role);
         assert_eq!(token.family, family, "wrong family for {role:?}");
         assert_eq!(token.size, size, "wrong size for {role:?}");
-        assert_eq!(token.line_height, line_height, "wrong line height for {role:?}");
+        assert_eq!(
+            token.line_height, line_height,
+            "wrong line height for {role:?}"
+        );
     }
 }
 

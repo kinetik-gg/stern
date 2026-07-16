@@ -5,8 +5,7 @@
 use std::{fs, path::Path};
 
 use stern_core::{
-    FontFamilyRole, FontFamilyScale, TextRole, TextRoleMetrics, TypographyScale,
-    default_dark_theme,
+    FontFamilyRole, FontFamilyScale, TextRole, TextRoleMetrics, TypographyScale, default_dark_theme,
 };
 
 const EXPECTED_FAMILY_ROLES: [FontFamilyRole; 3] = [
@@ -43,9 +42,18 @@ fn default_family_scale_has_exact_distinct_role_inventory() {
     assert_eq!(theme.font_family(FontFamilyRole::Ui), "Inter");
     assert_eq!(theme.font_family(FontFamilyRole::Brand), "Space Grotesk");
     assert_eq!(theme.font_family(FontFamilyRole::Mono), "Space Mono");
-    assert_ne!(theme.font_family(FontFamilyRole::Ui), theme.font_family(FontFamilyRole::Brand));
-    assert_ne!(theme.font_family(FontFamilyRole::Ui), theme.font_family(FontFamilyRole::Mono));
-    assert_ne!(theme.font_family(FontFamilyRole::Brand), theme.font_family(FontFamilyRole::Mono));
+    assert_ne!(
+        theme.font_family(FontFamilyRole::Ui),
+        theme.font_family(FontFamilyRole::Brand)
+    );
+    assert_ne!(
+        theme.font_family(FontFamilyRole::Ui),
+        theme.font_family(FontFamilyRole::Mono)
+    );
+    assert_ne!(
+        theme.font_family(FontFamilyRole::Brand),
+        theme.font_family(FontFamilyRole::Mono)
+    );
 }
 
 #[test]
@@ -55,10 +63,7 @@ fn typed_family_lookup_routes_three_independent_sentinels() {
         SENTINEL_FAMILIES.get(FontFamilyRole::Brand),
         "sentinel-brand"
     );
-    assert_eq!(
-        SENTINEL_FAMILIES.get(FontFamilyRole::Mono),
-        "sentinel-mono"
-    );
+    assert_eq!(SENTINEL_FAMILIES.get(FontFamilyRole::Mono), "sentinel-mono");
 }
 
 #[test]
@@ -75,7 +80,10 @@ fn every_text_role_resolves_one_family_and_its_independent_metrics() {
         let token = SENTINEL_TYPOGRAPHY.get(role);
         assert_eq!(token.family, family, "wrong family for {role:?}");
         assert_eq!(token.size, size, "wrong size for {role:?}");
-        assert_eq!(token.line_height, line_height, "wrong line height for {role:?}");
+        assert_eq!(
+            token.line_height, line_height,
+            "wrong line height for {role:?}"
+        );
     }
 }
 
@@ -94,10 +102,7 @@ fn family_customization_preserves_all_text_role_metrics() {
     assert_eq!(customized.get(TextRole::Label).family, "sentinel-ui");
     assert_eq!(customized.get(TextRole::Caption).family, "sentinel-ui");
     assert_eq!(customized.get(TextRole::Title).family, "sentinel-ui");
-    assert_eq!(
-        customized.get(TextRole::Monospace).family,
-        "sentinel-mono"
-    );
+    assert_eq!(customized.get(TextRole::Monospace).family, "sentinel-mono");
     assert_eq!(customized.family(FontFamilyRole::Brand), "sentinel-brand");
 }
 
@@ -117,10 +122,7 @@ fn metric_customization_preserves_all_semantic_family_authority() {
     assert_eq!(customized.get(TextRole::Monospace).family, "Space Mono");
 
     for role in TEXT_ROLES {
-        assert_eq!(
-            customized.metrics(role),
-            SENTINEL_TYPOGRAPHY.metrics(role)
-        );
+        assert_eq!(customized.metrics(role), SENTINEL_TYPOGRAPHY.metrics(role));
     }
 }
 
@@ -167,7 +169,9 @@ fn default_theme_does_not_restore_the_removed_geist_family() {
     let defaults = include_str!("../src/theme/defaults.rs");
 
     assert!(!defaults.contains("Geist Mono"));
-    assert!(defaults.contains("FontFamilyScale::new(\"Inter\", \"Space Grotesk\", \"Space Mono\")"));
+    assert!(
+        defaults.contains("FontFamilyScale::new(\"Inter\", \"Space Grotesk\", \"Space Mono\")")
+    );
 }
 
 #[test]
@@ -215,5 +219,7 @@ fn collect_rust_sources(root: &Path, sources: &mut Vec<std::path::PathBuf>) {
 
 fn is_test_source(path: &Path) -> bool {
     path.file_name().is_some_and(|name| name == "tests.rs")
-        || path.components().any(|component| component.as_os_str() == "tests")
+        || path
+            .components()
+            .any(|component| component.as_os_str() == "tests")
 }
