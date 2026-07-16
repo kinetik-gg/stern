@@ -2,6 +2,7 @@
 
 use std::mem::size_of;
 
+use stern_core::{FontFeatureScale, FontFeatureToken, default_dark_theme};
 use stern_text::{CosmicTextEngine, TextFeatureSet, TextLayoutKey, TextStyle, fonts};
 
 const ADVANCE_TOLERANCE: f32 = 0.001;
@@ -48,6 +49,24 @@ fn public_feature_set_is_fixed_size_and_constructor_default_is_disabled() {
             .with_features(TextFeatureSet::TABULAR_NUMBERS)
             .features,
         TextFeatureSet::TABULAR_NUMBERS
+    );
+}
+
+#[test]
+fn semantic_numeric_resolution_is_exact_and_fails_soft_for_custom_values() {
+    assert_eq!(
+        TextFeatureSet::resolve_semantic(
+            default_dark_theme().typography.features,
+            FontFeatureToken::Numeric,
+        ),
+        Some(TextFeatureSet::TABULAR_NUMBERS)
+    );
+    assert_eq!(
+        TextFeatureSet::resolve_semantic(
+            FontFeatureScale::new("unsupported-custom-value"),
+            FontFeatureToken::Numeric,
+        ),
+        None
     );
 }
 

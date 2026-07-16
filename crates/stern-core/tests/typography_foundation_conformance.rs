@@ -257,7 +257,7 @@ fn text_style_transports_exactly_the_bounded_low_level_feature_set() {
 }
 
 #[test]
-fn production_consumers_do_not_claim_numeric_feature_adoption() {
+fn production_numeric_feature_adoption_is_narrow_and_semantically_resolved() {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let roots = [
         workspace.join("crates/stern-text/src"),
@@ -274,24 +274,73 @@ fn production_consumers_do_not_claim_numeric_feature_adoption() {
     let mut violations = Vec::new();
     for path in sources {
         let source = fs::read_to_string(&path).expect("read production Rust source");
+        let relative = path
+            .strip_prefix(&workspace)
+            .expect("workspace production path")
+            .to_string_lossy()
+            .replace('\\', "/");
         for forbidden in [
             "tabular-nums",
             "FontWeightScale",
             "FontFeatureScale",
             "FontWeightToken",
             "FontFeatureToken",
+            "TextFeatureSet::TABULAR_NUMBERS",
         ] {
-            if source.contains(forbidden) {
-                violations.push(format!("{} contains {forbidden}", path.display()));
+            let allowed = match forbidden {
+                "tabular-nums" | "FontFeatureScale" => relative == "crates/stern-text/src/style.rs",
+                "FontFeatureToken" => matches!(
+                    relative.as_str(),
+                    "crates/stern-text/src/style.rs"
+                        | "crates/stern-widgets/src/components.rs"
+                        | "crates/stern-widgets/src/components/numeric_inputs.rs"
+                ),
+                "TextFeatureSet::TABULAR_NUMBERS" => {
+                    relative.starts_with("crates/stern-text/src/")
+                        || relative == "crates/stern-vello/src/tests/text_layouts.rs"
+                }
+                _ => false,
+            };
+            if source.contains(forbidden) && !allowed {
+                violations.push(format!("{relative} contains {forbidden}"));
             }
         }
     }
 
     assert!(
         violations.is_empty(),
-        "foundation metadata must not imply production adoption:\n{}",
+        "numeric feature adoption exceeded its bounded semantic path:\n{}",
         violations.join("\n")
     );
+
+    let numeric =
+        fs::read_to_string(workspace.join("crates/stern-widgets/src/components/numeric_inputs.rs"))
+            .expect("read numeric component source");
+    assert_eq!(
+        numeric
+            .matches("resolve_semantic(theme.typography.features, FontFeatureToken::Numeric)")
+            .count(),
+        1,
+        "numeric components must resolve the semantic feature exactly once through one helper"
+    );
+    let fields =
+        fs::read_to_string(workspace.join("crates/stern-widgets/src/components/text_fields.rs"))
+            .expect("read canonical text-field source");
+    let geometry =
+        fs::read_to_string(workspace.join("crates/stern-widgets/src/components/text_geometry.rs"))
+            .expect("read text-field geometry source");
+    assert_eq!(fields.matches(".with_features(features)").count(), 1);
+    assert_eq!(geometry.matches(".with_features(features)").count(), 1);
+    for required in [
+        "build_transient_with_features",
+        "resolve_text_navigation",
+        "build_with_features",
+    ] {
+        assert!(
+            fields.contains(required),
+            "canonical text fields must carry features through {required}"
+        );
+    }
 }
 
 fn struct_declaration<'a>(source: &'a str, name: &str) -> &'a str {

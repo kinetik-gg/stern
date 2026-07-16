@@ -1,13 +1,13 @@
 //! Windowless widget integration for retained text layout generations and churn.
 
 use stern_core::{
-    Brush, Color, FrameContext, Key, KeyEvent, KeyState, Modifiers, MouseButton, PhysicalSize,
-    Point, Primitive, Rect, ScaleFactor, Size, TextInputEvent, TextLayoutId, TextPrimitive,
-    TimeInfo, Ui as CoreUi, UiInput, UiInputEvent, UiMemory, Vec2, ViewportInfo, WidgetId,
-    default_dark_theme,
+    Brush, Color, ComponentState, FrameContext, Key, KeyEvent, KeyState, Modifiers, MouseButton,
+    PhysicalSize, Point, Primitive, Rect, ScaleFactor, SemanticValue, Size, TextInputEvent,
+    TextLayoutId, TextPrimitive, TimeInfo, Ui as CoreUi, UiInput, UiInputEvent, UiMemory, Vec2,
+    ViewportInfo, WidgetId, default_dark_theme,
 };
-use stern_text::{TextEditState, TextLayoutKey, TextLayoutStore, TextStyle};
-use stern_widgets::{NumericScrubInputConfig, Ui};
+use stern_text::{TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextStyle};
+use stern_widgets::{NumericScrubInputConfig, Ui, VectorScrubInputConfig};
 
 const FIELD_RECT: Rect = Rect::new(0.0, 0.0, 160.0, 24.0);
 
@@ -49,6 +49,352 @@ fn moved(x: f32, y: f32, delta_x: f32) -> UiInputEvent {
 
 fn field_id() -> WidgetId {
     WidgetId::from_key("root").child("number")
+}
+
+fn retained_ids(output: &stern_core::FrameOutput) -> Vec<u64> {
+    let mut ids = output
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Text(text) => text.layout.map(TextLayoutId::raw),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    ids
+}
+
+fn assert_tabular_retention(store: &TextLayoutStore, output: &stern_core::FrameOutput) {
+    assert!(!store.is_empty(), "numeric component must retain text");
+    assert!(store.layouts().all(|entry| {
+        entry.key.style.features == TextFeatureSet::TABULAR_NUMBERS
+            && entry.key.style.family == "Inter"
+    }));
+    assert_retained_ids_match(store, output);
+}
+
+fn assert_retained_ids_match(store: &TextLayoutStore, output: &stern_core::FrameOutput) {
+    let mut expected = store
+        .layouts()
+        .map(|entry| entry.id.raw())
+        .collect::<Vec<_>>();
+    expected.sort_unstable();
+    assert_eq!(retained_ids(output), expected);
+}
+
+fn numeric_width(text: &str) -> f32 {
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    let mut store = TextLayoutStore::new();
+    let mut state = TextEditState::new(text);
+    let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+    let _ = ui.numeric_input("number", FIELD_RECT, &mut state, false);
+    let output = ui.finish_output();
+    assert_tabular_retention(&store, &output);
+    store
+        .layouts()
+        .next()
+        .expect("numeric layout")
+        .layout
+        .size
+        .width
+}
+
+fn generic_width(text: &str) -> f32 {
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    let mut store = TextLayoutStore::new();
+    let mut state = TextEditState::new(text);
+    let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+    let _ = ui.text_field("text", FIELD_RECT, &mut state, false);
+    let output = ui.finish_output();
+    assert_eq!(retained_ids(&output).len(), 1);
+    let entry = store.layouts().next().expect("generic layout");
+    assert_eq!(entry.key.style.features, TextFeatureSet::NONE);
+    entry.layout.size.width
+}
+
+#[test]
+fn retained_numeric_components_are_tabular_across_access_states() {
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+
+    for disabled in [false, true] {
+        let mut memory = UiMemory::new();
+        let mut store = TextLayoutStore::new();
+        let mut state = TextEditState::new("20486357");
+        let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+        let _ = ui.numeric_input("number", FIELD_RECT, &mut state, disabled);
+        let output = ui.finish_output();
+
+        assert_eq!(state.text, "20486357");
+        assert!(output.semantics.nodes().iter().any(|node| {
+            matches!(node.state.value, Some(SemanticValue::Text(ref value)) if value == "20486357")
+        }));
+        assert_tabular_retention(&store, &output);
+    }
+
+    for config in [
+        NumericScrubInputConfig::new(1.0),
+        NumericScrubInputConfig::new(1.0).read_only(true),
+        NumericScrubInputConfig::new(1.0).disabled(true),
+    ] {
+        let mut memory = UiMemory::new();
+        let mut store = TextLayoutStore::new();
+        let mut value = 20_486_356.0;
+        let mut state = TextEditState::new("20486357");
+        let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+        let output = ui.numeric_scrub_input("number", FIELD_RECT, &mut value, &mut state, config);
+        let frame = ui.finish_output();
+
+        assert_eq!(state.text, "20486357");
+        assert!(!output.scrubbed);
+        assert_tabular_retention(&store, &frame);
+    }
+
+    for config in [
+        VectorScrubInputConfig::new(NumericScrubInputConfig::new(1.0)),
+        VectorScrubInputConfig::new(NumericScrubInputConfig::new(1.0)).read_only(true),
+        VectorScrubInputConfig::new(NumericScrubInputConfig::new(1.0)).disabled(true),
+    ] {
+        let mut memory = UiMemory::new();
+        let mut store = TextLayoutStore::new();
+        let mut values = [1.0, 2.0];
+        let mut states = [
+            TextEditState::new("11111111"),
+            TextEditState::new("20486357"),
+        ];
+        let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+        let _ = ui.vector2_scrub_input(
+            "vector",
+            Rect::new(0.0, 0.0, 320.0, 24.0),
+            "Position",
+            &mut values,
+            &mut states,
+            config,
+        );
+        let frame = ui.finish_output();
+
+        assert_eq!(states[0].text, "11111111");
+        assert_eq!(states[1].text, "20486357");
+        for state in &states {
+            let matching = store
+                .layouts()
+                .filter(|entry| entry.key.text == state.text)
+                .collect::<Vec<_>>();
+            assert_eq!(matching.len(), 1);
+            assert_eq!(
+                matching[0].key.style.features,
+                TextFeatureSet::TABULAR_NUMBERS
+            );
+        }
+        assert_eq!(
+            store
+                .layouts()
+                .filter(|entry| entry.key.style.features == TextFeatureSet::NONE)
+                .count(),
+            2,
+            "vector axis labels remain generic text"
+        );
+        assert_retained_ids_match(&store, &frame);
+    }
+}
+
+#[test]
+fn retained_numeric_widths_are_equal_while_generic_text_remains_proportional() {
+    let numeric = ["11111111", "20486357", "99999999"].map(numeric_width);
+    let generic = ["11111111", "20486357", "99999999"].map(generic_width);
+
+    assert!(
+        numeric
+            .windows(2)
+            .all(|pair| (pair[0] - pair[1]).abs() <= 0.001),
+        "tabular numeric widths diverged: {numeric:?}"
+    );
+    assert!(
+        generic
+            .windows(2)
+            .any(|pair| (pair[0] - pair[1]).abs() > 0.001),
+        "generic proportional control unexpectedly matched: {generic:?}"
+    );
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn retained_numeric_pointer_geometry_uses_the_tabular_navigation_authority() {
+    let theme = default_dark_theme();
+    let text = "11119999";
+    let recipe = theme.text_field(ComponentState::default());
+    let content_width = FIELD_RECT.width - recipe.padding_x * 2.0;
+    let style = TextStyle::new(
+        recipe.font.family,
+        recipe.font.size,
+        recipe.font.line_height,
+    );
+    let mut comparison_store = TextLayoutStore::new();
+    let proportional_layout = comparison_store.shape_transient(&TextLayoutKey::new(
+        text,
+        style.clone(),
+        content_width,
+        false,
+    ));
+    let tabular_layout = comparison_store.shape_transient(&TextLayoutKey::new(
+        text,
+        style.with_features(TextFeatureSet::TABULAR_NUMBERS),
+        content_width,
+        false,
+    ));
+    let proportional_navigation = proportional_layout
+        .navigation(text)
+        .expect("proportional navigation");
+    let tabular_navigation = tabular_layout.navigation(text).expect("tabular navigation");
+    assert!(
+        proportional_navigation
+            .caret_stops()
+            .iter()
+            .chain(tabular_navigation.caret_stops())
+            .all(|stop| stop.visual_line == 0),
+        "the navigation witness requires one unwrapped visual line"
+    );
+
+    let mut decision_boundaries = proportional_navigation
+        .caret_stops()
+        .windows(2)
+        .chain(tabular_navigation.caret_stops().windows(2))
+        .map(|stops| (stops[0].x + stops[1].x) * 0.5)
+        .collect::<Vec<_>>();
+    decision_boundaries.sort_by(f32::total_cmp);
+    decision_boundaries.dedup_by(|left, right| left.to_bits() == right.to_bits());
+    let first_caret = tabular_navigation
+        .caret_stops()
+        .first()
+        .expect("tabular caret stop")
+        .caret;
+    let line_rect = tabular_navigation.caret_rect(first_caret);
+    let model_y = line_rect.y + line_rect.height * 0.5;
+    let (model_x, tabular_hit, proportional_hit) = decision_boundaries
+        .windows(2)
+        .find_map(|bounds| {
+            let x = (bounds[0] + bounds[1]) * 0.5;
+            let tabular = tabular_navigation.hit_test_caret(x, model_y);
+            let proportional = proportional_navigation.hit_test_caret(x, model_y);
+            (tabular.offset != proportional.offset).then_some((x, tabular, proportional))
+        })
+        .expect("proportional and tabular hit regions must diverge");
+    assert!((0.0..content_width).contains(&model_x));
+
+    let anchor = if tabular_hit.offset == 0 {
+        text.len()
+    } else {
+        0
+    };
+    let click = Point::new(
+        FIELD_RECT.x + recipe.padding_x + model_x,
+        FIELD_RECT.y + recipe.padding_y + recipe.font.size + model_y,
+    );
+    let input = canonical([
+        UiInputEvent::ModifiersChanged(Modifiers::new(true, false, false, false)),
+        press(click.x, click.y),
+    ]);
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new(text);
+    state.set_caret(anchor);
+    let mut store = TextLayoutStore::new();
+    let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+    let _ = ui.numeric_input("number", FIELD_RECT, &mut state, false);
+    let output = ui.finish_output();
+
+    assert_eq!(state.caret_position(), tabular_hit);
+    assert_ne!(state.caret_position().offset, proportional_hit.offset);
+    assert_eq!(
+        state.selection,
+        stern_text::TextSelection::new(anchor, tabular_hit.offset)
+    );
+
+    let retained = store.layouts().next().expect("retained numeric layout");
+    assert_eq!(store.len(), 1);
+    assert_eq!(retained.key.text, text);
+    assert_eq!(retained.key.style.features, TextFeatureSet::TABULAR_NUMBERS);
+    let emitted_layout = output
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) => text.layout,
+            _ => None,
+        })
+        .expect("retained numeric text primitive");
+    assert_eq!(emitted_layout, retained.id);
+
+    let retained_navigation = retained
+        .layout
+        .navigation(text)
+        .expect("retained numeric navigation");
+    let paint_offset = Vec2::new(
+        FIELD_RECT.x + recipe.padding_x,
+        FIELD_RECT.y + recipe.padding_y + recipe.font.size,
+    );
+    let expected_selection = retained_navigation
+        .selection_rects(state.selection.range())
+        .into_iter()
+        .map(|rect| rect.translate(paint_offset))
+        .collect::<Vec<_>>();
+    let painted_selection = output
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Rect(rect) if rect.fill == Some(recipe.selection) => Some(rect.rect),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(painted_selection, expected_selection);
+
+    let expected_caret = retained_navigation
+        .caret_rect(state.caret_position())
+        .translate(paint_offset);
+    let painted_caret = output
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rect(rect) if rect.fill == Some(Brush::Solid(recipe.caret)) => {
+                Some(rect.rect)
+            }
+            _ => None,
+        })
+        .expect("painted retained caret");
+    assert_eq!(painted_caret, expected_caret);
+}
+
+#[test]
+fn retained_numeric_hot_frames_reuse_one_feature_bearing_layout() {
+    let theme = default_dark_theme();
+    let mut memory = UiMemory::new();
+    let mut store = TextLayoutStore::new();
+    let mut state = TextEditState::new("20486357");
+    let mut baseline = None;
+
+    for _ in 0..64 {
+        let input = UiInput::default();
+        let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+        let _ = ui.numeric_input("number", FIELD_RECT, &mut state, false);
+        let output = ui.finish_output();
+        assert_tabular_retention(&store, &output);
+
+        let entry = store.layouts().next().expect("retained numeric layout");
+        let snapshot = (
+            entry.id,
+            store.len(),
+            store.retained_payload_bytes(),
+            store.change_cursor(),
+        );
+        if let Some(expected) = baseline {
+            assert_eq!(snapshot, expected);
+        } else {
+            baseline = Some(snapshot);
+        }
+    }
+    assert_eq!(state.text, "20486357");
 }
 
 #[test]
