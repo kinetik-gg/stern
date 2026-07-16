@@ -291,12 +291,17 @@ returns that error before ordinary cluster validation because hidden source
 graphemes cannot have byte-accurate caret or selection interpolation. Full-fit
 and visible layouts preserve existing navigation.
 
-No widget opts into ellipsis in this slice, and `TextPrimitive`, theme tokens,
-render commands, editable field behavior, accessible values, copy behavior,
-and tooltip behavior are unchanged. Registered renderer resources and Vello
-consume the shaped topology already authorized by the retained layout ID.
-Deterministic CPU encoding at `1.0`, `1.25`, `1.5`, and `2.0` is evidence of
-topology transport, not raster or visual acceptance.
+Canonical retained `Ui::select_field` now opts selected values and placeholders
+into this policy at the exact post-padding, post-disclosure text width. This is
+a prerelease breaking rendering-behavior change even though public signatures
+and exports are unchanged. Complete source remains in the primitive,
+presentation, key, renderer resource, semantic description, and semantic
+value; placeholder state remains unselected and the disclosure stays separate.
+The public low-level `select_field(...)` path remains layoutless. Rejected
+admission, invalid geometry, and multiline sources preserve complete visible
+text. Registered component-to-Vello CPU encoding at `1.0`, `1.25`, `1.5`, and
+`2.0` proves shaped topology transport without fallback-cache activity, not
+raster or visual acceptance.
 
 ## Deliberate limits
 
@@ -317,14 +322,15 @@ vector numeric subfields, including registered Vello glyph encoding. It is not
 Accepted because direct/layoutless compatibility paths, timelines, frame
 counters, timecodes, and tables do not consume the feature and no visual
 acceptance was performed. `STERN-TYP-001` and `STERN-TYP-003` are preserved
-without advancing. The non-destructive end-ellipsis follow-up advances only
-`STERN-TYP-004` to bounded Partial for explicit retained single-line requests;
-it has no component adoption or visual evidence. `STERN-TYP-005` and
-`STERN-TYP-007` do not advance. All typography parity records remain
-unverified, and nothing is Accepted.
+without advancing. The retained select-trigger adoption advances only
+`STERN-TYP-004` to stronger bounded Partial for canonical selected values and
+placeholders with complete-source semantics and registered Vello topology.
+Other truncating components and external visual evidence remain outstanding.
+`STERN-TYP-005` and `STERN-TYP-007` do not advance. All typography parity
+records remain unverified, and nothing is Accepted.
 
 This bounded evidence does not prove direct/layoutless component parity,
 platform or non-Latin fallback, failed-load layout stability, IME behavior,
-weight transport, start/middle/multiline or component truncation, optical
-baselines, DPI legibility, renderer pixels, browser output, or GPU/manual
-visual review.
+weight transport, copied-value or tooltip workflows, editable or other
+component truncation, start/middle/multiline ellipsis, optical baselines, DPI
+legibility, renderer pixels, browser output, or GPU/manual visual review.
