@@ -56,13 +56,23 @@ assert_eq!(theme.sizes.get(SizeToken::PanelHeader), 30.0);
 legacy scalar compatibility fields are preserved. Conversely,
 `Theme::with_spacing` preserves a customized size foundation.
 
-## No aliases or `ControlMetrics` mirroring
+## Medium icon consumer authority
 
-This foundation intentionally provides no legacy size aliases or forwarding
-methods. `ControlMetrics` remains provisional independent consumer
-configuration: its declaration, defaults, customization, and widget consumers
-are unchanged. Values are not synchronized in either direction, and a matching
-number does not make a `ControlMetrics` field a size-token alias.
+`Theme::sizes.icon.md` is the only production default for icon-button visual
+geometry. It supplies the unsized bitmap and selectable-bitmap paths, registered
+vector icons, and the missing-vector symbol. It is also the fallback when an
+explicit bitmap or selectable-bitmap size is non-finite or not positive.
 
-Consumer adoption, hardcoded geometry reconciliation, and eventual
-`ControlMetrics` migration or removal require a separate inventoried change.
+Valid explicit sizes passed to `image_icon_button_sized` and
+`image_icon_selectable_button_sized` remain authoritative and are not replaced
+by the theme default.
+
+`ControlMetrics::icon_size` has been removed. External `ControlMetrics` struct
+literals must delete that field. Its remaining `control_height`,
+`compact_control_height`, `check_size`, `padding_x`, and `padding_y` fields keep
+their existing defaults and customization behavior, but cannot affect icon
+geometry.
+
+The size foundation intentionally provides no legacy aliases, mirrors, or
+forwarding methods. Adoption by other component families and reconciliation of
+hardcoded geometry remain separate inventoried changes.
