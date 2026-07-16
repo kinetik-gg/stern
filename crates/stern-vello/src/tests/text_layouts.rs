@@ -6,7 +6,8 @@ use stern_core::{
 };
 use stern_render::TextLayoutResourceSync;
 use stern_text::{
-    CosmicTextEngine, TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextStyle,
+    CosmicTextEngine, TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextOverflow,
+    TextStyle,
 };
 use stern_widgets::Ui;
 
@@ -119,6 +120,66 @@ fn retained_numeric_widget_encodes_registered_tabular_glyphs_without_fallback() 
                 .glyph_runs
                 .iter()
                 .all(|run| { (run.font_size - logical_font_size * scale).abs() <= 0.000_1 })
+        );
+        assert_eq!(renderer.cached_text_layout_count(), 0);
+        assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+    }
+}
+
+#[test]
+fn registered_end_ellipsis_encodes_engine_topology_without_fallback() {
+    let id = TextLayoutId::from_raw(46);
+    let source = "Registered Vello authority keeps this complete source while presenting ellipsis";
+    let key = TextLayoutKey::new(source, TextStyle::new("Inter", 18.0, 24.0), 84.0, false)
+        .with_overflow(TextOverflow::EndEllipsis);
+    let expected = resource(id, key);
+    assert_eq!(expected.key.text, source);
+    assert_eq!(expected.key.overflow, TextOverflow::EndEllipsis);
+    assert!(expected.layout.is_elided());
+    let expected_ids = expected
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let expected_marker_ids = expected
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| &run.glyphs)
+        .filter(|glyph| glyph.elided)
+        .map(|glyph| glyph.id)
+        .collect::<Vec<_>>();
+    assert_eq!(expected_marker_ids.len(), 1);
+
+    let mut resources = RenderResources::new();
+    resources.register_text_layout(expected);
+    let primitives = [primitive(Some(id), "conflicting fallback text")];
+    let mut renderer = VelloRenderer::new();
+
+    for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: viewport(f64::from(scale)),
+            primitives: &primitives,
+            resources: &resources,
+        });
+        let encoding = renderer.scene().encoding();
+        let encoded_ids = encoding
+            .resources
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.id)
+            .collect::<Vec<_>>();
+
+        assert!(output.diagnostics.is_empty());
+        assert_eq!(encoded_ids, expected_ids);
+        assert!(encoded_ids.contains(&expected_marker_ids[0]));
+        assert!(
+            encoding
+                .resources
+                .glyph_runs
+                .iter()
+                .all(|run| (run.font_size - 18.0 * scale).abs() <= 0.000_1)
         );
         assert_eq!(renderer.cached_text_layout_count(), 0);
         assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
