@@ -1,8 +1,8 @@
 //! Windowless conformance for retained select-trigger end ellipsis.
 
 use stern_core::{
-    ComponentState, FrameOutput, Primitive, Rect, SemanticValue, TextLayoutId, TextPrimitive,
-    UiInput, UiMemory, WidgetId, default_dark_theme,
+    ComponentState, FrameOutput, Point, PointerButtonState, PointerInput, Primitive, Rect,
+    SemanticValue, TextLayoutId, TextPrimitive, UiInput, UiMemory, WidgetId, default_dark_theme,
 };
 use stern_text::{TextLayoutStore, TextOverflow};
 use stern_widgets::{
@@ -55,12 +55,34 @@ fn retained_frame(
     rect: Rect,
     config: SelectFieldConfig,
 ) -> (SelectFieldOutput, FrameOutput) {
-    let theme = default_dark_theme();
     let input = UiInput::default();
-    let mut ui = Ui::new(&input, memory, &theme).with_text_layouts(store);
+    retained_frame_with_input(store, memory, model, rect, config, &input)
+}
+
+fn retained_frame_with_input(
+    store: &mut TextLayoutStore,
+    memory: &mut UiMemory,
+    model: &DropdownModel,
+    rect: Rect,
+    config: SelectFieldConfig,
+    input: &UiInput,
+) -> (SelectFieldOutput, FrameOutput) {
+    let theme = default_dark_theme();
+    let mut ui = Ui::new(input, memory, &theme).with_text_layouts(store);
     let output = ui.select_field("retained", rect, "Material", model, config);
     let frame = ui.finish_output();
     (output, frame)
+}
+
+fn pointer_input(pressed: bool, down: bool, released: bool) -> UiInput {
+    UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(FIELD.x + 4.0, FIELD.y + 4.0)),
+            primary: PointerButtonState::new(pressed, down, released),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    }
 }
 
 fn final_value_layout(frame: &FrameOutput, source: &str) -> Option<TextLayoutId> {
@@ -653,5 +675,54 @@ fn multiline_and_paragraph_separator_labels_remain_visible_and_complete() {
             output.widget.semantics[0].state.value,
             Some(SemanticValue::Text(source.to_owned()))
         );
+    }
+}
+
+#[test]
+fn unresolved_model_states_preserve_open_request_eligibility() {
+    let mut missing = selected_model("Removed selection");
+    missing.replace_items([DropdownItem::new(
+        DropdownItemId::from_raw(99),
+        "Remaining enabled item",
+    )]);
+    let cases = [
+        (DropdownModel::new(), true),
+        (
+            DropdownModel::from_items([DropdownItem::new(
+                DropdownItemId::from_raw(71),
+                "Disabled A",
+            )
+            .with_enabled(false)]),
+            true,
+        ),
+        (missing, false),
+    ];
+
+    for (model, disabled) in cases {
+        let mut store = TextLayoutStore::new();
+        let mut memory = UiMemory::new();
+        let _ = retained_frame_with_input(
+            &mut store,
+            &mut memory,
+            &model,
+            FIELD,
+            SelectFieldConfig::new("Complete unresolved placeholder"),
+            &pointer_input(true, true, false),
+        );
+        let (released, _) = retained_frame_with_input(
+            &mut store,
+            &mut memory,
+            &model,
+            FIELD,
+            SelectFieldConfig::new("Complete unresolved placeholder"),
+            &pointer_input(false, false, true),
+        );
+
+        assert_eq!(released.response.state.disabled, disabled);
+        assert_eq!(released.response.clicked, !disabled);
+        assert_eq!(released.open_requested, !disabled);
+        assert_eq!(model.selected_id(), None);
+        assert!(released.presentation.placeholder);
+        assert!(!released.widget.semantics[0].state.selected);
     }
 }
