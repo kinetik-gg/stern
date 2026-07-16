@@ -73,6 +73,16 @@ fn final_value_layout(frame: &FrameOutput, source: &str) -> Option<TextLayoutId>
         })
 }
 
+fn final_disclosure_layout(frame: &FrameOutput, disclosure: &str) -> Option<TextLayoutId> {
+    frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == disclosure => text.layout,
+            _ => None,
+        })
+}
+
 #[test]
 fn long_selected_value_uses_exact_retained_end_ellipsis_without_changing_source() {
     let source = "Complete selected material identity remains byte exact while its trigger presentation elides";
@@ -423,4 +433,86 @@ fn identical_hot_frames_reuse_value_id_and_retained_accounting() {
         assert_eq!(store.retained_payload_bytes(), first_bytes);
         assert_eq!(store.change_cursor(), first_cursor);
     }
+}
+
+#[test]
+fn source_and_width_change_value_identity_while_open_only_changes_disclosure() {
+    let source = "Stable selected source for identity transition evidence";
+    let model = selected_model(source);
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let (closed, closed_frame) = retained_frame(
+        &mut store,
+        &mut memory,
+        &model,
+        FIELD,
+        SelectFieldConfig::new("Choose"),
+    );
+    let closed_id = value_text(&closed)
+        .layout
+        .expect("closed retained value ID");
+    let closed_disclosure_id =
+        final_disclosure_layout(&closed_frame, "v").expect("closed disclosure layout");
+
+    let (open, open_frame) = retained_frame(
+        &mut store,
+        &mut memory,
+        &model,
+        FIELD,
+        SelectFieldConfig::new("Choose").open(true),
+    );
+    let open_id = value_text(&open).layout.expect("open retained value ID");
+    let open_disclosure_id =
+        final_disclosure_layout(&open_frame, "^").expect("open disclosure layout");
+    assert_eq!(open_id, closed_id);
+    assert_eq!(final_value_layout(&open_frame, source), Some(closed_id));
+    assert_ne!(open_disclosure_id, closed_disclosure_id);
+    assert_eq!(disclosure_text(&closed).origin.x, FIELD.max_x() - 16.0);
+    assert_eq!(disclosure_text(&open).origin.x, FIELD.max_x() - 16.0);
+
+    let changed_source = "A different complete selected source produces distinct identity";
+    let changed_model = selected_model(changed_source);
+    let (changed, changed_frame) = retained_frame(
+        &mut store,
+        &mut memory,
+        &changed_model,
+        FIELD,
+        SelectFieldConfig::new("Choose"),
+    );
+    let changed_id = value_text(&changed)
+        .layout
+        .expect("changed-source retained value ID");
+    assert_ne!(changed_id, closed_id);
+    assert_eq!(
+        final_value_layout(&changed_frame, changed_source),
+        Some(changed_id)
+    );
+
+    let wider = Rect::new(FIELD.x, FIELD.y, FIELD.width + 13.25, FIELD.height);
+    let (resized, resized_frame) = retained_frame(
+        &mut store,
+        &mut memory,
+        &model,
+        wider,
+        SelectFieldConfig::new("Choose"),
+    );
+    let resized_id = value_text(&resized)
+        .layout
+        .expect("resized retained value ID");
+    assert_ne!(resized_id, closed_id);
+    assert_eq!(final_value_layout(&resized_frame, source), Some(resized_id));
+    assert_eq!(
+        store
+            .stored_layout(resized_id)
+            .expect("resized resident layout")
+            .key
+            .width_bits,
+        expected_text_width(
+            wider,
+            default_dark_theme()
+                .text_field(ComponentState::default())
+                .padding_x
+        )
+        .to_bits()
+    );
 }
