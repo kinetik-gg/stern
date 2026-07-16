@@ -689,3 +689,62 @@ fn apply_numeric_scrub_semantics(
         ));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use stern_core::{
+        PhysicalSize, Primitive, ScaleFactor, Size, TimeInfo, ViewportInfo, default_dark_theme,
+    };
+
+    #[test]
+    fn read_only_runtime_retains_the_unchanged_tabular_numeric_draft() {
+        let draft = "20486357";
+        let context = stern_core::FrameContext::new(
+            ViewportInfo::new(
+                Size::new(320.0, 180.0),
+                PhysicalSize::ZERO,
+                ScaleFactor::ONE,
+            ),
+            UiInput::default(),
+            TimeInfo::default(),
+        );
+        let mut memory = UiMemory::new();
+        let mut runtime = CoreUi::begin_frame(context, &mut memory);
+        let theme = default_dark_theme();
+        let mut state = TextEditState::new(draft);
+        let mut store = TextLayoutStore::new();
+
+        let output = numeric_input_with_access_runtime(
+            &mut runtime,
+            WidgetId::from_key("read-only-number"),
+            Rect::new(0.0, 0.0, 160.0, 24.0),
+            &mut state,
+            &theme,
+            TextFieldAccess::ReadOnly,
+            Some(&mut store),
+            true,
+        );
+
+        assert_eq!(state.text, draft);
+        assert_eq!(
+            output.field.widget.semantics[0].state.value.as_ref(),
+            Some(&SemanticValue::Text(draft.to_owned()))
+        );
+        assert_eq!(store.len(), 1);
+        let retained = store.layouts().next().expect("retained numeric layout");
+        assert_eq!(retained.key.text, draft);
+        assert_eq!(retained.key.style.features, TextFeatureSet::TABULAR_NUMBERS);
+        let primitive_layout = output
+            .field
+            .widget
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Text(text) => text.layout,
+                _ => None,
+            })
+            .expect("retained numeric text primitive");
+        assert_eq!(primitive_layout, retained.id);
+    }
+}
