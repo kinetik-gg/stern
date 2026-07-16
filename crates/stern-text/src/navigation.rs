@@ -13,6 +13,8 @@ pub const SHAPED_TEXT_GEOMETRY_EPSILON: f32 = 1.0e-4;
 /// Structural error returned while deriving shaped text navigation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextNavigationError {
+    /// The layout hides source graphemes and cannot provide complete navigation.
+    ElidedLayout,
     /// The layout has no visual line or skips a visual-line index.
     MissingVisualLine,
     /// More than one line claims the same visual-line index.
@@ -170,6 +172,9 @@ impl ShapedTextLayout {
 
 impl ShapedTextNavigation {
     fn from_layout(layout: &ShapedTextLayout, source: &str) -> Result<Self, TextNavigationError> {
+        if layout.is_elided() {
+            return Err(TextNavigationError::ElidedLayout);
+        }
         validate_visual_lines(layout, source)?;
         let lines = navigation_lines(layout);
         let clusters = validated_clusters(layout, source)?;
