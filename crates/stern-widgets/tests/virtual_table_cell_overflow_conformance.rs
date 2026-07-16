@@ -9,9 +9,9 @@ use stern_core::{
 };
 use stern_text::{TextFeatureSet, TextLayoutStore, TextOverflow};
 use stern_widgets::{
-    CollectionProjectedItem, CollectionProjection, ItemId, TableColumn, TableLayout, Ui,
-    VirtualTableConfig, VirtualTableOutput, VirtualTableRow, VirtualTableSelection,
-    VirtualTableSelectionMode,
+    CollectionProjectedItem, CollectionProjection, ItemId, TableColumn, TableColumnConstraints,
+    TableLayout, Ui, VirtualTableConfig, VirtualTableOutput, VirtualTableRow,
+    VirtualTableSelection, VirtualTableSelectionMode,
 };
 
 const BOUNDS: Rect = Rect::new(7.0, 11.0, 320.0, 88.0);
@@ -425,4 +425,124 @@ fn over_budget_source_rejects_custom_and_generic_layouts_without_store_mutation(
         accounting
     );
     assert!(store.layouts().all(|entry| entry.key.text != source));
+}
+
+#[test]
+fn hot_frames_source_width_and_clamped_width_obey_retained_identity_boundaries() {
+    let source = "Stable complete table body-cell source across hot frames";
+    let items = projection(&[1, 2]);
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let mut selection = VirtualTableSelection::new();
+    let first = run_table(
+        Some(&mut store),
+        &items,
+        config(BOUNDS, [80.0, 119.3], VirtualTableSelectionMode::Cell),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |_| VirtualTableRow::new([source, source]),
+    );
+    let first_ids = body_texts(&first.frame, source)
+        .iter()
+        .map(|text| text.layout.expect("initial body-cell identity"))
+        .collect::<Vec<_>>();
+    assert_eq!(first_ids.len(), 4);
+    assert_eq!(first_ids[0], first_ids[2]);
+    assert_eq!(first_ids[1], first_ids[3]);
+    assert_ne!(first_ids[0], first_ids[1]);
+    let accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
+
+    for _ in 0..4 {
+        let hot = run_table(
+            Some(&mut store),
+            &items,
+            config(BOUNDS, [80.0, 119.3], VirtualTableSelectionMode::Cell),
+            &mut selection,
+            &mut memory,
+            UiInput::default(),
+            |_| VirtualTableRow::new([source, source]),
+        );
+        let hot_ids = body_texts(&hot.frame, source)
+            .iter()
+            .map(|text| text.layout.expect("hot body-cell identity"))
+            .collect::<Vec<_>>();
+        assert_eq!(hot_ids, first_ids);
+        assert_eq!(
+            (
+                store.len(),
+                store.retained_payload_bytes(),
+                store.change_cursor()
+            ),
+            accounting
+        );
+    }
+
+    let changed_source = "Distinct complete table body-cell source";
+    let changed = run_table(
+        Some(&mut store),
+        &projection(&[1]),
+        config(BOUNDS, [80.0], VirtualTableSelectionMode::Cell),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |_| VirtualTableRow::new([changed_source]),
+    );
+    let changed_id = body_texts(&changed.frame, changed_source)[0]
+        .layout
+        .expect("changed-source body-cell identity");
+    assert_ne!(changed_id, first_ids[0]);
+
+    let resized = run_table(
+        Some(&mut store),
+        &projection(&[1]),
+        config(BOUNDS, [100.0], VirtualTableSelectionMode::Cell),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |_| VirtualTableRow::new([source]),
+    );
+    let resized_id = body_texts(&resized.frame, source)[0]
+        .layout
+        .expect("resized body-cell identity");
+    assert_ne!(resized_id, first_ids[0]);
+
+    let clamped_config = |raw_width| {
+        config(BOUNDS, [raw_width], VirtualTableSelectionMode::Cell)
+            .column_constraints([(id(10), TableColumnConstraints::new(80.0, 80.0))])
+    };
+    let clamped_a = run_table(
+        Some(&mut store),
+        &projection(&[1]),
+        clamped_config(160.0),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |_| VirtualTableRow::new([source]),
+    );
+    let clamped_b = run_table(
+        Some(&mut store),
+        &projection(&[1]),
+        clamped_config(240.0),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |_| VirtualTableRow::new([source]),
+    );
+    let clamped_a_text = body_texts(&clamped_a.frame, source)[0];
+    let clamped_b_text = body_texts(&clamped_b.frame, source)[0];
+    assert_eq!(clamped_a_text.layout, Some(first_ids[0]));
+    assert_eq!(clamped_b_text.layout, Some(first_ids[0]));
+    assert_eq!(
+        body_semantics(&clamped_a.frame, source)[0].bounds.width,
+        80.0
+    );
+    assert_eq!(
+        body_semantics(&clamped_b.frame, source)[0].bounds.width,
+        80.0
+    );
 }
