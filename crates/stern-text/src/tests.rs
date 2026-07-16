@@ -44,7 +44,7 @@ fn bundled_font_database_sets_default_family_aliases() {
     );
     assert_eq!(
         query_font_bytes(&mut engine, &[fontdb::Family::Monospace]),
-        fonts::GEIST_MONO_VARIABLE
+        fonts::SPACE_MONO_REGULAR
     );
 }
 
@@ -63,6 +63,12 @@ fn generic_families_shape_with_bundled_fonts() {
         200.0,
         false,
     ));
+    let mono_alias = engine.shape_text(&TextLayoutKey::new(
+        "let value = 1;",
+        TextStyle::new("mono", 13.0, 18.0),
+        200.0,
+        false,
+    ));
 
     assert!(!sans.runs.is_empty());
     assert!(
@@ -74,7 +80,14 @@ fn generic_families_shape_with_bundled_fonts() {
     assert!(
         mono.runs
             .iter()
-            .all(|run| run.font.data.data() == fonts::GEIST_MONO_VARIABLE)
+            .all(|run| run.font.data.data() == fonts::SPACE_MONO_REGULAR)
+    );
+    assert!(!mono_alias.runs.is_empty());
+    assert!(
+        mono_alias
+            .runs
+            .iter()
+            .all(|run| run.font.data.data() == fonts::SPACE_MONO_REGULAR)
     );
 }
 
