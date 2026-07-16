@@ -10,6 +10,17 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** The semantic Brand family now resolves through the exact
+  bundled Space Grotesk variable face from revision
+  `03507d024a01282884232081fc6011c09ff4e849`. Qualified public
+  `fonts::{SPACE_GROTESK_UPSTREAM_COMMIT, SPACE_GROTESK_VARIABLE}` expose the
+  revision and bytes, while the default theme's `FontFamilyRole::Brand` result
+  shapes through that same asset. Existing Inter and Space Mono
+  named/default/generic authority is unchanged. Brand measurements, wrapping,
+  layout geometry, snapshots, and derived hashes may change from prior fallback
+  behavior. This adds no Brand default alias or `TextRole`, does not remap
+  Title, and advances only Partial deterministic Brand loading and provenance
+  evidence; nothing is Accepted. See `docs/typography-migration.md`.
 - **Breaking:** Replaced bundled Geist Mono with exact Space Mono Regular from
   revision `329858c2c4dbd3476f972a4ae00624b018cf4b81`. The public monospace
   default is now `"Space Mono"`; named/default/generic `"monospace"` and
