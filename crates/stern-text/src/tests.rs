@@ -117,7 +117,7 @@ fn named_default_families_shape_with_bundled_fonts() {
     assert!(
         mono.runs
             .iter()
-            .all(|run| run.font.data.data() == fonts::GEIST_MONO_VARIABLE)
+            .all(|run| run.font.data.data() == fonts::SPACE_MONO_REGULAR)
     );
 }
 
