@@ -188,3 +188,62 @@ fn fitting_empty_layoutless_and_direct_buttons_keep_complete_sources() {
     assert_eq!(direct.semantics[0].label.as_deref(), Some(source));
     assert_eq!(direct_label.origin, Point::new(9.0, direct_label.origin.y));
 }
+
+#[test]
+fn narrow_nonpositive_and_multiline_labels_keep_registered_full_source_policy() {
+    for width in [16.0_f32, 15.999, 1.0, 0.0, -20.0] {
+        let source = "Complete narrow button source remains visible";
+        let rect = Rect::new(BUTTON.x, BUTTON.y, width, BUTTON.height);
+        let mut store = TextLayoutStore::new();
+        let mut memory = UiMemory::new();
+        let (response, frame) = retained_button(
+            &mut store,
+            &mut memory,
+            rect,
+            source,
+            false,
+            &UiInput::default(),
+        );
+        let label = button_text(&frame, source);
+        let stored = store
+            .stored_layout(label.layout.expect("registered zero-width button policy"))
+            .expect("resident zero-width button policy");
+
+        assert_eq!(stored.key.width_bits, 0.0_f32.to_bits());
+        assert_eq!(stored.key.overflow, TextOverflow::EndEllipsis);
+        assert_eq!(stored.key.text, source);
+        assert!(!stored.layout.is_elided());
+        assert_eq!(marker_count(&store, label), 0);
+        assert_eq!(label.text, source);
+        assert_eq!(frame.semantics.nodes()[0].bounds, response.rect);
+        assert_eq!(frame.semantics.nodes()[0].label.as_deref(), Some(source));
+    }
+
+    for source in [
+        "First complete line\nSecond complete line",
+        "First complete line\r\nSecond complete line",
+        "First complete paragraph\u{2029}Second complete paragraph",
+    ] {
+        let mut store = TextLayoutStore::new();
+        let mut memory = UiMemory::new();
+        let (_, frame) = retained_button(
+            &mut store,
+            &mut memory,
+            BUTTON,
+            source,
+            false,
+            &UiInput::default(),
+        );
+        let label = button_text(&frame, source);
+        let stored = store
+            .stored_layout(label.layout.expect("registered multiline button policy"))
+            .expect("resident multiline button policy");
+
+        assert_eq!(stored.key.text, source);
+        assert_eq!(stored.key.overflow, TextOverflow::EndEllipsis);
+        assert!(!stored.layout.is_elided());
+        assert_eq!(marker_count(&store, label), 0);
+        assert_eq!(label.text, source);
+        assert_eq!(frame.semantics.nodes()[0].label.as_deref(), Some(source));
+    }
+}
