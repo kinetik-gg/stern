@@ -114,15 +114,13 @@ fn image_icon_button_uses_common_scale_integer_icon_size() {
         &default_dark_theme(),
         false,
     );
-    let Primitive::Image(image) = output.primitives[1] else {
-        panic!("expected image primitive");
-    };
+    let image = icon_image_rect(&output);
 
-    assert_approx(image.rect.width, 16.0);
-    assert_approx(image.rect.height, 16.0);
+    assert_approx(image.width, 16.0);
+    assert_approx(image.height, 16.0);
     for scale in [1.0_f32, 1.25, 1.5, 2.0] {
-        assert_approx((image.rect.width * scale).fract(), 0.0);
-        assert_approx((image.rect.height * scale).fract(), 0.0);
+        assert_approx((image.width * scale).fract(), 0.0);
+        assert_approx((image.height * scale).fract(), 0.0);
     }
 }
 
@@ -139,17 +137,15 @@ fn sized_image_icon_button_uses_requested_common_scale_icon_size() {
         &default_dark_theme(),
         false,
     );
-    let Primitive::Image(image) = output.primitives[1] else {
-        panic!("expected image primitive");
-    };
+    let image = icon_image_rect(&output);
 
-    assert_approx(image.rect.width, 24.0);
-    assert_approx(image.rect.height, 24.0);
-    assert_approx(image.rect.x, 3.0);
-    assert_approx(image.rect.y, 1.0);
+    assert_approx(image.width, 24.0);
+    assert_approx(image.height, 24.0);
+    assert_approx(image.x, 3.0);
+    assert_approx(image.y, 1.0);
     for scale in [1.0_f32, 1.25, 1.5, 2.0] {
-        assert_approx((image.rect.width * scale).fract(), 0.0);
-        assert_approx((image.rect.height * scale).fract(), 0.0);
+        assert_approx((image.width * scale).fract(), 0.0);
+        assert_approx((image.height * scale).fract(), 0.0);
     }
 }
 
@@ -175,6 +171,202 @@ fn icon_button_uses_registered_vector_icon() {
     assert_eq!(output.primitives.len(), 2);
     assert!(matches!(output.primitives[0], Primitive::Rect(_)));
     assert!(matches!(output.primitives[1], Primitive::Path(_)));
+}
+
+#[test]
+fn medium_icon_token_controls_every_unsized_icon_family() {
+    let mut theme = default_dark_theme();
+    theme.sizes.icon.md = 24.0;
+    let [bitmap, selectable, vector, missing] = unsized_icon_family_primitives(&theme);
+
+    let bitmap_rect = icon_image_rect_from_primitives(&bitmap);
+    assert_eq!(bitmap_rect, Rect::new(8.0, 8.0, 24.0, 24.0));
+    assert_eq!(icon_image_rect_from_primitives(&selectable), bitmap_rect);
+
+    let vector_path = vector
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Path(path) => Some(path),
+            _ => None,
+        })
+        .expect("registered vector icon must emit a path");
+    assert_eq!(
+        vector_path.elements,
+        vec![
+            PathElement::MoveTo(Point::new(13.0, 20.0)),
+            PathElement::LineTo(Point::new(18.0, 25.0)),
+            PathElement::LineTo(Point::new(27.0, 15.0)),
+        ]
+    );
+    assert_approx(vector_path.stroke.expect("vector stroke").width, 2.0);
+
+    let missing_line = missing
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Line(line) => Some(line),
+            _ => None,
+        })
+        .expect("missing vector icon must emit a line");
+    for (actual, expected) in [
+        (missing_line.from.x, 12.32),
+        (missing_line.from.y, 12.32),
+        (missing_line.to.x, 27.68),
+        (missing_line.to.y, 27.68),
+    ] {
+        assert_approx(actual, expected);
+    }
+
+    for (scale, expected_physical) in [(1.0, 24.0), (1.25, 30.0), (1.5, 36.0), (2.0, 48.0)] {
+        assert_approx(bitmap_rect.width * scale, expected_physical);
+        assert_approx(bitmap_rect.height * scale, expected_physical);
+        assert_eq!(bitmap_rect, Rect::new(8.0, 8.0, 24.0, 24.0));
+    }
+}
+
+#[test]
+fn explicit_icon_sizes_preserve_valid_values_and_theme_invalid_values() {
+    let mut theme = default_dark_theme();
+    theme.sizes.icon.md = 24.0;
+    let rect = Rect::new(0.0, 0.0, 40.0, 40.0);
+
+    for invalid in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+        let bitmap = image_icon_button_sized(
+            WidgetId::from_key("invalid-bitmap"),
+            rect,
+            ImageId::from_raw(1),
+            "Bitmap",
+            invalid,
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            &theme,
+            false,
+        );
+        let selectable = crate::image_icon_selectable_button_sized(
+            WidgetId::from_key("invalid-selectable-bitmap"),
+            rect,
+            ImageId::from_raw(2),
+            "Selectable bitmap",
+            false,
+            invalid,
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            &theme,
+            false,
+        );
+        assert_approx(icon_image_rect(&bitmap).width, 24.0);
+        assert_approx(icon_image_rect(&selectable).width, 24.0);
+    }
+
+    let bitmap = image_icon_button_sized(
+        WidgetId::from_key("valid-bitmap"),
+        rect,
+        ImageId::from_raw(3),
+        "Bitmap",
+        13.0,
+        &UiInput::default(),
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let selectable = crate::image_icon_selectable_button_sized(
+        WidgetId::from_key("valid-selectable-bitmap"),
+        rect,
+        ImageId::from_raw(4),
+        "Selectable bitmap",
+        true,
+        13.0,
+        &UiInput::default(),
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    assert_approx(icon_image_rect(&bitmap).width, 13.0);
+    assert_approx(icon_image_rect(&selectable).width, 13.0);
+}
+
+#[test]
+fn remaining_control_metrics_cannot_change_icon_geometry() {
+    let mut baseline = default_dark_theme();
+    baseline.sizes.icon.md = 24.0;
+    let expected = unsized_icon_family_primitives(&baseline);
+    let customized = baseline.with_controls(stern_core::ControlMetrics {
+        control_height: 101.0,
+        compact_control_height: 103.0,
+        check_size: 107.0,
+        padding_x: 109.0,
+        padding_y: 113.0,
+    });
+
+    assert_eq!(unsized_icon_family_primitives(&customized), expected);
+}
+
+fn unsized_icon_family_primitives(theme: &stern_core::Theme) -> [Vec<Primitive>; 4] {
+    let rect = Rect::new(0.0, 0.0, 40.0, 40.0);
+    let icon = IconId::from_raw(7);
+    let mut icons = IconLibrary::new();
+    icons.register(icon, check_icon());
+
+    [
+        image_icon_button(
+            WidgetId::from_key("bitmap"),
+            rect,
+            ImageId::from_raw(1),
+            "Bitmap",
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            theme,
+            false,
+        )
+        .primitives,
+        image_icon_selectable_button(
+            WidgetId::from_key("selectable-bitmap"),
+            rect,
+            ImageId::from_raw(2),
+            "Selectable bitmap",
+            true,
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            theme,
+            false,
+        )
+        .primitives,
+        icon_button_with_library(
+            WidgetId::from_key("vector"),
+            rect,
+            icon,
+            "Vector",
+            &icons,
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            theme,
+            false,
+        )
+        .primitives,
+        icon_button(
+            WidgetId::from_key("missing-vector"),
+            rect,
+            IconId::from_raw(8),
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            theme,
+            false,
+        )
+        .primitives,
+    ]
+}
+
+fn icon_image_rect(output: &crate::WidgetOutput) -> Rect {
+    icon_image_rect_from_primitives(&output.primitives)
+}
+
+fn icon_image_rect_from_primitives(primitives: &[Primitive]) -> Rect {
+    primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Image(image) => Some(image.rect),
+            _ => None,
+        })
+        .expect("icon button must emit an image primitive")
 }
 
 #[test]
