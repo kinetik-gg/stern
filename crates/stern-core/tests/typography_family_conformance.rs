@@ -2,6 +2,8 @@
 
 #![allow(clippy::float_cmp)]
 
+use std::{fs, path::Path};
+
 use stern_core::{
     FontFamilyRole, FontFamilyScale, TextRole, TextRoleMetrics, TypographyScale,
     default_dark_theme,
@@ -140,4 +142,78 @@ fn typography_replacement_preserves_unrelated_theme_fields_and_body_mirror() {
     assert_eq!(customized.controls, base.controls);
     assert_eq!(customized.radius, base.radius);
     assert_eq!(customized.border_width, base.border_width);
+}
+
+#[test]
+fn typography_scale_stores_metrics_without_resolved_family_strings() {
+    let source = include_str!("../src/theme/tokens.rs");
+    let start = source
+        .find("pub struct TypographyScale {")
+        .expect("TypographyScale declaration");
+    let declaration = &source[start..];
+    let end = declaration
+        .find("\n}\n\nimpl TypographyScale")
+        .expect("TypographyScale declaration end");
+    let declaration = &declaration[..end + 2];
+
+    assert!(declaration.contains("pub families: FontFamilyScale"));
+    assert_eq!(declaration.matches("TextRoleMetrics").count(), 5);
+    assert!(!declaration.contains("FontToken"));
+    assert!(!declaration.contains("&'static str"));
+}
+
+#[test]
+fn default_theme_does_not_restore_the_removed_geist_family() {
+    let defaults = include_str!("../src/theme/defaults.rs");
+
+    assert!(!defaults.contains("Geist Mono"));
+    assert!(defaults.contains("FontFamilyScale::new(\"Inter\", \"Space Grotesk\", \"Space Mono\")"));
+}
+
+#[test]
+fn production_widget_and_demo_sources_do_not_embed_normative_family_literals() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let roots = [
+        workspace.join("crates/stern-widgets/src"),
+        workspace.join("apps/stern-demo/src"),
+    ];
+    let mut sources = Vec::new();
+    for root in roots {
+        collect_rust_sources(&root, &mut sources);
+    }
+
+    let mut violations = Vec::new();
+    for path in sources {
+        if is_test_source(&path) {
+            continue;
+        }
+        let source = fs::read_to_string(&path).expect("read production Rust source");
+        for literal in ["\"Inter\"", "\"Space Grotesk\"", "\"Space Mono\""] {
+            if source.contains(literal) {
+                violations.push(format!("{} contains {literal}", path.display()));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "normative families must resolve through the theme:\n{}",
+        violations.join("\n")
+    );
+}
+
+fn collect_rust_sources(root: &Path, sources: &mut Vec<std::path::PathBuf>) {
+    for entry in fs::read_dir(root).expect("read source directory") {
+        let path = entry.expect("read source entry").path();
+        if path.is_dir() {
+            collect_rust_sources(&path, sources);
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            sources.push(path);
+        }
+    }
+}
+
+fn is_test_source(path: &Path) -> bool {
+    path.file_name().is_some_and(|name| name == "tests.rs")
+        || path.components().any(|component| component.as_os_str() == "tests")
 }
