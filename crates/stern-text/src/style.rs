@@ -1,3 +1,5 @@
+use stern_core::{FontFeatureScale, FontFeatureToken};
+
 /// Fixed set of supported low-level text-shaping features.
 ///
 /// Stern intentionally exposes only named feature combinations instead of
@@ -11,6 +13,20 @@ impl TextFeatureSet {
     pub const NONE: Self = Self(0);
     /// Tabular numeric figures (`tnum=1`).
     pub const TABULAR_NUMBERS: Self = Self(1 << 0);
+
+    /// Resolves one semantic foundation token into Stern's bounded feature set.
+    ///
+    /// Customized values that Stern does not support fail soft instead of
+    /// exposing arbitrary OpenType tags through the text API.
+    #[must_use]
+    pub fn resolve_semantic(scale: FontFeatureScale, token: FontFeatureToken) -> Option<Self> {
+        match token {
+            FontFeatureToken::Numeric if scale.get(token) == "tabular-nums" => {
+                Some(Self::TABULAR_NUMBERS)
+            }
+            FontFeatureToken::Numeric => None,
+        }
+    }
 
     pub(crate) const fn has_tabular_numbers(self) -> bool {
         self.0 & Self::TABULAR_NUMBERS.0 != 0
