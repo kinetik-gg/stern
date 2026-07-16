@@ -1,13 +1,21 @@
 //! Windowless conformance for retained standard-button label end ellipsis.
 
+use std::{fs, path::Path, time::Duration};
+
 use stern_core::{
     ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionSource, CursorShape, FrameOutput,
-    Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PathElement, PlatformRequest,
-    Point, PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest, Response,
-    SemanticRole, Shortcut, TextPrimitive, UiInput, UiMemory, WidgetId, default_dark_theme,
+    ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PathElement,
+    PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest,
+    Response, SemanticRole, Shortcut, TextPrimitive, UiInput, UiMemory, WidgetId,
+    default_dark_theme,
 };
 use stern_text::{TextFeatureSet, TextLayoutStore, TextOverflow};
-use stern_widgets::{Ui, button};
+use stern_widgets::chrome::{SystemFeedbackScene, SystemFeedbackSceneConfig};
+use stern_widgets::{
+    ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, DiagnosticStrip, FeedbackStack, IconId,
+    JobCancel, JobList, JobPhase, JobRow, JobRowId, MenuBar, MenuBarMenu, MenuBarMenuId, StatusBar,
+    TabStrip, Toolbar, ToolbarGroup, ToolbarGroupId, Ui, button,
+};
 
 const BUTTON: Rect = Rect::new(7.0, 11.0, 119.3, 28.0);
 
@@ -107,6 +115,33 @@ fn assert_path_element_translation(source: &PathElement, translated: &PathElemen
         (PathElement::Close, PathElement::Close) => {}
         _ => panic!("translated focus path changed element topology"),
     }
+}
+
+fn collect_rust_sources(root: &Path, current: &Path, output: &mut Vec<(String, String)>) {
+    for entry in fs::read_dir(current).expect("read production source directory") {
+        let path = entry.expect("read production source entry").path();
+        if path.is_dir() {
+            collect_rust_sources(root, &path, output);
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            let relative = path
+                .strip_prefix(root)
+                .expect("production source remains under manifest root")
+                .to_string_lossy()
+                .replace('\\', "/");
+            output.push((
+                relative,
+                fs::read_to_string(path).expect("read UTF-8 production Rust source"),
+            ));
+        }
+    }
+}
+
+fn production_rust_sources() -> Vec<(String, String)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut sources = Vec::new();
+    collect_rust_sources(root, &root.join("src"), &mut sources);
+    sources.sort_by(|left, right| left.0.cmp(&right.0));
+    sources
 }
 
 #[test]
@@ -1027,12 +1062,77 @@ fn invalid_and_nonfinite_rects_preserve_preexisting_output_and_interaction_topol
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn end_ellipsis_adoption_is_limited_to_standard_and_delegated_action_buttons() {
     let standard = "Complete standard button adoption source";
     let action_source = "Complete delegated action button adoption source";
+    let icon_label = "Neighboring vector icon accessible label";
+    let image_icon_label = "Neighboring image icon accessible label";
+    let selectable_icon_label = "Neighboring selectable image icon accessible label";
     let tab = "Neighboring tab source keeps generic retained policy";
     let row = "Neighboring list row source keeps generic retained policy";
+    let menu = "Neighboring menu source keeps generic retained policy";
+    let toolbar = "Neighboring toolbar source keeps generic retained policy";
+    let busy = "Neighboring busy source keeps generic retained policy";
+    let busy_cancel = "Neighboring busy cancel keeps generic retained policy";
     let action = ActionDescriptor::new("adoption.action", action_source);
+    let menu_bar = MenuBar::from_menus([MenuBarMenu::from_actions(
+        MenuBarMenuId::from_raw(1),
+        menu,
+        [ActionDescriptor::new("boundary.menu", "Menu item")],
+    )]);
+    let toolbar_model = Toolbar::from_groups([ToolbarGroup::from_actions(
+        ToolbarGroupId::from_raw(2),
+        "Boundary toolbar group",
+        [ActionDescriptor::new("boundary.toolbar", toolbar)],
+    )]);
+    let tabs = TabStrip::new();
+    let status = StatusBar::new();
+    let chrome_scene = ChromeScene::new(
+        ChromeSceneConfig::new(
+            WidgetId::from_key("boundary-chrome"),
+            Rect::new(0.0, 50.0, 240.0, 28.0),
+            Rect::new(0.0, 82.0, 240.0, 28.0),
+            Rect::new(0.0, 114.0, 240.0, 28.0),
+            Rect::new(0.0, 146.0, 240.0, 28.0),
+            ActionContext::Global,
+        )
+        .with_widths([
+            (ChromeSceneItemKey::Menu(MenuBarMenuId::from_raw(1)), 200.0),
+            (
+                ChromeSceneItemKey::Toolbar {
+                    group: ToolbarGroupId::from_raw(2),
+                    action: ActionId::new("boundary.toolbar"),
+                },
+                200.0,
+            ),
+        ]),
+        &menu_bar,
+        &toolbar_model,
+        &tabs,
+        &status,
+    );
+    let jobs = JobList::from_rows([JobRow::new(JobRowId::from_raw(3), busy, JobPhase::Running)
+        .with_detail("")
+        .with_cancel(JobCancel::new(
+            ActionDescriptor::new("boundary.busy.cancel", busy_cancel),
+            ActionContext::Global,
+        ))]);
+    let diagnostics = DiagnosticStrip::new();
+    let feedback = FeedbackStack::new();
+    let feedback_scene = SystemFeedbackScene::prepare(
+        SystemFeedbackSceneConfig::new(
+            WidgetId::from_key("boundary-busy"),
+            Rect::new(0.0, 180.0, 300.0, 32.0),
+            Rect::new(0.0, 216.0, 300.0, 32.0),
+            Rect::new(0.0, 252.0, 300.0, 32.0),
+        ),
+        &jobs,
+        &diagnostics,
+        &feedback,
+        Duration::from_secs(3),
+    )
+    .expect("valid busy boundary scene");
     let theme = default_dark_theme();
     let input = UiInput::default();
     let mut memory = UiMemory::new();
@@ -1041,8 +1141,27 @@ fn end_ellipsis_adoption_is_limited_to_standard_and_delegated_action_buttons() {
 
     let _ = ui.button("standard", BUTTON, standard, false);
     let _ = ui.action_button("action", BUTTON, &action, ActionContext::Global);
+    let _ = ui.icon_button_with_label("icon", BUTTON, IconId::from_raw(11), icon_label, false);
+    let _ = ui.image_icon_button(
+        "image-icon",
+        BUTTON,
+        ImageId::from_raw(12),
+        image_icon_label,
+        false,
+    );
+    let _ = ui.image_icon_selectable_button(
+        "selectable-image-icon",
+        BUTTON,
+        ImageId::from_raw(13),
+        selectable_icon_label,
+        true,
+        false,
+    );
+    let selectable = ui.selectable("selectable", BUTTON, true, false);
     let _ = ui.tab_button("tab", BUTTON, tab, false, false);
     let _ = ui.list_row("row", BUTTON, row, false, false);
+    let _ = ui.chrome_scene(&chrome_scene);
+    let _ = ui.system_feedback(&feedback_scene);
     let frame = ui.finish_output();
 
     for source in [standard, action_source] {
@@ -1058,13 +1177,112 @@ fn end_ellipsis_adoption_is_limited_to_standard_and_delegated_action_buttons() {
         );
     }
 
-    for source in [tab, row] {
-        let label = button_text(&frame, source);
+    for source in [tab, row, menu, toolbar, busy, busy_cancel] {
+        let label = frame
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Text(text) if text.text == source => Some(text),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("missing neighboring source {source}"));
         let stored = store
             .stored_layout(label.layout.expect("generic neighboring identity"))
             .expect("resident neighboring identity");
         assert_eq!(stored.key.text, source);
         assert_eq!(stored.key.overflow, TextOverflow::Visible);
         assert_eq!(stored.key.width_bits, 0.0_f32.to_bits());
+    }
+
+    for accessible_label in [icon_label, image_icon_label, selectable_icon_label] {
+        assert!(frame.primitives.iter().all(
+            |primitive| !matches!(primitive, Primitive::Text(text) if text.text == accessible_label)
+        ));
+        assert!(
+            store
+                .layouts()
+                .all(|entry| entry.key.text != accessible_label)
+        );
+        assert!(
+            frame
+                .semantics
+                .nodes()
+                .iter()
+                .any(|node| node.label.as_deref() == Some(accessible_label))
+        );
+    }
+    assert!(frame.semantics.get(selectable.id).is_none());
+
+    let mut adopters = store
+        .layouts()
+        .filter(|entry| entry.key.overflow == TextOverflow::EndEllipsis)
+        .map(|entry| entry.key.text.clone())
+        .collect::<Vec<_>>();
+    adopters.sort();
+    let mut expected = vec![standard.to_owned(), action_source.to_owned()];
+    expected.sort();
+    assert_eq!(adopters, expected);
+}
+
+#[test]
+fn production_call_graph_bounds_button_adoption_and_absent_split_busy_consumers() {
+    let sources = production_rust_sources();
+    assert!(!sources.is_empty());
+
+    let overflow_adopters = sources
+        .iter()
+        .filter_map(|(path, source)| {
+            let count = source
+                .matches("with_overflow(TextOverflow::EndEllipsis)")
+                .count();
+            (count > 0).then(|| (path.as_str(), count))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        overflow_adopters,
+        vec![
+            ("src/components/selector_fields.rs", 1),
+            ("src/ui/basic_controls.rs", 1),
+            ("src/ui/property_grid.rs", 1),
+        ]
+    );
+
+    let button_widget_calls = sources
+        .iter()
+        .filter_map(|(path, source)| {
+            let count = source
+                .lines()
+                .filter(|line| {
+                    line.trim_start()
+                        .starts_with("let mut output = button_widget(")
+                })
+                .count();
+            (count > 0).then(|| (path.as_str(), count))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(button_widget_calls, vec![("src/ui/basic_controls.rs", 1)]);
+
+    let retained_button_delegates = sources
+        .iter()
+        .filter_map(|(path, source)| {
+            let count = source.matches("self.button(").count();
+            (count > 0).then(|| (path.as_str(), count))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        retained_button_delegates,
+        vec![("src/ui/basic_controls.rs", 1)]
+    );
+
+    for (path, source) in &sources {
+        let normalized = source.to_ascii_lowercase();
+        assert!(
+            !normalized.contains("split_button") && !normalized.contains("splitbutton"),
+            "unexpected split-button rendering consumer in {path}"
+        );
+        assert!(
+            !normalized.contains("busy_button") && !normalized.contains("busybutton"),
+            "unexpected busy-button rendering consumer in {path}"
+        );
     }
 }
