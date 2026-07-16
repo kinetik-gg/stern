@@ -760,10 +760,18 @@ fn qualified_facade_connects_numeric_token_to_tabular_shaping() {
     let family = theme.font_family(stern::core::FontFamilyRole::Ui);
 
     assert_eq!(numeric_token, "tabular-nums");
-    let numeric_features = match numeric_token {
-        "tabular-nums" => stern::text::TextFeatureSet::TABULAR_NUMBERS,
-        unexpected => panic!("unsupported numeric feature token: {unexpected}"),
-    };
+    let numeric_features = stern::text::TextFeatureSet::resolve_semantic(
+        theme.typography.features,
+        stern::core::FontFeatureToken::Numeric,
+    )
+    .expect("default numeric feature is supported");
+    assert_eq!(
+        stern::text::TextFeatureSet::resolve_semantic(
+            stern::core::FontFeatureScale::new("facade-unsupported-feature"),
+            stern::core::FontFeatureToken::Numeric,
+        ),
+        None
+    );
     let style = stern::text::TextStyle::new(family, 32.0, 40.0).with_features(numeric_features);
     let mut engine = stern::text::CosmicTextEngine::new();
     let first = engine.shape_text(&stern::text::TextLayoutKey::new(
