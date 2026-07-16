@@ -686,6 +686,33 @@ fn default_theme_mono_family_matches_the_public_text_default() {
 }
 
 #[test]
+fn default_theme_brand_shapes_with_public_space_grotesk_asset() {
+    let theme = stern::core::default_dark_theme();
+    let family = theme.font_family(stern::core::FontFamilyRole::Brand);
+    let mut engine = stern::text::CosmicTextEngine::new();
+    let layout = engine.shape_text(&stern::text::TextLayoutKey::new(
+        "Stern",
+        stern::text::TextStyle::new(family, 20.0, 24.0),
+        200.0,
+        false,
+    ));
+
+    assert_eq!(family, "Space Grotesk");
+    assert_eq!(
+        stern::text::fonts::SPACE_GROTESK_UPSTREAM_COMMIT,
+        "03507d024a01282884232081fc6011c09ff4e849"
+    );
+    assert_eq!(stern::text::fonts::SPACE_GROTESK_VARIABLE.len(), 136_676);
+    assert!(!layout.runs.is_empty());
+    assert!(
+        layout
+            .runs
+            .iter()
+            .all(|run| { run.font.data.data() == stern::text::fonts::SPACE_GROTESK_VARIABLE })
+    );
+}
+
+#[test]
 #[allow(clippy::float_cmp)]
 fn qualified_facade_constructs_and_resolves_typography_foundation() {
     use stern::core::{
