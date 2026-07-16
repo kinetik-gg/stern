@@ -77,7 +77,13 @@ through `Theme::with_sizes` and uses the typed `SizeToken` inventory for
 lookup. `Theme::sizes.icon.md` is the only default and invalid-explicit
 fallback authority for icon-button visual geometry; the prerelease migration
 removed `ControlMetrics::icon_size` without an alias or mirror. Valid explicit
-`*_sized` icon APIs remain authoritative. See
+`*_sized` icon APIs remain authoritative. Checkbox and radio visible indicator
+geometry instead uses one private exact `14.0` component-recipe dimension,
+exposed through the unchanged `CheckRecipe::size` result. The prerelease
+migration removed `ControlMetrics::check_size` without a token, alias, mirror,
+or replacement customization hook; `Theme::radio_button` continues to inherit
+the checkbox recipe size. Caller-owned rectangles and full-label interaction
+and semantic bounds remain unchanged. See
 [Exact Size Foundation Migration](size-migration.md).
 
 | Group | Current classification | Canonical path for new code | Public workflow use | Promotion prerequisite |
@@ -268,7 +274,7 @@ records the evidence needed for the final API decision.
 | --- | --- | --- |
 | `text::TextLayoutCache` versus shaped `text::TextLayoutStore` | Use `TextLayoutStore` for retained shaped layouts and renderer resources. `TextLayoutCache` remains a module-qualified approximate measurement compatibility API. | Desktop text behavior, renderer resource lifetime, and public workflow evidence determine deprecation/removal and migration wording. |
 | Legacy viewport `Guide`, `Crosshair`, and `ViewportComposition` helpers versus surface/descriptor paths | Keep legacy helpers compatible but noncanonical. New work starts with `widgets::viewport::ViewportSurface` and the relevant `ViewportGuideDescriptor`, `ViewportOverlayDescriptor`, or `ViewportToolSurfaceDescriptor`. | Viewport composition, external texture, pointer transform, painter, and public workflow proof determine the final retained set. |
-| Legacy `Theme` scalar fields versus token groups | New work uses grouped token surfaces including `Theme::radii`, `Theme::strokes`, `Theme::sizes`, `Theme::controls`, and `Theme::typography`; default icon geometry uses `Theme::sizes.icon.md`. `radius`, `border_width`, and `text_size` remain compatible. | Complete theme-token migration and representative component paint proof precede deprecation or removal. |
+| Legacy `Theme` scalar fields versus token groups | New work uses grouped token surfaces including `Theme::radii`, `Theme::strokes`, `Theme::sizes`, `Theme::controls`, and `Theme::typography`; default icon geometry uses `Theme::sizes.icon.md`, while checkbox and radio recipes resolve their private exact `14.0` indicator dimension. Removed `ControlMetrics::{icon_size, check_size}` fields have no compatibility aliases. `radius`, `border_width`, and `text_size` remain compatible. | Complete theme-token migration and representative component paint proof precede deprecation or removal. Current selection-indicator evidence covers direct visual geometry and full-label bounds only; it does not establish mixed-state mark anatomy or renderer baselines. |
 | Dock `PanelId` versus `PanelInstanceId` | New instance-oriented APIs use `widgets::dock::PanelInstanceId`; the convertible legacy `PanelId` remains compatible. | Dock interaction, persistence round-trip, and public workflow evidence establish whether a migration can be enforced. |
 | `ActionContext`, `ActionPriority`, and `ActionRoutingContext` | Keep all three compatible and provisional; do not claim that their current overlap is final. | Action-routing, input precedence, modal/text reservation, and public workflow evidence must establish one non-contradictory public model. |
 

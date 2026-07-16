@@ -89,7 +89,6 @@ fn size_replacement_is_isolated_from_theme_and_control_metrics() {
     baseline.controls = ControlMetrics {
         control_height: 293.0,
         compact_control_height: 307.0,
-        check_size: 313.0,
         padding_x: 317.0,
         padding_y: 331.0,
     };
@@ -124,21 +123,14 @@ fn size_replacement_is_isolated_from_theme_and_control_metrics() {
 #[test]
 fn control_metrics_defaults_and_customization_remain_independent() {
     let defaults = default_dark_theme();
-    assert_eq!(
-        defaults.controls,
-        ControlMetrics {
-            control_height: 28.0,
-            compact_control_height: 22.0,
-            check_size: 14.0,
-            padding_x: 8.0,
-            padding_y: 4.0,
-        }
-    );
+    assert_eq!(defaults.controls.control_height, 28.0);
+    assert_eq!(defaults.controls.compact_control_height, 22.0);
+    assert_eq!(defaults.controls.padding_x, 8.0);
+    assert_eq!(defaults.controls.padding_y, 4.0);
 
     let controls = ControlMetrics {
         control_height: 409.0,
         compact_control_height: 419.0,
-        check_size: 431.0,
         padding_x: 433.0,
         padding_y: 439.0,
     };
@@ -200,7 +192,6 @@ fn controls_and_legacy_mirror_cannot_mutate_stroke_authority() {
     let controls = ControlMetrics {
         control_height: 31.0,
         compact_control_height: 19.0,
-        check_size: 17.0,
         padding_x: 9.0,
         padding_y: 5.0,
     };
@@ -778,6 +769,51 @@ fn component_recipes_cover_common_states() {
         Brush::Solid(theme.colors.border.focused)
     );
     assert!(theme.panel().shadow.is_none());
+}
+
+#[test]
+fn selection_indicator_recipe_size_is_exact_across_component_states() {
+    let theme = default_dark_theme();
+    let states = [
+        ComponentState::default(),
+        ComponentState {
+            hovered: true,
+            ..ComponentState::default()
+        },
+        ComponentState {
+            focused: true,
+            ..ComponentState::default()
+        },
+        ComponentState {
+            selected: true,
+            ..ComponentState::default()
+        },
+        ComponentState {
+            hovered: true,
+            focused: true,
+            selected: true,
+            ..ComponentState::default()
+        },
+        ComponentState {
+            disabled: true,
+            ..ComponentState::default()
+        },
+        ComponentState {
+            hovered: true,
+            focused: true,
+            disabled: true,
+            selected: true,
+            ..ComponentState::default()
+        },
+    ];
+
+    for state in states {
+        let checkbox = theme.checkbox(state);
+        let radio = theme.radio_button(state);
+        assert_eq!(checkbox.size, 14.0, "wrong checkbox size for {state:?}");
+        assert_eq!(radio.size, 14.0, "wrong radio size for {state:?}");
+        assert_eq!(radio.size, checkbox.size);
+    }
 }
 
 #[test]

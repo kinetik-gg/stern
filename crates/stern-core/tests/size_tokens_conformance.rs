@@ -127,7 +127,6 @@ fn with_sizes_changes_only_the_size_foundation() {
     baseline.controls = ControlMetrics {
         control_height: 293.0,
         compact_control_height: 307.0,
-        check_size: 313.0,
         padding_x: 317.0,
         padding_y: 331.0,
     };
@@ -157,7 +156,6 @@ fn spacing_and_remaining_control_customization_do_not_mirror_size_tokens() {
     let controls = ControlMetrics {
         control_height: 353.0,
         compact_control_height: 359.0,
-        check_size: 373.0,
         padding_x: 379.0,
         padding_y: 383.0,
     };
@@ -179,7 +177,6 @@ fn spacing_and_remaining_control_customization_do_not_mirror_size_tokens() {
 
     assert_eq!(default_dark_theme().controls.control_height, 28.0);
     assert_eq!(default_dark_theme().controls.compact_control_height, 22.0);
-    assert_eq!(default_dark_theme().controls.check_size, 14.0);
     assert_eq!(default_dark_theme().controls.padding_x, 8.0);
     assert_eq!(default_dark_theme().controls.padding_y, 4.0);
 }
@@ -224,6 +221,33 @@ fn control_metric_field_audit_is_declaration_scoped() {
     assert!(!control_metrics_declares_icon_size(
         comments_and_literals_only
     ));
+
+    let unrelated_check_size = r"
+        pub struct CheckRecipe {
+            pub check_size: f32,
+        }
+
+        pub struct ControlMetrics {
+            pub control_height: f32,
+        }
+    ";
+    assert!(!control_metrics_declares_check_size(unrelated_check_size));
+
+    for mutated_control_metrics in [
+        r"
+            pub struct ControlMetrics {
+                check_size: f32,
+            }
+        ",
+        r"
+            pub struct ControlMetrics {
+                pub(super) check_size /* field comment */
+                    : core::primitive::f32,
+            }
+        ",
+    ] {
+        assert!(control_metrics_declares_check_size(mutated_control_metrics));
+    }
 }
 
 #[test]
@@ -257,7 +281,38 @@ fn icon_size_member_access_audit_handles_layout_and_ignores_non_code() {
 }
 
 #[test]
-fn production_sources_have_no_removed_icon_size_authority() {
+fn check_size_member_access_audit_is_scoped_and_ignores_non_code() {
+    for mutated_consumer in [
+        "theme . controls . check_size",
+        "theme\n    .controls\n    .check_size",
+        "theme.controls/* authority hop */.check_size",
+        "theme /* root */ . controls /* field */ . check_size",
+        r#"fn inspect<'a>(value: &'a str) {
+            let quote = '"';
+            let byte_quote = b'"';
+            let _ = (value, quote, byte_quote, theme.controls.check_size);
+        }"#,
+    ] {
+        assert!(has_check_size_member_access(mutated_consumer));
+    }
+
+    let comments_literals_and_unrelated_members = r##"
+        let normal = ".controls.check_size";
+        let raw = r#"theme.controls.check_size"#;
+        // theme.controls.check_size
+        /* theme . controls . check_size */
+        let check_size = recipe.check_size;
+        let direct = theme.check_size;
+        let qualified = theme.sizes.check_size;
+        let split = theme.controls.check_/* token boundary */size;
+    "##;
+    assert!(!has_check_size_member_access(
+        comments_literals_and_unrelated_members
+    ));
+}
+
+#[test]
+fn production_sources_have_no_removed_icon_or_check_size_authority() {
     let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = crate_root
         .parent()
@@ -294,6 +349,11 @@ fn production_sources_have_no_removed_icon_size_authority() {
             "removed icon_size member access remains in {}",
             path.display()
         );
+        assert!(
+            !has_check_size_member_access(&source),
+            "removed controls.check_size member access remains in {}",
+            path.display()
+        );
     }
 
     let tokens_path = crate_root.join("src/theme/tokens.rs");
@@ -302,10 +362,13 @@ fn production_sources_have_no_removed_icon_size_authority() {
         !control_metrics_declares_icon_size(&tokens_source),
         "ControlMetrics still declares the removed icon_size field"
     );
+    assert!(
+        !control_metrics_declares_check_size(&tokens_source),
+        "ControlMetrics still declares the removed check_size field"
+    );
     for remaining in [
         "control_height",
         "compact_control_height",
-        "check_size",
         "padding_x",
         "padding_y",
     ] {
@@ -318,6 +381,10 @@ fn production_sources_have_no_removed_icon_size_authority() {
 
 fn control_metrics_declares_icon_size(source: &str) -> bool {
     control_metrics_declares_field(source, "icon_size")
+}
+
+fn control_metrics_declares_check_size(source: &str) -> bool {
+    control_metrics_declares_field(source, "check_size")
 }
 
 fn control_metrics_declares_field(source: &str, field: &str) -> bool {
@@ -341,10 +408,18 @@ fn control_metrics_declares_field(source: &str, field: &str) -> bool {
 }
 
 fn has_icon_size_member_access(source: &str) -> bool {
+    has_control_metric_member_access(source, "icon_size")
+}
+
+fn has_check_size_member_access(source: &str) -> bool {
+    has_control_metric_member_access(source, "check_size")
+}
+
+fn has_control_metric_member_access(source: &str, field: &str) -> bool {
     let source = mask_rust_comments_and_literals(source);
     let bytes = source.as_bytes();
     let controls = b"controls";
-    let icon_size = b"icon_size";
+    let field = field.as_bytes();
     for dot in bytes
         .iter()
         .enumerate()
@@ -358,8 +433,8 @@ fn has_icon_size_member_access(source: &str) -> bool {
         if bytes.get(separator) != Some(&b'.') {
             continue;
         }
-        let icon_size_start = skip_ascii_whitespace(bytes, separator + 1);
-        if identifier_matches(bytes, icon_size_start, icon_size) {
+        let field_start = skip_ascii_whitespace(bytes, separator + 1);
+        if identifier_matches(bytes, field_start, field) {
             return true;
         }
     }

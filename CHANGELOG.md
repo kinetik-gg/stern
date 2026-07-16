@@ -10,11 +10,18 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Removed `ControlMetrics::check_size` and made one private exact
+  `14.0` component-recipe dimension the sole visible indicator-size authority
+  for checkbox and radio controls. `Theme::radio_button` continues to inherit
+  the checkbox recipe size; caller-owned rectangles, full-label interaction and
+  semantic bounds, focus layers, and component state behavior are unchanged.
+  This migration adds no size token or alias. External `ControlMetrics` struct
+  literals must delete `check_size`. See `docs/size-migration.md`.
 - **Breaking:** Removed `ControlMetrics::icon_size` and made
   `Theme::sizes.icon.md` the sole default icon-size authority for unsized
   bitmap, selectable-bitmap, vector-library, and missing-vector icon buttons.
   Invalid explicit bitmap sizes now use that same themed fallback, while valid
-  explicit sizes and the remaining five `ControlMetrics` fields are unchanged.
+  explicit sizes and the remaining four `ControlMetrics` fields are unchanged.
   See `docs/size-migration.md`.
 - **Breaking:** Added the exact grouped 14-token `SizeScale` foundation at
   `Theme::sizes`, with typed `SizeToken` lookup and replacement through

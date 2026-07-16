@@ -47,7 +47,6 @@ pub const fn default_dark_theme() -> Theme {
         controls: ControlMetrics {
             control_height: 28.0,
             compact_control_height: 22.0,
-            check_size: 14.0,
             padding_x: 8.0,
             padding_y: 4.0,
         },

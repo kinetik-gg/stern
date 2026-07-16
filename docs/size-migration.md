@@ -69,9 +69,30 @@ by the theme default.
 
 `ControlMetrics::icon_size` has been removed. External `ControlMetrics` struct
 literals must delete that field. Its remaining `control_height`,
-`compact_control_height`, `check_size`, `padding_x`, and `padding_y` fields keep
-their existing defaults and customization behavior, but cannot affect icon
-geometry.
+`compact_control_height`, `padding_x`, and `padding_y` fields keep their
+existing defaults and customization behavior, but cannot affect icon geometry.
+
+## Selection indicator consumer authority
+
+Checkbox and radio visible indicator geometry now resolves one private named
+component-recipe dimension at exactly `14.0` logical units. `Theme::checkbox`
+places that value in the unchanged public `CheckRecipe::size` field, and
+`Theme::radio_button` continues to inherit the checkbox recipe before replacing
+only its radius. The exact `14.0` value is not a size-foundation token and must
+not be replaced with `sizes.icon.*` or a compatibility alias.
+
+`ControlMetrics::check_size` has been removed. External `ControlMetrics` struct
+literals must delete that field; there is no replacement customization hook.
+The remaining `control_height`, `compact_control_height`, `padding_x`, and
+`padding_y` fields remain unchanged and cannot affect checkbox or radio
+indicator geometry.
+
+Caller-provided control rectangles and full-label response and semantic bounds
+remain authoritative. The visible indicator remains `14 x 14` logical units
+through selected, unselected, hover, focus, and disabled states, and focus
+layers remain additive. Unrounded physical-space transport is exactly `14.0`,
+`17.5`, `21.0`, and `28.0` at scales `1.0`, `1.25`, `1.5`, and `2.0`; this does
+not claim raster snapping or reviewed renderer baselines.
 
 The size foundation intentionally provides no legacy aliases, mirrors, or
 forwarding methods. Adoption by other component families and reconciliation of
