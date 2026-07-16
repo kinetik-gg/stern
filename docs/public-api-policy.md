@@ -86,6 +86,33 @@ makes `STERN-TYP-000` Partial for deterministic Mono text-system alignment and
 requirement is Accepted, and this policy does not claim platform fallback,
 renderer/browser output, GPU/manual review, or any other deferred capability.
 
+### Qualified bundled Brand authority
+
+The qualified text API exposes the exact bundled Space Grotesk variable face
+through
+`stern::text::fonts::{SPACE_GROTESK_UPSTREAM_COMMIT, SPACE_GROTESK_VARIABLE}`.
+The revision is `03507d024a01282884232081fc6011c09ff4e849`; the public bytes
+are the pinned `136,676`-byte upstream `fonts/ttf/SpaceGrotesk[wght].ttf`
+asset with SHA-256
+`ACAD6DE1FC93436F5C0F1F4137751EF04F1AEA3063E7036535970FFCFBD79F72`.
+These qualified items are not added to the default prelude.
+
+The default theme's `FontFamilyRole::Brand` result can be passed into public
+`TextStyle`, and the default text engine resolves that `"Space Grotesk"` name
+through the public bundled bytes. There is no Brand default alias, Brand
+`TextRole`, Title remapping, fallback-stack authority, or current weight-axis
+transport. Existing Inter and Space Mono named/default/generic resolution is
+preserved.
+
+This advances only deterministic Brand text-system byte alignment for
+`STERN-TYP-000` and exact asset/license provenance for `STERN-TYP-006`; both
+remain Partial. `STERN-TYP-001` and `STERN-TYP-003` are preserved without
+advancing, `STERN-TYP-002`, `STERN-TYP-004`, `STERN-TYP-005`, and
+`STERN-TYP-007` do not advance, all typography parity records remain
+unverified, and nothing is Accepted. Measured geometry may change with the
+family, but no baseline, overflow, widget-adoption, renderer, browser, GPU, or
+manual visual evidence follows from this loading boundary.
+
 ### Qualified size foundation
 
 The grouped size foundation remains available through `stern::core` without
@@ -291,7 +318,7 @@ records the evidence needed for the final API decision.
 | --- | --- | --- |
 | `text::TextLayoutCache` versus shaped `text::TextLayoutStore` | Use `TextLayoutStore` for retained shaped layouts and renderer resources. `TextLayoutCache` remains a module-qualified approximate measurement compatibility API. | Desktop text behavior, renderer resource lifetime, and public workflow evidence determine deprecation/removal and migration wording. |
 | Legacy viewport `Guide`, `Crosshair`, and `ViewportComposition` helpers versus surface/descriptor paths | Keep legacy helpers compatible but noncanonical. New work starts with `widgets::viewport::ViewportSurface` and the relevant `ViewportGuideDescriptor`, `ViewportOverlayDescriptor`, or `ViewportToolSurfaceDescriptor`. | Viewport composition, external texture, pointer transform, painter, and public workflow proof determine the final retained set. |
-| Legacy `Theme` scalar fields versus token groups | New work uses grouped token surfaces including `Theme::radii`, `Theme::strokes`, `Theme::sizes`, `Theme::controls`, and `Theme::typography`. Typography stores semantic UI, Brand, and Mono family authority separately from per-role logical metrics, plus exact customizable size, line-height, weight, and feature foundation scales. Qualified foundation lookup is `theme.typography.<scale>.get(token)`; `Theme::font` remains the resolved compatibility boundary and `Theme::font_family` exposes typed family lookup. Title remains UI and Brand has no current `TextRole`. Foundation weight and feature metadata does not expand `FontToken` or text/render transport. Default icon geometry uses `Theme::sizes.icon.md`, while checkbox and radio recipes resolve their private exact `14.0` indicator dimension. Removed `ControlMetrics::{icon_size, check_size}` fields have no compatibility aliases. `radius`, `border_width`, and `text_size` remain compatible. | Complete theme-token migration and representative component paint proof precede deprecation or removal. Current typography evidence proves deterministic theme authority plus bounded Space Mono asset loading and named/default/generic byte alignment. The numeric `"tabular-nums"` value does not prove consumer adoption or shaped tabular figures; no evidence is claimed for fallback, glyph-metric suitability, DPI legibility, renderer output, or visual review. Current selection-indicator evidence covers direct visual geometry and full-label bounds only; it does not establish mixed-state mark anatomy or renderer baselines. |
+| Legacy `Theme` scalar fields versus token groups | New work uses grouped token surfaces including `Theme::radii`, `Theme::strokes`, `Theme::sizes`, `Theme::controls`, and `Theme::typography`. Typography stores semantic UI, Brand, and Mono family authority separately from per-role logical metrics, plus exact customizable size, line-height, weight, and feature foundation scales. Qualified foundation lookup is `theme.typography.<scale>.get(token)`; `Theme::font` remains the resolved compatibility boundary and `Theme::font_family` exposes typed family lookup. Title remains UI and Brand has no current `TextRole`. Foundation weight and feature metadata does not expand `FontToken` or text/render transport. Default icon geometry uses `Theme::sizes.icon.md`, while checkbox and radio recipes resolve their private exact `14.0` indicator dimension. Removed `ControlMetrics::{icon_size, check_size}` fields have no compatibility aliases. `radius`, `border_width`, and `text_size` remain compatible. | Complete theme-token migration and representative component paint proof precede deprecation or removal. Current typography evidence proves deterministic theme authority plus bounded Space Mono and Space Grotesk asset loading with exact byte alignment for Mono and Brand. The numeric `"tabular-nums"` value does not prove consumer adoption or shaped tabular figures; no evidence is claimed for fallback, glyph-metric suitability, DPI legibility, renderer output, or visual review. Current selection-indicator evidence covers direct visual geometry and full-label bounds only; it does not establish mixed-state mark anatomy or renderer baselines. |
 | Dock `PanelId` versus `PanelInstanceId` | New instance-oriented APIs use `widgets::dock::PanelInstanceId`; the convertible legacy `PanelId` remains compatible. | Dock interaction, persistence round-trip, and public workflow evidence establish whether a migration can be enforced. |
 | `ActionContext`, `ActionPriority`, and `ActionRoutingContext` | Keep all three compatible and provisional; do not claim that their current overlap is final. | Action-routing, input precedence, modal/text reservation, and public workflow evidence must establish one non-contradictory public model. |
 
