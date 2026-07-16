@@ -1,6 +1,8 @@
 //! Windowless conformance for retained virtual-table body-cell end ellipsis.
 
-use std::time::Duration;
+#![allow(clippy::too_many_lines)]
+
+use std::{fs, path::Path, time::Duration};
 
 use stern_core::{
     FrameContext, FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton,
@@ -245,6 +247,33 @@ fn assert_layout_only_delta(retained: &Run, layoutless: &Run) {
         layoutless.frame.platform_requests
     );
     assert_eq!(retained.frame.warnings, layoutless.frame.warnings);
+}
+
+fn collect_rust_sources(root: &Path, current: &Path, output: &mut Vec<(String, String)>) {
+    for entry in fs::read_dir(current).expect("read production source directory") {
+        let path = entry.expect("read production source entry").path();
+        if path.is_dir() {
+            collect_rust_sources(root, &path, output);
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            let relative = path
+                .strip_prefix(root)
+                .expect("production source remains under manifest root")
+                .to_string_lossy()
+                .replace('\\', "/");
+            output.push((
+                relative,
+                fs::read_to_string(path).expect("read UTF-8 production Rust source"),
+            ));
+        }
+    }
+}
+
+fn production_rust_sources() -> Vec<(String, String)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut sources = Vec::new();
+    collect_rust_sources(root, &root.join("src"), &mut sources);
+    sources.sort_by(|left, right| left.0.cmp(&right.0));
+    sources
 }
 
 #[test]
@@ -639,17 +668,23 @@ fn hot_frames_source_width_and_clamped_width_obey_retained_identity_boundaries()
         UiInput::default(),
         |_| VirtualTableRow::new([source]),
     );
-    let clamped_a_text = body_texts(&clamped_a.frame, source)[0];
-    let clamped_b_text = body_texts(&clamped_b.frame, source)[0];
-    assert_eq!(clamped_a_text.layout, Some(first_ids[0]));
-    assert_eq!(clamped_b_text.layout, Some(first_ids[0]));
+    let first_clamped_text = body_texts(&clamped_a.frame, source)[0];
+    let same_effective_width_text = body_texts(&clamped_b.frame, source)[0];
+    assert_eq!(first_clamped_text.layout, Some(first_ids[0]));
+    assert_eq!(same_effective_width_text.layout, Some(first_ids[0]));
     assert_eq!(
-        body_semantics(&clamped_a.frame, source)[0].bounds.width,
-        80.0
+        body_semantics(&clamped_a.frame, source)[0]
+            .bounds
+            .width
+            .to_bits(),
+        80.0_f32.to_bits()
     );
     assert_eq!(
-        body_semantics(&clamped_b.frame, source)[0].bounds.width,
-        80.0
+        body_semantics(&clamped_b.frame, source)[0]
+            .bounds
+            .width
+            .to_bits(),
+        80.0_f32.to_bits()
     );
 }
 
@@ -1347,4 +1382,158 @@ fn missing_cells_keep_empty_explicit_policy_and_extra_cells_remain_unpainted() {
     assert!(store.layouts().all(|entry| entry.key.text != extra));
     assert_eq!(body_semantics(&extra_run.frame, "First").len(), 1);
     assert_eq!(body_semantics(&extra_run.frame, "Second").len(), 1);
+}
+
+#[test]
+fn hundred_thousand_rows_keep_exact_bounded_materialization_and_layout_registration() {
+    let raw_ids = (0..100_000).collect::<Vec<_>>();
+    let items = projection(&raw_ids);
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let mut selection = VirtualTableSelection::new();
+    let run = run_table(
+        Some(&mut store),
+        &items,
+        config(BOUNDS, [80.0, 80.0, 80.0], VirtualTableSelectionMode::Cell),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |item| {
+            VirtualTableRow::new([
+                format!("Row {} first", item.id.raw()),
+                format!("Row {} second", item.id.raw()),
+                format!("Row {} third", item.id.raw()),
+            ])
+        },
+    );
+
+    assert_eq!(run.output.window.body.visible_range, 0..4);
+    assert_eq!(run.output.window.body.materialized_range, 0..5);
+    assert_eq!(run.callbacks, [id(0), id(1), id(2), id(3), id(4)]);
+    assert_eq!(run.output.rows.len(), 5);
+    assert_eq!(
+        run.frame
+            .primitives
+            .iter()
+            .filter(|primitive| matches!(primitive, Primitive::Text(_)))
+            .count(),
+        18
+    );
+    assert_eq!(store.len(), 18);
+    assert_eq!(
+        store
+            .layouts()
+            .filter(|entry| entry.key.overflow == TextOverflow::EndEllipsis)
+            .count(),
+        15
+    );
+    assert_eq!(
+        store
+            .layouts()
+            .filter(|entry| entry.key.overflow == TextOverflow::Visible)
+            .count(),
+        3
+    );
+    assert!(
+        store
+            .layouts()
+            .all(|entry| !entry.key.text.starts_with("Row 99999 "))
+    );
+    for raw in 0..5 {
+        for suffix in ["first", "second", "third"] {
+            let source = format!("Row {raw} {suffix}");
+            assert_eq!(body_texts(&run.frame, &source).len(), 1);
+            assert_eq!(
+                body_semantics(&run.frame, &source).len(),
+                usize::from(raw < 4)
+            );
+        }
+    }
+}
+
+#[test]
+fn production_call_graph_limits_explicit_adoption_to_virtual_table_body_cells() {
+    let sources = production_rust_sources();
+    assert!(!sources.is_empty());
+    let overflow_adopters = sources
+        .iter()
+        .filter_map(|(path, source)| {
+            let count = source
+                .matches("with_overflow(TextOverflow::EndEllipsis)")
+                .count();
+            (count > 0).then_some((path.as_str(), count))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        overflow_adopters,
+        vec![
+            ("src/components/selector_fields.rs", 1),
+            ("src/ui/basic_controls.rs", 1),
+            ("src/ui/property_grid.rs", 1),
+            ("src/ui/virtual_table.rs", 1),
+        ]
+    );
+
+    let virtual_table = sources
+        .iter()
+        .find(|(path, _)| path == "src/ui/virtual_table.rs")
+        .map(|(_, source)| source)
+        .expect("virtual-table production source");
+    assert_eq!(
+        virtual_table
+            .matches("self.paint_virtual_table_text(rect, &label, recipe.foreground);")
+            .count(),
+        1
+    );
+    assert_eq!(
+        virtual_table
+            .matches("self.paint_virtual_table_body_text(rect, label, recipe.foreground);")
+            .count(),
+        1
+    );
+    assert_eq!(
+        virtual_table
+            .matches("fn paint_virtual_table_text(")
+            .count(),
+        1
+    );
+    assert_eq!(
+        virtual_table
+            .matches("fn paint_virtual_table_body_text(")
+            .count(),
+        1
+    );
+    assert_eq!(
+        virtual_table
+            .matches("self.virtual_table_text_primitive(rect, label, color)")
+            .count(),
+        2
+    );
+    assert_eq!(
+        virtual_table
+            .matches("self.primitive(Primitive::Text(text));")
+            .count(),
+        2
+    );
+    let header_boundary = virtual_table
+        .split_once("fn paint_virtual_table_header(")
+        .and_then(|(_, rest)| rest.split_once("fn paint_virtual_table_resize_handle("))
+        .map(|(header, _)| header)
+        .expect("bounded header painter source");
+    assert!(header_boundary.contains("self.paint_virtual_table_text("));
+    assert!(!header_boundary.contains("TextOverflow::EndEllipsis"));
+    let body_boundary = virtual_table
+        .split_once("fn paint_virtual_table_body_text(")
+        .and_then(|(_, rest)| rest.split_once("fn virtual_table_text_primitive("))
+        .map(|(body, _)| body)
+        .expect("bounded body painter source");
+    assert_eq!(
+        body_boundary
+            .matches("with_overflow(TextOverflow::EndEllipsis)")
+            .count(),
+        1
+    );
+    assert!(body_boundary.contains("let raw_span = rect.width - padding_x * 2.0_f32;"));
+    assert!(body_boundary.contains("let label_width = raw_span.max(0.0_f32);"));
+    assert!(body_boundary.contains("self.primitive(Primitive::Text(text));"));
 }
