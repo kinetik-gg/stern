@@ -180,6 +180,7 @@ fn attrs_for_style(style: &TextStyle) -> Attrs<'_> {
 fn bundled_font_system() -> FontSystem {
     let mut db = fontdb::Database::new();
     db.load_font_data(fonts::INTER_VARIABLE.to_vec());
+    db.load_font_data(fonts::SPACE_GROTESK_VARIABLE.to_vec());
     db.load_font_data(fonts::SPACE_MONO_REGULAR.to_vec());
     db.set_sans_serif_family(INTER_FONTDB_FAMILY);
     db.set_monospace_family(DEFAULT_MONOSPACE_FONT_FAMILY);
