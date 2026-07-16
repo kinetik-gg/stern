@@ -1,8 +1,7 @@
 /// Pinned upstream commit for the bundled Inter font file.
 pub const INTER_UPSTREAM_COMMIT: &str = "353b61b9f4430d5f420d56605a6e7993e0941470";
 /// Pinned upstream commit for the bundled Space Grotesk font file.
-pub const SPACE_GROTESK_UPSTREAM_COMMIT: &str =
-    "03507d024a01282884232081fc6011c09ff4e849";
+pub const SPACE_GROTESK_UPSTREAM_COMMIT: &str = "03507d024a01282884232081fc6011c09ff4e849";
 /// Pinned upstream commit for the bundled Space Mono font file.
 pub const SPACE_MONO_UPSTREAM_COMMIT: &str = "329858c2c4dbd3476f972a4ae00624b018cf4b81";
 /// Bundled Inter variable TTF bytes.
