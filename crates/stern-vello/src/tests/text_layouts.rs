@@ -384,10 +384,7 @@ fn retained_property_widget_encodes_label_ellipsis_without_state_glyph_fallback(
 
         assert!(output.diagnostics.is_empty());
         assert_eq!(encoded_ids, expected_ids);
-        assert_eq!(
-            encoded_ids[marker_indexes[0]],
-            label_ids[marker_indexes[0]]
-        );
+        assert_eq!(encoded_ids[marker_indexes[0]], label_ids[marker_indexes[0]]);
         assert!(
             encoding
                 .resources

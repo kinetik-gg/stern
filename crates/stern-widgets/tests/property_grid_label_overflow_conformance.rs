@@ -42,15 +42,13 @@ fn retained_grid(
 ) -> (PropertyGridOutput<ValueObservation>, FrameOutput) {
     let mut ui = Ui::new(input, memory, theme).with_text_layouts(store);
     let output = ui
-        .property_grid("grid", bounds, rows, config, |_, cell| {
-            ValueObservation {
-                row: cell.row.id,
-                access: cell.access,
-                geometry: cell.geometry,
-                value_rect: cell.value_rect,
-                row_widget_id: cell.row_widget_id(),
-                value_widget_id: cell.value_widget_id(),
-            }
+        .property_grid("grid", bounds, rows, config, |_, cell| ValueObservation {
+            row: cell.row.id,
+            access: cell.access,
+            geometry: cell.geometry,
+            value_rect: cell.value_rect,
+            row_widget_id: cell.row_widget_id(),
+            value_widget_id: cell.value_widget_id(),
         })
         .expect("valid property rows");
     (output, ui.finish_output())
@@ -117,7 +115,11 @@ fn label_width_matrix_preserves_exact_operation_order_and_positive_zero() {
     let cases = [
         (
             "No trailing state reserves no width",
-            PropertyGridRow::property(ItemId::from_raw(1), "No trailing state reserves no width", 0),
+            PropertyGridRow::property(
+                ItemId::from_raw(1),
+                "No trailing state reserves no width",
+                0,
+            ),
             0.0_f32,
             0x42E2_999A_u32,
         ),
@@ -145,13 +147,9 @@ fn label_width_matrix_preserves_exact_operation_order_and_positive_zero() {
         ),
         (
             "Help wins over status reservation",
-            PropertyGridRow::property(
-                ItemId::from_raw(4),
-                "Help wins over status reservation",
-                0,
-            )
-            .with_help_text("Help")
-            .with_status(PropertyGridRowStatus::error("Error")),
+            PropertyGridRow::property(ItemId::from_raw(4), "Help wins over status reservation", 0)
+                .with_help_text("Help")
+                .with_status(PropertyGridRowStatus::error("Error")),
             22.0_f32,
             0x42B6_999A_u32,
         ),
@@ -238,7 +236,8 @@ fn label_width_matrix_preserves_exact_operation_order_and_positive_zero() {
 
 #[test]
 fn ordinary_required_and_fitting_labels_preserve_complete_sources() {
-    let long = "Complete ordinary property label source remains intact while its presentation elides";
+    let long =
+        "Complete ordinary property label source remains intact while its presentation elides";
     let required =
         "Complete required property label source keeps its presentation-only suffix while eliding";
     let rows = [
@@ -263,7 +262,10 @@ fn ordinary_required_and_fitting_labels_preserve_complete_sources() {
         assert_eq!(stored.key.text, source);
         assert_eq!(stored.key.style.family, label.family);
         assert_eq!(stored.key.style.size_bits, label.size.to_bits());
-        assert_eq!(stored.key.style.line_height_bits, label.line_height.to_bits());
+        assert_eq!(
+            stored.key.style.line_height_bits,
+            label.line_height.to_bits()
+        );
         assert!(!stored.key.wrap);
         assert_eq!(stored.key.overflow, TextOverflow::EndEllipsis);
         assert_eq!(stored.layout.is_elided(), elided);
@@ -442,10 +444,9 @@ fn translation_and_scroll_change_origins_without_retained_identity_growth() {
     );
 
     let scroll_bounds = Rect::new(0.0, 0.0, 300.0, 24.0);
-    let scroll_config = PropertyGridConfig::new(PropertyGridLayout::new(
-        100.0, 26.0, 120.0, 6.0, 12.0,
-    ))
-    .with_overscan(0);
+    let scroll_config =
+        PropertyGridConfig::new(PropertyGridLayout::new(100.0, 26.0, 120.0, 6.0, 12.0))
+            .with_overscan(0);
     let mut scroll_store = TextLayoutStore::new();
     let mut scroll_memory = UiMemory::new();
     let (_, unscrolled) = retained_grid(
@@ -586,11 +587,7 @@ fn hot_frames_reuse_identity_and_source_width_or_suffix_changes_do_not() {
     assert_ne!(label_id(&resized, source), stable_id);
 
     let required_source = format!("{source} *");
-    let (_, required) = retained_default(
-        &mut store,
-        &mut memory,
-        &[row.with_required(true)],
-    );
+    let (_, required) = retained_default(&mut store, &mut memory, &[row.with_required(true)]);
     assert_ne!(label_id(&required, &required_source), stable_id);
 }
 
@@ -640,8 +637,14 @@ fn row_access_geometry_callbacks_order_and_semantics_remain_application_owned() 
     for (value, geometry) in output.values.iter().zip(&expected_geometry) {
         assert_eq!(value.row, value.value.row);
         assert_eq!(value.value.geometry, *geometry);
-        assert_eq!(value.value.row_widget_id, output.root.child(("property-grid-row", value.row.raw())));
-        assert_eq!(value.value.value_widget_id, value.value.row_widget_id.child("value"));
+        assert_eq!(
+            value.value.row_widget_id,
+            output.root.child(("property-grid-row", value.row.raw()))
+        );
+        assert_eq!(
+            value.value.value_widget_id,
+            value.value.row_widget_id.child("value")
+        );
     }
     for (row, geometry) in rows.iter().zip(&expected_geometry) {
         let presentation = if row.state.required {
@@ -656,15 +659,19 @@ fn row_access_geometry_callbacks_order_and_semantics_remain_application_owned() 
         assert!(frame.semantics.nodes().iter().any(|node| {
             node.id == output.root.child(("property-grid-row", row.id.raw()))
                 && node.label.as_deref() == Some(row.label.as_str())
-                && node.state.disabled
-                    == matches!(row.id.raw(), 73)
+                && node.state.disabled == matches!(row.id.raw(), 73)
         }));
     }
 
     let original_ids = output
         .values
         .iter()
-        .map(|value| (value.row, (value.value.row_widget_id, value.value.value_widget_id)))
+        .map(|value| {
+            (
+                value.row,
+                (value.value.row_widget_id, value.value.value_widget_id),
+            )
+        })
         .collect::<BTreeMap<_, _>>();
     let reordered = rows.iter().rev().cloned().collect::<Vec<_>>();
     let mut reorder_memory = UiMemory::new();
@@ -681,7 +688,10 @@ fn row_access_geometry_callbacks_order_and_semantics_remain_application_owned() 
         reordered_output
             .values
             .iter()
-            .map(|value| (value.row, (value.value.row_widget_id, value.value.value_widget_id)))
+            .map(|value| (
+                value.row,
+                (value.value.row_widget_id, value.value.value_widget_id)
+            ))
             .collect::<BTreeMap<_, _>>(),
         original_ids
     );
@@ -713,7 +723,10 @@ fn offscreen_rows_do_not_register_layouts_and_sections_keep_generic_policy() {
     );
     assert_eq!(output.values.len(), 1);
     assert_eq!(output.values[0].row, ItemId::from_raw(85));
-    assert_eq!(label_text(&frame, "Virtual property 5").text, "Virtual property 5");
+    assert_eq!(
+        label_text(&frame, "Virtual property 5").text,
+        "Virtual property 5"
+    );
     let retained_sources = store
         .layouts()
         .map(|entry| entry.key.text.as_str())
@@ -721,8 +734,8 @@ fn offscreen_rows_do_not_register_layouts_and_sections_keep_generic_policy() {
     assert_eq!(retained_sources, vec!["Virtual property 5"]);
 
     let section_source = "Long section title remains on its existing generic visible path";
-    let section = PropertyGridRow::section(ItemId::from_raw(90), section_source)
-        .with_required(true);
+    let section =
+        PropertyGridRow::section(ItemId::from_raw(90), section_source).with_required(true);
     let mut section_store = TextLayoutStore::new();
     let mut section_memory = UiMemory::new();
     let (section_output, section_frame) = retained_default(
@@ -737,7 +750,11 @@ fn offscreen_rows_do_not_register_layouts_and_sections_keep_generic_policy() {
         (section_output.visible_rows[0].label_rect.x + 8.0_f32).to_bits()
     );
     let section_layout = section_store
-        .stored_layout(section_text.layout.expect("generic retained section layout"))
+        .stored_layout(
+            section_text
+                .layout
+                .expect("generic retained section layout"),
+        )
         .expect("resident section layout");
     assert_eq!(section_layout.key.text, section_source);
     assert_eq!(section_layout.key.overflow, TextOverflow::Visible);
@@ -835,9 +852,11 @@ fn layoutless_ui_and_invalid_outer_bounds_preserve_fail_safe_output() {
     assert_eq!(output.values[0].value, row.id);
     assert_eq!(label_text(&frame, source).layout, None);
     assert_eq!(label_text(&frame, source).text, source);
-    assert!(frame.semantics.nodes().iter().any(|node| {
-        node.role == SemanticRole::Row && node.label.as_deref() == Some(source)
-    }));
+    assert!(
+        frame.semantics.nodes().iter().any(|node| {
+            node.role == SemanticRole::Row && node.label.as_deref() == Some(source)
+        })
+    );
 
     for bounds in [
         Rect::ZERO,

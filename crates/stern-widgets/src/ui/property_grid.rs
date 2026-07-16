@@ -237,8 +237,7 @@ impl Ui<'_> {
             } else {
                 0.0_f32
             };
-            let label_width =
-                ((geometry.label_rect.width - 6.0_f32) - reserved_right).max(0.0_f32);
+            let label_width = ((geometry.label_rect.width - 6.0_f32) - reserved_right).max(0.0_f32);
             self.paint_property_grid_label(label_origin, label, label_color, label_width);
         }
         if row.state.help_text.is_some() {
@@ -298,12 +297,7 @@ impl Ui<'_> {
         self.primitive(primitive);
     }
 
-    fn property_grid_text_primitive(
-        &self,
-        origin: Point,
-        text: String,
-        color: Color,
-    ) -> Primitive {
+    fn property_grid_text_primitive(&self, origin: Point, text: String, color: Color) -> Primitive {
         let font = self.theme.font(TextRole::Label);
         Primitive::Text(TextPrimitive {
             layout: None,
