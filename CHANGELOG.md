@@ -45,10 +45,11 @@ published, or accepted as an alpha release.
   six-size `12/11/10/14/16/20`, three-line-height `16/15/14`, and four-weight
   `400/500/600/700` inventories plus the numeric feature value
   `"tabular-nums"`. Existing text-role family, size, and line-height resolution
-  is unchanged. The new weight and feature values are deterministic metadata
-  only; they are not transported to text, shaping, widgets, or renderers and
-  make no tabular-figure conformance claim. External `TypographyScale` struct
-  literals must initialize the four new scales. See
+  is unchanged. Weight values remain metadata only. The feature scale remains
+  semantic metadata and does not automatically affect text or components; the
+  later opt-in `TextFeatureSet` path transports its numeric meaning through
+  shaping without changing this token authority. External `TypographyScale`
+  struct literals must initialize the four new scales. See
   `docs/typography-migration.md`.
 - **Breaking:** Replaced the five resolved `FontToken` values stored by
   `TypographyScale` with exact UI, Brand, and Mono semantic family roles plus
