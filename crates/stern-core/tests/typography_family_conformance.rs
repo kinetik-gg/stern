@@ -5,7 +5,8 @@
 use std::{fs, path::Path};
 
 use stern_core::{
-    FontFamilyRole, FontFamilyScale, TextRole, TextRoleMetrics, TypographyScale, default_dark_theme,
+    FontFamilyRole, FontFamilyScale, FontFeatureScale, FontLineHeightScale, FontSizeScale,
+    FontWeightScale, TextRole, TextRoleMetrics, TypographyScale, default_dark_theme,
 };
 
 const EXPECTED_FAMILY_ROLES: [FontFamilyRole; 3] = [
@@ -19,6 +20,10 @@ const SENTINEL_FAMILIES: FontFamilyScale =
 
 const SENTINEL_TYPOGRAPHY: TypographyScale = TypographyScale {
     families: SENTINEL_FAMILIES,
+    sizes: FontSizeScale::new(151.0, 157.0, 163.0, 167.0, 173.0, 179.0),
+    line_heights: FontLineHeightScale::new(181.0, 191.0, 193.0),
+    weights: FontWeightScale::new(601, 607, 613, 617),
+    features: FontFeatureScale::new("sentinel-numeric"),
     body: TextRoleMetrics::new(101.0, 103.0),
     label: TextRoleMetrics::new(107.0, 109.0),
     caption: TextRoleMetrics::new(113.0, 127.0),

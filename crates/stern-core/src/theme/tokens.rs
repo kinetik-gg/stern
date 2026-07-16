@@ -1212,6 +1212,14 @@ impl TextRole {
 pub struct TypographyScale {
     /// Semantic font-family authority.
     pub families: FontFamilyScale,
+    /// Exact semantic font-size authority.
+    pub sizes: FontSizeScale,
+    /// Exact semantic font line-height authority.
+    pub line_heights: FontLineHeightScale,
+    /// Exact semantic font-weight authority.
+    pub weights: FontWeightScale,
+    /// Exact semantic font-feature authority.
+    pub features: FontFeatureScale,
     /// Body copy and ordinary labels.
     pub body: TextRoleMetrics,
     /// Compact labels inside controls.

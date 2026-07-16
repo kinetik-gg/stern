@@ -6,8 +6,9 @@ use std::{fs, path::Path};
 
 use stern_core::{
     Color, ControlMetrics, CornerRadius, DurationScale, ElevationScale, FontFamilyScale,
-    OpacityScale, RadiusScale, SpacingRole, SpacingScale, SpacingStep, StrokeScale,
-    TextRoleMetrics, TypographyScale, default_dark_theme,
+    FontFeatureScale, FontLineHeightScale, FontSizeScale, FontWeightScale, OpacityScale,
+    RadiusScale, SpacingRole, SpacingScale, SpacingStep, StrokeScale, TextRoleMetrics,
+    TypographyScale, default_dark_theme,
 };
 
 const EXPECTED_STEPS: [SpacingStep; 9] = [
@@ -137,6 +138,10 @@ fn spacing_replacement_preserves_every_non_spacing_theme_field() {
             "spacing-isolation-brand",
             "spacing-isolation-mono",
         ),
+        sizes: FontSizeScale::new(411.0, 412.0, 413.0, 414.0, 415.0, 416.0),
+        line_heights: FontLineHeightScale::new(421.0, 422.0, 423.0),
+        weights: FontWeightScale::new(501, 502, 503, 504),
+        features: FontFeatureScale::new("spacing-isolation-numeric"),
         body: TextRoleMetrics::new(401.0, 402.0),
         label: TextRoleMetrics::new(403.0, 404.0),
         caption: TextRoleMetrics::new(405.0, 406.0),

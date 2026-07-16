@@ -639,12 +639,16 @@ fn qualified_facade_stroke_types_construct_and_expose_exact_roles() {
 #[allow(clippy::float_cmp)]
 fn qualified_facade_constructs_and_resolves_semantic_font_families() {
     use stern::core::{
-        FontFamilyRole, FontFamilyScale, FontToken, TextRole, TextRoleMetrics, TypographyScale,
-        default_dark_theme,
+        FontFamilyRole, FontFamilyScale, FontFeatureScale, FontLineHeightScale, FontSizeScale,
+        FontToken, FontWeightScale, TextRole, TextRoleMetrics, TypographyScale, default_dark_theme,
     };
 
     let typography = TypographyScale {
         families: FontFamilyScale::new("facade-ui", "facade-brand", "facade-mono"),
+        sizes: FontSizeScale::new(31.0, 32.0, 33.0, 34.0, 35.0, 36.0),
+        line_heights: FontLineHeightScale::new(41.0, 42.0, 43.0),
+        weights: FontWeightScale::new(401, 402, 403, 404),
+        features: FontFeatureScale::new("facade-numeric"),
         body: TextRoleMetrics::new(11.0, 17.0),
         label: TextRoleMetrics::new(12.0, 18.0),
         caption: TextRoleMetrics::new(13.0, 19.0),

@@ -1,7 +1,8 @@
 use super::{
     ControlMetrics, ControlSizeScale, DurationScale, ElevationScale, FontFamilyScale,
-    HandleSizeScale, IconSizeScale, OpacityScale, RadiusScale, RowSizeScale, SizeScale,
-    SpacingScale, StrokeScale, TextRoleMetrics, Theme, ThemeColors, TypographyScale,
+    FontFeatureScale, FontLineHeightScale, FontSizeScale, FontWeightScale, HandleSizeScale,
+    IconSizeScale, OpacityScale, RadiusScale, RowSizeScale, SizeScale, SpacingScale, StrokeScale,
+    TextRoleMetrics, Theme, ThemeColors, TypographyScale,
 };
 
 /// Returns the default dark editor theme.
@@ -25,6 +26,10 @@ pub const fn default_dark_theme() -> Theme {
         strokes,
         typography: TypographyScale {
             families: FontFamilyScale::new("Inter", "Space Grotesk", "Space Mono"),
+            sizes: FontSizeScale::new(12.0, 11.0, 10.0, 14.0, 16.0, 20.0),
+            line_heights: FontLineHeightScale::new(16.0, 15.0, 14.0),
+            weights: FontWeightScale::new(400, 500, 600, 700),
+            features: FontFeatureScale::new("tabular-nums"),
             body: TextRoleMetrics::new(12.0, 17.0),
             label: TextRoleMetrics::new(12.0, 16.0),
             caption: TextRoleMetrics::new(11.0, 15.0),
