@@ -1,10 +1,14 @@
 use super::common::assert_approx;
 use crate::{RenderFrameInput, RenderResources, TextLayoutResource, VelloRenderer};
 use stern_core::{
-    Brush, Color, PhysicalSize, Point, Primitive, ScaleFactor, Size, TextLayoutId, TextPrimitive,
-    Transform, Vec2, ViewportInfo,
+    Brush, Color, PhysicalSize, Point, Primitive, Rect, ScaleFactor, Size, TextLayoutId,
+    TextPrimitive, Transform, UiInput, UiMemory, Vec2, ViewportInfo, default_dark_theme,
 };
-use stern_text::{CosmicTextEngine, TextLayoutKey, TextStyle};
+use stern_render::TextLayoutResourceSync;
+use stern_text::{
+    CosmicTextEngine, TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextStyle,
+};
+use stern_widgets::Ui;
 
 fn resource(id: TextLayoutId, key: TextLayoutKey) -> TextLayoutResource {
     let mut engine = CosmicTextEngine::new();
@@ -18,9 +22,11 @@ fn resource(id: TextLayoutId, key: TextLayoutKey) -> TextLayoutResource {
 
 fn viewport(scale: f64) -> ViewportInfo {
     let physical = match scale {
+        1.0 => 100,
         1.25 => 125,
         1.5 => 150,
         1.75 => 175,
+        2.0 => 200,
         _ => panic!("unsupported fixture scale {scale}"),
     };
     ViewportInfo::new(
@@ -40,6 +46,83 @@ fn primitive(layout: Option<TextLayoutId>, text: &str) -> Primitive {
         line_height: 9.0,
         brush: Brush::Solid(Color::WHITE),
     })
+}
+
+#[test]
+fn retained_numeric_widget_encodes_registered_tabular_glyphs_without_fallback() {
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    let mut store = TextLayoutStore::new();
+    let mut state = TextEditState::new("20486357");
+    let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+    let _ = ui.numeric_input("number", Rect::new(0.0, 0.0, 96.0, 24.0), &mut state, false);
+    let frame = ui.finish_output();
+    let id = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) => text.layout,
+            _ => None,
+        })
+        .expect("retained numeric layout ID");
+    let entry = store
+        .layouts()
+        .find(|entry| entry.id == id)
+        .expect("feature-bearing store entry");
+    assert_eq!(entry.key.style.features, TextFeatureSet::TABULAR_NUMBERS);
+    let expected_ids = entry
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let logical_font_size = entry.key.style.size();
+
+    let mut resources = RenderResources::new();
+    let mut sync = TextLayoutResourceSync::new();
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(report.added, 1);
+    assert_eq!(report.retained, 1);
+    assert_eq!(
+        resources
+            .text_layout_resource(id)
+            .expect("reconciled numeric resource")
+            .key
+            .style
+            .features,
+        TextFeatureSet::TABULAR_NUMBERS
+    );
+
+    let mut renderer = VelloRenderer::new();
+    for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: viewport(f64::from(scale)),
+            primitives: &frame.primitives,
+            resources: &resources,
+        });
+        let encoding = renderer.scene().encoding();
+
+        assert!(output.diagnostics.is_empty());
+        assert_eq!(
+            encoding
+                .resources
+                .glyphs
+                .iter()
+                .map(|glyph| glyph.id)
+                .collect::<Vec<_>>(),
+            expected_ids
+        );
+        assert!(
+            encoding
+                .resources
+                .glyph_runs
+                .iter()
+                .all(|run| { (run.font_size - logical_font_size * scale).abs() <= 0.000_1 })
+        );
+        assert_eq!(renderer.cached_text_layout_count(), 0);
+        assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+    }
 }
 
 #[test]

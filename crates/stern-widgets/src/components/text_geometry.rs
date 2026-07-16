@@ -5,8 +5,8 @@ use stern_core::{
     Stroke, TextFieldRecipe, TextLayoutId, TextPrimitive, Transform, Vec2, WidgetId,
 };
 use stern_text::{
-    ShapedTextLayout, ShapedTextNavigation, TextAffinity, TextCaret, TextEditState, TextLayoutKey,
-    TextLayoutStore, TextSelection, TextStyle, TextViewport, TextViewportMode,
+    ShapedTextLayout, ShapedTextNavigation, TextAffinity, TextCaret, TextEditState, TextFeatureSet,
+    TextLayoutKey, TextLayoutStore, TextSelection, TextStyle, TextViewport, TextViewportMode,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,12 +139,33 @@ impl TextFieldGeometry {
         retained_offset: Vec2,
         text_layouts: Option<&mut TextLayoutStore>,
     ) -> Self {
+        Self::build_with_features(
+            rect,
+            state,
+            recipe,
+            kind,
+            retained_offset,
+            TextFeatureSet::NONE,
+            text_layouts,
+        )
+    }
+
+    pub(crate) fn build_with_features(
+        rect: Rect,
+        state: &TextEditState,
+        recipe: &TextFieldRecipe,
+        kind: TextFieldKind,
+        retained_offset: Vec2,
+        features: TextFeatureSet,
+        text_layouts: Option<&mut TextLayoutStore>,
+    ) -> Self {
         Self::build_with_retention(
             rect,
             state,
             recipe,
             kind,
             retained_offset,
+            features,
             text_layouts,
             TextGeometryRetention::Retained,
         )
@@ -158,23 +179,46 @@ impl TextFieldGeometry {
         retained_offset: Vec2,
         text_layouts: Option<&mut TextLayoutStore>,
     ) -> Self {
+        Self::build_transient_with_features(
+            rect,
+            state,
+            recipe,
+            kind,
+            retained_offset,
+            TextFeatureSet::NONE,
+            text_layouts,
+        )
+    }
+
+    pub(crate) fn build_transient_with_features(
+        rect: Rect,
+        state: &TextEditState,
+        recipe: &TextFieldRecipe,
+        kind: TextFieldKind,
+        retained_offset: Vec2,
+        features: TextFeatureSet,
+        text_layouts: Option<&mut TextLayoutStore>,
+    ) -> Self {
         Self::build_with_retention(
             rect,
             state,
             recipe,
             kind,
             retained_offset,
+            features,
             text_layouts,
             TextGeometryRetention::Transient,
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_with_retention(
         rect: Rect,
         state: &TextEditState,
         recipe: &TextFieldRecipe,
         kind: TextFieldKind,
         retained_offset: Vec2,
+        features: TextFeatureSet,
         text_layouts: Option<&mut TextLayoutStore>,
         retention: TextGeometryRetention,
     ) -> Self {
@@ -203,6 +247,7 @@ impl TextFieldGeometry {
                     content_rect,
                     recipe,
                     kind,
+                    features,
                     store,
                     retention,
                 )
@@ -377,12 +422,14 @@ type GeometryParts = (
     Size,
 );
 
+#[allow(clippy::too_many_arguments)]
 fn shaped_geometry(
     display: &DisplayTextMap,
     selection: TextSelection,
     content_rect: Rect,
     recipe: &TextFieldRecipe,
     kind: TextFieldKind,
+    features: TextFeatureSet,
     store: &mut TextLayoutStore,
     retention: TextGeometryRetention,
 ) -> GeometryParts {
@@ -392,7 +439,8 @@ fn shaped_geometry(
             recipe.font.family,
             recipe.font.size,
             recipe.font.line_height,
-        ),
+        )
+        .with_features(features),
         content_rect.width,
         kind.wraps(),
     );

@@ -1,8 +1,8 @@
 use super::{
     ComponentState, CursorShape, OrderedTextInputResult, Primitive, Rect, RectPrimitive, Response,
-    TextEditMode, TextEditState, TextLayoutKey, TextLayoutStore, TextSelection, TextStyle, Theme,
-    UiInput, UiMemory, WidgetId, WidgetOutput, display_text_with_composition, focusable,
-    multi_line_hit_offset, multi_line_text_primitives, single_line_hit_offset,
+    TextEditMode, TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextSelection,
+    TextStyle, Theme, UiInput, UiMemory, WidgetId, WidgetOutput, display_text_with_composition,
+    focusable, multi_line_hit_offset, multi_line_text_primitives, single_line_hit_offset,
     single_line_text_primitives, text_field_layout, text_field_semantics,
     text_input_platform_requests, text_line_fragments, with_hover_cursor, with_response_state,
 };
@@ -78,6 +78,43 @@ pub(crate) fn text_field_with_access_runtime(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn text_field_with_access_runtime_and_features(
+    runtime: &mut CoreUi<'_>,
+    id: WidgetId,
+    rect: Rect,
+    state: &mut TextEditState,
+    theme: &Theme,
+    access: TextFieldAccess,
+    features: TextFeatureSet,
+    text_layouts: Option<&mut TextLayoutStore>,
+    caret_visible: bool,
+) -> (TextFieldOutput, OrderedTextInputResult) {
+    let result = canonical_text_field_runtime(
+        runtime,
+        id,
+        rect,
+        state,
+        theme,
+        access,
+        features,
+        text_layouts,
+        caret_visible,
+        TextFieldKind::SingleLine,
+        TextEditMode::SingleLine,
+        false,
+        TextFieldPointerSource::Selection,
+        |_, _| true,
+    );
+    (
+        TextFieldOutput {
+            widget: result.widget,
+            changed: result.changed,
+        },
+        result.ordered,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn text_field_with_access_runtime_metadata(
     runtime: &mut CoreUi<'_>,
     id: WidgetId,
@@ -128,6 +165,7 @@ pub(crate) fn text_field_with_access_runtime_metadata_and_fence(
         state,
         theme,
         access,
+        TextFeatureSet::NONE,
         text_layouts,
         caret_visible,
         TextFieldKind::SingleLine,
@@ -135,6 +173,47 @@ pub(crate) fn text_field_with_access_runtime_metadata_and_fence(
         interaction_fenced,
         TextFieldPointerSource::Selection,
         |_, _| true,
+    );
+    let field = TextFieldOutput {
+        widget: result.widget,
+        changed: result.changed,
+    };
+    (field, result.ordered, result.pointer)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn text_field_with_pointer_runtime_and_features(
+    runtime: &mut CoreUi<'_>,
+    id: WidgetId,
+    rect: Rect,
+    state: &mut TextEditState,
+    theme: &Theme,
+    access: TextFieldAccess,
+    features: TextFeatureSet,
+    text_layouts: Option<&mut TextLayoutStore>,
+    caret_visible: bool,
+    pointer_source: TextFieldPointerSource,
+    replay_guard: impl FnOnce(&TextFieldPointerMetadata, &TextEditState) -> bool,
+) -> (
+    TextFieldOutput,
+    OrderedTextInputResult,
+    TextFieldPointerMetadata,
+) {
+    let result = canonical_text_field_runtime(
+        runtime,
+        id,
+        rect,
+        state,
+        theme,
+        access,
+        features,
+        text_layouts,
+        caret_visible,
+        TextFieldKind::SingleLine,
+        TextEditMode::SingleLine,
+        false,
+        pointer_source,
+        replay_guard,
     );
     let field = TextFieldOutput {
         widget: result.widget,
@@ -164,48 +243,6 @@ struct RawTextPointerAction {
 pub(crate) enum TextFieldPointerSource {
     Selection,
     DomainDrag(CapturedDomainDragGesture),
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn text_field_with_pointer_runtime(
-    runtime: &mut CoreUi<'_>,
-    id: WidgetId,
-    rect: Rect,
-    state: &mut TextEditState,
-    theme: &Theme,
-    access: TextFieldAccess,
-    text_layouts: Option<&mut TextLayoutStore>,
-    caret_visible: bool,
-    pointer_source: TextFieldPointerSource,
-    replay_guard: impl FnOnce(&TextFieldPointerMetadata, &TextEditState) -> bool,
-) -> (
-    TextFieldOutput,
-    OrderedTextInputResult,
-    TextFieldPointerMetadata,
-) {
-    let result = canonical_text_field_runtime(
-        runtime,
-        id,
-        rect,
-        state,
-        theme,
-        access,
-        text_layouts,
-        caret_visible,
-        TextFieldKind::SingleLine,
-        TextEditMode::SingleLine,
-        false,
-        pointer_source,
-        replay_guard,
-    );
-    (
-        TextFieldOutput {
-            widget: result.widget,
-            changed: result.changed,
-        },
-        result.ordered,
-        result.pointer,
-    )
 }
 
 /// Emits a single-line text field and applies text input while focused.
@@ -431,6 +468,7 @@ pub(crate) fn multi_line_text_field_with_access_runtime(
         state,
         theme,
         access,
+        TextFeatureSet::NONE,
         text_layouts,
         caret_visible,
         TextFieldKind::WrappedMultiLine,
@@ -681,6 +719,7 @@ fn canonical_text_field_runtime(
     state: &mut TextEditState,
     theme: &Theme,
     access: TextFieldAccess,
+    features: TextFeatureSet,
     mut text_layouts: Option<&mut TextLayoutStore>,
     caret_visible: bool,
     kind: TextFieldKind,
@@ -758,14 +797,26 @@ fn canonical_text_field_runtime(
         disabled: access.is_disabled(),
         selected: false,
     });
-    let entry_geometry = TextFieldGeometry::build_transient(
-        rect,
-        state,
-        &entry_recipe,
-        kind,
-        retained_offset,
-        text_layouts.as_deref_mut(),
-    );
+    let entry_geometry = if features == TextFeatureSet::NONE {
+        TextFieldGeometry::build_transient(
+            rect,
+            state,
+            &entry_recipe,
+            kind,
+            retained_offset,
+            text_layouts.as_deref_mut(),
+        )
+    } else {
+        TextFieldGeometry::build_transient_with_features(
+            rect,
+            state,
+            &entry_recipe,
+            kind,
+            retained_offset,
+            features,
+            text_layouts.as_deref_mut(),
+        )
+    };
     let mut pointer_actions = raw_pointer_actions
         .into_iter()
         .map(|action| ResolvedTextPointerAction {
@@ -894,7 +945,8 @@ fn canonical_text_field_runtime(
         navigation_recipe.font.family,
         navigation_recipe.font.size,
         navigation_recipe.font.line_height,
-    );
+    )
+    .with_features(features);
     let navigation_width = (rect.width - navigation_recipe.padding_x * 2.0).max(0.0);
     let navigation_wrap = kind.wraps();
     let shaped_navigation_configured = text_layouts.is_some();
@@ -1009,8 +1061,19 @@ fn canonical_text_field_runtime(
         disabled: access.is_disabled(),
         selected: false,
     });
-    let geometry =
-        TextFieldGeometry::build(rect, state, &recipe, kind, retained_offset, text_layouts);
+    let geometry = if features == TextFeatureSet::NONE {
+        TextFieldGeometry::build(rect, state, &recipe, kind, retained_offset, text_layouts)
+    } else {
+        TextFieldGeometry::build_with_features(
+            rect,
+            state,
+            &recipe,
+            kind,
+            retained_offset,
+            features,
+            text_layouts,
+        )
+    };
 
     if !access.is_disabled() && replay_enabled {
         let wheel = text_wheel_delta(runtime.input(), runtime.memory(), id, rect, kind, false);

@@ -196,12 +196,17 @@ assert_eq!(
     "tabular-nums",
 );
 
+let features = stern::text::TextFeatureSet::resolve_semantic(
+    theme.typography.features,
+    stern::core::FontFeatureToken::Numeric,
+)
+.unwrap_or_default();
 let style = stern::text::TextStyle::new(
     theme.font_family(stern::core::FontFamilyRole::Ui),
     12.0,
     16.0,
 )
-.with_features(stern::text::TextFeatureSet::TABULAR_NUMBERS);
+.with_features(features);
 ```
 
 `FontFeatureScale` remains the sole semantic token authority and continues to
@@ -215,6 +220,31 @@ and retained renderer resources through their existing composed style field.
 Applications that previously stored public `TextStyle` literals must add
 `features: TextFeatureSet::NONE` to preserve prior shaping and identity.
 
+## Retained numeric component adoption
+
+Canonical `Ui::numeric_input`, `Ui::numeric_scrub_input`, and vector numeric
+subfields now resolve `FontFeatureToken::Numeric` through
+`TextFeatureSet::resolve_semantic(...)` when a retained `TextLayoutStore` is
+attached. The exact default `"tabular-nums"` value selects
+`TABULAR_NUMBERS`; unsupported customized values fail soft to `NONE` rather
+than becoming arbitrary OpenType tags.
+
+This is a prerelease breaking rendering-behavior change without a widget
+signature change. Numeric drafts can measure differently because digit
+advances are now tabular. The same feature-bearing style is used for entry hit
+geometry, caret and selection navigation, final retained shaping, renderer
+resource reconciliation, and registered Vello encoding. Editable, read-only,
+and disabled scrub states keep the same rendering feature; vector numeric
+subfields inherit the scrub runtime. Generic text, search, path, and vector
+axis labels remain feature-disabled.
+
+Applications with snapshots or geometry derived from retained numeric fields
+should refresh those expectations. Applications that customize
+`theme.typography.features.numeric` to an unsupported value receive
+feature-disabled numeric shaping. Direct low-level widget helpers and
+layoutless/store-rejected compatibility rendering are unchanged and are not
+covered by this adoption contract.
+
 Deterministic conformance uses the exact bundled Inter variable face. Its
 default digit advances are observably proportional, while enabled digits
 `0-9` and equivalent-length changing numeric strings have equal advances
@@ -225,25 +255,27 @@ retained renderer-resource reconciliation.
 ## Deliberate limits
 
 The semantic foundation still does not transport weights through `FontToken`,
-text primitives, text layout, shaping, or renderers. The new low-level numeric
-feature path is opt-in at `TextStyle`; it does not change `FontToken`,
-`TextRole`, `TextPrimitive`, widgets, components, or default text behavior.
+text primitives, text layout, shaping, or renderers. Numeric feature adoption
+does not change `FontToken`, `TextRole`, or `TextPrimitive`; the accepted
+retained layout ID remains the component-to-renderer authority. Generic text
+behavior remains feature-disabled.
 
 The Space Mono follow-up advances only deterministic Mono text-system
 alignment for `STERN-TYP-000`, which remains Partial. Exact asset and license
 provenance makes `STERN-TYP-006` Partial. The Space Grotesk follow-up advances
 only the corresponding deterministic Brand text-system byte alignment and
 exact asset/license provenance; both requirements remain Partial.
-The tabular-number follow-up advances `STERN-TYP-002` only to bounded Partial
-for exact feature transport, real bundled-Inter shaping, layout/cache
-identity, and retained resource preservation. It is not Accepted because no
-specified timeline, inspector, frame-counter, table, or changing numeric
-component consumes the feature. `STERN-TYP-001` and `STERN-TYP-003` are
-preserved without advancing; `STERN-TYP-004`, `STERN-TYP-005`, and
-`STERN-TYP-007` do not advance. All typography parity records remain
-unverified, and nothing is Accepted.
+The retained numeric follow-up advances `STERN-TYP-002` only to stronger
+bounded Partial for canonical retained numeric inputs, numeric scrubs, and
+vector numeric subfields, including registered Vello glyph encoding. It is not
+Accepted because direct/layoutless compatibility paths, timelines, frame
+counters, timecodes, and tables do not consume the feature and no visual
+acceptance was performed. `STERN-TYP-001` and `STERN-TYP-003` are preserved
+without advancing; `STERN-TYP-004`, `STERN-TYP-005`, and `STERN-TYP-007` do
+not advance. All typography parity records remain unverified, and nothing is
+Accepted.
 
-This bounded evidence does not prove component adoption, platform or
-non-Latin fallback, failed-load layout stability, IME behavior, weight
-transport, truncation, optical baselines, overflow, DPI legibility, renderer
-pixels, browser output, or GPU/manual visual review.
+This bounded evidence does not prove direct/layoutless component parity,
+platform or non-Latin fallback, failed-load layout stability, IME behavior,
+weight transport, truncation, optical baselines, overflow, DPI legibility,
+renderer pixels, browser output, or GPU/manual visual review.

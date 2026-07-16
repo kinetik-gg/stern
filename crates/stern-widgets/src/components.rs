@@ -3,16 +3,16 @@
 use std::collections::BTreeMap;
 
 use stern_core::{
-    Brush, ClipId, Color, ComponentState, CornerRadius, CursorShape, DropTargetResponse, ImageId,
-    ImagePrimitive, Insets, Key, KeyState, LinePrimitive, PathElement, PathPrimitive,
-    PlatformRequest, Point, Primitive, Rect, RectPrimitive, Response, SemanticAction,
-    SemanticActionKind, SemanticNode, SemanticRole, SemanticState, SemanticValue, Stroke,
-    TextFieldRecipe, TextPrimitive, TextRole, Theme, UiInput, UiMemory, WidgetId, draggable,
-    drop_target, fit_box, focusable, pad_rect, pressable, selectable,
+    Brush, ClipId, Color, ComponentState, CornerRadius, CursorShape, DropTargetResponse,
+    FontFeatureToken, ImageId, ImagePrimitive, Insets, Key, KeyState, LinePrimitive, PathElement,
+    PathPrimitive, PlatformRequest, Point, Primitive, Rect, RectPrimitive, Response,
+    SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, SemanticState, SemanticValue,
+    Stroke, TextFieldRecipe, TextPrimitive, TextRole, Theme, UiInput, UiMemory, WidgetId,
+    draggable, drop_target, fit_box, focusable, pad_rect, pressable, selectable,
 };
 use stern_text::{
-    OrderedTextInputResult, ShapedTextLayout, TextEditMode, TextEditState, TextLayoutKey,
-    TextLayoutStore, TextSelection, TextStyle,
+    OrderedTextInputResult, ShapedTextLayout, TextEditMode, TextEditState, TextFeatureSet,
+    TextLayoutKey, TextLayoutStore, TextSelection, TextStyle,
 };
 
 use crate::{
@@ -92,7 +92,8 @@ pub(crate) use selector_fields::{
 pub(crate) use text_fields::{
     multi_line_text_field_with_access_runtime,
     multi_line_text_field_with_text_layouts_and_caret_visibility, text_field_with_access_runtime,
-    text_field_with_access_runtime_metadata_and_fence, text_field_with_pointer_runtime,
+    text_field_with_access_runtime_and_features, text_field_with_access_runtime_metadata_and_fence,
+    text_field_with_pointer_runtime_and_features,
     text_field_with_text_layouts_and_caret_visibility,
     text_field_with_text_layouts_and_caret_visibility_and_ordered_result,
 };
