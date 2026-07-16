@@ -303,6 +303,29 @@ text. Registered component-to-Vello CPU encoding at `1.0`, `1.25`, `1.5`, and
 `2.0` proves shaped topology transport without fallback-cache activity, not
 raster or visual acceptance.
 
+Canonical retained `Ui::property_grid` now opts only ordinary property-row main
+labels into the same policy. The complete presentation source is `row.label`
+plus `" *"` only for required properties; semantics continue to expose exact
+undecorated `row.label`. The retained width uses the existing property-label
+inset and leftmost trailing-glyph origin in this exact order:
+`((label_rect.width - 6.0) - reserved_right).max(0.0)`. Help presence,
+including `Some("")`, reserves `22.0`; otherwise an accented status reserves
+`10.0`; otherwise the reservation is zero. `SpacingRole::IconLabelGap` is not
+part of these fixed columns. Existing label/help/status origins, brushes,
+baselines, callbacks, access, intents, ordering, virtualization, and value
+controls are unchanged.
+
+Admitted nonpositive-width and multiline requests retain a complete-source
+`EndEllipsis` key and ID but shape visibly without a marker. Actual store
+rejection falls through to complete-source generic visible or layoutless
+attachment. Section titles retain their generic visible/layoutless behavior
+and existing `label_rect.x + 8` origin. This is a prerelease breaking rendering
+policy change without a public signature or export change. Registered
+property-label-to-Vello CPU evidence at `1.0`, `1.25`, `1.5`, and `2.0` proves
+resource/topology transport and separate help/status glyphs, not pixels,
+logical non-overlap at zero width, tooltip or copied-value behavior, or visual
+acceptance.
+
 ## Deliberate limits
 
 The semantic foundation still does not transport weights through `FontToken`,
@@ -322,12 +345,18 @@ vector numeric subfields, including registered Vello glyph encoding. It is not
 Accepted because direct/layoutless compatibility paths, timelines, frame
 counters, timecodes, and tables do not consume the feature and no visual
 acceptance was performed. `STERN-TYP-001` and `STERN-TYP-003` are preserved
-without advancing. The retained select-trigger adoption advances only
-`STERN-TYP-004` to stronger bounded Partial for canonical selected values and
-placeholders with complete-source semantics and registered Vello topology.
-Other truncating components and external visual evidence remain outstanding.
-`STERN-TYP-005` and `STERN-TYP-007` do not advance. All typography parity
-records remain unverified, and nothing is Accepted.
+without advancing. The retained select-trigger and property-label adoptions
+advance only `STERN-TYP-004` to stronger bounded Partial for canonical selected
+values, placeholders, and inspector property labels with complete-source
+semantics and registered Vello topology. `STERN-DEN-004` advances only to
+bounded Partial for finite-positive computed property-label spans; nonpositive
+spans retain visible fail-safe behavior and make no endpoint or non-overlap
+claim. Other truncating components and external visual evidence remain
+outstanding. Existing Partial evidence for `STERN-TYP-000`, `STERN-TYP-002`,
+and `STERN-TYP-006` is preserved. `STERN-TYP-005`, `STERN-TYP-007`,
+`STERN-INSPECT-001`, `STERN-PROP-001`, `STERN-TIP-001`, `STERN-TIP-002`, and
+`STERN-OVERLAY-COMP-002` do not advance. All typography parity records remain
+unverified, and nothing is Accepted.
 
 This bounded evidence does not prove direct/layoutless component parity,
 platform or non-Latin fallback, failed-load layout stability, IME behavior,
