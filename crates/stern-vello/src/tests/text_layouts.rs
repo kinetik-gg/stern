@@ -3,10 +3,11 @@ use crate::{
     RenderFrameInput, RenderResources, TextLayoutResource, VelloRenderer,
     project_text_point_to_device, root_transform, snap_axis_aligned_translation,
 };
+use std::time::Duration;
 use stern_core::{
-    ActionContext, ActionDescriptor, Brush, Color, PhysicalSize, Point, Primitive, Rect,
-    ScaleFactor, Size, TextLayoutId, TextPrimitive, Transform, UiInput, UiMemory, Vec2,
-    ViewportInfo, default_dark_theme,
+    ActionContext, ActionDescriptor, Brush, Color, FrameContext, FrameOutput, PhysicalSize, Point,
+    PointerOrder, Primitive, Rect, ScaleFactor, Size, TextLayoutId, TextPrimitive, TimeInfo,
+    Transform, UiInput, UiMemory, Vec2, ViewportInfo, default_dark_theme,
 };
 use stern_render::TextLayoutResourceSync;
 use stern_text::{
@@ -14,7 +15,9 @@ use stern_text::{
     TextStyle,
 };
 use stern_widgets::{
-    DropdownItem, DropdownItemId, DropdownModel, ItemId, SelectFieldConfig, Ui,
+    CollectionProjection, DropdownItem, DropdownItemId, DropdownModel, ItemId, SelectFieldConfig,
+    TableColumn, TableLayout, Ui, VirtualTableConfig, VirtualTableRow, VirtualTableSelection,
+    VirtualTableSelectionMode,
     inspector::{PropertyGridConfig, PropertyGridRow, PropertyGridRowStatus},
 };
 
@@ -54,6 +57,47 @@ fn primitive(layout: Option<TextLayoutId>, text: &str) -> Primitive {
         line_height: 9.0,
         brush: Brush::Solid(Color::WHITE),
     })
+}
+
+fn retained_virtual_table_frame(
+    store: &mut TextLayoutStore,
+    memory: &mut UiMemory,
+    header: &str,
+    body: &str,
+) -> FrameOutput {
+    let row_id = ItemId::from_raw(1);
+    let column_id = ItemId::from_raw(10);
+    let projection = CollectionProjection::from_source_ids(&[row_id]);
+    let config = VirtualTableConfig::new(
+        Rect::new(3.25, 5.5, 96.0, 64.0),
+        TableLayout {
+            columns: vec![TableColumn::new(column_id, header, 96.0)],
+            header_height: 20.0,
+            row_height: 20.0,
+            sort: None,
+        },
+    )
+    .label("Vello retained cell fixture")
+    .overscan(0)
+    .selection_mode(VirtualTableSelectionMode::Cell)
+    .resizable(false);
+    let context = FrameContext::new(
+        viewport(1.0),
+        UiInput::default(),
+        TimeInfo::new(Duration::from_millis(500), Duration::from_millis(16), 1),
+    );
+    let theme = default_dark_theme();
+    let mut ui = Ui::begin_frame(context, memory, &theme).with_text_layouts(store);
+    let table = ui
+        .prepare_virtual_table("vello-retained-cell-table", config, &projection)
+        .expect("valid Vello retained cell fixture");
+    ui.resolve_pointer_targets(|plan| {
+        table.declare_pointer_targets(plan, PointerOrder::new(100));
+    })
+    .expect("valid Vello retained cell pointer plan");
+    let mut selection = VirtualTableSelection::new();
+    let _ = ui.virtual_table(&table, &mut selection, |_| VirtualTableRow::new([body]));
+    ui.finish_output()
 }
 
 #[test]
@@ -345,6 +389,218 @@ fn retained_standard_and_action_buttons_encode_exact_ellipsis_resources_at_all_s
         );
         assert_eq!(standard_text.layout, Some(standard_id));
         assert_eq!(action_text.layout, Some(action_id));
+        assert_eq!(
+            (
+                store.len(),
+                store.retained_payload_bytes(),
+                store.change_cursor()
+            ),
+            store_accounting
+        );
+        assert_eq!(renderer.cached_text_layout_count(), 0);
+        assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn retained_virtual_table_cell_encodes_exact_ellipsis_and_separate_header_at_all_scales() {
+    let header_source = "Complete retained virtual-table header remains generic Visible";
+    let body_source = "Complete retained virtual-table body-cell source stays intact while Vello encodes ellipsis";
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let frame = retained_virtual_table_frame(&mut store, &mut memory, header_source, body_source);
+    let header_text = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == header_source => Some(text),
+            _ => None,
+        })
+        .expect("registered retained virtual-table header");
+    let body_text = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == body_source => Some(text),
+            _ => None,
+        })
+        .expect("registered retained virtual-table body cell");
+    let header_id = header_text.layout.expect("retained header identity");
+    let body_id = body_text.layout.expect("retained body-cell identity");
+    assert_ne!(header_id, body_id);
+    let store_accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
+    let hot = retained_virtual_table_frame(&mut store, &mut memory, header_source, body_source);
+    assert_eq!(
+        hot.primitives.iter().find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == header_source => text.layout,
+            _ => None,
+        }),
+        Some(header_id)
+    );
+    assert_eq!(
+        hot.primitives.iter().find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == body_source => text.layout,
+            _ => None,
+        }),
+        Some(body_id)
+    );
+    assert_eq!(
+        (
+            store.len(),
+            store.retained_payload_bytes(),
+            store.change_cursor()
+        ),
+        store_accounting
+    );
+
+    let header = store
+        .stored_layout(header_id)
+        .expect("retained virtual-table header entry");
+    let body = store
+        .stored_layout(body_id)
+        .expect("retained virtual-table body-cell entry");
+    assert_eq!(header.key.text, header_source);
+    assert_eq!(header.key.overflow, TextOverflow::Visible);
+    assert_eq!(header.key.width_bits, 0.0_f32.to_bits());
+    assert_eq!(body.key.text, body_source);
+    assert_eq!(body.key.overflow, TextOverflow::EndEllipsis);
+    assert_eq!(body.key.width_bits, 80.0_f32.to_bits());
+    assert!(body.layout.is_elided());
+    let body_markers = body
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| &run.glyphs)
+        .enumerate()
+        .filter_map(|(index, glyph)| glyph.elided.then_some(index))
+        .collect::<Vec<_>>();
+    assert_eq!(body_markers.len(), 1);
+    assert!(
+        header
+            .layout
+            .runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .all(|glyph| !glyph.elided)
+    );
+
+    let header_ids = header
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let body_ids = body
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let header_logical_points = header
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| {
+            run.glyphs.iter().map(|glyph| {
+                Point::new(
+                    header_text.origin.x + glyph.x,
+                    header_text.origin.y + glyph.y,
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let body_logical_points = body
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| {
+            run.glyphs
+                .iter()
+                .map(|glyph| Point::new(body_text.origin.x + glyph.x, body_text.origin.y + glyph.y))
+        })
+        .collect::<Vec<_>>();
+    let mut expected_ids = header_ids.clone();
+    expected_ids.extend_from_slice(&body_ids);
+    let mut logical_points = header_logical_points;
+    logical_points.extend_from_slice(&body_logical_points);
+    assert_eq!(expected_ids.len(), logical_points.len());
+    let body_marker_index = header_ids.len() + body_markers[0];
+    let mut resources = RenderResources::new();
+    let mut sync = TextLayoutResourceSync::new();
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(report.added, 2);
+    assert_eq!(report.retained, 2);
+    assert_eq!(
+        resources
+            .text_layout_resource(header_id)
+            .expect("reconciled virtual-table header resource")
+            .key
+            .text,
+        header_source
+    );
+    assert_eq!(
+        resources
+            .text_layout_resource(body_id)
+            .expect("reconciled virtual-table body-cell resource")
+            .key
+            .text,
+        body_source
+    );
+
+    let logical_font_size = body.key.style.size();
+    assert_eq!(header.key.style.size_bits, body.key.style.size_bits);
+    let mut renderer = VelloRenderer::new();
+    for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+        let device_scale = f64::from(scale);
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: viewport(device_scale),
+            primitives: &frame.primitives,
+            resources: &resources,
+        });
+        let encoding = renderer.scene().encoding();
+        let encoded_ids = encoding
+            .resources
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.id)
+            .collect::<Vec<_>>();
+
+        assert!(output.diagnostics.is_empty());
+        assert_eq!(encoded_ids, expected_ids);
+        assert_eq!(encoded_ids[body_marker_index], body_ids[body_markers[0]]);
+        let effective = snap_axis_aligned_translation(root_transform(device_scale));
+        assert_eq!(
+            effective.as_coeffs().map(f64::to_bits),
+            [device_scale, 0.0, 0.0, device_scale, 0.0, 0.0].map(f64::to_bits)
+        );
+        for (encoded, logical) in encoding.resources.glyphs.iter().zip(&logical_points) {
+            assert_eq!(
+                Point::new(encoded.x, encoded.y),
+                project_text_point_to_device(effective, *logical)
+            );
+        }
+        assert!(
+            encoding
+                .resources
+                .glyph_runs
+                .iter()
+                .all(|run| run.font_size.to_bits() == (logical_font_size * scale).to_bits())
+        );
+        assert_eq!(
+            resources
+                .text_layout_resource(body_id)
+                .expect("stable virtual-table body-cell resource")
+                .key
+                .width_bits,
+            80.0_f32.to_bits()
+        );
+        assert_eq!(body_text.layout, Some(body_id));
+        assert_eq!(header_text.layout, Some(header_id));
         assert_eq!(
             (
                 store.len(),

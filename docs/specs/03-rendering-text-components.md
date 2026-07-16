@@ -459,6 +459,39 @@ pixels, GPU output, tooltips, copied values, or visual acceptance. This advances
 bounded Partial for the pinned positive `119.3` and `80.0` button-label fixture
 spans. Nothing is Accepted.
 
+Canonical retained `Ui::virtual_table` now opts only final complete-source body
+cell label primitives into `EndEllipsis`. The width authority is the prepared,
+constraint-clamped `TableCellRect::rect.width`, never the raw column width, and
+uses the existing control padding in this exact order: `let padding_x =
+theme.controls.padding_x; let raw_span = rect.width - padding_x * 2.0_f32; let
+label_width = raw_span.max(0.0_f32);`. With canonical `padding_x == 8.0`, prepared
+widths `119.3` and `80.0` retain exact content-width bits `0x42CE999A` and
+`0x42800000`; `16.0`, `15.999`, and `1.0` retain positive-zero width bits and
+make no endpoint or non-overlap claim.
+
+The body key derives family, size, and line height from the unchanged final
+`TextPrimitive`, disables wrapping, and keeps default features. Complete source
+remains in the primitive, retained key, renderer resource, and cell semantic
+label. Missing presentation cells retain explicit empty-source policy; extra
+caller cells remain outside the prepared column count. Admission rejection
+falls through to existing generic complete-source attachment, and a `Ui`
+without a retained store remains layoutless. Headers, including sort arrows,
+focus, narrow widths, and resize transactions, stay separate generic
+Visible/layoutless consumers.
+
+This adoption changes no table configuration or model, row/column/cell
+identity, selection mode, focus annulus, navigation, sort/resize transaction,
+scroll transform, row geometry, semantic topology, callback, materialization,
+public API, text primitive, or renderer command. Deterministic evidence keeps a
+100,000-row source bounded to the existing visible/materialized window and
+transports actual body-cell and separate header resources through Vello CPU
+encoding at `1.0`, `1.25`, `1.5`, and `2.0` with no fallback-cache activity.
+It proves neither pixels, GPU output, browser output, copied values, editing,
+tooltips, column-configurable or header overflow, nor visual acceptance. This
+strengthens bounded Partial evidence for `STERN-TYP-004` and only the explicit
+finite-positive body-cell spans for `STERN-DEN-004`; table-family requirements
+remain regression-only and nothing is Accepted.
+
 `ShapedTextLayout::navigation(source)` validates the complete public layout and
 returns one owned `ShapedTextNavigation`. It groups duplicate positioned glyphs
 by exact cluster range, divides each cluster by extended-grapheme count, and

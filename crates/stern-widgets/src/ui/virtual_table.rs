@@ -5,6 +5,7 @@ use stern_core::{
     RepaintRequest, Response, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
     SemanticValue, Stroke, TextPrimitive, TextRole, Transform, Vec2, scrollable,
 };
+use stern_text::{TextLayoutKey, TextOverflow, TextStyle};
 
 use super::Ui;
 use crate::{
@@ -559,13 +560,42 @@ impl Ui<'_> {
         ) {
             self.primitive(primitive);
         }
-        self.paint_virtual_table_text(rect, label, recipe.foreground);
+        self.paint_virtual_table_body_text(rect, label, recipe.foreground);
     }
 
     fn paint_virtual_table_text(&mut self, rect: Rect, label: &str, color: stern_core::Color) {
+        let text = self.virtual_table_text_primitive(rect, label, color);
+        self.primitive(Primitive::Text(text));
+    }
+
+    fn paint_virtual_table_body_text(&mut self, rect: Rect, label: &str, color: stern_core::Color) {
+        let mut text = self.virtual_table_text_primitive(rect, label, color);
+        if let Some(text_layouts) = self.text_layouts.as_deref_mut() {
+            let padding_x = self.theme.controls.padding_x;
+            let raw_span = rect.width - padding_x * 2.0_f32;
+            let label_width = raw_span.max(0.0_f32);
+            text.layout = text_layouts.try_layout_id(
+                TextLayoutKey::new(
+                    text.text.clone(),
+                    TextStyle::new(text.family.clone(), text.size, text.line_height),
+                    label_width,
+                    false,
+                )
+                .with_overflow(TextOverflow::EndEllipsis),
+            );
+        }
+        self.primitive(Primitive::Text(text));
+    }
+
+    fn virtual_table_text_primitive(
+        &self,
+        rect: Rect,
+        label: &str,
+        color: stern_core::Color,
+    ) -> TextPrimitive {
         let font = self.theme.font(TextRole::Label);
         let extra = (rect.height - font.line_height).max(0.0) * 0.5;
-        self.primitive(Primitive::Text(TextPrimitive {
+        TextPrimitive {
             layout: None,
             origin: Point::new(
                 rect.x + self.theme.controls.padding_x,
@@ -576,7 +606,7 @@ impl Ui<'_> {
             size: font.size,
             line_height: font.line_height,
             brush: Brush::Solid(color),
-        }));
+        }
     }
 }
 

@@ -1254,6 +1254,7 @@ fn production_call_graph_bounds_button_adoption_and_absent_split_busy_consumers(
             ("src/components/selector_fields.rs", 1),
             ("src/ui/basic_controls.rs", 1),
             ("src/ui/property_grid.rs", 1),
+            ("src/ui/virtual_table.rs", 1),
         ]
     );
 

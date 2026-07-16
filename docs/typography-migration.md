@@ -358,6 +358,34 @@ standard/action-button Vello CPU evidence at `1.0`, `1.25`, `1.5`, and `2.0`
 proves resource and glyph topology without fallback-cache activity, not raster,
 GPU, tooltip, copied-value, or visual acceptance.
 
+Canonical retained `Ui::virtual_table` now opts only its final body-cell label
+primitive into the same policy. It computes the retained span from the final
+prepared and constraint-clamped cell rectangle, not the raw `TableColumn`
+width, in this exact order: `let padding_x = theme.controls.padding_x; let
+raw_span = rect.width - padding_x * 2.0_f32; let label_width =
+raw_span.max(0.0_f32);`. The key uses the unchanged primitive family, size, and
+line height with default features and wrapping disabled. Complete caller-owned
+cell source remains in the primitive, key, renderer resource, and semantic
+label. Equal complete source/style/effective-width keys may intentionally share
+a retained layout ID without becoming row, column, or cell identity.
+
+This prerelease rendering-policy change adds no table API or overflow
+configuration. `VirtualTableConfig`, `TableColumn`, `VirtualTableRow`, prepared
+geometry, stable identities, both selection/navigation modes, focus annuli,
+sort, resize, two-axis scroll, virtualization, semantics, callback bounds, and
+generic attachment remain unchanged. Missing cells keep empty-source explicit
+policy, extra cells remain unpainted, and strict admission rejection preserves
+the complete primitive and semantic source while leaving the label layoutless
+when generic fallback also rejects. Header labels and sort arrows remain
+generic Visible/layoutless consumers.
+
+Registered virtual-table-to-Vello CPU evidence at `1.0`, `1.25`, `1.5`, and
+`2.0` proves exact retained body-marker topology, separate complete header
+resources, logical-width/ID stability, coordinate scaling, and zero fallback
+cache activity. It does not prove raster or GPU output, browser behavior,
+copied values, editing, tooltips, column-configurable or header overflow, or
+visual acceptance.
+
 ## Deliberate limits
 
 The semantic foundation still does not transport weights through `FontToken`,
@@ -377,16 +405,18 @@ vector numeric subfields, including registered Vello glyph encoding. It is not
 Accepted because direct/layoutless compatibility paths, timelines, frame
 counters, timecodes, and tables do not consume the feature and no visual
 acceptance was performed. `STERN-TYP-001` and `STERN-TYP-003` are preserved
-without advancing. The retained select-trigger, property-label, and standard
-and delegated action-button adoptions advance only `STERN-TYP-004` to stronger
-bounded Partial for canonical selected values, placeholders, inspector property
-labels, and standard/action button labels with complete-source semantics and
-registered Vello topology. `STERN-DEN-004` advances only to bounded Partial for
-finite-positive computed property-label and button-label spans; nonpositive
-spans retain visible fail-safe behavior and make no endpoint or non-overlap
-claim. Other truncating components and external visual evidence remain
-outstanding. Button action evidence is regression-only and does not advance any
-`STERN-ACT-*` requirement. Existing Partial evidence for `STERN-TYP-000`,
+without advancing. The retained select-trigger, property-label, standard and
+delegated action-button, and virtual-table body-cell adoptions advance only
+`STERN-TYP-004` to stronger bounded Partial for canonical selected values,
+placeholders, inspector property labels, standard/action button labels, and
+retained table body-cell labels with complete-source semantics and registered
+Vello topology. `STERN-DEN-004` advances only to bounded Partial for
+finite-positive computed property-label, button-label, and prepared body-cell
+spans; nonpositive spans retain visible fail-safe behavior and make no endpoint
+or non-overlap claim. Other truncating components and external visual evidence
+remain outstanding. Button action and table-family evidence are regression-only
+and do not advance any `STERN-ACT-*` or `STERN-TBL-*` requirement. Existing
+Partial evidence for `STERN-TYP-000`,
 `STERN-TYP-002`, and `STERN-TYP-006` is preserved. `STERN-TYP-005`, `STERN-TYP-007`,
 `STERN-INSPECT-001`, `STERN-PROP-001`, `STERN-TIP-001`, `STERN-TIP-002`, and
 `STERN-OVERLAY-COMP-002` do not advance. All typography parity records remain

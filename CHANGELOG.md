@@ -10,6 +10,23 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Canonical retained `Ui::virtual_table` now applies
+  `TextOverflow::EndEllipsis` only to final complete-source body-cell labels at
+  the exact prepared-cell span `(rect.width -
+  theme.controls.padding_x * 2.0_f32).max(0.0_f32)`. Complete primitive,
+  retained-key, renderer-resource, and semantic source is preserved. Headers
+  and sort arrows remain generic Visible/layoutless consumers. Store rejection,
+  missing and extra cells, nonpositive spans, and multiline sources retain the
+  existing fail-soft ownership and topology without changing public APIs,
+  table models, stable identities, selection/focus/navigation, sort/resize,
+  two-axis scrolling, bounded materialization, callbacks, semantics, generic
+  attachment, text primitives, or renderer commands. Registered Vello CPU
+  evidence covers actual body/header resources at `1.0`, `1.25`, `1.5`, and
+  `2.0`, not pixels, GPU, browser, copied-value, editing, tooltip, or visual
+  acceptance. `STERN-TYP-004` advances only to stronger bounded Partial and
+  `STERN-DEN-004` only to bounded Partial for finite-positive prepared body-cell
+  spans. Table-family requirements remain regression-only and nothing is
+  Accepted. See `docs/typography-migration.md`.
 - **Breaking:** Canonical retained `Ui::button`, and the existing
   `Ui::action_button` delegation, now apply `TextOverflow::EndEllipsis` only to
   the final complete-source label at the exact themed span
