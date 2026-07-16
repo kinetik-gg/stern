@@ -4,8 +4,8 @@ use crate::boundary::{clamp_boundary, next_boundary, previous_boundary};
 use crate::fonts::INTER_FONTDB_FAMILY;
 use crate::{
     CosmicTextEngine, DEFAULT_FONT_FAMILY, DEFAULT_MONOSPACE_FONT_FAMILY, ShapedTextLayout,
-    TextComposition, TextEditMode, TextEditState, TextLayoutCache, TextLayoutKey, TextLayoutStore,
-    TextSelection, TextStyle, fonts,
+    TextComposition, TextEditMode, TextEditState, TextFeatureSet, TextLayoutCache, TextLayoutKey,
+    TextLayoutStore, TextSelection, TextStyle, fonts,
 };
 use cosmic_text::fontdb;
 use stern_core::{
@@ -345,6 +345,28 @@ fn text_layout_store_assigns_stable_cached_ids() {
     assert_eq!(first, second);
     assert_eq!(store.len(), 1);
     assert!(!store.layout(first).expect("layout is cached").is_empty());
+}
+
+#[test]
+fn text_features_participate_in_style_key_and_retained_id_identity() {
+    let default_style = TextStyle::new("Inter", 12.0, 16.0);
+    let numeric_style = default_style
+        .clone()
+        .with_features(TextFeatureSet::TABULAR_NUMBERS);
+    let default_key = TextLayoutKey::new("0123456789", default_style, 100.0, false);
+    let numeric_key = TextLayoutKey::new("0123456789", numeric_style, 100.0, false);
+    let mut store = TextLayoutStore::new();
+
+    assert_eq!(default_key.style.features, TextFeatureSet::NONE);
+    assert_ne!(default_key, numeric_key);
+
+    let default_id = store.layout_id(default_key.clone());
+    let numeric_id = store.layout_id(numeric_key.clone());
+
+    assert_ne!(default_id, numeric_id);
+    assert_eq!(store.len(), 2);
+    assert_eq!(store.stored_layout(default_id).unwrap().key, &default_key);
+    assert_eq!(store.stored_layout(numeric_id).unwrap().key, &numeric_key);
 }
 
 #[test]

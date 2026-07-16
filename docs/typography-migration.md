@@ -173,24 +173,77 @@ remapping, fallback stack, or platform discovery. Although the bundled face
 contains a weight axis, the current shaping API does not select or transport
 that axis.
 
+## Tabular-number shaping transport
+
+The qualified text API now transports Stern's bounded numeric feature through
+layout and production shaping. This is a prerelease breaking struct-shape
+change: public `TextStyle` literals must initialize the new
+`features: TextFeatureSet` field. Existing constructor calls remain compatible
+because `TextStyle::new(...)` selects `TextFeatureSet::NONE`.
+
+`TextFeatureSet` is an opaque fixed-size value with only two public
+authorities: `NONE` and `TABULAR_NUMBERS`. The latter maps to OpenType
+`tnum=1`; Stern does not expose arbitrary OpenType tags or a generic feature
+registry. Opt in through the qualified facade:
+
+```rust
+let theme = stern::core::default_dark_theme();
+assert_eq!(
+    theme
+        .typography
+        .features
+        .get(stern::core::FontFeatureToken::Numeric),
+    "tabular-nums",
+);
+
+let style = stern::text::TextStyle::new(
+    theme.font_family(stern::core::FontFamilyRole::Ui),
+    12.0,
+    16.0,
+)
+.with_features(stern::text::TextFeatureSet::TABULAR_NUMBERS);
+```
+
+`FontFeatureScale` remains the sole semantic token authority and continues to
+resolve `FontFeatureToken::Numeric` to `"tabular-nums"` by default.
+`TextFeatureSet` is the lower-level shaping mechanism selected after semantic
+resolution; it does not duplicate or replace the theme token value.
+
+Feature identity participates in `TextStyle` equality and hashing, and
+therefore in `TextLayoutKey`, the compatibility cache, retained layout IDs,
+and retained renderer resources through their existing composed style field.
+Applications that previously stored public `TextStyle` literals must add
+`features: TextFeatureSet::NONE` to preserve prior shaping and identity.
+
+Deterministic conformance uses the exact bundled Inter variable face. Its
+default digit advances are observably proportional, while enabled digits
+`0-9` and equivalent-length changing numeric strings have equal advances
+within `0.001` logical unit. Feature-bearing layouts retain the same UTF-8
+ranges, line topology, Inter byte authority, bounded store/cache behavior, and
+retained renderer-resource reconciliation.
+
 ## Deliberate limits
 
-The semantic foundation still does not transport weights or features through
-`FontToken`, text primitives, text layout, shaping, or renderers. In
-particular, storing `"tabular-nums"` does not enable or prove tabular figures
-in any consumer.
+The semantic foundation still does not transport weights through `FontToken`,
+text primitives, text layout, shaping, or renderers. The new low-level numeric
+feature path is opt-in at `TextStyle`; it does not change `FontToken`,
+`TextRole`, `TextPrimitive`, widgets, components, or default text behavior.
 
 The Space Mono follow-up advances only deterministic Mono text-system
 alignment for `STERN-TYP-000`, which remains Partial. Exact asset and license
 provenance makes `STERN-TYP-006` Partial. The Space Grotesk follow-up advances
 only the corresponding deterministic Brand text-system byte alignment and
 exact asset/license provenance; both requirements remain Partial.
-`STERN-TYP-001` and `STERN-TYP-003` are preserved without advancing;
-`STERN-TYP-002`, `STERN-TYP-004`, `STERN-TYP-005`, and `STERN-TYP-007` do not
-advance. All typography parity records remain unverified, and nothing is
-Accepted.
+The tabular-number follow-up advances `STERN-TYP-002` only to bounded Partial
+for exact feature transport, real bundled-Inter shaping, layout/cache
+identity, and retained resource preservation. It is not Accepted because no
+specified timeline, inspector, frame-counter, table, or changing numeric
+component consumes the feature. `STERN-TYP-001` and `STERN-TYP-003` are
+preserved without advancing; `STERN-TYP-004`, `STERN-TYP-005`, and
+`STERN-TYP-007` do not advance. All typography parity records remain
+unverified, and nothing is Accepted.
 
-This bounded evidence does not prove platform or non-Latin fallback,
-failed-load layout stability, IME behavior, weight or feature transport,
-tabular figures, widget adoption, truncation, optical baselines, overflow,
-DPI legibility, renderer or browser output, or GPU/manual visual review.
+This bounded evidence does not prove component adoption, platform or
+non-Latin fallback, failed-load layout stability, IME behavior, weight
+transport, truncation, optical baselines, overflow, DPI legibility, renderer
+pixels, browser output, or GPU/manual visual review.

@@ -1,4 +1,6 @@
-use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Wrap, fontdb};
+use cosmic_text::{
+    Attrs, Buffer, Family, FeatureTag, FontFeatures, FontSystem, Metrics, Shaping, Wrap, fontdb,
+};
 use stern_core::Size;
 
 use crate::fonts::INTER_FONTDB_FAMILY;
@@ -174,7 +176,11 @@ fn attrs_for_style(style: &TextStyle) -> Attrs<'_> {
         DEFAULT_FONT_FAMILY => Family::Name(INTER_FONTDB_FAMILY),
         family => Family::Name(family),
     };
-    Attrs::new().family(family)
+    let mut features = FontFeatures::new();
+    if style.features.has_tabular_numbers() {
+        features.set(FeatureTag::new(b"tnum"), 1);
+    }
+    Attrs::new().family(family).font_features(features)
 }
 
 fn bundled_font_system() -> FontSystem {

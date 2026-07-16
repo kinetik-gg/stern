@@ -7,7 +7,7 @@ use stern_render::{
     ImageResource, RenderImage, RenderImageSampling, RenderResources, TextLayoutResourceSync,
     TextLayoutResourceSyncKind, TextLayoutResourceSyncReport, TextureResource,
 };
-use stern_text::{TextLayoutKey, TextLayoutStore, TextStyle};
+use stern_text::{TextFeatureSet, TextLayoutKey, TextLayoutStore, TextStyle};
 
 const MAX_TEXT_PAYLOAD_BYTES: usize = 32 * 1024 * 1024;
 
@@ -100,6 +100,52 @@ fn initial_full_then_noop_is_exact_and_preserves_allocations() {
     assert_eq!(resources.snapshot(), snapshot);
     assert_eq!(resources.retained_text_layout_payload_bytes(), bytes);
     assert!(resources.has_text_layout(second));
+}
+
+#[test]
+fn reconciliation_retains_distinct_feature_bearing_layout_resources() {
+    let default_key = key("12038475");
+    let numeric_key = TextLayoutKey::new(
+        "12038475",
+        TextStyle::new("Inter", 12.0, 16.0).with_features(TextFeatureSet::TABULAR_NUMBERS),
+        120.0,
+        false,
+    );
+    let mut store = TextLayoutStore::new();
+    let default_id = store.layout_id(default_key);
+    let numeric_id = store.layout_id(numeric_key);
+    let mut resources = RenderResources::new();
+    let mut sync = TextLayoutResourceSync::new();
+
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(report.kind, TextLayoutResourceSyncKind::Full);
+    assert_eq!((report.added, report.retained), (2, 2));
+    assert_ne!(default_id, numeric_id);
+
+    let default_resource = resources.text_layout_resource(default_id).unwrap();
+    let default_layout = Arc::clone(&default_resource.layout);
+    assert_eq!(default_resource.key.style.features, TextFeatureSet::NONE);
+    let numeric_resource = resources.text_layout_resource(numeric_id).unwrap();
+    let numeric_layout = Arc::clone(&numeric_resource.layout);
+    assert_eq!(
+        numeric_resource.key.style.features,
+        TextFeatureSet::TABULAR_NUMBERS
+    );
+    assert_eq!(
+        resources.retained_text_layout_payload_bytes(),
+        Some(store.retained_payload_bytes())
+    );
+
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert!(report.is_noop());
+    assert!(Arc::ptr_eq(
+        &resources.text_layout_resource(default_id).unwrap().layout,
+        &default_layout
+    ));
+    assert!(Arc::ptr_eq(
+        &resources.text_layout_resource(numeric_id).unwrap().layout,
+        &numeric_layout
+    ));
 }
 
 #[test]

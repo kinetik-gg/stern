@@ -3,12 +3,16 @@
 use std::sync::Arc;
 
 use stern_core::TextLayoutId;
-use stern_text::{TextLayoutCache, TextLayoutKey, TextLayoutStore, TextStyle};
+use stern_text::{TextFeatureSet, TextLayoutCache, TextLayoutKey, TextLayoutStore, TextStyle};
 
 const MAX_RETAINED_BYTES: usize = 32 * 1024 * 1024;
 
 fn style() -> TextStyle {
     TextStyle::new("Inter", 13.0, 17.0)
+}
+
+fn numeric_style() -> TextStyle {
+    style().with_features(TextFeatureSet::TABULAR_NUMBERS)
 }
 
 fn key(text: impl Into<String>, width: f32, wrap: bool) -> TextLayoutKey {
@@ -167,4 +171,49 @@ fn compatibility_cache_dynamic_workload_is_bounded_and_hot_entry_survives() {
         clone.retained_payload_bytes(),
         cache.retained_payload_bytes()
     );
+}
+
+#[test]
+fn feature_aware_store_and_cache_identity_stay_bounded_on_hot_hits() {
+    let default_key = key("12038475", 140.0, false);
+    let numeric_key = TextLayoutKey::new("12038475", numeric_style(), 140.0, false);
+    let mut store = TextLayoutStore::new();
+
+    let default_id = store.layout_id(default_key.clone());
+    let numeric_id = store.layout_id(numeric_key.clone());
+    let store_bytes = store.retained_payload_bytes();
+    let store_cursor = store.change_cursor();
+
+    assert_ne!(default_id, numeric_id);
+    assert_eq!(store.len(), 2);
+    assert!(store_bytes <= MAX_RETAINED_BYTES);
+    for _ in 0..10_000 {
+        assert_eq!(store.try_layout_id(default_key.clone()), Some(default_id));
+        assert_eq!(store.try_layout_id(numeric_key.clone()), Some(numeric_id));
+    }
+    assert_eq!(store.retained_payload_bytes(), store_bytes);
+    assert_eq!(store.change_cursor(), store_cursor);
+    assert_eq!(
+        store.stored_layout(default_id).unwrap().key.style.features,
+        TextFeatureSet::NONE
+    );
+    assert_eq!(
+        store.stored_layout(numeric_id).unwrap().key.style.features,
+        TextFeatureSet::TABULAR_NUMBERS
+    );
+
+    let mut cache = TextLayoutCache::new();
+    let default_layout = cache.get_or_measure(default_key.clone());
+    let numeric_layout = cache.get_or_measure(numeric_key.clone());
+    let cache_bytes = cache.retained_payload_bytes();
+
+    assert_eq!(cache.len(), 2);
+    assert!(cache_bytes <= MAX_RETAINED_BYTES);
+    for _ in 0..10_000 {
+        assert_eq!(cache.get_or_measure(default_key.clone()), default_layout);
+        assert_eq!(cache.get_or_measure(numeric_key.clone()), numeric_layout);
+    }
+    assert_eq!(cache.retained_payload_bytes(), cache_bytes);
+    assert_eq!(cache.get(&default_key), Some(default_layout));
+    assert_eq!(cache.get(&numeric_key), Some(numeric_layout));
 }

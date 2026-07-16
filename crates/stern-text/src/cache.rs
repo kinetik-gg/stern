@@ -363,6 +363,12 @@ fn compare_keys(left: &TextLayoutKey, right: &TextLayoutKey) -> Ordering {
                 .line_height_bits
                 .cmp(&right.style.line_height_bits)
         })
+        .then_with(|| {
+            left.style
+                .features
+                .ordering_key()
+                .cmp(&right.style.features.ordering_key())
+        })
         .then_with(|| left.width_bits.cmp(&right.width_bits))
         .then_with(|| left.wrap.cmp(&right.wrap))
 }
@@ -407,7 +413,7 @@ fn fallback_measure(key: &TextLayoutKey) -> TextLayout {
 #[cfg(test)]
 mod budget_tests {
     use super::*;
-    use crate::TextStyle;
+    use crate::{TextFeatureSet, TextStyle};
 
     fn key(text: &str) -> TextLayoutKey {
         TextLayoutKey::new(text, TextStyle::new("Inter", 12.0, 16.0), 100.0, false)
@@ -601,5 +607,47 @@ mod budget_tests {
         assert!(cache.get(&b).is_some());
         assert!(cache.get(&c).is_some());
         assert_eq!(cache.retained_payload_bytes(), entry_cost * 2);
+    }
+
+    #[test]
+    fn equal_lru_metadata_orders_features_before_selecting_the_cache_victim() {
+        let none = normalize_key(key("00000000"));
+        let tabular = normalize_key(TextLayoutKey::new(
+            "00000000",
+            TextStyle::new("Inter", 12.0, 16.0).with_features(TextFeatureSet::TABULAR_NUMBERS),
+            100.0,
+            false,
+        ));
+        let newcomer = normalize_key(key("zzzzzzzz"));
+        let entry_cost = cache_entry_payload_bytes(&none).expect("cost");
+        assert_eq!(cache_entry_payload_bytes(&tabular), Some(entry_cost));
+        assert_eq!(cache_entry_payload_bytes(&newcomer), Some(entry_cost));
+        assert_eq!(compare_keys(&none, &tabular), Ordering::Less);
+
+        for insertion_order in [
+            [none.clone(), tabular.clone()],
+            [tabular.clone(), none.clone()],
+        ] {
+            let mut cache = TextLayoutCache::with_policy(policy(entry_cost * 2, 120));
+            for request in insertion_order {
+                cache.get_or_measure(request);
+            }
+            cache.advance_generation();
+            for request in [&none, &tabular] {
+                let entry = cache.layouts.get_mut(request).expect("resident");
+                entry.last_generation = 0;
+                entry.touch_ordinal = 7;
+            }
+
+            cache.get_or_measure(newcomer.clone());
+
+            assert!(
+                cache.get(&none).is_none(),
+                "feature-disabled key is the literal first victim"
+            );
+            assert!(cache.get(&tabular).is_some());
+            assert!(cache.get(&newcomer).is_some());
+            assert_eq!(cache.retained_payload_bytes(), entry_cost * 2);
+        }
     }
 }

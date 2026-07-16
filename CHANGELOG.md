@@ -10,6 +10,16 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Added the opaque fixed-size `TextFeatureSet` and public
+  `TextStyle::features` field. `TextStyle::new(...)` remains feature-disabled;
+  explicit `TABULAR_NUMBERS` opt-in now maps to OpenType `tnum=1` during
+  production shaping and participates in layout, cache/store, retained ID, and
+  renderer-resource identity. Deterministic bundled-Inter evidence proves
+  unequal default digit advances and equal enabled digit/changing-string
+  advances within `0.001` logical unit. `FontFeatureScale` remains the sole
+  semantic token authority, no component adopts the feature, and
+  `STERN-TYP-002` advances only to bounded Partial. See
+  `docs/typography-migration.md`.
 - **Breaking:** The semantic Brand family now resolves through the exact
   bundled Space Grotesk variable face from revision
   `03507d024a01282884232081fc6011c09ff4e849`. Qualified public
@@ -35,10 +45,11 @@ published, or accepted as an alpha release.
   six-size `12/11/10/14/16/20`, three-line-height `16/15/14`, and four-weight
   `400/500/600/700` inventories plus the numeric feature value
   `"tabular-nums"`. Existing text-role family, size, and line-height resolution
-  is unchanged. The new weight and feature values are deterministic metadata
-  only; they are not transported to text, shaping, widgets, or renderers and
-  make no tabular-figure conformance claim. External `TypographyScale` struct
-  literals must initialize the four new scales. See
+  is unchanged. Weight values remain metadata only. The feature scale remains
+  semantic metadata and does not automatically affect text or components; the
+  later opt-in `TextFeatureSet` path transports its numeric meaning through
+  shaping without changing this token authority. External `TypographyScale`
+  struct literals must initialize the four new scales. See
   `docs/typography-migration.md`.
 - **Breaking:** Replaced the five resolved `FontToken` values stored by
   `TypographyScale` with exact UI, Brand, and Mono semantic family roles plus

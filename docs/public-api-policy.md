@@ -113,6 +113,43 @@ unverified, and nothing is Accepted. Measured geometry may change with the
 family, but no baseline, overflow, widget-adoption, renderer, browser, GPU, or
 manual visual evidence follows from this loading boundary.
 
+### Qualified tabular-number shaping
+
+The qualified text API exposes `stern::text::TextFeatureSet` as an opaque
+fixed-size low-level shaping authority. Its only public values are `NONE` and
+`TABULAR_NUMBERS`; the latter maps to OpenType `tnum=1` in the production text
+engine. `stern::text::TextStyle::new(...)` remains feature-disabled, while
+`TextStyle::with_features(...)` provides explicit opt-in. None of these items
+is added to the default prelude.
+
+Adding public `TextStyle::features` is a prerelease breaking struct-shape
+change. Feature identity is retained through `TextLayoutKey`, cache/store
+lookup, layout IDs, and renderer text resources through their existing
+composed style fields. The API does not expose arbitrary feature tags, font
+weight, variable coordinates, or a generic registry.
+
+The default theme's existing `FontFeatureScale` remains the sole semantic
+token authority: `FontFeatureToken::Numeric` resolves to `"tabular-nums"`.
+`TextFeatureSet::TABULAR_NUMBERS` is only the low-level mechanism selected
+after that semantic lookup; it is not a second token value.
+
+Focused deterministic evidence proves that exact bundled Inter has unequal
+default numeric advances, then produces equal enabled `0-9` advances and
+equal widths for equivalent-length changing numeric strings within `0.001`
+logical unit. It also proves preserved UTF-8 ranges, layout topology, family
+bytes, bounded cache/store behavior, distinct retained IDs, and renderer
+resource reconciliation.
+
+This advances `STERN-TYP-002` only to bounded Partial. No specified numeric
+component consumes the feature, so the requirement is not Accepted.
+`STERN-TYP-000` and `STERN-TYP-006` preserve their existing Partial evidence;
+`STERN-TYP-001` and `STERN-TYP-003` are preserved only;
+`STERN-TYP-004`, `STERN-TYP-005`, and `STERN-TYP-007` do not advance. All
+typography parity records remain unverified. This evidence makes no component,
+fallback, failed-load, truncation, optical-baseline, overflow, non-Latin, IME,
+DPI, renderer-pixel, browser, GPU, manual, visual, release, or acceptance
+claim.
+
 ### Qualified size foundation
 
 The grouped size foundation remains available through `stern::core` without
@@ -318,7 +355,7 @@ records the evidence needed for the final API decision.
 | --- | --- | --- |
 | `text::TextLayoutCache` versus shaped `text::TextLayoutStore` | Use `TextLayoutStore` for retained shaped layouts and renderer resources. `TextLayoutCache` remains a module-qualified approximate measurement compatibility API. | Desktop text behavior, renderer resource lifetime, and public workflow evidence determine deprecation/removal and migration wording. |
 | Legacy viewport `Guide`, `Crosshair`, and `ViewportComposition` helpers versus surface/descriptor paths | Keep legacy helpers compatible but noncanonical. New work starts with `widgets::viewport::ViewportSurface` and the relevant `ViewportGuideDescriptor`, `ViewportOverlayDescriptor`, or `ViewportToolSurfaceDescriptor`. | Viewport composition, external texture, pointer transform, painter, and public workflow proof determine the final retained set. |
-| Legacy `Theme` scalar fields versus token groups | New work uses grouped token surfaces including `Theme::radii`, `Theme::strokes`, `Theme::sizes`, `Theme::controls`, and `Theme::typography`. Typography stores semantic UI, Brand, and Mono family authority separately from per-role logical metrics, plus exact customizable size, line-height, weight, and feature foundation scales. Qualified foundation lookup is `theme.typography.<scale>.get(token)`; `Theme::font` remains the resolved compatibility boundary and `Theme::font_family` exposes typed family lookup. Title remains UI and Brand has no current `TextRole`. Foundation weight and feature metadata does not expand `FontToken` or text/render transport. Default icon geometry uses `Theme::sizes.icon.md`, while checkbox and radio recipes resolve their private exact `14.0` indicator dimension. Removed `ControlMetrics::{icon_size, check_size}` fields have no compatibility aliases. `radius`, `border_width`, and `text_size` remain compatible. | Complete theme-token migration and representative component paint proof precede deprecation or removal. Current typography evidence proves deterministic theme authority plus bounded Space Mono and Space Grotesk asset loading with exact byte alignment for Mono and Brand. The numeric `"tabular-nums"` value does not prove consumer adoption or shaped tabular figures; no evidence is claimed for fallback, glyph-metric suitability, DPI legibility, renderer output, or visual review. Current selection-indicator evidence covers direct visual geometry and full-label bounds only; it does not establish mixed-state mark anatomy or renderer baselines. |
+| Legacy `Theme` scalar fields versus token groups | New work uses grouped token surfaces including `Theme::radii`, `Theme::strokes`, `Theme::sizes`, `Theme::controls`, and `Theme::typography`. Typography stores semantic UI, Brand, and Mono family authority separately from per-role logical metrics, plus exact customizable size, line-height, weight, and feature foundation scales. Qualified foundation lookup is `theme.typography.<scale>.get(token)`; `Theme::font` remains the resolved compatibility boundary and `Theme::font_family` exposes typed family lookup. Title remains UI and Brand has no current `TextRole`. Foundation weight metadata does not expand `FontToken` or text/render transport. The numeric feature has a separate opt-in low-level `TextStyle` shaping mechanism and does not change `FontToken`, primitives, widgets, or default component behavior. Default icon geometry uses `Theme::sizes.icon.md`, while checkbox and radio recipes resolve their private exact `14.0` indicator dimension. Removed `ControlMetrics::{icon_size, check_size}` fields have no compatibility aliases. `radius`, `border_width`, and `text_size` remain compatible. | Complete theme-token migration and representative component paint proof precede deprecation or removal. Current typography evidence proves deterministic theme authority, bounded Space Mono and Space Grotesk asset loading with exact byte alignment for Mono and Brand, and bounded bundled-Inter `tnum=1` shaping with retained identity. The numeric `"tabular-nums"` value and its low-level transport do not prove specified component adoption; no evidence is claimed for fallback, glyph-metric suitability, DPI legibility, renderer pixels, or visual review. Current selection-indicator evidence covers direct visual geometry and full-label bounds only; it does not establish mixed-state mark anatomy or renderer baselines. |
 | Dock `PanelId` versus `PanelInstanceId` | New instance-oriented APIs use `widgets::dock::PanelInstanceId`; the convertible legacy `PanelId` remains compatible. | Dock interaction, persistence round-trip, and public workflow evidence establish whether a migration can be enforced. |
 | `ActionContext`, `ActionPriority`, and `ActionRoutingContext` | Keep all three compatible and provisional; do not claim that their current overlap is final. | Action-routing, input precedence, modal/text reservation, and public workflow evidence must establish one non-contradictory public model. |
 

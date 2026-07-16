@@ -26,7 +26,7 @@ pub use selection::{TextAffinity, TextCaret, TextComposition, TextSelection};
 pub use store::{
     StoredTextLayout, TextLayoutChange, TextLayoutChangeCursor, TextLayoutChanges, TextLayoutStore,
 };
-pub use style::{TextLayoutKey, TextStyle};
+pub use style::{TextFeatureSet, TextLayoutKey, TextStyle};
 pub use undo::TextUndoStack;
 pub use viewport::{TextViewport, TextViewportMode};
 

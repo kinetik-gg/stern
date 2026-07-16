@@ -751,6 +751,47 @@ fn qualified_facade_constructs_and_resolves_typography_foundation() {
 }
 
 #[test]
+fn qualified_facade_connects_numeric_token_to_tabular_shaping() {
+    let theme = stern::core::default_dark_theme();
+    let numeric_token = theme
+        .typography
+        .features
+        .get(stern::core::FontFeatureToken::Numeric);
+    let family = theme.font_family(stern::core::FontFamilyRole::Ui);
+
+    assert_eq!(numeric_token, "tabular-nums");
+    let numeric_features = match numeric_token {
+        "tabular-nums" => stern::text::TextFeatureSet::TABULAR_NUMBERS,
+        unexpected => panic!("unsupported numeric feature token: {unexpected}"),
+    };
+    let style = stern::text::TextStyle::new(family, 32.0, 40.0).with_features(numeric_features);
+    let mut engine = stern::text::CosmicTextEngine::new();
+    let first = engine.shape_text(&stern::text::TextLayoutKey::new(
+        "11111111",
+        style.clone(),
+        1_000.0,
+        false,
+    ));
+    let second = engine.shape_text(&stern::text::TextLayoutKey::new(
+        "20846357", style, 1_000.0, false,
+    ));
+
+    assert_eq!(family, stern::text::DEFAULT_FONT_FAMILY);
+    assert_eq!(
+        numeric_features,
+        stern::text::TextFeatureSet::TABULAR_NUMBERS
+    );
+    assert!((first.size.width - second.size.width).abs() <= 0.001);
+    assert!(
+        first
+            .runs
+            .iter()
+            .chain(second.runs.iter())
+            .all(|run| run.font.data.data() == stern::text::fonts::INTER_VARIABLE)
+    );
+}
+
+#[test]
 #[allow(clippy::float_cmp)]
 fn qualified_facade_exposes_focus_ring_recipe_without_prelude_expansion() {
     use stern::core::{

@@ -186,12 +186,9 @@ fn typography_scale_stores_each_foundation_authority_once() {
 }
 
 #[test]
-fn foundation_metadata_does_not_expand_resolved_or_transport_shapes() {
+fn foundation_metadata_does_not_expand_core_resolved_or_primitive_shapes() {
     let token_source = include_str!("../src/theme/tokens.rs");
     let render_source = include_str!("../src/render.rs");
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let text_style_source = fs::read_to_string(workspace.join("crates/stern-text/src/style.rs"))
-        .expect("read stern-text TextStyle source");
     let declarations = [
         ("FontToken", struct_declaration(token_source, "FontToken")),
         (
@@ -202,18 +199,18 @@ fn foundation_metadata_does_not_expand_resolved_or_transport_shapes() {
             "TextPrimitive",
             struct_declaration(render_source, "TextPrimitive"),
         ),
-        (
-            "TextStyle",
-            struct_declaration(&text_style_source, "TextStyle"),
-        ),
     ];
 
     for (name, declaration) in declarations {
         for forbidden in [
             "FontSizeScale",
+            "FontSizeToken",
             "FontLineHeightScale",
+            "FontLineHeightToken",
             "FontWeightScale",
+            "FontWeightToken",
             "FontFeatureScale",
+            "FontFeatureToken",
             "pub weight:",
             "pub feature:",
             "pub weights:",
@@ -224,6 +221,38 @@ fn foundation_metadata_does_not_expand_resolved_or_transport_shapes() {
                 "{name} must not transport foundation metadata through {forbidden}"
             );
         }
+    }
+}
+
+#[test]
+fn text_style_transports_exactly_the_bounded_low_level_feature_set() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let source = fs::read_to_string(workspace.join("crates/stern-text/src/style.rs"))
+        .expect("read stern-text TextStyle source");
+    let declaration = struct_declaration(&source, "TextStyle");
+
+    assert_eq!(declaration.matches("pub features:").count(), 1);
+    assert_eq!(
+        declaration.matches("pub features: TextFeatureSet").count(),
+        1
+    );
+    for forbidden in [
+        "FontSizeScale",
+        "FontSizeToken",
+        "FontLineHeightScale",
+        "FontLineHeightToken",
+        "FontWeightScale",
+        "FontWeightToken",
+        "FontFeatureScale",
+        "FontFeatureToken",
+        "pub weight:",
+        "pub weights:",
+        "pub feature:",
+    ] {
+        assert!(
+            !declaration.contains(forbidden),
+            "TextStyle must not transport foundation metadata through {forbidden}"
+        );
     }
 }
 
