@@ -366,6 +366,31 @@ the effective affinity. Shaped mixed-direction visual traversal, ligature caret
 subdivision, and hit/caret/selection geometry use the source-bound shaped
 authority below rather than byte interpolation.
 
+Retained display text may request `TextOverflow::EndEllipsis` through
+`TextLayoutKey::with_overflow`. `Visible` is the constructor default. The end
+policy applies only to a finite positive width with wrapping disabled and a
+single-line source; other width, wrapping, and multiline combinations preserve
+their existing behavior. Eligible shaping uses pinned cosmic-text end ellipsis
+with a one-line limit. Stern never constructs a shortened replacement string:
+the full source and policy remain in the layout key, store identity, change
+journal reconciliation, and renderer resource.
+
+An engine-generated ellipsis glyph has an empty source range at the hidden
+extended-grapheme seam and sets `ShapedGlyph::elided`. Ordinary source glyphs,
+including a literal `U+2026`, do not set that marker.
+`ShapedTextLayout::is_elided()` reports whether any marker is present. Since
+hidden graphemes cannot support complete byte-accurate movement,
+`ShapedTextLayout::navigation(source)` rejects marked layouts with
+`TextNavigationError::ElidedLayout` before other structural validation.
+Full-fit requests and all visible layouts retain normal navigation.
+
+Overflow is part of key equality, hashing, deterministic cache ordering, and
+retained ID identity. Registered renderer and Vello paths consume the existing
+shaped-layout resource authority; this policy does not add overflow state to
+`TextPrimitive` or render commands. Editable widgets remain visible. Component
+adoption, accessible and copied values, tooltips, multiline/start/middle
+ellipsis, and visual acceptance are separate work.
+
 `ShapedTextLayout::navigation(source)` validates the complete public layout and
 returns one owned `ShapedTextNavigation`. It groups duplicate positioned glyphs
 by exact cluster range, divides each cluster by extended-grapheme count, and
