@@ -165,6 +165,44 @@ fallback, failed-load, truncation, optical-baseline, overflow, non-Latin, IME,
 DPI, renderer-pixel, browser, GPU, manual, visual, release, or acceptance
 claim beyond the canonical retained numeric path.
 
+### Qualified retained end ellipsis
+
+The qualified `stern::text` API exposes
+`TextOverflow::{Visible, EndEllipsis}`, `TextLayoutKey::with_overflow`,
+`ShapedGlyph::elided`, `ShapedTextLayout::is_elided`, and
+`TextNavigationError::ElidedLayout`. These symbols are not added to the default
+prelude. `TextLayoutKey::new(...)` remains source-compatible and defaults to
+`Visible`; public struct literals must add `overflow: TextOverflow::Visible`.
+Public `ShapedGlyph` literals must add `elided: false`, and exhaustive error
+matches must handle the new navigation variant.
+
+`EndEllipsis` is a display-only retained layout policy for finite positive
+width, nonwrapping, single-line requests. Pinned cosmic-text performs the end
+elision with a one-line limit. The byte-exact source is never replaced: it and
+the explicit overflow policy remain in `TextLayoutKey`, retained cache/store
+identity, renderer resources, and reconciliation. Only the shaped presentation
+may hide glyphs. The generated ellipsis glyph carries an empty source range at
+an extended-grapheme seam and is distinguished from a literal source
+`U+2026` by `elided`.
+
+An elided layout rejects navigation explicitly because hidden graphemes cannot
+provide complete byte-accurate caret and selection geometry. Full-fit and
+visible layouts remain navigable. Invalid widths, wrapping requests, and
+multiline sources preserve existing visible or wrapping behavior.
+
+Deterministic evidence covers LTR, RTL, combining-mark, and emoji seams;
+distinct stable retained identities and hot-frame accounting; complete-source
+renderer reconciliation; and registered Vello glyph topology at `1.0`, `1.25`,
+`1.5`, and `2.0` without fallback cache activity. It does not prove raster
+pixels or visual acceptance.
+
+This advances only `STERN-TYP-004` to bounded Partial. No component opts into
+the policy, so this makes no claim about component semantics, accessible or
+copied values, tooltips, editable selection, start/middle/multiline ellipsis,
+baseline behavior, browser output, GPU output, or manual review. No typography
+parity record is Accepted, and every other typography requirement preserves
+its prior status.
+
 ### Qualified size foundation
 
 The grouped size foundation remains available through `stern::core` without
