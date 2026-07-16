@@ -533,6 +533,35 @@ fn shaped_navigation_api_is_qualified_and_state_methods_are_typed() {
 }
 
 #[test]
+fn text_overflow_api_is_qualified_and_preserves_complete_source() {
+    use stern::text::{
+        CosmicTextEngine, ShapedGlyph, TextLayoutKey, TextNavigationError, TextOverflow, TextStyle,
+    };
+
+    let source = "The public facade retains this complete source while presentation elides";
+    let visible = TextLayoutKey::new(source, TextStyle::new("Inter", 18.0, 24.0), 84.0, false);
+    assert_eq!(visible.overflow, TextOverflow::Visible);
+    let request = visible.with_overflow(TextOverflow::EndEllipsis);
+    let mut engine = CosmicTextEngine::new();
+    let layout = engine.shape_text(&request);
+    let marker: Option<&ShapedGlyph> = layout
+        .runs
+        .iter()
+        .flat_map(|run| &run.glyphs)
+        .find(|glyph| glyph.elided);
+
+    assert_eq!(request.text, source);
+    assert_eq!(request.overflow, TextOverflow::EndEllipsis);
+    assert!(layout.is_elided());
+    let marker = marker.expect("qualified generated glyph");
+    assert_eq!(marker.start, marker.end);
+    assert_eq!(
+        layout.navigation(source),
+        Err(TextNavigationError::ElidedLayout)
+    );
+}
+
+#[test]
 fn root_widget_compatibility_exports_remain_source_compatible() {
     use stern::widgets::{
         self, asset_browser, chrome, collection_actions, collections, dock, inline_edit, inspector,

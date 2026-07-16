@@ -43,6 +43,16 @@ impl Default for TextFeatureSet {
     }
 }
 
+/// Presentation policy applied when laid-out text exceeds its width.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TextOverflow {
+    /// Preserve the complete shaped glyph presentation even when it exceeds the width.
+    #[default]
+    Visible,
+    /// Replace the hidden end of one eligible display line with an ellipsis glyph.
+    EndEllipsis,
+}
+
 /// Font properties used by text measurement and layout.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TextStyle {
@@ -99,6 +109,8 @@ pub struct TextLayoutKey {
     pub width_bits: u32,
     /// Whether text may wrap.
     pub wrap: bool,
+    /// Presentation policy for text that exceeds the requested width.
+    pub overflow: TextOverflow,
 }
 
 impl TextLayoutKey {
@@ -110,7 +122,15 @@ impl TextLayoutKey {
             style,
             width_bits: width.to_bits(),
             wrap,
+            overflow: TextOverflow::Visible,
         }
+    }
+
+    /// Sets the presentation policy for text that exceeds the requested width.
+    #[must_use]
+    pub const fn with_overflow(mut self, overflow: TextOverflow) -> Self {
+        self.overflow = overflow;
+        self
     }
 
     /// Returns the maximum width.

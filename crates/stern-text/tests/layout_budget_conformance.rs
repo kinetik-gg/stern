@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use stern_core::TextLayoutId;
-use stern_text::{TextFeatureSet, TextLayoutCache, TextLayoutKey, TextLayoutStore, TextStyle};
+use stern_text::{
+    TextFeatureSet, TextLayoutCache, TextLayoutKey, TextLayoutStore, TextOverflow, TextStyle,
+};
 
 const MAX_RETAINED_BYTES: usize = 32 * 1024 * 1024;
 
@@ -216,4 +218,57 @@ fn feature_aware_store_and_cache_identity_stay_bounded_on_hot_hits() {
     assert_eq!(cache.retained_payload_bytes(), cache_bytes);
     assert_eq!(cache.get(&default_key), Some(default_layout));
     assert_eq!(cache.get(&numeric_key), Some(numeric_layout));
+}
+
+#[test]
+fn overflow_policy_has_distinct_stable_store_and_cache_identity() {
+    let source = "The complete caller-owned source remains retained after presentation elision 👩‍🚀";
+    let visible = key(source, 96.0, false);
+    let ellipsized = visible.clone().with_overflow(TextOverflow::EndEllipsis);
+    let mut store = TextLayoutStore::new();
+
+    let visible_id = store.layout_id(visible.clone());
+    let ellipsized_id = store.layout_id(ellipsized.clone());
+    let bytes = store.retained_payload_bytes();
+    let cursor = store.change_cursor();
+
+    assert_ne!(visible_id, ellipsized_id);
+    assert!(!store.layout(visible_id).unwrap().is_elided());
+    assert!(store.layout(ellipsized_id).unwrap().is_elided());
+    for id in [visible_id, ellipsized_id] {
+        let retained = store.stored_layout(id).expect("retained layout");
+        assert_eq!(retained.key.text, source);
+    }
+    assert_eq!(
+        store.stored_layout(visible_id).unwrap().key.overflow,
+        TextOverflow::Visible
+    );
+    assert_eq!(
+        store.stored_layout(ellipsized_id).unwrap().key.overflow,
+        TextOverflow::EndEllipsis
+    );
+
+    for _ in 0..10_000 {
+        assert_eq!(store.try_layout_id(visible.clone()), Some(visible_id));
+        assert_eq!(store.try_layout_id(ellipsized.clone()), Some(ellipsized_id));
+    }
+    assert_eq!(store.retained_payload_bytes(), bytes);
+    assert_eq!(store.change_cursor(), cursor);
+
+    let mut cache = TextLayoutCache::new();
+    let visible_measurement = cache.get_or_measure(visible.clone());
+    let ellipsized_measurement = cache.get_or_measure(ellipsized.clone());
+    let cache_bytes = cache.retained_payload_bytes();
+    assert_eq!(visible_measurement, ellipsized_measurement);
+    assert_eq!(cache.len(), 2);
+    for _ in 0..10_000 {
+        assert_eq!(cache.get_or_measure(visible.clone()), visible_measurement);
+        assert_eq!(
+            cache.get_or_measure(ellipsized.clone()),
+            ellipsized_measurement
+        );
+    }
+    assert_eq!(cache.retained_payload_bytes(), cache_bytes);
+    assert_eq!(cache.get(&visible), Some(visible_measurement));
+    assert_eq!(cache.get(&ellipsized), Some(ellipsized_measurement));
 }

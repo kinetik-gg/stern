@@ -371,6 +371,7 @@ fn compare_keys(left: &TextLayoutKey, right: &TextLayoutKey) -> Ordering {
         })
         .then_with(|| left.width_bits.cmp(&right.width_bits))
         .then_with(|| left.wrap.cmp(&right.wrap))
+        .then_with(|| left.overflow.cmp(&right.overflow))
 }
 
 #[allow(
@@ -413,7 +414,7 @@ fn fallback_measure(key: &TextLayoutKey) -> TextLayout {
 #[cfg(test)]
 mod budget_tests {
     use super::*;
-    use crate::{TextFeatureSet, TextStyle};
+    use crate::{TextFeatureSet, TextOverflow, TextStyle};
 
     fn key(text: &str) -> TextLayoutKey {
         TextLayoutKey::new(text, TextStyle::new("Inter", 12.0, 16.0), 100.0, false)
@@ -646,6 +647,43 @@ mod budget_tests {
                 "feature-disabled key is the literal first victim"
             );
             assert!(cache.get(&tabular).is_some());
+            assert!(cache.get(&newcomer).is_some());
+            assert_eq!(cache.retained_payload_bytes(), entry_cost * 2);
+        }
+    }
+
+    #[test]
+    fn equal_lru_metadata_orders_overflow_before_selecting_the_cache_victim() {
+        let visible = normalize_key(key("same"));
+        let ellipsized = normalize_key(key("same").with_overflow(TextOverflow::EndEllipsis));
+        let newcomer = normalize_key(key("zzzz"));
+        let entry_cost = cache_entry_payload_bytes(&visible).expect("cost");
+        assert_eq!(cache_entry_payload_bytes(&ellipsized), Some(entry_cost));
+        assert_eq!(cache_entry_payload_bytes(&newcomer), Some(entry_cost));
+        assert_eq!(compare_keys(&visible, &ellipsized), Ordering::Less);
+
+        for insertion_order in [
+            [visible.clone(), ellipsized.clone()],
+            [ellipsized.clone(), visible.clone()],
+        ] {
+            let mut cache = TextLayoutCache::with_policy(policy(entry_cost * 2, 120));
+            for request in insertion_order {
+                cache.get_or_measure(request);
+            }
+            cache.advance_generation();
+            for request in [&visible, &ellipsized] {
+                let entry = cache.layouts.get_mut(request).expect("resident");
+                entry.last_generation = 0;
+                entry.touch_ordinal = 7;
+            }
+
+            cache.get_or_measure(newcomer.clone());
+
+            assert!(
+                cache.get(&visible).is_none(),
+                "visible key is the literal first victim"
+            );
+            assert!(cache.get(&ellipsized).is_some());
             assert!(cache.get(&newcomer).is_some());
             assert_eq!(cache.retained_payload_bytes(), entry_cost * 2);
         }

@@ -36,6 +36,15 @@ impl ShapedTextLayout {
         self.glyph_count() == 0
     }
 
+    /// Returns true when shaping replaced hidden source glyphs with an ellipsis.
+    #[must_use]
+    pub fn is_elided(&self) -> bool {
+        self.runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .any(|glyph| glyph.elided)
+    }
+
     /// Returns the caret rectangle for a UTF-8 byte offset.
     #[must_use]
     pub fn caret_rect(&self, byte_offset: usize) -> Rect {
@@ -293,6 +302,8 @@ pub struct ShapedGlyph {
     pub width: f32,
     /// Whether this glyph cluster is right-to-left.
     pub rtl: bool,
+    /// Whether this engine-generated glyph marks an elision seam.
+    pub elided: bool,
 }
 
 impl ShapedGlyph {

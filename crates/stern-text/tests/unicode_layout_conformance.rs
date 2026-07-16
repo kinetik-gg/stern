@@ -4,7 +4,8 @@ use stern_core::{Size, TextRange};
 use stern_text::{
     CosmicTextEngine, SHAPED_TEXT_GEOMETRY_EPSILON, ShapedGlyph, ShapedGlyphRun, ShapedTextLayout,
     ShapedTextLine, ShapedTextNavigation, TextAffinity, TextCaret, TextComposition, TextEditState,
-    TextLayoutKey, TextNavigationError, TextNavigationOutcome, TextSelection, TextStyle,
+    TextLayoutKey, TextNavigationError, TextNavigationOutcome, TextOverflow, TextSelection,
+    TextStyle,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -116,6 +117,7 @@ fn synthetic_layout(lines: &[LineSpec], cells: &[CellSpec]) -> ShapedTextLayout 
                     end: cell.end,
                     width: cell.right - cell.left,
                     rtl: cell.rtl,
+                    elided: false,
                 })
                 .collect::<Vec<_>>();
             (!glyphs.is_empty()).then(|| ShapedGlyphRun {
@@ -241,6 +243,92 @@ fn emoji_combining_and_zwj_clusters_have_only_egc_stops() {
             navigation.caret_stops()[0].caret
         );
     }
+}
+
+#[test]
+fn end_ellipsis_seams_are_empty_extended_grapheme_boundaries() {
+    let cases = [
+        ("A long left to right label that overflows", false),
+        ("مرحبا بالعالم مرحبا بالعالم مرحبا بالعالم", true),
+        (
+            "Cafe\u{301} Cafe\u{301} Cafe\u{301} Cafe\u{301} Cafe\u{301}",
+            false,
+        ),
+        ("👩‍🚀👩‍🚀👩‍🚀👩‍🚀👩‍🚀👩‍🚀", false),
+    ];
+
+    for (source, expected_rtl) in cases {
+        let mut engine = CosmicTextEngine::new();
+        let layout = engine.shape_text(
+            &TextLayoutKey::new(source, TextStyle::new("Inter", 18.0, 24.0), 84.0, false)
+                .with_overflow(TextOverflow::EndEllipsis),
+        );
+        let markers = layout
+            .runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .filter(|glyph| glyph.elided)
+            .collect::<Vec<_>>();
+        let boundaries = source
+            .grapheme_indices(true)
+            .map(|(offset, _)| offset)
+            .chain(std::iter::once(source.len()))
+            .collect::<Vec<_>>();
+
+        assert!(layout.is_elided(), "expected elision for {source:?}");
+        assert_eq!(markers.len(), 1, "unexpected markers for {source:?}");
+        assert_eq!(markers[0].start, markers[0].end);
+        assert!(boundaries.contains(&markers[0].start));
+        assert_eq!(layout.lines[0].rtl, expected_rtl);
+    }
+}
+
+#[test]
+fn elided_navigation_fails_before_cluster_validation() {
+    let source = "Navigation must not interpolate through hidden source graphemes 👩‍🚀";
+    let mut engine = CosmicTextEngine::new();
+    let elided = engine.shape_text(
+        &TextLayoutKey::new(source, TextStyle::new("Inter", 18.0, 24.0), 96.0, false)
+            .with_overflow(TextOverflow::EndEllipsis),
+    );
+    assert!(elided.is_elided());
+    assert_eq!(
+        elided.navigation(source),
+        Err(TextNavigationError::ElidedLayout)
+    );
+    let mut malformed_elided = elided.clone();
+    malformed_elided.lines.clear();
+    assert_ne!(malformed_elided.line_count, malformed_elided.lines.len());
+    assert_eq!(
+        malformed_elided
+            .runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .filter(|glyph| glyph.elided)
+            .count(),
+        1
+    );
+    assert_eq!(
+        malformed_elided.navigation(source),
+        Err(TextNavigationError::ElidedLayout)
+    );
+
+    let visible_source = "e\u{301}👩‍🚀";
+    let visible = engine.shape_text(&TextLayoutKey::new(
+        visible_source,
+        TextStyle::new("Inter", 18.0, 24.0),
+        400.0,
+        false,
+    ));
+    let navigation = visible
+        .navigation(visible_source)
+        .expect("full-fit layout remains navigable");
+    let offsets = navigation
+        .caret_stops()
+        .iter()
+        .map(|stop| stop.caret.offset)
+        .collect::<Vec<_>>();
+    assert_eq!(offsets, vec![0, "e\u{301}".len(), visible_source.len()]);
 }
 
 #[test]
