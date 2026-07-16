@@ -181,7 +181,7 @@ pub fn image_icon_button(
         rect,
         image,
         label,
-        theme.controls.icon_size,
+        theme.sizes.icon.md,
         input,
         memory,
         theme,
@@ -226,7 +226,7 @@ pub fn image_icon_selectable_button(
         image,
         label,
         selected,
-        theme.controls.icon_size,
+        theme.sizes.icon.md,
         input,
         memory,
         theme,
@@ -259,7 +259,7 @@ pub fn image_icon_selectable_button_sized(
         selected,
     };
     let recipe = theme.button(state);
-    let icon_size = sanitized_icon_size(icon_size, theme.controls.icon_size);
+    let icon_size = sanitized_icon_size(icon_size, theme.sizes.icon.md);
     let icon_rect = fit_box(
         rect,
         stern_core::Size::new(icon_size, icon_size),
@@ -322,7 +322,7 @@ fn icon_button_with_optional_library(
     let recipe = theme.button(state);
     let icon_rect = fit_box(
         rect,
-        stern_core::Size::new(theme.controls.icon_size, theme.controls.icon_size),
+        stern_core::Size::new(theme.sizes.icon.md, theme.sizes.icon.md),
         stern_core::Alignment::Center,
         stern_core::Alignment::Center,
     );
