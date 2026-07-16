@@ -35,7 +35,7 @@ pub(crate) use undo::EditSnapshot;
 /// Bundled default UI font family.
 pub const DEFAULT_FONT_FAMILY: &str = "Inter";
 /// Bundled default monospace font family.
-pub const DEFAULT_MONOSPACE_FONT_FAMILY: &str = "Geist Mono";
+pub const DEFAULT_MONOSPACE_FONT_FAMILY: &str = "Space Mono";
 
 #[cfg(test)]
 mod tests;
