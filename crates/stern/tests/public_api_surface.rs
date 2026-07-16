@@ -671,6 +671,21 @@ fn qualified_facade_constructs_and_resolves_semantic_font_families() {
 }
 
 #[test]
+fn default_theme_mono_family_matches_the_public_text_default() {
+    let family = stern::core::default_dark_theme()
+        .font(stern::core::TextRole::Monospace)
+        .family;
+
+    assert_eq!(family, stern::text::DEFAULT_MONOSPACE_FONT_FAMILY);
+    assert_eq!(family, "Space Mono");
+    assert_eq!(
+        stern::text::fonts::SPACE_MONO_UPSTREAM_COMMIT,
+        "329858c2c4dbd3476f972a4ae00624b018cf4b81"
+    );
+    assert_eq!(stern::text::fonts::SPACE_MONO_REGULAR.len(), 99_356);
+}
+
+#[test]
 #[allow(clippy::float_cmp)]
 fn qualified_facade_constructs_and_resolves_typography_foundation() {
     use stern::core::{

@@ -10,6 +10,15 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Replaced bundled Geist Mono with exact Space Mono Regular from
+  revision `329858c2c4dbd3476f972a4ae00624b018cf4b81`. The public monospace
+  default is now `"Space Mono"`; named/default/generic `"monospace"` and
+  `"mono"` resolution use the same pinned bytes. Removed public
+  `fonts::{GEIST_UPSTREAM_COMMIT, GEIST_MONO_VARIABLE}` without aliases and
+  added the corresponding Space Mono authority. Applications should expect
+  monospace metrics, layout geometry, snapshots, and derived hashes to change.
+  This advances only Partial deterministic Mono alignment and asset/license
+  provenance evidence; nothing is Accepted. See `docs/typography-migration.md`.
 - **Breaking:** Added exact customizable font-size, line-height, weight, and
   feature foundation scales to `TypographyScale`. The defaults are the pinned
   six-size `12/11/10/14/16/20`, three-line-height `16/15/14`, and four-weight

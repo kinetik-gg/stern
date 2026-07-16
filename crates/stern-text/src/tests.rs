@@ -21,6 +21,16 @@ fn creates_cosmic_text_engine() {
 }
 
 #[test]
+fn space_mono_asset_authority_is_exact() {
+    assert_eq!(DEFAULT_MONOSPACE_FONT_FAMILY, "Space Mono");
+    assert_eq!(
+        fonts::SPACE_MONO_UPSTREAM_COMMIT,
+        "329858c2c4dbd3476f972a4ae00624b018cf4b81"
+    );
+    assert_eq!(fonts::SPACE_MONO_REGULAR.len(), 99_356);
+}
+
+#[test]
 fn bundled_font_database_sets_default_family_aliases() {
     let mut engine = CosmicTextEngine::new();
 
@@ -44,7 +54,7 @@ fn bundled_font_database_sets_default_family_aliases() {
     );
     assert_eq!(
         query_font_bytes(&mut engine, &[fontdb::Family::Monospace]),
-        fonts::GEIST_MONO_VARIABLE
+        fonts::SPACE_MONO_REGULAR
     );
 }
 
@@ -63,6 +73,12 @@ fn generic_families_shape_with_bundled_fonts() {
         200.0,
         false,
     ));
+    let mono_alias = engine.shape_text(&TextLayoutKey::new(
+        "let value = 1;",
+        TextStyle::new("mono", 13.0, 18.0),
+        200.0,
+        false,
+    ));
 
     assert!(!sans.runs.is_empty());
     assert!(
@@ -74,7 +90,14 @@ fn generic_families_shape_with_bundled_fonts() {
     assert!(
         mono.runs
             .iter()
-            .all(|run| run.font.data.data() == fonts::GEIST_MONO_VARIABLE)
+            .all(|run| run.font.data.data() == fonts::SPACE_MONO_REGULAR)
+    );
+    assert!(!mono_alias.runs.is_empty());
+    assert!(
+        mono_alias
+            .runs
+            .iter()
+            .all(|run| run.font.data.data() == fonts::SPACE_MONO_REGULAR)
     );
 }
 
@@ -104,7 +127,7 @@ fn named_default_families_shape_with_bundled_fonts() {
     assert!(
         mono.runs
             .iter()
-            .all(|run| run.font.data.data() == fonts::GEIST_MONO_VARIABLE)
+            .all(|run| run.font.data.data() == fonts::SPACE_MONO_REGULAR)
     );
 }
 

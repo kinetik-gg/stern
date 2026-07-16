@@ -112,14 +112,44 @@ assert_eq!(theme.font(TextRole::Monospace).family, "Space Mono");
 their existing signatures. `Theme::with_typography` continues to mirror only
 the Body size into the legacy `Theme::text_size` compatibility field.
 
+## Space Mono loading alignment
+
+The bundled monospace face now follows the semantic Mono family authority.
+This is a prerelease breaking change:
+
+- `DEFAULT_MONOSPACE_FONT_FAMILY` changed from `"Geist Mono"` to
+  `"Space Mono"`.
+- Public `fonts::GEIST_UPSTREAM_COMMIT` and `fonts::GEIST_MONO_VARIABLE` were
+  removed without compatibility aliases.
+- Public `fonts::SPACE_MONO_UPSTREAM_COMMIT` and
+  `fonts::SPACE_MONO_REGULAR` expose the exact pinned replacement authority.
+
+The default text engine loads Space Mono Regular from upstream revision
+`329858c2c4dbd3476f972a4ae00624b018cf4b81`. Named `"Space Mono"`, the public
+default, generic `"monospace"`, and the `"mono"` alias all resolve through
+those same bundled bytes. Inter and generic sans-serif resolution are
+unchanged.
+
+Applications must expect monospace glyph metrics, measured widths, wrapping,
+layout geometry, and any derived snapshots or hashes to change. Review stored
+goldens and application-owned layout assumptions instead of treating the new
+face as metrically interchangeable with Geist Mono.
+
 ## Deliberate limits
 
-This migration establishes deterministic theme authority only. It does not
-transport weights or features through `FontToken`, text primitives, text
-layout, shaping, or renderers. In particular, storing `"tabular-nums"` does not
-enable or prove tabular figures in any consumer. It also does not bundle or
-download new fonts, change the text engine, prove that a platform can load a
-named family, define fallback behavior, change glyph metrics or baseline
-placement, or provide browser, Vello, DPI, or visual review evidence. Existing
-font assets and their license records are unchanged. Those concerns require
-separate evidence before any typography requirement can be accepted.
+The semantic foundation still does not transport weights or features through
+`FontToken`, text primitives, text layout, shaping, or renderers. In
+particular, storing `"tabular-nums"` does not enable or prove tabular figures
+in any consumer.
+
+The Space Mono follow-up advances only deterministic Mono text-system
+alignment for `STERN-TYP-000`, which remains Partial. Exact asset and license
+provenance makes `STERN-TYP-006` Partial. `STERN-TYP-001` and
+`STERN-TYP-003` are preserved without advancing; `STERN-TYP-002`,
+`STERN-TYP-004`, `STERN-TYP-005`, and `STERN-TYP-007` do not advance.
+Nothing is Accepted.
+
+This bounded evidence does not prove Space Grotesk loading, platform or
+non-Latin fallback, failed-load layout stability, IME behavior, weight or
+feature transport, tabular figures, widget adoption, optical baselines, DPI
+legibility, renderer or browser output, or GPU/manual visual review.
