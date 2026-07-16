@@ -230,17 +230,39 @@ attachment change is introduced. Hidden, disabled, pointer, keyboard, action
 source/context/order, cursor, repaint, focus, semantic, and geometry behavior
 remain the existing contracts; action evidence is regression-only.
 
+Canonical retained `Ui::virtual_table` now applies the policy only to final
+complete-source body-cell label primitives at the exact prepared-cell span
+`(rect.width - theme.controls.padding_x * 2.0_f32).max(0.0_f32)`. This adoption
+adds no public API: `Ui::virtual_table`, `VirtualTableConfig`, `TableColumn`,
+`VirtualTableRow`, selection/output models, constructors, fields, methods,
+exports, qualified modules, facade root, and default prelude remain unchanged.
+It adds no public column overflow configuration, copied-value or editing API,
+tooltip, helper, alias, theme or spacing surface, `TextPrimitive` field, or
+renderer command. Header text and sort arrows remain generic Visible/layoutless
+consumers, and generic retained attachment remains the only fallback authority.
+
+Stable row/column/cell identities, both selection and navigation modes, focus
+annuli, sort/resize outputs, two-axis scroll transforms, bounded
+materialization, callbacks, semantics, and complete caller-owned cell labels
+remain application-owned existing contracts. Retained layout IDs are
+presentation-cache identity only and may be shared by equal
+source/style/effective-width cells. Table-family evidence is regression-only;
+there is no claim for copied values, editing, column-configurable overflow,
+header overflow, auto-sizing, pinning, or numeric tabular shaping.
+
 This advances only `STERN-TYP-004` to stronger bounded Partial. Component
 evidence covers selection and placeholder states, property-label state and
-fixed-column topology, standard and delegated action-button states, exact
-retained identity and rejection, and registered Vello topology.
+fixed-column topology, standard and delegated action-button states, retained
+virtual-table body cells, exact retained identity and rejection, and registered
+Vello topology.
 `STERN-DEN-004` advances only to bounded Partial for finite-positive computed
-property-label and button-label spans; nonpositive spans make no endpoint or
-non-overlap claim. Existing Partial evidence for `STERN-TYP-000`,
+property-label, button-label, and prepared body-cell spans; nonpositive spans
+make no endpoint or non-overlap claim. Existing Partial evidence for `STERN-TYP-000`,
 `STERN-TYP-002`, and `STERN-TYP-006` is preserved, while `STERN-TYP-001` and
 `STERN-TYP-003` do not advance. `STERN-DEN-003`, `STERN-STA-001` through
-`STERN-STA-007`, and button action routing are regression-only; no
-`STERN-ACT-*` requirement advances. This makes no claim about copied values,
+`STERN-STA-007`, button action routing, and table-family requirements are
+regression-only; no `STERN-ACT-*` or `STERN-TBL-*` requirement advances. This
+makes no claim about copied values,
 tooltips, editable selection, other truncating components,
 start/middle/multiline ellipsis, baseline behavior, browser output, GPU output,
 or manual review. `STERN-TYP-005`, `STERN-TYP-007`,
