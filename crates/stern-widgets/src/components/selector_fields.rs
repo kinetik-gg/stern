@@ -2,9 +2,9 @@ use super::{
     ComponentState, CursorShape, DropTargetResponse, DropdownModel, DropdownTriggerPresentation,
     IconId, Primitive, Rect, RectPrimitive, Response, SemanticAction, SemanticActionKind,
     SemanticNode, SemanticRole, SemanticValue, TextEditState, TextFieldAccess, TextFieldOutput,
-    TextLayoutStore, Theme, UiInput, UiMemory, WidgetId, WidgetOutput, drop_target,
-    field_text_primitive, finite_widget_extent, pressable, suppress_disabled_interaction_reporting,
-    text_field_with_access_runtime_metadata_and_fence,
+    TextLayoutKey, TextLayoutStore, TextOverflow, TextStyle, Theme, UiInput, UiMemory, WidgetId,
+    WidgetOutput, drop_target, field_text_primitive, finite_widget_extent, pressable,
+    suppress_disabled_interaction_reporting, text_field_with_access_runtime_metadata_and_fence,
     text_field_with_text_layouts_and_caret_visibility, with_hover_cursor, with_response_state,
 };
 use stern_core::Ui as CoreUi;
@@ -305,6 +305,21 @@ pub fn select_field(
     memory: &mut UiMemory,
     theme: &Theme,
 ) -> SelectFieldOutput {
+    select_field_with_text_layouts(id, rect, label, model, config, input, memory, theme, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn select_field_with_text_layouts(
+    id: WidgetId,
+    rect: Rect,
+    label: impl Into<String>,
+    model: &DropdownModel,
+    config: SelectFieldConfig,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    text_layouts: Option<&mut TextLayoutStore>,
+) -> SelectFieldOutput {
     let label = label.into();
     let has_enabled_item = model.items().iter().any(|item| item.enabled);
     let interactions_disabled = config.disabled || config.read_only || !has_enabled_item;
@@ -332,12 +347,20 @@ pub fn select_field(
         (rect.width - recipe.padding_x * 2.0 - arrow_width).max(0.0),
         rect.height,
     );
-    primitives.push(field_text_primitive(
-        text_rect,
-        presentation.label.clone(),
-        &recipe,
-        theme,
-    ));
+    let mut value_primitive =
+        field_text_primitive(text_rect, presentation.label.clone(), &recipe, theme);
+    if let (Some(text_layouts), Primitive::Text(text)) = (text_layouts, &mut value_primitive) {
+        text.layout = text_layouts.try_layout_id(
+            TextLayoutKey::new(
+                text.text.clone(),
+                TextStyle::new(text.family.clone(), text.size, text.line_height),
+                text_rect.width,
+                false,
+            )
+            .with_overflow(TextOverflow::EndEllipsis),
+        );
+    }
+    primitives.push(value_primitive);
     if arrow_width > 0.0 {
         primitives.push(field_text_primitive(
             Rect::new(rect.max_x() - arrow_width, rect.y, arrow_width, rect.height),

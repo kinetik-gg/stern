@@ -196,12 +196,22 @@ renderer reconciliation; and registered Vello glyph topology at `1.0`, `1.25`,
 `1.5`, and `2.0` without fallback cache activity. It does not prove raster
 pixels or visual acceptance.
 
-This advances only `STERN-TYP-004` to bounded Partial. No component opts into
-the policy, so this makes no claim about component semantics, accessible or
-copied values, tooltips, editable selection, start/middle/multiline ellipsis,
-baseline behavior, browser output, GPU output, or manual review. No typography
-parity record is Accepted, and every other typography requirement preserves
-its prior status.
+Canonical retained `Ui::select_field` now applies the policy to complete
+selected values and placeholders at the exact text rectangle while preserving
+complete primitive and semantic text and a separate disclosure affordance.
+This adoption adds no public API: the existing `Ui::select_field` signature is
+unchanged, its retained helper is crate-private, the public low-level
+`select_field(...)` remains layoutless, and no root, prelude, or facade export
+is added.
+
+This advances only `STERN-TYP-004` to stronger bounded Partial. Component
+evidence covers selection and placeholder states, disabled/read-only/open
+presentation, exact retained identity and rejection, and registered Vello
+topology. It makes no claim about copied values, tooltips, editable selection,
+other truncating components, start/middle/multiline ellipsis, baseline
+behavior, browser output, GPU output, or manual review. No typography parity
+record is Accepted, and every other typography requirement preserves its prior
+status.
 
 ### Qualified size foundation
 

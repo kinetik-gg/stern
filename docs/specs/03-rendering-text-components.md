@@ -387,9 +387,18 @@ Full-fit requests and all visible layouts retain normal navigation.
 Overflow is part of key equality, hashing, deterministic cache ordering, and
 retained ID identity. Registered renderer and Vello paths consume the existing
 shaped-layout resource authority; this policy does not add overflow state to
-`TextPrimitive` or render commands. Editable widgets remain visible. Component
-adoption, accessible and copied values, tooltips, multiline/start/middle
-ellipsis, and visual acceptance are separate work.
+`TextPrimitive` or render commands. Editable widgets remain visible.
+
+Canonical retained `Ui::select_field` is the first bounded component adoption.
+Its complete selected value or placeholder requests `EndEllipsis` at the exact
+post-padding, post-disclosure text-rectangle width. The complete label remains
+in the primitive, presentation, retained key, renderer resource, semantic
+description, and semantic value; placeholder state remains unselected. The
+disclosure primitive stays separate and fixed. The direct public
+`select_field(...)` compatibility helper remains layoutless, and failed store
+admission or ineligible geometry/source preserves complete visible text. Other
+component adoption, copied values, tooltips, editable selection,
+multiline/start/middle ellipsis, and visual acceptance remain separate work.
 
 `ShapedTextLayout::navigation(source)` validates the complete public layout and
 returns one owned `ShapedTextNavigation`. It groups duplicate positioned glyphs

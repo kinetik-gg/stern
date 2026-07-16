@@ -12,7 +12,7 @@ use stern_core::{
 };
 use stern_text::{
     OrderedTextInputResult, ShapedTextLayout, TextEditMode, TextEditState, TextFeatureSet,
-    TextLayoutKey, TextLayoutStore, TextSelection, TextStyle,
+    TextLayoutKey, TextLayoutStore, TextOverflow, TextSelection, TextStyle,
 };
 
 use crate::{
@@ -88,6 +88,7 @@ pub(crate) use search::{
 };
 pub(crate) use selector_fields::{
     path_field_with_access_runtime, path_field_with_text_layouts_and_caret_visibility,
+    select_field_with_text_layouts,
 };
 pub(crate) use text_fields::{
     multi_line_text_field_with_access_runtime,

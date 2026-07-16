@@ -9,7 +9,7 @@ use stern_text::{
     CosmicTextEngine, TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextOverflow,
     TextStyle,
 };
-use stern_widgets::Ui;
+use stern_widgets::{DropdownItem, DropdownItemId, DropdownModel, SelectFieldConfig, Ui};
 
 fn resource(id: TextLayoutId, key: TextLayoutKey) -> TextLayoutResource {
     let mut engine = CosmicTextEngine::new();
@@ -120,6 +120,124 @@ fn retained_numeric_widget_encodes_registered_tabular_glyphs_without_fallback() 
                 .glyph_runs
                 .iter()
                 .all(|run| { (run.font_size - logical_font_size * scale).abs() <= 0.000_1 })
+        );
+        assert_eq!(renderer.cached_text_layout_count(), 0);
+        assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn retained_select_widget_encodes_registered_ellipsis_without_arrow_fallback() {
+    let source =
+        "Canonical retained select source stays complete while Vello encodes its end ellipsis";
+    let item_id = DropdownItemId::from_raw(17);
+    let mut model = DropdownModel::from_items([DropdownItem::new(item_id, source)]);
+    assert!(model.set_selected_id(item_id));
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    let mut store = TextLayoutStore::new();
+    let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+    let _ = ui.select_field(
+        "material",
+        Rect::new(0.0, 0.0, 96.0, 24.0),
+        "Material",
+        &model,
+        SelectFieldConfig::new("Choose material"),
+    );
+    let frame = ui.finish_output();
+    let value_id = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == source => text.layout,
+            _ => None,
+        })
+        .expect("registered retained select value");
+    let arrow_id = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == "v" => text.layout,
+            _ => None,
+        })
+        .expect("separate registered disclosure");
+    assert_ne!(value_id, arrow_id);
+    let value = store
+        .stored_layout(value_id)
+        .expect("retained select value entry");
+    let arrow = store
+        .stored_layout(arrow_id)
+        .expect("retained select disclosure entry");
+    assert_eq!(value.key.text, source);
+    assert_eq!(value.key.overflow, TextOverflow::EndEllipsis);
+    assert!(value.layout.is_elided());
+    assert_eq!(arrow.key.text, "v");
+    assert_eq!(arrow.key.overflow, TextOverflow::Visible);
+    let value_ids = value
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let arrow_ids = arrow
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let marker_index = value
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| &run.glyphs)
+        .enumerate()
+        .filter_map(|(index, glyph)| glyph.elided.then_some(index))
+        .collect::<Vec<_>>();
+    assert_eq!(marker_index.len(), 1);
+    let logical_font_size = value.key.style.size();
+
+    let mut resources = RenderResources::new();
+    let mut sync = TextLayoutResourceSync::new();
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(report.added, 2);
+    assert_eq!(report.retained, 2);
+    assert_eq!(
+        resources
+            .text_layout_resource(value_id)
+            .expect("reconciled select resource")
+            .key
+            .text,
+        source
+    );
+
+    let mut renderer = VelloRenderer::new();
+    for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: viewport(f64::from(scale)),
+            primitives: &frame.primitives,
+            resources: &resources,
+        });
+        let encoding = renderer.scene().encoding();
+        let encoded_ids = encoding
+            .resources
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.id)
+            .collect::<Vec<_>>();
+        let split = value_ids.len();
+
+        assert!(output.diagnostics.is_empty());
+        assert_eq!(&encoded_ids[..split], value_ids.as_slice());
+        assert_eq!(&encoded_ids[split..], arrow_ids.as_slice());
+        assert_eq!(encoded_ids[marker_index[0]], value_ids[marker_index[0]]);
+        assert!(
+            encoding
+                .resources
+                .glyph_runs
+                .iter()
+                .all(|run| (run.font_size - logical_font_size * scale).abs() <= 0.000_1)
         );
         assert_eq!(renderer.cached_text_layout_count(), 0);
         assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);

@@ -14,6 +14,8 @@ use stern_text::{
     TextComposition, TextEditState, TextLayoutKey, TextLayoutStore, TextSelection, TextStyle,
 };
 
+use crate::components::select_field_with_text_layouts as select_field_widget;
+
 #[allow(unused_imports)]
 use super::{
     RadioGroupChoice, RadioGroupOutput, ScrollAreaOutput, TextVisualState, Ui,
@@ -49,7 +51,7 @@ use crate::{
     radio_button as radio_button_widget, radio_button_with_label as radio_button_with_label_widget,
     radio_button_with_label_target as radio_button_with_label_target_widget,
     search_field_with_text_layouts_and_caret_visibility as search_field_widget,
-    select_field as select_field_widget, separator as separator_widget, slider as slider_widget,
+    separator as separator_widget, slider as slider_widget,
     slider_with_label as slider_with_label_widget,
     slider_with_label_and_step as slider_with_label_and_step_widget,
     slider_with_step as slider_with_step_widget, tab_button as tab_button_widget,
@@ -206,8 +208,19 @@ impl Ui<'_> {
     ) -> SelectFieldOutput {
         let id = self.id(key);
         let theme = self.theme;
+        let text_layouts = self.text_layouts.as_deref_mut();
         let (input, memory) = self.runtime.input_and_memory_mut();
-        let output = select_field_widget(id, rect, label, model, config, input, memory, theme);
+        let output = select_field_widget(
+            id,
+            rect,
+            label,
+            model,
+            config,
+            input,
+            memory,
+            theme,
+            text_layouts,
+        );
         self.push_widget_output(&output.widget);
         output
     }

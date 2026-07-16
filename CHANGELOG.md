@@ -10,6 +10,17 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Canonical retained `Ui::select_field` now applies
+  `TextOverflow::EndEllipsis` to selected values and placeholders at the exact
+  post-padding, post-disclosure text width. Complete source remains in the
+  primitive, presentation, retained key, renderer resource, semantic
+  description, and semantic value; placeholders remain unselected and the
+  disclosure stays separate. Store rejection and ineligible sources or
+  geometry fail soft to complete visible/layoutless text. Public signatures and
+  exports are unchanged, and the direct `select_field(...)` compatibility path
+  remains layoutless. Registered Vello evidence covers the component topology
+  at `1.0`, `1.25`, `1.5`, and `2.0`. `STERN-TYP-004` advances only to stronger
+  bounded Partial; nothing is Accepted. See `docs/typography-migration.md`.
 - **Breaking:** Added qualified retained single-line end ellipsis through
   `TextOverflow::{Visible, EndEllipsis}` and `TextLayoutKey::with_overflow`.
   Constructors default to `Visible`; public key literals must add the field.
@@ -19,10 +30,11 @@ published, or accepted as an alpha release.
   `ShapedTextLayout::is_elided()` reports presentation elision, and exhaustive
   `TextNavigationError` matches must handle `ElidedLayout`. Overflow remains in
   cache/store IDs and renderer-resource identity, and registered Vello consumes
-  the existing shaped-layout authority. No widget opts in, no `TextPrimitive`
-  or render-command shape changes, and no accessible/copy/tooltip behavior is
-  claimed. `STERN-TYP-004` advances only to bounded Partial; nothing is
-  Accepted. See `docs/typography-migration.md`.
+  the existing shaped-layout authority. The policy adds no `TextPrimitive` or
+  render-command shape and makes no copied-value or tooltip claim. The retained
+  select-trigger entry above is its first bounded component consumer.
+  `STERN-TYP-004` remains Partial; nothing is Accepted. See
+  `docs/typography-migration.md`.
 - **Breaking:** Canonical retained `Ui` numeric inputs, numeric scrubs, and
   vector numeric subfields now resolve `FontFeatureToken::Numeric` through the
   bounded `TextFeatureSet` bridge and shape bundled Inter digits with tabular
