@@ -9,7 +9,10 @@ use stern_text::{
     CosmicTextEngine, TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextOverflow,
     TextStyle,
 };
-use stern_widgets::{DropdownItem, DropdownItemId, DropdownModel, SelectFieldConfig, Ui};
+use stern_widgets::{
+    DropdownItem, DropdownItemId, DropdownModel, ItemId, SelectFieldConfig, Ui,
+    inspector::{PropertyGridConfig, PropertyGridRow, PropertyGridRowStatus},
+};
 
 fn resource(id: TextLayoutId, key: TextLayoutKey) -> TextLayoutResource {
     let mut engine = CosmicTextEngine::new();
@@ -232,6 +235,156 @@ fn retained_select_widget_encodes_registered_ellipsis_without_arrow_fallback() {
         assert_eq!(&encoded_ids[..split], value_ids.as_slice());
         assert_eq!(&encoded_ids[split..], arrow_ids.as_slice());
         assert_eq!(encoded_ids[marker_index[0]], value_ids[marker_index[0]]);
+        assert!(
+            encoding
+                .resources
+                .glyph_runs
+                .iter()
+                .all(|run| (run.font_size - logical_font_size * scale).abs() <= 0.000_1)
+        );
+        assert_eq!(renderer.cached_text_layout_count(), 0);
+        assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn retained_property_widget_encodes_label_ellipsis_without_state_glyph_fallback() {
+    let source =
+        "Canonical retained property label source stays complete while Vello encodes ellipsis";
+    let row = PropertyGridRow::property(ItemId::from_raw(29), source, 0)
+        .with_help_text("Complete help remains application-owned")
+        .with_status(PropertyGridRowStatus::error("Error remains separate"));
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    let mut store = TextLayoutStore::new();
+    let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+    let output = ui
+        .property_grid(
+            "properties",
+            Rect::new(0.0, 0.0, 96.0, 24.0),
+            &[row],
+            PropertyGridConfig::default().with_overscan(0),
+            |_, _| (),
+        )
+        .expect("valid retained property grid");
+    let frame = ui.finish_output();
+    let label_id = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == source => text.layout,
+            _ => None,
+        })
+        .expect("registered retained property label");
+    let help_id = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == "?" => text.layout,
+            _ => None,
+        })
+        .expect("separate registered property help glyph");
+    let status_id = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == "x" => text.layout,
+            _ => None,
+        })
+        .expect("separate registered property status glyph");
+    assert_ne!(label_id, help_id);
+    assert_ne!(label_id, status_id);
+    assert_ne!(help_id, status_id);
+
+    let label = store
+        .stored_layout(label_id)
+        .expect("retained property label entry");
+    let help = store
+        .stored_layout(help_id)
+        .expect("retained property help entry");
+    let status = store
+        .stored_layout(status_id)
+        .expect("retained property status entry");
+    let geometry = output.visible_rows[0];
+    assert_eq!(label.key.text, source);
+    assert_eq!(label.key.overflow, TextOverflow::EndEllipsis);
+    assert_eq!(
+        label.key.width_bits,
+        ((geometry.label_rect.width - 6.0_f32) - 22.0_f32)
+            .max(0.0_f32)
+            .to_bits()
+    );
+    assert!(label.layout.is_elided());
+    assert_eq!(help.key.text, "?");
+    assert_eq!(help.key.overflow, TextOverflow::Visible);
+    assert_eq!(status.key.text, "x");
+    assert_eq!(status.key.overflow, TextOverflow::Visible);
+    let label_ids = label
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let help_ids = help
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let status_ids = status
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let marker_indexes = label
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| &run.glyphs)
+        .enumerate()
+        .filter_map(|(index, glyph)| glyph.elided.then_some(index))
+        .collect::<Vec<_>>();
+    assert_eq!(marker_indexes.len(), 1);
+    let logical_font_size = label.key.style.size();
+
+    let mut resources = RenderResources::new();
+    let mut sync = TextLayoutResourceSync::new();
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(report.added, 3);
+    assert_eq!(report.retained, 3);
+    assert_eq!(
+        resources
+            .text_layout_resource(label_id)
+            .expect("reconciled property label resource")
+            .key
+            .text,
+        source
+    );
+
+    let mut expected_ids = label_ids.clone();
+    expected_ids.extend_from_slice(&help_ids);
+    expected_ids.extend_from_slice(&status_ids);
+    let mut renderer = VelloRenderer::new();
+    for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: viewport(f64::from(scale)),
+            primitives: &frame.primitives,
+            resources: &resources,
+        });
+        let encoding = renderer.scene().encoding();
+        let encoded_ids = encoding
+            .resources
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.id)
+            .collect::<Vec<_>>();
+
+        assert!(output.diagnostics.is_empty());
+        assert_eq!(encoded_ids, expected_ids);
+        assert_eq!(encoded_ids[marker_indexes[0]], label_ids[marker_indexes[0]]);
         assert!(
             encoding
                 .resources

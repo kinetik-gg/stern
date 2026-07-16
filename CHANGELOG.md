@@ -10,6 +10,22 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Canonical retained `Ui::property_grid` now applies
+  `TextOverflow::EndEllipsis` only to ordinary property-row main labels. The
+  complete `row.label` plus presentation-only required `" *"` suffix remains
+  in the primitive, retained key, and renderer resource while semantics retain
+  exact undecorated `row.label`. Width uses the existing `6.0` label inset and
+  fixed leftmost trailing-glyph origin: help presence (including `Some("")`)
+  reserves `22.0`, otherwise accented status reserves `10.0`. Help/status
+  glyphs and section titles remain separate generic visible/layoutless text.
+  Admission rejection, nonpositive spans, and multiline sources preserve
+  complete visible/layoutless text without changing public APIs, property-grid
+  models, callbacks, access, intents, ordering, virtualization, generic
+  attachment, text primitives, or renderer commands. Registered Vello evidence
+  covers CPU topology at `1.0`, `1.25`, `1.5`, and `2.0`, not pixels or visual
+  acceptance. `STERN-TYP-004` advances only to stronger bounded Partial, and
+  `STERN-DEN-004` advances only to bounded Partial for finite-positive computed
+  spans; nothing is Accepted. See `docs/typography-migration.md`.
 - **Breaking:** Canonical retained `Ui::select_field` now applies
   `TextOverflow::EndEllipsis` to selected values and placeholders at the exact
   post-padding, post-disclosure text width. Complete source remains in the

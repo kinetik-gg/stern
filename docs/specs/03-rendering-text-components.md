@@ -400,6 +400,32 @@ admission or ineligible geometry/source preserves complete visible text. Other
 component adoption, copied values, tooltips, editable selection,
 multiline/start/middle ellipsis, and visual acceptance remain separate work.
 
+Canonical retained `Ui::property_grid` also opts only
+`PropertyGridRowKind::Property` main labels into `EndEllipsis`. It first builds
+the complete presentation source from `row.label`, appending the
+presentation-only `" *"` suffix for required rows, while row semantics retain
+the exact undecorated `row.label`. The retained span is computed from the
+current label column in the fixed order `((label_rect.width - 6.0) -
+reserved_right).max(0.0)`: help presence reserves `22.0`, otherwise an accented
+status reserves `10.0`, otherwise nothing is reserved. Help wins when both are
+present, including `Some("")`, because its `?` origin is the leftmost trailing
+glyph origin. The existing label, help, and status origins remain respectively
+`label_rect.x + 6`, `max_x - 22`, and `max_x - 10`; help and status keep
+separate generic visible layouts.
+
+An admitted property label keeps its full-source `EndEllipsis` key and retained
+identity even when a nonpositive span or multiline source makes elision
+ineligible; that shaped topology remains visible and contains no generated
+marker. Admission rejection falls through to the existing complete-source
+generic visible or layoutless path. Section titles remain at `label_rect.x + 8`
+on their existing generic visible/layoutless path. This adoption changes no
+property-grid model, layout, semantics, callback, access, intent,
+virtualization, public API, text primitive, or renderer command contract.
+Registered Vello evidence covers deterministic CPU topology transport at
+`1.0`, `1.25`, `1.5`, and `2.0`; it does not establish raster pixels, logical
+non-overlap for zero-width spans, tooltip or copied-value behavior, or visual
+acceptance.
+
 `ShapedTextLayout::navigation(source)` validates the complete public layout and
 returns one owned `ShapedTextNavigation`. It groups duplicate positioned glyphs
 by exact cluster range, divides each cluster by extended-grapheme count, and
