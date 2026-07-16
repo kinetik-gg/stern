@@ -603,6 +603,7 @@ fn hot_frames_reuse_identity_and_source_width_or_suffix_changes_do_not() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn row_access_geometry_callbacks_order_and_semantics_remain_application_owned() {
     let rows = vec![
         PropertyGridRow::property(ItemId::from_raw(71), "Editable", 2),
