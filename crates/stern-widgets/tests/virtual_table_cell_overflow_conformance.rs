@@ -1470,7 +1470,6 @@ fn production_call_graph_limits_explicit_adoption_to_virtual_table_body_cells() 
             ("src/components/selector_fields.rs", 1),
             ("src/ui/basic_controls.rs", 1),
             ("src/ui/property_grid.rs", 1),
-            ("src/ui/virtual_table.rs", 1),
         ]
     );
 
@@ -1527,12 +1526,8 @@ fn production_call_graph_limits_explicit_adoption_to_virtual_table_body_cells() 
         .and_then(|(_, rest)| rest.split_once("fn virtual_table_text_primitive("))
         .map(|(body, _)| body)
         .expect("bounded body painter source");
-    assert_eq!(
-        body_boundary
-            .matches("with_overflow(TextOverflow::EndEllipsis)")
-            .count(),
-        1
-    );
+    assert!(body_boundary.contains("let overflow = TextOverflow::EndEllipsis;"));
+    assert_eq!(body_boundary.matches(".with_overflow(overflow)").count(), 1);
     assert!(body_boundary.contains("let raw_span = rect.width - padding_x * 2.0_f32;"));
     assert!(body_boundary.contains("let label_width = raw_span.max(0.0_f32);"));
     assert!(body_boundary.contains("self.primitive(Primitive::Text(text));"));
