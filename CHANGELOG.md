@@ -10,6 +10,17 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Canonical retained `Ui` numeric inputs, numeric scrubs, and
+  vector numeric subfields now resolve `FontFeatureToken::Numeric` through the
+  bounded `TextFeatureSet` bridge and shape bundled Inter digits with tabular
+  advances. Numeric measurements, caret positions, and derived snapshots can
+  change; public widget signatures and `TextPrimitive` are unchanged. The same
+  feature-bearing style now drives hit/navigation geometry, final retained
+  shaping, renderer reconciliation, and registered Vello glyph encoding.
+  Unsupported customized feature values fail soft to `NONE`, generic text
+  remains feature-disabled, and direct/layoutless compatibility paths are not
+  covered. `STERN-TYP-002` advances only to stronger bounded Partial. See
+  `docs/typography-migration.md`.
 - **Breaking:** Added the opaque fixed-size `TextFeatureSet` and public
   `TextStyle::features` field. `TextStyle::new(...)` remains feature-disabled;
   explicit `TABULAR_NUMBERS` opt-in now maps to OpenType `tnum=1` during
@@ -17,8 +28,8 @@ published, or accepted as an alpha release.
   renderer-resource identity. Deterministic bundled-Inter evidence proves
   unequal default digit advances and equal enabled digit/changing-string
   advances within `0.001` logical unit. `FontFeatureScale` remains the sole
-  semantic token authority, no component adopts the feature, and
-  `STERN-TYP-002` advances only to bounded Partial. See
+  semantic token authority, while adoption remains opt-in outside the
+  canonical retained numeric path. `STERN-TYP-002` remains Partial. See
   `docs/typography-migration.md`.
 - **Breaking:** The semantic Brand family now resolves through the exact
   bundled Space Grotesk variable face from revision
