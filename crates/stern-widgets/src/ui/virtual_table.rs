@@ -574,7 +574,6 @@ impl Ui<'_> {
             let padding_x = self.theme.controls.padding_x;
             let raw_span = rect.width - padding_x * 2.0_f32;
             let label_width = raw_span.max(0.0_f32);
-            let overflow = TextOverflow::EndEllipsis;
             text.layout = text_layouts.try_layout_id(
                 TextLayoutKey::new(
                     text.text.clone(),
@@ -582,7 +581,7 @@ impl Ui<'_> {
                     label_width,
                     false,
                 )
-                .with_overflow(overflow),
+                .with_overflow(TextOverflow::EndEllipsis),
             );
         }
         self.primitive(Primitive::Text(text));
