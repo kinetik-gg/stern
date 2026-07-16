@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use stern_core::{
     FrameContext, FrameOutput, PhysicalSize, PointerOrder, Primitive, Rect, ScaleFactor,
-    SemanticRole, Size, TextPrimitive, TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId,
-    default_dark_theme,
+    SemanticRole, Size, TextPrimitive, TimeInfo, Transform, UiInput, UiMemory, Vec2, ViewportInfo,
+    WidgetId, default_dark_theme,
 };
 use stern_text::{TextFeatureSet, TextLayoutStore, TextOverflow};
 use stern_widgets::{
@@ -139,6 +139,17 @@ fn marker_count(store: &TextLayoutStore, text: &TextPrimitive) -> usize {
         .flat_map(|run| &run.glyphs)
         .filter(|glyph| glyph.elided)
         .count()
+}
+
+fn transforms(frame: &FrameOutput) -> Vec<Transform> {
+    frame
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::TransformBegin(transform) => Some(*transform),
+            _ => None,
+        })
+        .collect()
 }
 
 #[test]
@@ -544,5 +555,220 @@ fn hot_frames_source_width_and_clamped_width_obey_retained_identity_boundaries()
     assert_eq!(
         body_semantics(&clamped_b.frame, source)[0].bounds.width,
         80.0
+    );
+}
+
+#[test]
+fn translation_and_fractional_horizontal_scroll_preserve_logical_width_and_identity() {
+    let source = "Complete translated and horizontally scrolled body-cell source";
+    let items = projection(&[1]);
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let mut selection = VirtualTableSelection::new();
+    let seed = run_table(
+        Some(&mut store),
+        &items,
+        config(BOUNDS, [200.0, 200.0], VirtualTableSelectionMode::Cell),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |_| VirtualTableRow::new([source, source]),
+    );
+    let seed_texts = body_texts(&seed.frame, source);
+    let seed_ids = seed_texts
+        .iter()
+        .map(|text| text.layout.expect("seed body-cell identity"))
+        .collect::<Vec<_>>();
+    assert_eq!(seed_ids.len(), 2);
+    assert_eq!(seed_ids[0], seed_ids[1]);
+    let width_bits = store
+        .stored_layout(seed_ids[0])
+        .expect("seed retained body-cell entry")
+        .key
+        .width_bits;
+    let accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
+
+    let moved_bounds = Rect::new(
+        BOUNDS.x + 40.0,
+        BOUNDS.y + 20.0,
+        BOUNDS.width,
+        BOUNDS.height,
+    );
+    let moved = run_table(
+        Some(&mut store),
+        &items,
+        config(
+            moved_bounds,
+            [200.0, 200.0],
+            VirtualTableSelectionMode::Cell,
+        ),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |_| VirtualTableRow::new([source, source]),
+    );
+    let moved_texts = body_texts(&moved.frame, source);
+    assert_eq!(
+        moved_texts
+            .iter()
+            .map(|text| text.layout.expect("moved body-cell identity"))
+            .collect::<Vec<_>>(),
+        seed_ids
+    );
+    for (seed_text, moved_text) in seed_texts.iter().zip(moved_texts) {
+        assert_eq!(
+            (moved_text.origin.x - seed_text.origin.x).to_bits(),
+            40.0_f32.to_bits()
+        );
+        assert_eq!(
+            (moved_text.origin.y - seed_text.origin.y).to_bits(),
+            20.0_f32.to_bits()
+        );
+    }
+    assert_eq!(
+        store
+            .stored_layout(seed_ids[0])
+            .expect("moved retained body-cell entry")
+            .key
+            .width_bits,
+        width_bits
+    );
+    assert_eq!(
+        (
+            store.len(),
+            store.retained_payload_bytes(),
+            store.change_cursor()
+        ),
+        accounting
+    );
+
+    memory.set_scroll_offset(seed.root, Vec2::new(30.25, 0.0));
+    let scrolled = run_table(
+        Some(&mut store),
+        &items,
+        config(BOUNDS, [200.0, 200.0], VirtualTableSelectionMode::Cell),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |_| VirtualTableRow::new([source, source]),
+    );
+    let scrolled_texts = body_texts(&scrolled.frame, source);
+    assert_eq!(scrolled.output.window.offset, Vec2::new(30.25, 0.0));
+    assert_eq!(
+        scrolled_texts
+            .iter()
+            .map(|text| text.layout.expect("scrolled body-cell identity"))
+            .collect::<Vec<_>>(),
+        seed_ids
+    );
+    assert_eq!(
+        scrolled_texts
+            .iter()
+            .map(|text| text.origin)
+            .collect::<Vec<_>>(),
+        seed_texts
+            .iter()
+            .map(|text| text.origin)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(transforms(&seed.frame).len(), 2);
+    assert_eq!(transforms(&scrolled.frame).len(), 2);
+    assert_eq!(transforms(&seed.frame)[0], Transform::IDENTITY);
+    assert_eq!(transforms(&seed.frame)[1], Transform::IDENTITY);
+    assert_eq!(
+        transforms(&scrolled.frame)[0],
+        Transform::translation(Vec2::new(-30.25, 0.0))
+    );
+    assert_eq!(
+        transforms(&scrolled.frame)[1],
+        Transform::translation(Vec2::new(-30.25, 0.0))
+    );
+    assert_eq!(
+        (
+            store.len(),
+            store.retained_payload_bytes(),
+            store.change_cursor()
+        ),
+        accounting
+    );
+}
+
+#[test]
+fn vertical_scroll_reuses_overlapping_cell_ids_and_preserves_exact_window_contract() {
+    let raw_ids = (1..=10).collect::<Vec<_>>();
+    let items = projection(&raw_ids);
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let mut selection = VirtualTableSelection::new();
+    let seed = run_table(
+        Some(&mut store),
+        &items,
+        config(BOUNDS, [119.3], VirtualTableSelectionMode::Row),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |item| VirtualTableRow::new([format!("Vertical row {}", item.id.raw())]),
+    );
+    assert_eq!(seed.output.window.body.visible_range, 0..4);
+    assert_eq!(seed.output.window.body.materialized_range, 0..5);
+    assert_eq!(seed.callbacks, [id(1), id(2), id(3), id(4), id(5)]);
+    assert_eq!(
+        seed.output
+            .rows
+            .iter()
+            .map(|row| row.id)
+            .collect::<Vec<_>>(),
+        seed.callbacks
+    );
+
+    let seed_ids = (1..=5)
+        .map(|raw| {
+            let source = format!("Vertical row {raw}");
+            (
+                raw,
+                body_texts(&seed.frame, &source)[0]
+                    .layout
+                    .expect("seed vertical body-cell identity"),
+            )
+        })
+        .collect::<Vec<_>>();
+    memory.set_scroll_offset(seed.root, Vec2::new(0.0, 20.0));
+    let scrolled = run_table(
+        Some(&mut store),
+        &items,
+        config(BOUNDS, [119.3], VirtualTableSelectionMode::Row),
+        &mut selection,
+        &mut memory,
+        UiInput::default(),
+        |item| VirtualTableRow::new([format!("Vertical row {}", item.id.raw())]),
+    );
+    assert_eq!(scrolled.output.window.offset, Vec2::new(0.0, 20.0));
+    assert_eq!(scrolled.output.window.body.visible_range, 1..5);
+    assert_eq!(scrolled.output.window.body.materialized_range, 1..6);
+    assert_eq!(scrolled.callbacks, [id(2), id(3), id(4), id(5), id(6)]);
+    assert_eq!(
+        scrolled
+            .output
+            .rows
+            .iter()
+            .map(|row| row.id)
+            .collect::<Vec<_>>(),
+        scrolled.callbacks
+    );
+    for (raw, expected_id) in seed_ids.into_iter().filter(|(raw, _)| *raw >= 2) {
+        let source = format!("Vertical row {raw}");
+        assert_eq!(
+            body_texts(&scrolled.frame, &source)[0].layout,
+            Some(expected_id)
+        );
+        assert_eq!(body_semantics(&scrolled.frame, &source).len(), 1);
+    }
+    assert_eq!(
+        transforms(&scrolled.frame)[1].dy.to_bits(),
+        (-20.0_f32).to_bits()
     );
 }
