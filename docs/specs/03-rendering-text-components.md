@@ -426,6 +426,39 @@ Registered Vello evidence covers deterministic CPU topology transport at
 non-overlap for zero-width spans, tooltip or copied-value behavior, or visual
 acceptance.
 
+Canonical retained `Ui::button` now opts only the final complete-source label
+primitive into `EndEllipsis`. The label width follows the existing standard
+button horizontal padding in this exact operation order:
+`let padding_x = theme.controls.padding_x; let raw_span = rect.width -
+padding_x * 2.0_f32; let label_width = raw_span.max(0.0_f32);`. In the pinned
+width matrix, the explicit positive `119.3` and `80.0` rectangle widths end
+exactly at `rect.max_x() - padding_x`. The `16.0`, `15.999`, and `1.0` cases
+retain positive-zero width bits and make no endpoint or non-overlap claim. The
+layout key derives its family, size, and line height from the unchanged final
+`TextPrimitive`, disables wrapping, and keeps default text features.
+
+`Ui::action_button` receives the same policy only through its unchanged
+delegation to `Ui::button`. Hidden actions still emit nothing; disabled actions
+remain visible and inert; pointer and keyboard activation still enqueue exactly
+the existing action ID, `ActionSource::Button`, context, and FIFO order.
+Descriptor icon, shortcut, checked, tooltip, and keyword metadata do not add
+button-label topology. The standalone public `button(...)` component remains
+complete-source and layoutless, while neighboring button-family and generic
+text consumers retain their existing policies.
+
+An admitted narrow, nonpositive, or multiline button label retains its
+full-source `EndEllipsis` key and ID without synthesizing a marker. Strict store
+rejection falls through to the unchanged complete-source generic Visible or
+layoutless attachment, without an unregistered ID. Invalid and nonfinite
+rectangles follow the same width expression without validation or early return;
+their existing primitive, semantic, and interaction topology is preserved.
+Registered standard/action-button Vello evidence covers deterministic CPU
+resource and glyph topology at `1.0`, `1.25`, `1.5`, and `2.0`, not raster
+pixels, GPU output, tooltips, copied values, or visual acceptance. This advances
+`STERN-TYP-004` only to stronger bounded Partial and `STERN-DEN-004` only to
+bounded Partial for the pinned positive `119.3` and `80.0` button-label fixture
+spans. Nothing is Accepted.
+
 `ShapedTextLayout::navigation(source)` validates the complete public layout and
 returns one owned `ShapedTextNavigation`. It groups duplicate positioned glyphs
 by exact cluster range, divides each cluster by extended-grapheme count, and

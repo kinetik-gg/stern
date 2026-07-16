@@ -11,7 +11,8 @@ use stern_core::{
 };
 #[allow(unused_imports)]
 use stern_text::{
-    TextComposition, TextEditState, TextLayoutKey, TextLayoutStore, TextSelection, TextStyle,
+    TextComposition, TextEditState, TextLayoutKey, TextLayoutStore, TextOverflow, TextSelection,
+    TextStyle,
 };
 
 #[allow(unused_imports)]
@@ -73,7 +74,24 @@ impl Ui<'_> {
         let id = self.id(key);
         let theme = self.theme;
         let (input, memory) = self.runtime.input_and_memory_mut();
-        let output = button_widget(id, rect, text, input, memory, theme, disabled);
+        let mut output = button_widget(id, rect, text, input, memory, theme, disabled);
+        if let (Some(text_layouts), Some(Primitive::Text(text))) = (
+            self.text_layouts.as_deref_mut(),
+            output.primitives.last_mut(),
+        ) {
+            let padding_x = theme.controls.padding_x;
+            let raw_span = rect.width - padding_x * 2.0_f32;
+            let label_width = raw_span.max(0.0_f32);
+            text.layout = text_layouts.try_layout_id(
+                TextLayoutKey::new(
+                    text.text.clone(),
+                    TextStyle::new(text.family.clone(), text.size, text.line_height),
+                    label_width,
+                    false,
+                )
+                .with_overflow(TextOverflow::EndEllipsis),
+            );
+        }
         self.push_interactive(output)
     }
 

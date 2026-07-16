@@ -326,6 +326,38 @@ resource/topology transport and separate help/status glyphs, not pixels,
 logical non-overlap at zero width, tooltip or copied-value behavior, or visual
 acceptance.
 
+Canonical retained `Ui::button` now opts only its existing final label
+primitive into the same policy. The retained width is computed in this exact
+order from the unchanged standard-button rectangle and theme control padding:
+`let padding_x = theme.controls.padding_x; let raw_span = rect.width -
+padding_x * 2.0_f32; let label_width = raw_span.max(0.0_f32);`. The key uses the
+label primitive's exact family, size, and line height with wrapping disabled and
+default features. Complete text remains in the primitive, retained key,
+renderer resource, and semantic label. This is a prerelease breaking rendering
+policy change without a public signature, export, theme, token, primitive, or
+renderer-command change.
+
+The existing `Ui::action_button` implementation is structurally unchanged and
+inherits the policy only because it delegates its complete descriptor label to
+`Ui::button`. Hidden actions remain absent, disabled actions remain visible and
+inert, and pointer/keyboard activation retains the exact action ID, button
+source, context, and FIFO ordering. Icon, shortcut, checked, tooltip, and
+keyword descriptor metadata remains unused by this button topology; no
+toolbar, menu, split, busy, disclosure, or icon-button behavior is added. The
+standalone public `button(...)` component stays complete-source and layoutless,
+and neighboring retained button-family consumers keep generic Visible policy.
+
+Admitted nonpositive-width and multiline labels keep a complete-source
+`EndEllipsis` key and ID but no generated marker. Strict rejection leaves the
+store and change cursor unchanged and falls through to the existing
+complete-source generic Visible or layoutless attachment. Invalid and
+nonfinite rectangles follow the literal width expression while preserving the
+existing geometry, semantic, response, cursor, repaint, focus, and action
+topology; no geometry-validity or non-overlap claim is added. Registered
+standard/action-button Vello CPU evidence at `1.0`, `1.25`, `1.5`, and `2.0`
+proves resource and glyph topology without fallback-cache activity, not raster,
+GPU, tooltip, copied-value, or visual acceptance.
+
 ## Deliberate limits
 
 The semantic foundation still does not transport weights through `FontToken`,
@@ -345,15 +377,17 @@ vector numeric subfields, including registered Vello glyph encoding. It is not
 Accepted because direct/layoutless compatibility paths, timelines, frame
 counters, timecodes, and tables do not consume the feature and no visual
 acceptance was performed. `STERN-TYP-001` and `STERN-TYP-003` are preserved
-without advancing. The retained select-trigger and property-label adoptions
-advance only `STERN-TYP-004` to stronger bounded Partial for canonical selected
-values, placeholders, and inspector property labels with complete-source
-semantics and registered Vello topology. `STERN-DEN-004` advances only to
-bounded Partial for finite-positive computed property-label spans; nonpositive
+without advancing. The retained select-trigger, property-label, and standard
+and delegated action-button adoptions advance only `STERN-TYP-004` to stronger
+bounded Partial for canonical selected values, placeholders, inspector property
+labels, and standard/action button labels with complete-source semantics and
+registered Vello topology. `STERN-DEN-004` advances only to bounded Partial for
+finite-positive computed property-label and button-label spans; nonpositive
 spans retain visible fail-safe behavior and make no endpoint or non-overlap
 claim. Other truncating components and external visual evidence remain
-outstanding. Existing Partial evidence for `STERN-TYP-000`, `STERN-TYP-002`,
-and `STERN-TYP-006` is preserved. `STERN-TYP-005`, `STERN-TYP-007`,
+outstanding. Button action evidence is regression-only and does not advance any
+`STERN-ACT-*` requirement. Existing Partial evidence for `STERN-TYP-000`,
+`STERN-TYP-002`, and `STERN-TYP-006` is preserved. `STERN-TYP-005`, `STERN-TYP-007`,
 `STERN-INSPECT-001`, `STERN-PROP-001`, `STERN-TIP-001`, `STERN-TIP-002`, and
 `STERN-OVERLAY-COMP-002` do not advance. All typography parity records remain
 unverified, and nothing is Accepted.

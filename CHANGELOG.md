@@ -10,6 +10,20 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Canonical retained `Ui::button`, and the existing
+  `Ui::action_button` delegation, now apply `TextOverflow::EndEllipsis` only to
+  the final complete-source label at the exact themed span
+  `(rect.width - theme.controls.padding_x * 2.0_f32).max(0.0_f32)`. Complete
+  text remains in primitives, retained keys, renderer resources, and semantics.
+  Narrow, nonpositive, multiline, rejected, invalid, and nonfinite cases retain
+  fail-soft complete-source behavior without changing geometry, interaction,
+  action routing/order, generic attachment, public APIs, or other button
+  consumers; standalone `button(...)` remains layoutless. Registered Vello CPU
+  evidence covers `1.0`, `1.25`, `1.5`, and `2.0`, not pixels, GPU, tooltip,
+  copied-value, or visual acceptance. `STERN-TYP-004` advances only to stronger
+  bounded Partial and `STERN-DEN-004` only to bounded Partial for
+  finite-positive button-label spans. No action requirement advances and
+  nothing is Accepted. See `docs/typography-migration.md`.
 - **Breaking:** Canonical retained `Ui::property_grid` now applies
   `TextOverflow::EndEllipsis` only to ordinary property-row main labels. The
   complete `row.label` plus presentation-only required `" *"` suffix remains

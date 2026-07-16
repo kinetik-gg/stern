@@ -216,17 +216,34 @@ configuration, copied-value API, tooltip API, helper, alias, prelude item,
 `TextPrimitive` field, or renderer command is added, and generic retained-text
 attachment keeps its existing fallback contract.
 
+Canonical retained `Ui::button` now applies the policy only to the final
+complete-source label primitive at
+`(rect.width - theme.controls.padding_x * 2.0_f32).max(0.0_f32)`. Existing
+`Ui::action_button` delegates to that path unchanged. This adoption adds no
+public API: both method signatures, `ActionDescriptor`, `Response`, standalone
+public `button(...)`, theme and spacing surfaces, exports, qualified modules,
+facade root, and default prelude remain unchanged. The standalone component
+stays layoutless. No public overflow configuration, helper, alias, copied-value
+or tooltip API, descriptor presentation field, `TextPrimitive` field, renderer
+command, toolbar/menu/split/busy/disclosure/icon-button behavior, or generic
+attachment change is introduced. Hidden, disabled, pointer, keyboard, action
+source/context/order, cursor, repaint, focus, semantic, and geometry behavior
+remain the existing contracts; action evidence is regression-only.
+
 This advances only `STERN-TYP-004` to stronger bounded Partial. Component
 evidence covers selection and placeholder states, property-label state and
-fixed-column topology, disabled/read-only/open presentation, exact retained
-identity and rejection, and registered Vello topology. `STERN-DEN-004` advances
-only to bounded Partial for finite-positive computed property-label spans;
-nonpositive spans make no endpoint or non-overlap claim. Existing Partial
-evidence for `STERN-TYP-000`, `STERN-TYP-002`, and `STERN-TYP-006` is
-preserved, while `STERN-TYP-001` and `STERN-TYP-003` do not advance. This makes
-no claim about copied values, tooltips, editable selection, other truncating
-components, start/middle/multiline ellipsis, baseline behavior, browser output,
-GPU output, or manual review. `STERN-TYP-005`, `STERN-TYP-007`,
+fixed-column topology, standard and delegated action-button states, exact
+retained identity and rejection, and registered Vello topology.
+`STERN-DEN-004` advances only to bounded Partial for finite-positive computed
+property-label and button-label spans; nonpositive spans make no endpoint or
+non-overlap claim. Existing Partial evidence for `STERN-TYP-000`,
+`STERN-TYP-002`, and `STERN-TYP-006` is preserved, while `STERN-TYP-001` and
+`STERN-TYP-003` do not advance. `STERN-DEN-003`, `STERN-STA-001` through
+`STERN-STA-007`, and button action routing are regression-only; no
+`STERN-ACT-*` requirement advances. This makes no claim about copied values,
+tooltips, editable selection, other truncating components,
+start/middle/multiline ellipsis, baseline behavior, browser output, GPU output,
+or manual review. `STERN-TYP-005`, `STERN-TYP-007`,
 `STERN-INSPECT-001`, `STERN-PROP-001`, `STERN-TIP-001`, `STERN-TIP-002`, and
 `STERN-OVERLAY-COMP-002` do not advance. No typography parity record is
 Accepted.

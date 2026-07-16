@@ -1,8 +1,12 @@
 use super::common::assert_approx;
-use crate::{RenderFrameInput, RenderResources, TextLayoutResource, VelloRenderer};
+use crate::{
+    RenderFrameInput, RenderResources, TextLayoutResource, VelloRenderer,
+    project_text_point_to_device, root_transform, snap_axis_aligned_translation,
+};
 use stern_core::{
-    Brush, Color, PhysicalSize, Point, Primitive, Rect, ScaleFactor, Size, TextLayoutId,
-    TextPrimitive, Transform, UiInput, UiMemory, Vec2, ViewportInfo, default_dark_theme,
+    ActionContext, ActionDescriptor, Brush, Color, PhysicalSize, Point, Primitive, Rect,
+    ScaleFactor, Size, TextLayoutId, TextPrimitive, Transform, UiInput, UiMemory, Vec2,
+    ViewportInfo, default_dark_theme,
 };
 use stern_render::TextLayoutResourceSync;
 use stern_text::{
@@ -123,6 +127,231 @@ fn retained_numeric_widget_encodes_registered_tabular_glyphs_without_fallback() 
                 .glyph_runs
                 .iter()
                 .all(|run| { (run.font_size - logical_font_size * scale).abs() <= 0.000_1 })
+        );
+        assert_eq!(renderer.cached_text_layout_count(), 0);
+        assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn retained_standard_and_action_buttons_encode_exact_ellipsis_resources_at_all_scales() {
+    let standard_source =
+        "Canonical retained standard button source stays complete while Vello encodes ellipsis";
+    let action_source =
+        "Canonical delegated action button source stays complete while Vello encodes ellipsis";
+    let action = ActionDescriptor::new("button.render", action_source);
+    let standard_rect = Rect::new(0.0, 0.0, 96.0, 24.0);
+    let action_rect = Rect::new(0.0, 32.0, 96.0, 24.0);
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    let mut store = TextLayoutStore::new();
+    let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+    let _ = ui.button("standard", standard_rect, standard_source, false);
+    let _ = ui.action_button("action", action_rect, &action, ActionContext::Global);
+    let frame = ui.finish_output();
+
+    let standard_text = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == standard_source => Some(text),
+            _ => None,
+        })
+        .expect("registered retained standard button label");
+    let action_text = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == action_source => Some(text),
+            _ => None,
+        })
+        .expect("registered retained action button label");
+    let standard_id = standard_text
+        .layout
+        .expect("standard button retained identity");
+    let action_id = action_text.layout.expect("action button retained identity");
+    assert_ne!(standard_id, action_id);
+
+    let standard = store
+        .stored_layout(standard_id)
+        .expect("retained standard button entry");
+    let action = store
+        .stored_layout(action_id)
+        .expect("retained action button entry");
+    let expected_width_bits = (standard_rect.width - theme.controls.padding_x * 2.0_f32).to_bits();
+    assert_eq!(standard.key.text, standard_source);
+    assert_eq!(action.key.text, action_source);
+    assert_eq!(standard.key.width_bits, expected_width_bits);
+    assert_eq!(action.key.width_bits, expected_width_bits);
+    assert_eq!(standard.key.overflow, TextOverflow::EndEllipsis);
+    assert_eq!(action.key.overflow, TextOverflow::EndEllipsis);
+    assert!(standard.layout.is_elided());
+    assert!(action.layout.is_elided());
+
+    let standard_ids = standard
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let action_ids = action
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let standard_logical_points = standard
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| {
+            run.glyphs.iter().map(|glyph| {
+                Point::new(
+                    standard_text.origin.x + glyph.x,
+                    standard_text.origin.y + glyph.y,
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let action_logical_points = action
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| {
+            run.glyphs.iter().map(|glyph| {
+                Point::new(
+                    action_text.origin.x + glyph.x,
+                    action_text.origin.y + glyph.y,
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let standard_markers = standard
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| &run.glyphs)
+        .enumerate()
+        .filter_map(|(index, glyph)| glyph.elided.then_some(index))
+        .collect::<Vec<_>>();
+    let action_markers = action
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| &run.glyphs)
+        .enumerate()
+        .filter_map(|(index, glyph)| glyph.elided.then_some(index))
+        .collect::<Vec<_>>();
+    assert_eq!(standard_markers.len(), 1);
+    assert_eq!(action_markers.len(), 1);
+    let logical_font_size = standard.key.style.size();
+    assert_eq!(action.key.style.size_bits, standard.key.style.size_bits);
+
+    let mut expected_ids = standard_ids.clone();
+    expected_ids.extend_from_slice(&action_ids);
+    let mut logical_points = standard_logical_points;
+    logical_points.extend_from_slice(&action_logical_points);
+    assert_eq!(logical_points.len(), expected_ids.len());
+    let action_marker_index = standard_ids.len() + action_markers[0];
+    let store_accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
+    let mut resources = RenderResources::new();
+    let mut sync = TextLayoutResourceSync::new();
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(report.added, 2);
+    assert_eq!(report.retained, 2);
+    assert_eq!(
+        resources
+            .text_layout_resource(standard_id)
+            .expect("reconciled standard button resource")
+            .key
+            .text,
+        standard_source
+    );
+    assert_eq!(
+        resources
+            .text_layout_resource(action_id)
+            .expect("reconciled action button resource")
+            .key
+            .text,
+        action_source
+    );
+
+    let mut renderer = VelloRenderer::new();
+    for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+        let device_scale = f64::from(scale);
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: viewport(device_scale),
+            primitives: &frame.primitives,
+            resources: &resources,
+        });
+        let encoding = renderer.scene().encoding();
+        let encoded_ids = encoding
+            .resources
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.id)
+            .collect::<Vec<_>>();
+
+        assert!(output.diagnostics.is_empty());
+        assert_eq!(encoded_ids, expected_ids);
+        let effective = snap_axis_aligned_translation(root_transform(device_scale));
+        assert_eq!(
+            effective.as_coeffs().map(f64::to_bits),
+            [device_scale, 0.0, 0.0, device_scale, 0.0, 0.0].map(f64::to_bits)
+        );
+        for (encoded, logical) in encoding.resources.glyphs.iter().zip(&logical_points) {
+            let expected = project_text_point_to_device(effective, *logical);
+            assert_eq!(Point::new(encoded.x, encoded.y), expected);
+        }
+        assert_eq!(
+            encoded_ids[standard_markers[0]],
+            standard_ids[standard_markers[0]]
+        );
+        assert_eq!(
+            encoded_ids[action_marker_index],
+            action_ids[action_markers[0]]
+        );
+        assert!(
+            encoding
+                .resources
+                .glyph_runs
+                .iter()
+                .all(|run| { run.font_size.to_bits() == (logical_font_size * scale).to_bits() })
+        );
+        assert!(encoding.resources.glyphs.iter().all(|glyph| {
+            (glyph.x - glyph.x.round()).abs() <= 0.001 && (glyph.y - glyph.y.round()).abs() <= 0.001
+        }));
+        assert_eq!(
+            resources
+                .text_layout_resource(standard_id)
+                .expect("stable standard button resource")
+                .key
+                .width_bits,
+            expected_width_bits
+        );
+        assert_eq!(
+            resources
+                .text_layout_resource(action_id)
+                .expect("stable action button resource")
+                .key
+                .width_bits,
+            expected_width_bits
+        );
+        assert_eq!(standard_text.layout, Some(standard_id));
+        assert_eq!(action_text.layout, Some(action_id));
+        assert_eq!(
+            (
+                store.len(),
+                store.retained_payload_bytes(),
+                store.change_cursor()
+            ),
+            store_accounting
         );
         assert_eq!(renderer.cached_text_layout_count(), 0);
         assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
