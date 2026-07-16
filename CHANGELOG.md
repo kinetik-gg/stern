@@ -10,6 +10,19 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Added qualified retained single-line end ellipsis through
+  `TextOverflow::{Visible, EndEllipsis}` and `TextLayoutKey::with_overflow`.
+  Constructors default to `Visible`; public key literals must add the field.
+  Eligible finite-positive-width, nonwrapping, single-line requests use pinned
+  cosmic-text end ellipsis without replacing the complete caller-owned source.
+  `ShapedGlyph::elided` identifies the generated empty-range seam marker,
+  `ShapedTextLayout::is_elided()` reports presentation elision, and exhaustive
+  `TextNavigationError` matches must handle `ElidedLayout`. Overflow remains in
+  cache/store IDs and renderer-resource identity, and registered Vello consumes
+  the existing shaped-layout authority. No widget opts in, no `TextPrimitive`
+  or render-command shape changes, and no accessible/copy/tooltip behavior is
+  claimed. `STERN-TYP-004` advances only to bounded Partial; nothing is
+  Accepted. See `docs/typography-migration.md`.
 - **Breaking:** Canonical retained `Ui` numeric inputs, numeric scrubs, and
   vector numeric subfields now resolve `FontFeatureToken::Numeric` through the
   bounded `TextFeatureSet` bridge and shape bundled Inter digits with tabular
