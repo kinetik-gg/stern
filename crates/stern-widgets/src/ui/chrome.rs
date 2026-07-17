@@ -5,6 +5,7 @@ use stern_core::{
     SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, Stroke, TextPrimitive,
     TextRole,
 };
+use stern_text::{TextLayoutKey, TextOverflow, TextStyle};
 
 use super::Ui;
 use crate::chrome::{
@@ -139,7 +140,7 @@ impl Ui<'_> {
             | ChromeSceneRowKind::Tab { .. }
             | ChromeSceneRowKind::Status => &row.label,
         };
-        self.primitive(Primitive::Text(TextPrimitive {
+        let mut primitive = Primitive::Text(TextPrimitive {
             layout: None,
             origin: Point::new(
                 row.rect.x + self.theme.controls.padding_x,
@@ -150,7 +151,25 @@ impl Ui<'_> {
             size: font.size,
             line_height: font.line_height,
             brush: Brush::Solid(foreground),
-        }));
+        });
+        if row.kind == ChromeSceneRowKind::Toolbar
+            && let Some(text_layouts) = self.text_layouts.as_deref_mut()
+            && let Primitive::Text(text) = &mut primitive
+        {
+            let padding_x = self.theme.controls.padding_x;
+            let raw_span = row.rect.width - padding_x * 2.0_f32;
+            let label_width = raw_span.max(0.0_f32);
+            text.layout = text_layouts.try_layout_id(
+                TextLayoutKey::new(
+                    text.text.clone(),
+                    TextStyle::new(text.family.clone(), text.size, text.line_height),
+                    label_width,
+                    false,
+                )
+                .with_overflow(TextOverflow::EndEllipsis),
+            );
+        }
+        self.primitive(primitive);
     }
 }
 

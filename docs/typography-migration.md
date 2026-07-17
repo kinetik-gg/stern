@@ -358,6 +358,36 @@ standard/action-button Vello CPU evidence at `1.0`, `1.25`, `1.5`, and `2.0`
 proves resource and glyph topology without fallback-cache activity, not raster,
 GPU, tooltip, copied-value, or visual acceptance.
 
+Canonical retained `Ui::chrome_scene` now opts only final action-backed toolbar
+row labels into the same policy. It uses the final overflow-projected row width,
+not the requested item or surface width, in this exact operation order: `let
+padding_x = theme.controls.padding_x; let raw_span = row.rect.width - padding_x
+* 2.0_f32; let label_width = raw_span.max(0.0_f32);`. The unchanged final text
+primitive supplies family, size, and line height; wrapping is disabled and
+features remain default. Complete action label source remains in the descriptor,
+primitive, retained key, renderer resource, and semantic label.
+
+This prerelease rendering-policy change adds no public API, model, projection,
+theme, primitive, renderer-command, or generic-attachment change. Hidden and
+overflowed actions register no label, while the separate overflow-trigger
+literal stays generic Visible/layoutless. Hover, press, focus, checked,
+disabled, icon, shortcut, tooltip, and keyword metadata preserve retained
+identity when source, effective width, and style are equal. Pointer and keyboard
+activation preserve the existing action ID, button source, context, and FIFO
+ordering. Equal retained text keys may share one ID across distinct actions;
+the layout ID is not action identity.
+
+Narrow/nonpositive spans and newline or Unicode paragraph sources retain the
+complete-source explicit key without a generated marker. Strict admission
+rejection leaves store accounting unchanged and falls through only to the
+existing complete-source generic Visible or layoutless path. Menu, tab,
+tab-close, status, overflow-trigger, overlay, command-palette, and system-
+feedback text remain generic consumers. Registered chrome-toolbar-to-Vello CPU
+evidence at `1.0`, `1.25`, `1.5`, and `2.0` proves exact resource/marker
+topology, stable logical width and retained identity, coordinate scaling, and
+zero fallback-cache activity. It does not prove browser, raster, pixel, GPU,
+copied-value, tooltip, platform, DPI-legibility, manual, or visual acceptance.
+
 Canonical retained `Ui::virtual_table` now opts only its final body-cell label
 primitive into the same policy. It computes the retained span from the final
 prepared and constraint-clamped cell rectangle, not the raw `TableColumn`
@@ -406,17 +436,20 @@ Accepted because direct/layoutless compatibility paths, timelines, frame
 counters, timecodes, and tables do not consume the feature and no visual
 acceptance was performed. `STERN-TYP-001` and `STERN-TYP-003` are preserved
 without advancing. The retained select-trigger, property-label, standard and
-delegated action-button, and virtual-table body-cell adoptions advance only
+delegated action-button, chrome-toolbar label, and virtual-table body-cell
+adoptions advance only
 `STERN-TYP-004` to stronger bounded Partial for canonical selected values,
-placeholders, inspector property labels, standard/action button labels, and
-retained table body-cell labels with complete-source semantics and registered
-Vello topology. `STERN-DEN-004` advances only to bounded Partial for
-finite-positive computed property-label, button-label, and prepared body-cell
-spans; nonpositive spans retain visible fail-safe behavior and make no endpoint
-or non-overlap claim. Other truncating components and external visual evidence
-remain outstanding. Button action and table-family evidence are regression-only
-and do not advance any `STERN-ACT-*` or `STERN-TBL-*` requirement. Existing
-Partial evidence for `STERN-TYP-000`,
+placeholders, inspector property labels, standard/action button labels,
+chrome-toolbar labels, and retained table body-cell labels with complete-source
+semantics and registered Vello topology. `STERN-DEN-004` advances only to
+bounded Partial for finite-positive computed property-label, button-label,
+toolbar-label, and prepared body-cell spans; nonpositive spans retain visible
+fail-safe behavior and make no endpoint or non-overlap claim. Other truncating
+components and external visual evidence remain outstanding. Button action,
+toolbar, chrome, and table-family evidence are regression-only and do not
+advance any `STERN-ACT-*`, `STERN-TOOLBAR-001` through `STERN-TOOLBAR-006`,
+`STERN-CHROME-001`, `STERN-CHROME-004`, `STERN-CHROME-005`, or `STERN-TBL-*`
+requirement. Existing Partial evidence for `STERN-TYP-000`,
 `STERN-TYP-002`, and `STERN-TYP-006` is preserved. `STERN-TYP-005`, `STERN-TYP-007`,
 `STERN-INSPECT-001`, `STERN-PROP-001`, `STERN-TIP-001`, `STERN-TIP-002`, and
 `STERN-OVERLAY-COMP-002` do not advance. All typography parity records remain

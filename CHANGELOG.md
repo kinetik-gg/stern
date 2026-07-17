@@ -10,6 +10,24 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Canonical retained `Ui::chrome_scene` now applies
+  `TextOverflow::EndEllipsis` only to final complete-source toolbar-row labels at
+  the final overflow-projected span `(row.rect.width -
+  theme.controls.padding_x * 2.0_f32).max(0.0_f32)`. Complete descriptor,
+  primitive, retained-key, renderer-resource, and semantic source is preserved.
+  Hidden and overflowed actions register no label; menu, tab, tab-close, status,
+  overflow-trigger, overlay, command-palette, and system-feedback text remains
+  generic Visible/layoutless. Store rejection, nonpositive spans, newline and
+  Unicode paragraph sources retain fail-soft complete-source behavior without
+  changing public APIs, projection, geometry, focus, semantics, interaction,
+  action routing/order, generic attachment, text primitives, or renderer
+  commands. Registered Vello CPU evidence covers actual toolbar-label resources
+  at `1.0`, `1.25`, `1.5`, and `2.0`, not browser, raster, pixels, GPU,
+  copied-value, tooltip, DPI-legibility, platform, manual, or visual acceptance.
+  `STERN-TYP-004` advances only to stronger bounded Partial and `STERN-DEN-004`
+  only to bounded Partial for finite-positive computed toolbar-label spans.
+  Toolbar and chrome requirements remain regression-only; nothing is Accepted.
+  See `docs/typography-migration.md`.
 - **Breaking:** Canonical retained `Ui::virtual_table` now applies
   `TextOverflow::EndEllipsis` only to final complete-source body-cell labels at
   the exact prepared-cell span `(rect.width -

@@ -7,7 +7,7 @@ use std::time::Duration;
 use stern_core::{
     ActionContext, ActionDescriptor, Brush, Color, FrameContext, FrameOutput, PhysicalSize, Point,
     PointerOrder, Primitive, Rect, ScaleFactor, Size, TextLayoutId, TextPrimitive, TimeInfo,
-    Transform, UiInput, UiMemory, Vec2, ViewportInfo, default_dark_theme,
+    Transform, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_render::TextLayoutResourceSync;
 use stern_text::{
@@ -15,9 +15,10 @@ use stern_text::{
     TextStyle,
 };
 use stern_widgets::{
-    CollectionProjection, DropdownItem, DropdownItemId, DropdownModel, ItemId, SelectFieldConfig,
-    TableColumn, TableLayout, Ui, VirtualTableConfig, VirtualTableRow, VirtualTableSelection,
-    VirtualTableSelectionMode,
+    ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, CollectionProjection, DropdownItem,
+    DropdownItemId, DropdownModel, ItemId, MenuBar, SelectFieldConfig, StatusBar, TabStrip,
+    TableColumn, TableLayout, Toolbar, ToolbarGroup, ToolbarGroupId, Ui, VirtualTableConfig,
+    VirtualTableRow, VirtualTableSelection, VirtualTableSelectionMode,
     inspector::{PropertyGridConfig, PropertyGridRow, PropertyGridRowStatus},
 };
 
@@ -100,6 +101,26 @@ fn retained_virtual_table_frame(
     ui.finish_output()
 }
 
+fn retained_chrome_toolbar_frame(
+    store: &mut TextLayoutStore,
+    memory: &mut UiMemory,
+    scene: &ChromeScene<'_>,
+) -> FrameOutput {
+    let context = FrameContext::new(
+        viewport(1.0),
+        UiInput::default(),
+        TimeInfo::new(Duration::from_millis(500), Duration::from_millis(16), 1),
+    );
+    let theme = default_dark_theme();
+    let mut ui = Ui::begin_frame(context, memory, &theme).with_text_layouts(store);
+    ui.resolve_pointer_targets(|plan| {
+        scene.declare_pointer_targets(plan, PointerOrder::new(100));
+    })
+    .expect("valid retained chrome-toolbar pointer plan");
+    let _ = ui.chrome_scene(scene);
+    ui.finish_output()
+}
+
 #[test]
 fn retained_numeric_widget_encodes_registered_tabular_glyphs_without_fallback() {
     let theme = default_dark_theme();
@@ -172,6 +193,162 @@ fn retained_numeric_widget_encodes_registered_tabular_glyphs_without_fallback() 
                 .iter()
                 .all(|run| { (run.font_size - logical_font_size * scale).abs() <= 0.000_1 })
         );
+        assert_eq!(renderer.cached_text_layout_count(), 0);
+        assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn retained_chrome_toolbar_label_encodes_exact_ellipsis_resource_at_all_scales() {
+    let source =
+        "Canonical retained chrome toolbar source stays complete while Vello encodes ellipsis";
+    let group = ToolbarGroupId::from_raw(724);
+    let action = ActionDescriptor::new("toolbar.render", source);
+    let key = ChromeSceneItemKey::Toolbar {
+        group,
+        action: action.id.clone(),
+    };
+    let menu = MenuBar::new();
+    let toolbar = Toolbar::from_groups([ToolbarGroup::from_actions(group, "Rendering", [action])]);
+    let tabs = TabStrip::new();
+    let status = StatusBar::new();
+    let scene = ChromeScene::new(
+        ChromeSceneConfig::new(
+            WidgetId::from_key("vello-retained-chrome-toolbar"),
+            Rect::ZERO,
+            Rect::new(3.25, 5.5, 160.0, 24.0),
+            Rect::ZERO,
+            Rect::ZERO,
+            ActionContext::Editor,
+        )
+        .with_width(key, 80.0),
+        &menu,
+        &toolbar,
+        &tabs,
+        &status,
+    );
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let frame = retained_chrome_toolbar_frame(&mut store, &mut memory, &scene);
+    let text = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == source => Some(text),
+            _ => None,
+        })
+        .expect("registered retained chrome-toolbar label");
+    let id = text.layout.expect("retained chrome-toolbar identity");
+    let entry = store
+        .stored_layout(id)
+        .expect("retained chrome-toolbar entry");
+    assert_eq!(entry.key.text, source);
+    assert_eq!(entry.key.width_bits, 64.0_f32.to_bits());
+    assert_eq!(entry.key.overflow, TextOverflow::EndEllipsis);
+    assert!(entry.layout.is_elided());
+    let glyph_ids = entry
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+    let logical_points = entry
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| {
+            run.glyphs
+                .iter()
+                .map(|glyph| Point::new(text.origin.x + glyph.x, text.origin.y + glyph.y))
+        })
+        .collect::<Vec<_>>();
+    let markers = entry
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| &run.glyphs)
+        .enumerate()
+        .filter_map(|(index, glyph)| glyph.elided.then_some(index))
+        .collect::<Vec<_>>();
+    assert_eq!(markers.len(), 1);
+    let logical_font_size = entry.key.style.size();
+    let accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
+    let hot = retained_chrome_toolbar_frame(&mut store, &mut memory, &scene);
+    assert_eq!(
+        hot.primitives.iter().find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == source => text.layout,
+            _ => None,
+        }),
+        Some(id)
+    );
+    assert_eq!(
+        (
+            store.len(),
+            store.retained_payload_bytes(),
+            store.change_cursor()
+        ),
+        accounting
+    );
+
+    let mut resources = RenderResources::new();
+    let mut sync = TextLayoutResourceSync::new();
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(report.added, 1);
+    assert_eq!(report.retained, 1);
+    let resource = resources
+        .text_layout_resource(id)
+        .expect("reconciled chrome-toolbar resource");
+    assert_eq!(resource.key.text, source);
+    assert_eq!(resource.key.width_bits, 64.0_f32.to_bits());
+    assert_eq!(resource.key.overflow, TextOverflow::EndEllipsis);
+
+    let mut renderer = VelloRenderer::new();
+    for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+        let device_scale = f64::from(scale);
+        let output = renderer.submit_frame(RenderFrameInput {
+            viewport: viewport(device_scale),
+            primitives: &frame.primitives,
+            resources: &resources,
+        });
+        let encoding = renderer.scene().encoding();
+        let encoded_ids = encoding
+            .resources
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.id)
+            .collect::<Vec<_>>();
+
+        assert!(output.diagnostics.is_empty());
+        assert_eq!(encoded_ids, glyph_ids);
+        assert_eq!(encoded_ids[markers[0]], glyph_ids[markers[0]]);
+        let effective = snap_axis_aligned_translation(root_transform(device_scale));
+        for (encoded, logical) in encoding.resources.glyphs.iter().zip(&logical_points) {
+            assert_eq!(
+                Point::new(encoded.x, encoded.y),
+                project_text_point_to_device(effective, *logical)
+            );
+        }
+        assert!(
+            encoding
+                .resources
+                .glyph_runs
+                .iter()
+                .all(|run| run.font_size.to_bits() == (logical_font_size * scale).to_bits())
+        );
+        assert_eq!(
+            resources
+                .text_layout_resource(id)
+                .expect("stable chrome-toolbar resource")
+                .key
+                .width_bits,
+            64.0_f32.to_bits()
+        );
+        assert_eq!(text.layout, Some(id));
         assert_eq!(renderer.cached_text_layout_count(), 0);
         assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
     }

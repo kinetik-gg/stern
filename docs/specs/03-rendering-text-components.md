@@ -459,6 +459,47 @@ pixels, GPU output, tooltips, copied values, or visual acceptance. This advances
 bounded Partial for the pinned positive `119.3` and `80.0` button-label fixture
 spans. Nothing is Accepted.
 
+Canonical retained `Ui::chrome_scene` now also opts only final complete-source
+`ChromeSceneRowKind::Toolbar` labels into `EndEllipsis`. The width authority is
+the final overflow-projected `row.rect.width`, never a requested model or
+surface width, and uses the existing control padding in this exact order: `let
+padding_x = theme.controls.padding_x; let raw_span = row.rect.width - padding_x
+* 2.0_f32; let label_width = raw_span.max(0.0_f32);`. With canonical
+`padding_x == 8.0`, projected widths `119.3` and `80.0` retain exact
+content-width bits `0x42CE999A` and `0x42800000`; `16.0`, `15.999`, and `1.0`
+retain positive-zero bits and make no endpoint or non-overlap claim.
+
+The key derives family, size, and line height from the unchanged final
+`TextPrimitive`, disables wrapping, and keeps default features. Complete action
+label source remains in the descriptor, primitive, retained key, renderer
+resource, and semantic label. Equal source/style/effective-width keys may share
+a retained layout ID across distinct actions because retained IDs remain
+presentation-cache identity, not action identity. Hidden and overflowed actions
+emit no toolbar-row primitive, semantic row, or retained label registration.
+The separate overflow trigger remains a generic Visible/layoutless literal
+glyph, and overflow projection preserves its existing stable action-key order.
+
+Hover, press, focus, checked, disabled, icon, shortcut, tooltip, and keyword
+metadata do not change the retained key when source, effective width, and style
+are equal. Existing surface and row rectangles, clips, origins, baselines,
+focus annuli, primitive order, semantics, responses, repaint, action ID,
+`ActionSource::Button`, context, and FIFO action routing remain unchanged.
+Admission rejection is transactional and falls through only to the existing
+complete-source generic Visible or layoutless attachment; admitted narrow,
+nonpositive, newline, and Unicode paragraph requests retain full-source policy
+without synthesizing a marker.
+
+Menu, tab, tab-close, status, overflow-trigger, overlay, command-palette, and
+system-feedback text remain generic Visible/layoutless consumers. This adoption
+adds no toolbar, action, chrome, overflow, text, theme, primitive, renderer, or
+public API. Registered chrome-toolbar Vello evidence covers deterministic CPU
+resource and glyph topology at `1.0`, `1.25`, `1.5`, and `2.0` with no fallback
+cache activity. It proves neither browser, raster, pixel, GPU, copied-value,
+tooltip, DPI-legibility, platform, manual, nor visual acceptance. It strengthens
+only bounded Partial evidence for `STERN-TYP-004` and finite-positive computed
+toolbar-label spans for `STERN-DEN-004`; toolbar and chrome requirements remain
+regression-only, and nothing is Accepted.
+
 Canonical retained `Ui::virtual_table` now opts only final complete-source body
 cell label primitives into `EndEllipsis`. The width authority is the prepared,
 constraint-clamped `TableCellRect::rect.width`, never the raw column width, and

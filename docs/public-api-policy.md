@@ -230,6 +230,27 @@ attachment change is introduced. Hidden, disabled, pointer, keyboard, action
 source/context/order, cursor, repaint, focus, semantic, and geometry behavior
 remain the existing contracts; action evidence is regression-only.
 
+Canonical retained `Ui::chrome_scene` now applies the policy only to final
+complete-source toolbar-row label primitives at the final overflow-projected
+span `(row.rect.width - theme.controls.padding_x * 2.0_f32).max(0.0_f32)`.
+This adoption adds no public API: `Ui::chrome_scene`, `ChromeSceneConfig`,
+toolbar/action/chrome/overflow models, `ActionDescriptor`, response and output
+types, constructors, fields, methods, exports, qualified modules, facade root,
+and default prelude remain unchanged. It adds no public overflow configuration,
+copied-value or tooltip API, helper, alias, theme or spacing surface,
+`TextPrimitive` field, renderer command, or generic attachment change.
+
+Complete action label source remains in the existing descriptor, primitive,
+retained key, renderer resource, and semantic label. Hidden and overflowed
+actions register no toolbar label; the overflow trigger and menu, tab,
+tab-close, status, overlay, command-palette, and system-feedback text remain
+generic Visible/layoutless consumers. Projection, stable action identity and
+order, row/surface geometry, focus, semantics, interaction states, and exact
+button-source invocation routing remain existing contracts. Retained layout IDs
+remain presentation-cache identity and may be shared by equal
+source/style/effective-width actions. Toolbar and chrome evidence is
+regression-only; no toolbar or chrome requirement advances.
+
 Canonical retained `Ui::virtual_table` now applies the policy only to final
 complete-source body-cell label primitives at the exact prepared-cell span
 `(rect.width - theme.controls.padding_x * 2.0_f32).max(0.0_f32)`. This adoption
@@ -253,16 +274,18 @@ header overflow, auto-sizing, pinning, or numeric tabular shaping.
 This advances only `STERN-TYP-004` to stronger bounded Partial. Component
 evidence covers selection and placeholder states, property-label state and
 fixed-column topology, standard and delegated action-button states, retained
-virtual-table body cells, exact retained identity and rejection, and registered
-Vello topology.
+chrome-toolbar labels, virtual-table body cells, exact retained identity and
+rejection, and registered Vello topology.
 `STERN-DEN-004` advances only to bounded Partial for finite-positive computed
-property-label, button-label, and prepared body-cell spans; nonpositive spans
-make no endpoint or non-overlap claim. Existing Partial evidence for `STERN-TYP-000`,
-`STERN-TYP-002`, and `STERN-TYP-006` is preserved, while `STERN-TYP-001` and
-`STERN-TYP-003` do not advance. `STERN-DEN-003`, `STERN-STA-001` through
-`STERN-STA-007`, button action routing, and table-family requirements are
-regression-only; no `STERN-ACT-*` or `STERN-TBL-*` requirement advances. This
-makes no claim about copied values,
+property-label, button-label, toolbar-label, and prepared body-cell spans;
+nonpositive spans make no endpoint or non-overlap claim. Existing Partial
+evidence for `STERN-TYP-000`, `STERN-TYP-002`, and `STERN-TYP-006` is preserved,
+while `STERN-TYP-001` and `STERN-TYP-003` do not advance. `STERN-DEN-003`,
+`STERN-STA-001` through `STERN-STA-007`, button action routing, toolbar/chrome
+behavior, and table-family requirements are regression-only; no `STERN-ACT-*`,
+`STERN-TOOLBAR-001` through `STERN-TOOLBAR-006`, `STERN-CHROME-001`,
+`STERN-CHROME-004`, `STERN-CHROME-005`, or `STERN-TBL-*` requirement advances.
+This makes no claim about copied values,
 tooltips, editable selection, other truncating components,
 start/middle/multiline ellipsis, baseline behavior, browser output, GPU output,
 or manual review. `STERN-TYP-005`, `STERN-TYP-007`,
