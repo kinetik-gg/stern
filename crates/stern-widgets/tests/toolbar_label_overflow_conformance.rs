@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use stern_core::{
-    ActionContext, ActionDescriptor, FrameContext, FrameOutput, PhysicalSize, PointerOrder,
+    ActionContext, ActionDescriptor, FrameContext, FrameOutput, PhysicalSize, Point, PointerOrder,
     Primitive, Rect, ScaleFactor, Size, TextPrimitive, TimeInfo, UiInput, UiMemory, ViewportInfo,
     WidgetId, default_dark_theme,
 };
@@ -377,5 +377,140 @@ fn rejected_and_layoutless_labels_preserve_complete_source_without_identity_leak
             .label
             .as_deref(),
         Some(layoutless_source)
+    );
+}
+
+#[test]
+fn hot_translation_source_and_width_obey_retained_identity_boundaries() {
+    let source = "Stable complete toolbar source remains retained across hot frames";
+    let action = ActionDescriptor::new("toolbar.stable", source);
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let first = run_toolbar(
+        Some(&mut store),
+        &mut memory,
+        BOUNDS,
+        std::slice::from_ref(&action),
+        &[80.0],
+        UiInput::default(),
+    );
+    let first_text = toolbar_text(&first.frame, source);
+    let first_id = first_text.layout.expect("initial toolbar identity");
+    let first_origin = first_text.origin;
+    let first_rect = first.output.responses[0].rect;
+    let first_width_bits = store
+        .stored_layout(first_id)
+        .expect("initial toolbar entry")
+        .key
+        .width_bits;
+    let accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
+
+    for _ in 0..4 {
+        let hot = run_toolbar(
+            Some(&mut store),
+            &mut memory,
+            BOUNDS,
+            std::slice::from_ref(&action),
+            &[80.0],
+            UiInput::default(),
+        );
+        assert_eq!(toolbar_text(&hot.frame, source).layout, Some(first_id));
+        assert_eq!(
+            (
+                store.len(),
+                store.retained_payload_bytes(),
+                store.change_cursor()
+            ),
+            accounting
+        );
+    }
+
+    let delta = Point::new(40.0, 20.0);
+    let translated_bounds = Rect::new(
+        BOUNDS.x + delta.x,
+        BOUNDS.y + delta.y,
+        BOUNDS.width,
+        BOUNDS.height,
+    );
+    let moved = run_toolbar(
+        Some(&mut store),
+        &mut memory,
+        translated_bounds,
+        std::slice::from_ref(&action),
+        &[80.0],
+        UiInput::default(),
+    );
+    let moved_text = toolbar_text(&moved.frame, source);
+    let moved_rect = moved.output.responses[0].rect;
+    assert_eq!(moved_text.layout, Some(first_id));
+    assert_eq!(
+        (moved_text.origin.x - first_origin.x).to_bits(),
+        delta.x.to_bits()
+    );
+    assert_eq!(
+        (moved_text.origin.y - first_origin.y).to_bits(),
+        delta.y.to_bits()
+    );
+    assert_eq!((moved_rect.x - first_rect.x).to_bits(), delta.x.to_bits());
+    assert_eq!((moved_rect.y - first_rect.y).to_bits(), delta.y.to_bits());
+    assert_eq!(moved_rect.width.to_bits(), first_rect.width.to_bits());
+    assert_eq!(moved_rect.height.to_bits(), first_rect.height.to_bits());
+    assert_eq!(first.frame.primitives.len(), moved.frame.primitives.len());
+    assert_eq!(
+        store
+            .stored_layout(first_id)
+            .expect("translated toolbar entry")
+            .key
+            .width_bits,
+        first_width_bits
+    );
+    assert_eq!(
+        (
+            store.len(),
+            store.retained_payload_bytes(),
+            store.change_cursor()
+        ),
+        accounting
+    );
+
+    let changed_source = "Distinct complete toolbar source receives a distinct retained identity";
+    let changed = ActionDescriptor::new("toolbar.stable", changed_source);
+    let changed_run = run_toolbar(
+        Some(&mut store),
+        &mut memory,
+        BOUNDS,
+        &[changed],
+        &[80.0],
+        UiInput::default(),
+    );
+    let changed_id = toolbar_text(&changed_run.frame, changed_source)
+        .layout
+        .expect("changed-source toolbar identity");
+    assert_ne!(changed_id, first_id);
+
+    let resized = run_toolbar(
+        Some(&mut store),
+        &mut memory,
+        BOUNDS,
+        &[action],
+        &[100.0],
+        UiInput::default(),
+    );
+    let resized_id = toolbar_text(&resized.frame, source)
+        .layout
+        .expect("resized toolbar identity");
+    assert_ne!(resized_id, first_id);
+    assert_ne!(resized_id, changed_id);
+    assert_ne!(
+        store
+            .stored_layout(resized_id)
+            .expect("resized toolbar entry")
+            .key
+            .width_bits,
+        first_width_bits
     );
 }
