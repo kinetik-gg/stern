@@ -15,9 +15,9 @@ fn sentry_ids() -> [WidgetId; 2] {
     [root.child("left-sentry"), root.child("right-sentry")]
 }
 
-fn sentry_frame(input: UiInput, memory: &mut UiMemory) -> (Response, Response, FrameOutput) {
+fn sentry_frame(input: &UiInput, memory: &mut UiMemory) -> (Response, Response, FrameOutput) {
     let theme = default_dark_theme();
-    let mut ui = Ui::new(&input, memory, &theme);
+    let mut ui = Ui::new(input, memory, &theme);
     let left = ui.button("left-sentry", LEFT, "Left", false);
     ui.separator(SEPARATOR);
     let right = ui.button("right-sentry", RIGHT, "Right", false);
@@ -98,7 +98,7 @@ fn ui_separator_emits_only_passive_presentation() {
 fn ui_separator_does_not_enter_control_focus_order() {
     let theme = default_dark_theme();
     let ids = sentry_ids();
-    let (left, right, frame) = sentry_frame(UiInput::default(), &mut UiMemory::new());
+    let (left, right, frame) = sentry_frame(&UiInput::default(), &mut UiMemory::new());
 
     assert_eq!([left.id, right.id], ids);
     assert!(frame.primitives.contains(&separator(SEPARATOR, &theme)));
@@ -121,7 +121,7 @@ fn ui_separator_pointer_and_keyboard_inputs_emit_no_actions() {
     let ids = sentry_ids();
     let mut sentry_memory = UiMemory::new();
     let _ = sentry_frame(
-        UiInput {
+        &UiInput {
             pointer: PointerInput {
                 position: Some(LEFT.center()),
                 primary: PointerButtonState::new(true, true, false),
@@ -132,7 +132,7 @@ fn ui_separator_pointer_and_keyboard_inputs_emit_no_actions() {
         &mut sentry_memory,
     );
     let (left, _, _) = sentry_frame(
-        UiInput {
+        &UiInput {
             pointer: PointerInput {
                 position: Some(LEFT.center()),
                 primary: PointerButtonState::new(false, false, true),
@@ -145,15 +145,15 @@ fn ui_separator_pointer_and_keyboard_inputs_emit_no_actions() {
     assert!(left.clicked && left.state.focused);
     assert_eq!(sentry_memory.focused(), Some(ids[0]));
 
-    let (_, _, tab) = sentry_frame(key_input(Key::Tab, false), &mut sentry_memory);
+    let (_, _, tab) = sentry_frame(&key_input(Key::Tab, false), &mut sentry_memory);
     assert_eq!(sentry_memory.focused(), Some(ids[1]));
     assert_eq!(tab.semantics.focus_order(), ids);
-    let (_, right, _) = sentry_frame(key_input(Key::Space, false), &mut sentry_memory);
+    let (_, right, _) = sentry_frame(&key_input(Key::Space, false), &mut sentry_memory);
     assert!(right.clicked && right.keyboard_activated);
-    let (_, _, shift_tab) = sentry_frame(key_input(Key::Tab, true), &mut sentry_memory);
+    let (_, _, shift_tab) = sentry_frame(&key_input(Key::Tab, true), &mut sentry_memory);
     assert_eq!(sentry_memory.focused(), Some(ids[0]));
     assert_eq!(shift_tab.semantics.focus_order(), ids);
-    let (left, _, _) = sentry_frame(key_input(Key::Enter, false), &mut sentry_memory);
+    let (left, _, _) = sentry_frame(&key_input(Key::Enter, false), &mut sentry_memory);
     assert!(left.clicked && left.keyboard_activated);
 
     let mut pointer_memory = UiMemory::new();
@@ -162,7 +162,7 @@ fn ui_separator_pointer_and_keyboard_inputs_emit_no_actions() {
         pointer_input(true, true, false),
         pointer_input(false, false, true),
     ] {
-        let (left, right, frame) = sentry_frame(input, &mut pointer_memory);
+        let (left, right, frame) = sentry_frame(&input, &mut pointer_memory);
         assert_only_sentries(left, right, &frame);
         assert!(!left.state.hovered && !right.state.hovered);
         assert!(!left.clicked && !right.clicked);
@@ -178,7 +178,7 @@ fn ui_separator_pointer_and_keyboard_inputs_emit_no_actions() {
         (Key::Space, false),
     ] {
         let mut memory = UiMemory::new();
-        let (left, right, frame) = sentry_frame(key_input(key, shift), &mut memory);
+        let (left, right, frame) = sentry_frame(&key_input(key, shift), &mut memory);
         assert_only_sentries(left, right, &frame);
         assert_eq!(memory.pointer_capture(), None);
         assert!(frame.platform_requests.is_empty());
