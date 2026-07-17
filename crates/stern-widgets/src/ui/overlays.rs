@@ -1,7 +1,8 @@
 use stern_core::{
-    Brush, ClipId, ComponentState, ElevationLevel, Key, KeyState, MouseButton, Point, Primitive,
-    Rect, RectPrimitive, RepaintRequest, SemanticAction, SemanticActionKind, SemanticNode,
-    TextInputEvent, TextPrimitive, TextRole, UiInput, UiInputEvent, WidgetId, pressable,
+    Brush, ClipId, Color, ComponentState, ElevationLevel, FontToken, Key, KeyState, MouseButton,
+    Point, Primitive, Rect, RectPrimitive, RepaintRequest, SemanticAction, SemanticActionKind,
+    SemanticNode, ShortcutLabelLocalizer, ShortcutPlatform, TextInputEvent, TextPrimitive,
+    TextRole, UiInput, UiInputEvent, WidgetId, pressable,
 };
 
 use super::Ui;
@@ -18,6 +19,12 @@ struct MenuColumnGeometry {
     status: Rect,
     shortcut: Rect,
     disclosure: Rect,
+}
+
+#[derive(Clone, Copy)]
+struct MenuPresentation<'a> {
+    platform: ShortcutPlatform,
+    localizer: &'a dyn ShortcutLabelLocalizer,
 }
 
 fn menu_column_geometry(row: Rect) -> Option<MenuColumnGeometry> {
@@ -48,8 +55,35 @@ impl Ui<'_> {
     /// Call [`OverlayScene::declare_pointer_targets`] from the closure passed to
     /// [`Self::resolve_pointer_targets`] before evaluating lower UI and this scene. Action intents
     /// are also appended to the frame's application-owned action queue.
-    #[allow(clippy::too_many_lines)]
     pub fn overlay_scene(&mut self, scene: &mut OverlayScene) -> OverlaySceneOutput {
+        self.overlay_scene_impl(scene, None)
+    }
+
+    /// Paints a scene with an explicit one-evaluation menu shortcut presentation policy.
+    ///
+    /// Wide menu rows use [`stern_core::Shortcut::localized_label`] with the supplied platform
+    /// and caller-owned localizer. Other surfaces and narrow menu rows retain legacy painting.
+    pub fn overlay_scene_with_menu_presentation(
+        &mut self,
+        scene: &mut OverlayScene,
+        platform: ShortcutPlatform,
+        localizer: &dyn ShortcutLabelLocalizer,
+    ) -> OverlaySceneOutput {
+        self.overlay_scene_impl(
+            scene,
+            Some(MenuPresentation {
+                platform,
+                localizer,
+            }),
+        )
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn overlay_scene_impl(
+        &mut self,
+        scene: &mut OverlayScene,
+        menu_presentation: Option<MenuPresentation<'_>>,
+    ) -> OverlaySceneOutput {
         let mut output = OverlaySceneOutput::default();
         let keyboard_events = self.input().keyboard.events.clone();
         let text_events = self.input().text_events.clone();
@@ -151,7 +185,7 @@ impl Ui<'_> {
                     None
                 };
 
-                self.paint_overlay_row(&row, response.as_ref());
+                self.paint_overlay_row(&row, response.as_ref(), menu_presentation);
                 self.push_semantic_node(overlay_row_semantics(&row, response.as_ref()));
 
                 if response.is_some_and(|response| response.clicked && !response.keyboard_activated)
@@ -215,6 +249,7 @@ impl Ui<'_> {
         &mut self,
         row: &OverlaySceneRow,
         response: Option<&stern_core::Response>,
+        menu_presentation: Option<MenuPresentation<'_>>,
     ) {
         if row.kind == OverlaySceneRowKind::Separator {
             let height = self.theme.strokes.hairline;
@@ -252,13 +287,81 @@ impl Ui<'_> {
         };
         let font = self.theme.font(TextRole::Label);
         let extra = (row.rect.height - font.line_height).max(0.0) * 0.5;
+        let baseline = row.rect.y + extra + font.size;
+
+        if row.menu_columns
+            && let Some(presentation) = menu_presentation
+            && let Some(columns) = menu_column_geometry(row.rect)
+        {
+            self.paint_clipped_overlay_text(
+                row.id.child("menu-label-clip"),
+                columns.label,
+                row.label.clone(),
+                Point::new(columns.label.x, baseline),
+                font,
+                foreground,
+            );
+            let shortcut_label = row.shortcut.as_ref().and_then(|shortcut| {
+                shortcut.localized_label(presentation.platform, presentation.localizer)
+            });
+            if let Some(shortcut_label) = shortcut_label.filter(|label| !label.is_empty()) {
+                self.paint_clipped_overlay_text(
+                    row.id.child("menu-shortcut-clip"),
+                    columns.shortcut,
+                    shortcut_label,
+                    Point::new(columns.shortcut.x, baseline),
+                    font,
+                    foreground,
+                );
+            }
+            if row.expanded.is_some() {
+                self.paint_overlay_text(
+                    "›".to_owned(),
+                    Point::new(columns.disclosure.x, baseline),
+                    font,
+                    foreground,
+                );
+            }
+            return;
+        }
+
+        self.paint_overlay_text(
+            row.label.clone(),
+            Point::new(row.rect.x + self.theme.controls.padding_x, baseline),
+            font,
+            foreground,
+        );
+    }
+
+    fn paint_clipped_overlay_text(
+        &mut self,
+        clip_owner: WidgetId,
+        clip_rect: Rect,
+        text: String,
+        origin: Point,
+        font: FontToken,
+        foreground: Color,
+    ) {
+        let clip = ClipId::from_raw(clip_owner.raw());
+        self.primitive(Primitive::ClipBegin {
+            id: clip,
+            rect: clip_rect,
+        });
+        self.paint_overlay_text(text, origin, font, foreground);
+        self.primitive(Primitive::ClipEnd { id: clip });
+    }
+
+    fn paint_overlay_text(
+        &mut self,
+        text: String,
+        origin: Point,
+        font: FontToken,
+        foreground: Color,
+    ) {
         self.primitive(Primitive::Text(TextPrimitive {
             layout: None,
-            origin: Point::new(
-                row.rect.x + self.theme.controls.padding_x,
-                row.rect.y + extra + font.size,
-            ),
-            text: row.label.clone(),
+            origin,
+            text,
             family: font.family.to_owned(),
             size: font.size,
             line_height: font.line_height,
