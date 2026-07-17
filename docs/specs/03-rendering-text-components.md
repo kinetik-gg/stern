@@ -903,6 +903,15 @@ evaluation, repeated frames, and earlier-action visibility changes. Only
 GPU, native, manual, and visual acceptance remain unverified, and nothing
 becomes Accepted.
 
+Adjacent top-level application-menu movement reuses one caller-owned root
+overlay identity. Replacing that root closes its complete retained stack and
+scene descendant branch, including out-of-order descendants, while preserving
+unrelated overlays and the replacement's placement, dismissal, source, and
+context policy. Only the new active menu's actions remain exposed. This
+advances only `STERN-APPMENU-002` to bounded automated headless evidence; it
+remains Candidate, nothing becomes Accepted, and platform entry, browser,
+raster, GPU, Vello, native, manual, and visual evidence remain unverified.
+
 Presentation adds no response, target, focus stop, semantic node, or action.
 The original full-row rectangle, stable identity, descriptor, navigation,
 source/context, queue order, and action-only semantic label remain authoritative.
