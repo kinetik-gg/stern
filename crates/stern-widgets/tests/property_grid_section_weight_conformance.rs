@@ -33,6 +33,26 @@ fn retained_grid(
     (output, ui.finish_output())
 }
 
+fn layoutless_grid(
+    memory: &mut UiMemory,
+    rows: &[PropertyGridRow],
+    bounds: Rect,
+    theme: &Theme,
+) -> (PropertyGridOutput<()>, FrameOutput) {
+    let input = UiInput::default();
+    let mut ui = Ui::new(&input, memory, theme);
+    let output = ui
+        .property_grid(
+            "grid",
+            bounds,
+            rows,
+            PropertyGridConfig::default().with_overscan(0),
+            |_, _| (),
+        )
+        .expect("valid property rows");
+    (output, ui.finish_output())
+}
+
 fn text<'a>(frame: &'a FrameOutput, source: &str) -> &'a TextPrimitive {
     frame
         .primitives
@@ -282,4 +302,87 @@ fn hot_translation_and_disabled_frames_reuse_section_identity() {
     let changed_theme = theme.with_typography(changed_typography);
     let (_, restyled) = retained_grid(&mut store, &mut memory, &[row], BOUNDS, &changed_theme);
     assert_ne!(layout_id(&restyled, source), stable_id);
+}
+
+#[test]
+fn layoutless_section_preserves_complete_title_geometry_and_semantics() {
+    let source = "Layoutless complete section";
+    let theme = default_dark_theme();
+    let mut memory = UiMemory::new();
+    let (output, frame) = layoutless_grid(
+        &mut memory,
+        &[PropertyGridRow::section(ItemId::from_raw(31), source)],
+        BOUNDS,
+        &theme,
+    );
+
+    assert!(output.values.is_empty());
+    assert!(output.intents.is_empty());
+    let section = text(&frame, source);
+    assert_eq!(section.layout, None);
+    assert_eq!(section.text.as_bytes(), source.as_bytes());
+    assert_eq!(section.family, "Inter");
+    assert_eq!(section.size.to_bits(), 14.0_f32.to_bits());
+    assert_eq!(section.line_height.to_bits(), 19.0_f32.to_bits());
+    assert_eq!(
+        section.origin.x.to_bits(),
+        (output.visible_rows[0].label_rect.x + 8.0).to_bits()
+    );
+    assert!(
+        frame.semantics.nodes().iter().any(|node| {
+            node.role == SemanticRole::Label && node.label.as_deref() == Some(source)
+        })
+    );
+}
+
+#[test]
+fn over_budget_section_rejection_is_transactional_and_leaks_no_identity() {
+    const RETAINED_PAYLOAD_CEILING: usize = 32 * 1024 * 1024;
+
+    let theme = default_dark_theme();
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let _ = retained_grid(
+        &mut store,
+        &mut memory,
+        &[PropertyGridRow::section(
+            ItemId::from_raw(41),
+            "Warm retained section",
+        )],
+        BOUNDS,
+        &theme,
+    );
+    let accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
+
+    let source = "x".repeat(RETAINED_PAYLOAD_CEILING + 1);
+    let (output, frame) = retained_grid(
+        &mut store,
+        &mut memory,
+        &[PropertyGridRow::section(ItemId::from_raw(42), &source)],
+        BOUNDS,
+        &theme,
+    );
+    let section = text(&frame, &source);
+    assert_eq!(section.layout, None);
+    assert_eq!(section.text.as_bytes(), source.as_bytes());
+    assert_eq!(section.family, "Inter");
+    assert_eq!(section.size.to_bits(), 14.0_f32.to_bits());
+    assert_eq!(section.line_height.to_bits(), 19.0_f32.to_bits());
+    assert_eq!(
+        (
+            store.len(),
+            store.retained_payload_bytes(),
+            store.change_cursor()
+        ),
+        accounting
+    );
+    assert!(output.values.is_empty());
+    assert!(output.intents.is_empty());
+    assert!(frame.semantics.nodes().iter().any(|node| {
+        node.role == SemanticRole::Label && node.label.as_deref() == Some(source.as_str())
+    }));
 }
