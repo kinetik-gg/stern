@@ -810,6 +810,23 @@ Button::new("Analyze")
 
 The canonical internal implementation should still use shared behavior primitives.
 
+### 19.1 Qualified Icon Fallback And Naming Evidence
+
+Public headless icon-button evidence holds one stable widget identity, icon
+identity, label, and caller rectangle across missing, registered, missing
+again, and registered-but-unpaintable vector resources. Response, hit, and
+semantic outer bounds remain caller-owned, while registered and fallback
+primitives remain contained in the public medium-icon optical box. Idle,
+hover, press, and disabled presentation do not move those bounds. Explicit
+accessible names and the semantic invoke declaration remain independent of
+vector identity, vector content, missing fallback, and bitmap-backed presentation.
+
+This advances only `STERN-ICON-COMP-002` and `STERN-ICON-COMP-004` to bounded
+Partial automated headless evidence; Candidate remains Candidate and nothing
+becomes Accepted. Stable Stern-name/Phosphor policy, RTL mirroring declarations,
+platform/native behavior, browser, raster, GPU, Vello, manual review, visual
+acceptance, and exact pixel or private recipe equivalence remain unverified.
+
 ## 20. Lists, Tables, Trees, And Virtualization
 
 Internal tools often display large collections.
