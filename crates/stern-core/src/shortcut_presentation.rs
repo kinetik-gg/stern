@@ -69,6 +69,7 @@ impl ShortcutLabelLocalizer for EnglishShortcutLabels {
         }
     }
 
+    #[allow(clippy::unnecessary_literal_bound)]
     fn separator(&self, _platform: ShortcutPlatform) -> &str {
         "+"
     }
@@ -85,15 +86,15 @@ impl Shortcut {
         let mut labels = Vec::with_capacity(5);
         append_modifiers(&mut labels, self.modifiers, platform, localizer)?;
 
-        let key = if self.key != Key::Unidentified {
-            ShortcutLabelToken::LogicalKey(&self.key)
-        } else {
+        let key = if self.key == Key::Unidentified {
             match self.physical_key {
                 Some(key) if key != PhysicalKey::Unidentified => {
                     ShortcutLabelToken::PhysicalKey(key)
                 }
                 Some(_) | None => return None,
             }
+        } else {
+            ShortcutLabelToken::LogicalKey(&self.key)
         };
         append_label(&mut labels, platform, key, localizer)?;
 
@@ -150,11 +151,9 @@ const fn english_modifier_label(
     modifier: ShortcutModifier,
 ) -> &'static str {
     match (platform, modifier) {
-        (ShortcutPlatform::Windows, ShortcutModifier::Control)
-        | (ShortcutPlatform::Linux, ShortcutModifier::Control) => "Ctrl",
+        (ShortcutPlatform::Windows | ShortcutPlatform::Linux, ShortcutModifier::Control) => "Ctrl",
         (ShortcutPlatform::MacOs, ShortcutModifier::Control) => "Control",
-        (ShortcutPlatform::Windows, ShortcutModifier::Alt)
-        | (ShortcutPlatform::Linux, ShortcutModifier::Alt) => "Alt",
+        (ShortcutPlatform::Windows | ShortcutPlatform::Linux, ShortcutModifier::Alt) => "Alt",
         (ShortcutPlatform::MacOs, ShortcutModifier::Alt) => "Option",
         (_, ShortcutModifier::Shift) => "Shift",
         (ShortcutPlatform::Windows, ShortcutModifier::Super) => "Win",
@@ -228,9 +227,11 @@ fn english_physical_key_label(platform: ShortcutPlatform, key: PhysicalKey) -> O
         PhysicalKey::KeyY => "Y".to_owned(),
         PhysicalKey::KeyZ => "Z".to_owned(),
         PhysicalKey::Digit(number) if number <= 9 => number.to_string(),
-        PhysicalKey::Digit(_) => return None,
         PhysicalKey::NumpadDigit(number) if number <= 9 => format!("Numpad {number}"),
-        PhysicalKey::NumpadDigit(_) => return None,
+        PhysicalKey::Digit(_)
+        | PhysicalKey::NumpadDigit(_)
+        | PhysicalKey::Function(0)
+        | PhysicalKey::Unidentified => return None,
         PhysicalKey::Enter => platform_label(platform, "Enter", "Return", "Enter").to_owned(),
         PhysicalKey::NumpadEnter => {
             platform_label(platform, "Numpad Enter", "Numpad Return", "Numpad Enter").to_owned()
@@ -253,7 +254,6 @@ fn english_physical_key_label(platform: ShortcutPlatform, key: PhysicalKey) -> O
         PhysicalKey::ArrowRight => "Right".to_owned(),
         PhysicalKey::ArrowUp => "Up".to_owned(),
         PhysicalKey::ArrowDown => "Down".to_owned(),
-        PhysicalKey::Function(0) | PhysicalKey::Unidentified => return None,
         PhysicalKey::Function(number) => format!("F{number}"),
         PhysicalKey::Minus => "-".to_owned(),
         PhysicalKey::Equal => "=".to_owned(),
