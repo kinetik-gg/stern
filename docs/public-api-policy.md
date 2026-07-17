@@ -351,6 +351,23 @@ the checkbox recipe size. Caller-owned rectangles and full-label interaction
 and semantic bounds remain unchanged. See
 [Exact Size Foundation Migration](size-migration.md).
 
+### Qualified shortcut presentation
+
+The additive `ShortcutPlatform`, `ShortcutModifier`, `ShortcutLabelToken`,
+`ShortcutLabelLocalizer`, and `EnglishShortcutLabels` types are qualified
+Experimental core API. `Shortcut::localized_label` and
+`Shortcut::english_label` return owned presentation text without changing the
+existing routing shape or storing a display, platform, or locale field. These
+items are reachable through `stern::core` and deliberately absent from
+`stern::prelude`.
+
+Current evidence is bounded Partial for explicit Windows, macOS, and Linux
+policy selection, the deterministic English fallback, caller-owned
+localization, fail-closed tokens, and routing noninterference. Platform/locale
+discovery, menu adoption, non-English quality, sequential chords, and visual or
+runtime acceptance remain future work; nothing in this foundation is Stable or
+Accepted.
+
 | Group | Current classification | Canonical path for new code | Public workflow use | Promotion prerequisite |
 | --- | --- | --- | --- | --- |
 | Facade state | Provisional Experimental | `stern::UiState` or `stern::prelude::UiState` | Yes: retained application state | Public frame lifecycle, shaped-text resource registration, and presenter workflow proof |
@@ -382,6 +399,7 @@ and semantic bounds remain unchanged. See
 - `ActionRoutingContext`
 - `ActionSource`
 - `ActionState`
+- `EnglishShortcutLabels`
 - `Brush`
 - `Color`
 - `CursorShape`
@@ -392,6 +410,10 @@ and semantic bounds remain unchanged. See
 - `ImageId`
 - `Key`
 - `Modifiers`
+- `ShortcutLabelLocalizer`
+- `ShortcutLabelToken`
+- `ShortcutModifier`
+- `ShortcutPlatform`
 - `PathElement`
 - `PathPrimitive`
 - `PhysicalSize`

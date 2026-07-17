@@ -17,6 +17,7 @@ pub mod observers;
 pub mod perf;
 pub mod render;
 pub mod runtime;
+mod shortcut_presentation;
 pub mod test_harness;
 pub mod theme;
 pub mod units;
@@ -81,6 +82,10 @@ pub use render::{
 pub use runtime::{
     CursorShape, FrameContext, FrameOutput, FrameWarning, PlatformRequest, PointerOrder,
     PointerPlanError, PointerTarget, PointerTargetPlan, RepaintRequest, TimeInfo, Ui, ViewportInfo,
+};
+pub use shortcut_presentation::{
+    EnglishShortcutLabels, ShortcutLabelLocalizer, ShortcutLabelToken, ShortcutModifier,
+    ShortcutPlatform,
 };
 pub use test_harness::{
     FrameTrace, HarnessPhase, ScriptedInput, ScriptedKeyEvent, SettlePendingCause, SettleResult,

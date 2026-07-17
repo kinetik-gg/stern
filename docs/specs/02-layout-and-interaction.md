@@ -451,3 +451,28 @@ Priority:
 ```
 
 Text fields must consume typing and text-editing shortcuts before global actions receive them.
+
+### Shortcut presentation
+
+`Shortcut` remains routing identity rather than preformatted display text.
+Qualified callers may request owned presentation data with an explicit
+`ShortcutPlatform` and a `ShortcutLabelLocalizer`; core performs no operating
+system or locale discovery. Active modifiers precede the key in the stable
+Control, Alt, Shift, Super order. A resolved logical key is presented when
+available, even when a physical key also governs routing; an identified
+physical key is the fallback only for an unidentified logical key.
+
+Localization is all-or-nothing. Each required token must produce a nonempty
+label or the whole shortcut returns `None`, and the caller-provided separator
+may be empty for symbol policies. `EnglishShortcutLabels` is a deterministic
+Windows, macOS, and Linux reference policy, not locale discovery or a claim
+that English is correct for every user. Presentation does not mutate input,
+routing, descriptors, action queues, or application state and cannot invoke an
+action.
+
+This qualified API is Experimental and advances only bounded Partial
+structural and deterministic-policy evidence for `STERN-SHORTCUT-001`,
+`STERN-SHORTCUT-002`, and `STERN-SHORTCUT-003`. Runtime active-platform
+selection, non-English translation quality, menu/widget adoption, sequential
+chords, and browser, raster, GPU, manual, and visual evidence remain outside
+this contract. No shortcut or menu requirement is Accepted by this slice.
