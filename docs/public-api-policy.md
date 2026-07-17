@@ -351,19 +351,33 @@ the checkbox recipe size. Caller-owned rectangles and full-label interaction
 and semantic bounds remain unchanged. See
 [Exact Size Foundation Migration](size-migration.md).
 
-### Qualified collection context snapshots
+### Qualified collection context snapshots and Escape focus return
 
 Selection context targets own sorted, deduplicated item IDs, and collection
 action metadata and requests retain the target acquired when a menu opens.
-Bounded public headless evidence proves Asset Browser and Outliner retain that
-snapshot when live selection changes after opening and before command display.
+Bounded public headless evidence from issue #740/PR #743 separately proves
+Asset Browser and Outliner retain stable target and selection snapshots through
+command display and invocation when live selection changes after opening.
+That evidence does not prove command-close focus restoration.
 This advances only `STERN-CONTEXT-001` to bounded Partial; Candidate remains
 Candidate.
 
-Target/owner destruction, dynamic command removal, other consumers,
-`STERN-CONTEXT-002` invocation convergence, `STERN-CONTEXT-003` focus return,
-and platform/native/browser/raster/GPU/Vello/manual/visual evidence remain
-unverified. `STERN-MENU-003` does not advance, and nothing is Accepted.
+The two new Asset Browser and Outliner tests in issue #746 alone prove that
+Escape dismissal clears the retained context, restores focus to the exact
+selected invoking item or row without implicit selection mutation: cursor and
+selected item IDs remain byte-for-byte unchanged; no context request or frame
+action is emitted; a following frame is requested; the context menu then
+remains closed and selection-stable on that idle frame. The issue #746
+tests alone advance only the
+covered Asset Browser and Outliner portion of `STERN-CONTEXT-003` to bounded
+Partial. Candidate remains Candidate.
+
+Outside-click dismissal, target or owner destruction, focus loss, dynamic
+command removal, other consumers, generic `MenuOverlay` focus return,
+command-owned selection mutation, and `STERN-CONTEXT-002` menu-key/`Shift+F10`
+convergence remain unverified. Platform/native/browser/raster/GPU/Vello/manual/
+visual evidence also remains unverified. `STERN-MENU-003` does not advance, and
+nothing is Accepted.
 
 ### Qualified shortcut presentation
 

@@ -7,8 +7,8 @@ use std::time::Duration;
 use stern_core::{
     ActionDescriptor, Brush, Color, ComponentState, FrameContext, ImageId, Key, KeyEvent, KeyState,
     KeyboardInput, Modifiers, PathElement, PhysicalSize, Point, PointerButtonState, PointerInput,
-    PointerOrder, Primitive, Rect, ScaleFactor, SemanticActionKind, SemanticNode, Size, TimeInfo,
-    UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    PointerOrder, Primitive, Rect, RepaintRequest, ScaleFactor, SemanticActionKind, SemanticNode,
+    Size, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::asset_browser::{
     AssetBrowserConfig, AssetBrowserDropTargetKind, AssetBrowserItem, AssetBrowserItemRect,
@@ -1440,6 +1440,97 @@ fn drop_background_and_context_owners_never_create_asset_item_annuli() {
     );
     assert_eq!(state.cursor.active(), Some(id(1)));
     assert_eq!(state.selection.selected(), vec![id(1)]);
+}
+
+#[test]
+fn context_escape_dismissal_restores_asset_trigger_focus_without_mutating_selection() {
+    let model = AssetBrowserModel::new(vec![
+        asset(1, "One", "mesh"),
+        asset(2, "Two", "mesh"),
+        asset(3, "Three", "mesh"),
+    ]);
+    let cfg = config(AssetBrowserViewMode::List);
+    let mut state = AssetBrowserState::new();
+    let mut memory = UiMemory::new();
+    let idle = run_frame(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+    );
+    let trigger_point = item_rect(&idle, id(2)).rect.center();
+    let selected = click(trigger_point, &model, cfg.clone(), &mut state, &mut memory);
+    let trigger = selected.root.child(("asset-browser-item", 2_u64));
+    let expected_cursor = state.cursor.active();
+    let expected_selection = state.selection.selected();
+    assert_eq!(expected_cursor, Some(id(2)));
+    assert_eq!(expected_selection, vec![id(2)]);
+    assert_eq!(memory.focused(), Some(trigger));
+
+    let opened = context_click(trigger_point, &model, cfg.clone(), &mut state, &mut memory);
+    assert_eq!(
+        opened.output.context_opened,
+        state.context_target().cloned()
+    );
+    assert_eq!(memory.focused(), Some(trigger));
+    let menu = run_frame_with_options(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+        true,
+    );
+    let action = menu
+        .frame
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| node.label.as_deref() == Some("Delete"))
+        .expect("selected asset context action")
+        .id;
+    memory.focus(action);
+    assert_eq!(memory.focused(), Some(action));
+
+    let dismissed = run_frame_with_options(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        key_input(Key::Escape),
+        false,
+        true,
+    );
+    assert_eq!(state.context_target(), None);
+    assert_eq!(memory.focused(), Some(trigger));
+    assert_eq!(state.cursor.active(), expected_cursor);
+    assert_eq!(state.selection.selected(), expected_selection);
+    assert!(dismissed.output.requests.is_empty());
+    assert!(dismissed.frame.actions.is_empty());
+    assert_eq!(dismissed.frame.repaint, RepaintRequest::NextFrame);
+
+    let settled = run_frame_with_options(
+        &model,
+        cfg,
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+        true,
+    );
+    assert_eq!(memory.focused(), Some(trigger));
+    assert_eq!(state.cursor.active(), expected_cursor);
+    assert_eq!(state.selection.selected(), expected_selection);
+    assert!(
+        settled
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .all(|node| node.label.as_deref() != Some("Delete"))
+    );
 }
 
 #[test]

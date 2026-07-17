@@ -7,8 +7,8 @@ use std::time::Duration;
 use stern_core::{
     ActionDescriptor, Brush, Color, ComponentState, FrameContext, Key, KeyEvent, KeyState,
     KeyboardInput, Modifiers, PathElement, PhysicalSize, Point, PointerButtonState, PointerInput,
-    PointerOrder, Primitive, Rect, ScaleFactor, SemanticActionKind, SemanticNode, Size, TimeInfo,
-    UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    PointerOrder, Primitive, Rect, RepaintRequest, ScaleFactor, SemanticActionKind, SemanticNode,
+    Size, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::outliner::{
     OutlinerConfig, OutlinerOutput, OutlinerRequest, OutlinerSelectionMode, OutlinerState,
@@ -916,6 +916,94 @@ fn nested_drop_background_and_overlay_focus_never_become_row_focus() {
             .expect("row semantic")
             .state
             .focused
+    );
+}
+
+#[test]
+fn context_escape_dismissal_restores_outliner_trigger_focus_without_mutating_selection() {
+    let model = owned_model(OutlinerRowFlags::new());
+    let cfg = config(BOUNDS);
+    let mut state = OutlinerState::new();
+    let mut memory = UiMemory::new();
+    let idle = run_frame(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+    );
+    let trigger_point = row_zones(&idle, id(1)).label_rect.center();
+    let selected = click(
+        trigger_point,
+        1,
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+    );
+    let trigger = selected.root.child(("outliner-row", 1_u64));
+    let expected_cursor = state.cursor.active();
+    let expected_selection = state.selection.selected();
+    assert_eq!(expected_cursor, Some(id(1)));
+    assert_eq!(expected_selection, vec![id(1)]);
+    assert_eq!(memory.focused(), Some(trigger));
+
+    let opened = context_click(
+        row_zones(&selected, id(1)).context_rect.center(),
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+    );
+    assert_eq!(
+        opened.output.context_opened,
+        state.context_target().cloned()
+    );
+    assert_eq!(memory.focused(), Some(trigger));
+    let menu = run_frame(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+    );
+    let action = menu
+        .frame
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| node.label.as_deref() == Some("Delete"))
+        .expect("selected outliner context action")
+        .id;
+    memory.focus(action);
+    assert_eq!(memory.focused(), Some(action));
+
+    let dismissed = run_frame(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        key_input(Key::Escape),
+    );
+    assert_eq!(state.context_target(), None);
+    assert_eq!(memory.focused(), Some(trigger));
+    assert_eq!(state.cursor.active(), expected_cursor);
+    assert_eq!(state.selection.selected(), expected_selection);
+    assert!(dismissed.output.requests.is_empty());
+    assert!(dismissed.frame.actions.is_empty());
+    assert_eq!(dismissed.frame.repaint, RepaintRequest::NextFrame);
+
+    let settled = run_frame(&model, cfg, &mut state, &mut memory, UiInput::default());
+    assert_eq!(memory.focused(), Some(trigger));
+    assert_eq!(state.cursor.active(), expected_cursor);
+    assert_eq!(state.selection.selected(), expected_selection);
+    assert!(
+        settled
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .all(|node| node.label.as_deref() != Some("Delete"))
     );
 }
 
