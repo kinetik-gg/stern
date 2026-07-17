@@ -1,9 +1,9 @@
 //! Bounded icon fallback, geometry, and accessible-name conformance evidence.
 
 use stern_core::{
-    Alignment, ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PathElement,
-    PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect, SemanticActionKind,
-    Size, UiInput, UiMemory, WidgetId, default_dark_theme, fit_box,
+    Alignment, CursorShape, FrameOutput, ImageId, PathElement, PlatformRequest, Point,
+    PointerButtonState, PointerInput, Primitive, Rect, Response, SemanticActionKind, Size, UiInput,
+    UiMemory, WidgetId, default_dark_theme, fit_box,
 };
 use stern_widgets::{
     IconGraphic, IconId, IconLibrary, IconPath, Ui, WidgetOutput, icon_button_with_library,
@@ -54,6 +54,15 @@ fn render_vector(
     )
 }
 
+fn fresh_vector(
+    icons: &IconLibrary,
+    icon: IconId,
+    input: &UiInput,
+    disabled: bool,
+) -> WidgetOutput {
+    render_vector(icons, icon, input, &mut UiMemory::new(), disabled)
+}
+
 fn optical_box() -> Rect {
     let theme = default_dark_theme();
     fit_box(
@@ -76,6 +85,22 @@ fn pointer_input(down: bool, pressed: bool, released: bool) -> UiInput {
     }
 }
 
+fn render_frame(
+    icons: &IconLibrary,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    disabled: bool,
+) -> (Response, FrameOutput) {
+    let theme = default_dark_theme();
+    let mut ui = Ui::new(input, memory, &theme).with_icons(icons);
+    let response = ui.icon_button_with_label("frame-icon", OUTER, icon_id(23), LABEL, disabled);
+    (response, ui.finish_output())
+}
+
+fn fresh_frame(icons: &IconLibrary, input: &UiInput, disabled: bool) -> (Response, FrameOutput) {
+    render_frame(icons, input, &mut UiMemory::new(), disabled)
+}
+
 fn assert_outer_contract(output: &WidgetOutput) {
     let response = output.response.expect("icon response");
     assert_eq!(response.id, widget_id());
@@ -89,13 +114,7 @@ fn assert_outer_contract(output: &WidgetOutput) {
 }
 
 fn assert_point_in(rect: Rect, point: Point) {
-    assert!(
-        point.x >= rect.x
-            && point.x <= rect.max_x()
-            && point.y >= rect.y
-            && point.y <= rect.max_y(),
-        "point {point:?} escaped {rect:?}"
-    );
+    assert!(rect.contains_point(point));
 }
 
 fn assert_icon_tail_contained(output: &WidgetOutput, count: usize) {
@@ -110,16 +129,8 @@ fn assert_icon_tail_contained(output: &WidgetOutput, count: usize) {
                         PathElement::MoveTo(point) | PathElement::LineTo(point) => {
                             assert_point_in(optical_box(), *point);
                         }
-                        PathElement::QuadTo { ctrl, to } => {
-                            assert_point_in(optical_box(), *ctrl);
-                            assert_point_in(optical_box(), *to);
-                        }
-                        PathElement::CubicTo { ctrl1, ctrl2, to } => {
-                            assert_point_in(optical_box(), *ctrl1);
-                            assert_point_in(optical_box(), *ctrl2);
-                            assert_point_in(optical_box(), *to);
-                        }
                         PathElement::Close => {}
+                        other => panic!("unexpected icon path element {other:?}"),
                     }
                 }
             }
@@ -200,34 +211,10 @@ fn icon_bounds_survive_idle_hover_press_and_disabled_states() {
     let mut icons = IconLibrary::new();
     icons.register(icon, graphic(3.0));
 
-    let idle = render_vector(
-        &icons,
-        icon,
-        &UiInput::default(),
-        &mut UiMemory::new(),
-        false,
-    );
-    let hovered = render_vector(
-        &icons,
-        icon,
-        &pointer_input(false, false, false),
-        &mut UiMemory::new(),
-        false,
-    );
-    let pressed = render_vector(
-        &icons,
-        icon,
-        &pointer_input(true, true, false),
-        &mut UiMemory::new(),
-        false,
-    );
-    let disabled = render_vector(
-        &icons,
-        icon,
-        &pointer_input(true, true, false),
-        &mut UiMemory::new(),
-        true,
-    );
+    let idle = fresh_vector(&icons, icon, &UiInput::default(), false);
+    let hovered = fresh_vector(&icons, icon, &pointer_input(false, false, false), false);
+    let pressed = fresh_vector(&icons, icon, &pointer_input(true, true, false), false);
+    let disabled = fresh_vector(&icons, icon, &pointer_input(true, true, false), true);
 
     for output in [&idle, &hovered, &pressed, &disabled] {
         assert_outer_contract(output);
@@ -245,4 +232,121 @@ fn icon_bounds_survive_idle_hover_press_and_disabled_states() {
     assert!(disabled_semantic.state.disabled);
     assert!(!disabled_semantic.focusable);
     assert_eq!(disabled_semantic.label.as_deref(), Some(LABEL));
+}
+
+#[test]
+fn accessible_name_is_independent_of_icon_identity_and_graphic_content() {
+    let first = icon_id(17);
+    let second = icon_id(19);
+    let mut first_graphic = IconLibrary::new();
+    first_graphic.register(first, graphic(2.0));
+    let mut changed_graphic = IconLibrary::new();
+    changed_graphic.register(first, graphic(5.0));
+    changed_graphic.register(second, graphic(3.0));
+    let missing = IconLibrary::new();
+
+    let outputs = [
+        fresh_vector(&first_graphic, first, &UiInput::default(), false),
+        fresh_vector(&changed_graphic, first, &UiInput::default(), false),
+        fresh_vector(&changed_graphic, second, &UiInput::default(), false),
+        fresh_vector(&missing, first, &UiInput::default(), false),
+        image_icon_button(
+            widget_id(),
+            OUTER,
+            ImageId::from_raw(31),
+            LABEL,
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            &default_dark_theme(),
+            false,
+        ),
+    ];
+
+    for output in &outputs {
+        assert_outer_contract(output);
+        let semantic = &output.semantics[0];
+        assert!(
+            semantic
+                .actions
+                .iter()
+                .any(|action| action.kind == SemanticActionKind::Invoke)
+        );
+    }
+    assert_ne!(outputs[0].primitives, outputs[1].primitives);
+    assert_ne!(outputs[0].primitives, outputs[2].primitives);
+    assert!(
+        outputs[4]
+            .primitives
+            .iter()
+            .any(|primitive| matches!(primitive, Primitive::Image(_)))
+    );
+}
+
+#[test]
+fn icon_presentation_never_queues_an_action_without_activation() {
+    let mut registered = IconLibrary::new();
+    registered.register(icon_id(23), graphic(2.0));
+    let missing = IconLibrary::new();
+
+    let (registered_idle, registered_idle_frame) =
+        fresh_frame(&registered, &UiInput::default(), false);
+    let (missing_idle, missing_idle_frame) = fresh_frame(&missing, &UiInput::default(), false);
+    assert!(!registered_idle.clicked && !missing_idle.clicked);
+    assert_eq!(
+        registered_idle_frame.platform_requests,
+        missing_idle_frame.platform_requests
+    );
+    assert!(registered_idle_frame.platform_requests.is_empty());
+    assert!(registered_idle_frame.actions.is_empty());
+    assert!(missing_idle_frame.actions.is_empty());
+
+    let (_, registered_hover_frame) =
+        fresh_frame(&registered, &pointer_input(false, false, false), false);
+    let (_, missing_hover_frame) =
+        fresh_frame(&missing, &pointer_input(false, false, false), false);
+    assert_eq!(
+        registered_hover_frame.platform_requests,
+        missing_hover_frame.platform_requests
+    );
+    assert_eq!(
+        registered_hover_frame.platform_requests,
+        vec![PlatformRequest::SetCursor(CursorShape::PointingHand)]
+    );
+    assert!(registered_hover_frame.actions.is_empty());
+
+    let mut pointer_memory = UiMemory::new();
+    let (_, pressed_frame) = render_frame(
+        &registered,
+        &pointer_input(true, true, false),
+        &mut pointer_memory,
+        false,
+    );
+    let (released, released_frame) = render_frame(
+        &registered,
+        &pointer_input(false, false, true),
+        &mut pointer_memory,
+        false,
+    );
+    assert!(released.clicked);
+    assert!(!released.keyboard_activated);
+    assert!(pressed_frame.actions.is_empty() && released_frame.actions.is_empty());
+
+    let mut disabled_memory = UiMemory::new();
+    let (_, disabled_press_frame) = render_frame(
+        &registered,
+        &pointer_input(true, true, false),
+        &mut disabled_memory,
+        true,
+    );
+    let (disabled, disabled_release_frame) = render_frame(
+        &registered,
+        &pointer_input(false, false, true),
+        &mut disabled_memory,
+        true,
+    );
+    assert!(!disabled.clicked && !disabled.keyboard_activated);
+    assert!(disabled_press_frame.platform_requests.is_empty());
+    assert!(disabled_release_frame.platform_requests.is_empty());
+    assert!(disabled_press_frame.actions.is_empty());
+    assert!(disabled_release_frame.actions.is_empty());
 }
