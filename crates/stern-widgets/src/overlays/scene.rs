@@ -7,6 +7,7 @@ use super::{
     CommandPaletteOverlay, DropdownItemId, DropdownNavigationIntent, DropdownOverlay, MenuItem,
     MenuNavigationIntent, MenuOverlay, MenuSubmenuOpenIntent, ModalDialogOverlay, OverlayEntry,
     OverlayId, OverlayNavigationInput, OverlayStack, TypeaheadBuffer,
+    stack::descendant_overlay_ids,
 };
 
 /// Dense, deterministic geometry used by the public overlay scene.
@@ -171,7 +172,16 @@ impl OverlayScene {
     /// Adds a surface at the top of the scene.
     pub fn push(&mut self, surface: OverlaySceneSurface) {
         let id = surface.entry().id;
-        self.surfaces.retain(|candidate| candidate.entry().id != id);
+        if self
+            .surfaces
+            .iter()
+            .any(|candidate| candidate.entry().id == id)
+        {
+            let closing =
+                descendant_overlay_ids(self.surfaces.iter().map(OverlaySceneSurface::entry), id);
+            self.surfaces
+                .retain(|candidate| !closing.contains(&candidate.entry().id));
+        }
         self.surfaces.push(surface);
     }
 

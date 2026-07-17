@@ -2,6 +2,26 @@ use stern_core::Point;
 
 use super::{OverlayEntry, OverlayId};
 
+pub(crate) fn descendant_overlay_ids<'a>(
+    entries: impl IntoIterator<Item = &'a OverlayEntry>,
+    root: OverlayId,
+) -> Vec<OverlayId> {
+    let entries = entries.into_iter().collect::<Vec<_>>();
+    let mut ids = vec![root];
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for entry in &entries {
+            if entry.parent.is_some_and(|parent| ids.contains(&parent)) && !ids.contains(&entry.id)
+            {
+                ids.push(entry.id);
+                changed = true;
+            }
+        }
+    }
+    ids
+}
+
 /// Retained overlay stack.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct OverlayStack {
@@ -38,7 +58,7 @@ impl OverlayStack {
     /// Closes an overlay and any nested descendants by ID.
     pub fn close(&mut self, id: OverlayId) -> Option<OverlayEntry> {
         let closed = self.entries.iter().find(|entry| entry.id == id).cloned()?;
-        let closing = self.descendant_ids(id);
+        let closing = descendant_overlay_ids(&self.entries, id);
         self.entries.retain(|entry| !closing.contains(&entry.id));
         Some(closed)
     }
@@ -152,23 +172,6 @@ impl OverlayStack {
             requests.push(id);
         }
         requests
-    }
-
-    fn descendant_ids(&self, root: OverlayId) -> Vec<OverlayId> {
-        let mut ids = vec![root];
-        let mut changed = true;
-        while changed {
-            changed = false;
-            for entry in &self.entries {
-                if entry.parent.is_some_and(|parent| ids.contains(&parent))
-                    && !ids.contains(&entry.id)
-                {
-                    ids.push(entry.id);
-                    changed = true;
-                }
-            }
-        }
-        ids
     }
 
     fn would_parent_cycle(&self, parent: OverlayId, child: OverlayId) -> bool {

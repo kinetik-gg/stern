@@ -10,6 +10,14 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- Added bounded automated headless evidence for `STERN-APPMENU-002`. Adjacent
+  top-level movement reuses one caller-owned root overlay identity; replacing
+  it closes the complete retained stack and scene descendant branch while
+  preserving unrelated overlays and the replacement placement, dismissal,
+  source, and context policy. Only the new active menu actions remain exposed.
+  The requirement remains Candidate, nothing becomes Accepted, and platform
+  entry, browser, raster, GPU, Vello, native, manual, and visual evidence remain
+  unverified.
 - Added bounded automated headless evidence for `STERN-MENU-COMP-004` only.
   Section headings and separators retain deterministic semantic/read order while
   row-center routing is blocked and no response, focus/navigation selection,
