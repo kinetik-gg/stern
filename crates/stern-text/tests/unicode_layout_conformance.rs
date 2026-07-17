@@ -1493,7 +1493,10 @@ fn nondefault_weight_preserves_unicode_bidi_and_multiline_source_topology() {
     assert_eq!(request.style.weight, 700);
     assert!(layout.line_count >= 2);
     assert_eq!(layout.lines.first().expect("first line").text_start, 0);
-    assert_eq!(layout.lines.last().expect("last line").text_end, source.len());
+    assert_eq!(
+        layout.lines.last().expect("last line").text_end,
+        source.len()
+    );
     assert!(layout.navigation(source).is_ok());
     assert!(
         layout
