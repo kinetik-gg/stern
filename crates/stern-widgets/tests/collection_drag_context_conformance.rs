@@ -3,9 +3,10 @@
 use stern_core::{ActionDescriptor, ActionId, Point, Rect, Size};
 use stern_widgets::{
     AssetBrowserDropTargetKind, AssetBrowserItem, AssetBrowserLayout, AssetBrowserModel,
-    AssetBrowserViewMode, CollectionContextTarget, GridColumns, GridLayout, ItemId, ListLayout,
-    OutlinerDropZoneKind, OutlinerItem, OutlinerLayout, OutlinerModel, OutlinerRowFlags, Selection,
-    TreeExpansion, collection_context_actions, outliner_context_target_at,
+    AssetBrowserViewMode, CollectionContextTarget, CollectionSelectionContextTarget, GridColumns,
+    GridLayout, ItemId, ListLayout, OutlinerDropZoneKind, OutlinerItem, OutlinerLayout,
+    OutlinerModel, OutlinerRowFlags, Selection, TreeExpansion, collection_context_actions,
+    outliner_context_target_at,
 };
 
 fn id(raw: u64) -> ItemId {
@@ -262,4 +263,110 @@ fn context_action_requests_are_metadata_only_and_selection_aware() {
     );
     assert!(actions[1].request().is_none());
     assert_eq!(actions[1].descriptor.id, ActionId::new("delete"));
+}
+
+#[test]
+fn selection_snapshot_is_owned_sorted_deduplicated_and_empty_rejected() {
+    let mut source = vec![id(30), id(10), id(20), id(10)];
+    let from_items = CollectionSelectionContextTarget::new(source.iter().copied())
+        .expect("nonempty selection target");
+
+    source.clear();
+    source.push(id(40));
+    assert_eq!(from_items.items, vec![id(10), id(20), id(30)]);
+
+    let mut selection = Selection::new();
+    selection.replace(id(20));
+    selection.toggle(id(10));
+    let from_selection = CollectionSelectionContextTarget::from_selection(&selection)
+        .expect("selection-backed target");
+
+    selection.replace(id(40));
+    assert_eq!(from_selection.items, vec![id(10), id(20)]);
+    assert_eq!(selection.selected(), vec![id(40)]);
+    assert!(CollectionSelectionContextTarget::new(Vec::new()).is_none());
+    assert!(CollectionSelectionContextTarget::from_selection(&Selection::new()).is_none());
+}
+
+#[test]
+fn action_metadata_and_requests_keep_the_captured_selection_after_source_mutation() {
+    let mut selection = Selection::new();
+    selection.replace(id(20));
+    selection.toggle(id(10));
+    let target = CollectionContextTarget::selection(selection.selected())
+        .expect("captured selection target");
+    let mut disabled = action("asset.delete", "Delete");
+    disabled.state.enabled = false;
+    let mut hidden = action("asset.hidden", "Hidden");
+    hidden.state.visible = false;
+    let actions =
+        collection_context_actions(&target, [action("asset.open", "Open"), disabled, hidden]);
+
+    selection.replace(id(30));
+
+    assert_eq!(selection.selected(), vec![id(30)]);
+    assert_eq!(actions.len(), 2);
+    assert!(actions.iter().all(|metadata| metadata.target == target
+        && metadata.target.target_ids() == vec![id(10), id(20)]));
+    assert!(
+        actions
+            .iter()
+            .all(|metadata| metadata.descriptor.id != ActionId::new("asset.hidden"))
+    );
+    let request = actions[0].request().expect("enabled retained request");
+    assert_eq!(request.action_id, ActionId::new("asset.open"));
+    assert_eq!(request.target, target);
+    assert_eq!(request.target_ids, vec![id(10), id(20)]);
+    assert!(!actions[1].can_request());
+    assert!(actions[1].request().is_none());
+}
+
+#[test]
+fn item_selection_and_background_resolution_capture_distinct_stable_targets() {
+    let mut selection = Selection::new();
+    selection.replace(id(20));
+    selection.toggle(id(10));
+    let expected_selection =
+        CollectionContextTarget::selection([id(10), id(20)]).expect("selection target");
+
+    let rows = outliner_rows(false);
+    let outliner_bounds = Rect::new(0.0, 0.0, 240.0, 120.0);
+    let outliner_targets = [
+        outliner_context_target_at(outliner_bounds, &rows, rows[1].rect.center(), &selection)
+            .expect("outliner selection target"),
+        outliner_context_target_at(outliner_bounds, &rows, rows[2].rect.center(), &selection)
+            .expect("outliner item target"),
+        outliner_context_target_at(outliner_bounds, &rows, Point::new(4.0, 90.0), &selection)
+            .expect("outliner background target"),
+    ];
+
+    let asset_bounds = Rect::new(0.0, 0.0, 300.0, 160.0);
+    let assets = asset_layout().resolve(asset_bounds, &asset_model(), 0.0, &selection, None);
+    let asset_targets = [
+        assets
+            .context_target_at(asset_bounds, assets.items[1].rect.center(), &selection)
+            .expect("asset selection target"),
+        assets
+            .context_target_at(asset_bounds, assets.items[2].rect.center(), &selection)
+            .expect("asset item target"),
+        assets
+            .context_target_at(asset_bounds, Point::new(260.0, 90.0), &selection)
+            .expect("asset background target"),
+    ];
+    let captured_outliner = outliner_targets.clone();
+    let captured_assets = asset_targets.clone();
+
+    selection.replace(id(50));
+
+    assert_eq!(selection.selected(), vec![id(50)]);
+    assert_eq!(outliner_targets, captured_outliner);
+    assert_eq!(asset_targets, captured_assets);
+    for targets in [&outliner_targets, &asset_targets] {
+        assert_eq!(targets[0], expected_selection);
+        assert_eq!(targets[1], CollectionContextTarget::item(id(30)));
+        assert_eq!(targets[2], CollectionContextTarget::background());
+        assert_ne!(targets[0], targets[1]);
+        assert_ne!(targets[0], targets[2]);
+        assert_ne!(targets[1], targets[2]);
+    }
 }

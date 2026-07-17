@@ -170,6 +170,23 @@ fn action(id: &str, label: &str) -> ActionDescriptor {
     ActionDescriptor::new(id, label)
 }
 
+fn snapshot_action(
+    id_prefix: &str,
+    label_prefix: &str,
+    target: &CollectionContextTarget,
+) -> ActionDescriptor {
+    let ids = target
+        .target_ids()
+        .into_iter()
+        .map(|item| item.raw().to_string())
+        .collect::<Vec<_>>()
+        .join("-");
+    ActionDescriptor::new(
+        format!("{id_prefix}.{ids}"),
+        format!("{label_prefix} {ids}"),
+    )
+}
+
 struct Run {
     root: WidgetId,
     outside: WidgetId,
@@ -189,6 +206,33 @@ fn run_frame(
     input: UiInput,
     lower: bool,
     reject_rename: bool,
+) -> Run {
+    run_frame_with_context_actions(
+        model,
+        config,
+        state,
+        memory,
+        input,
+        lower,
+        reject_rename,
+        |target| match target {
+            CollectionContextTarget::Background(_) => vec![action("asset.create", "Create")],
+            CollectionContextTarget::Item(_) => vec![action("asset.inspect", "Inspect")],
+            CollectionContextTarget::Selection(_) => vec![action("asset.delete", "Delete")],
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_frame_with_context_actions(
+    model: &AssetBrowserModel,
+    config: AssetBrowserConfig,
+    state: &mut AssetBrowserState,
+    memory: &mut UiMemory,
+    input: UiInput,
+    lower: bool,
+    reject_rename: bool,
+    context_actions: impl FnMut(&CollectionContextTarget) -> Vec<ActionDescriptor>,
 ) -> Run {
     let theme = default_dark_theme();
     let mut ui = Ui::begin_frame(context(input), memory, &theme);
@@ -215,11 +259,7 @@ fn run_frame(
         &scene,
         state,
         |_target, _draft| reject_rename.then(|| "name already exists".to_owned()),
-        |target| match target {
-            CollectionContextTarget::Background(_) => vec![action("asset.create", "Create")],
-            CollectionContextTarget::Item(_) => vec![action("asset.inspect", "Inspect")],
-            CollectionContextTarget::Selection(_) => vec![action("asset.delete", "Delete")],
-        },
+        context_actions,
     );
     let frame = ui.finish_output();
     Run {
@@ -1109,6 +1149,123 @@ fn assert_context_parity(run: &mut Run, action: &ActionId, target: &CollectionCo
     assert_eq!(invocation.source, ActionSource::Menu);
     assert_eq!(invocation.context, ActionContext::Widget(run.root));
     assert!(run.frame.actions.is_empty());
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn asset_browser_menu_keeps_open_snapshot_when_live_selection_changes_before_display() {
+    let model = assets([1, 2, 3]);
+    let cfg = config(AssetBrowserViewMode::List);
+    let mut state = AssetBrowserState::new();
+    state.selection.replace(id(1));
+    state.selection.toggle(id(2));
+    let mut memory = UiMemory::new();
+    let idle = run_frame(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+        false,
+    );
+    let trigger = idle.items[0].rect.center();
+    let captured =
+        CollectionContextTarget::selection([id(1), id(2)]).expect("captured selection target");
+    let live = CollectionContextTarget::selection([id(3)]).expect("live selection target");
+    let captured_descriptor = snapshot_action("asset.snapshot", "Asset snapshot", &captured);
+    let live_descriptor = snapshot_action("asset.snapshot", "Asset snapshot", &live);
+    assert_ne!(captured_descriptor.id, live_descriptor.id);
+    assert_ne!(captured_descriptor.label, live_descriptor.label);
+
+    let mut provider_calls = Vec::new();
+    let _ = run_frame_with_context_actions(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        secondary_input(trigger, true, true, false),
+        false,
+        false,
+        |target| {
+            provider_calls.push(target.clone());
+            vec![snapshot_action("asset.snapshot", "Asset snapshot", target)]
+        },
+    );
+    let opened = run_frame_with_context_actions(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        secondary_input(trigger, false, false, true),
+        false,
+        false,
+        |target| {
+            provider_calls.push(target.clone());
+            vec![snapshot_action("asset.snapshot", "Asset snapshot", target)]
+        },
+    );
+    assert_eq!(opened.output.context_opened, Some(captured.clone()));
+    assert_eq!(state.context_target(), Some(&captured));
+    assert!(!provider_calls.is_empty());
+    assert!(provider_calls.iter().all(|target| target == &captured));
+
+    state.selection.replace(id(3));
+    let menu = run_frame_with_context_actions(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+        false,
+        |target| {
+            provider_calls.push(target.clone());
+            vec![snapshot_action("asset.snapshot", "Asset snapshot", target)]
+        },
+    );
+    assert_eq!(state.selection.selected(), vec![id(3)]);
+    assert_eq!(state.context_target(), Some(&captured));
+    assert!(provider_calls.iter().all(|target| target == &captured));
+    let command = semantic_center(&menu.frame, &captured_descriptor.label);
+    assert!(
+        menu.frame
+            .semantics
+            .nodes()
+            .iter()
+            .all(|node| node.label.as_deref() != Some(live_descriptor.label.as_str()))
+    );
+
+    let _ = run_frame_with_context_actions(
+        &model,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        primary_input(command, true, true, false, 1),
+        false,
+        false,
+        |target| {
+            provider_calls.push(target.clone());
+            vec![snapshot_action("asset.snapshot", "Asset snapshot", target)]
+        },
+    );
+    let mut invoked = run_frame_with_context_actions(
+        &model,
+        cfg,
+        &mut state,
+        &mut memory,
+        primary_input(command, false, false, true, 1),
+        false,
+        false,
+        |target| {
+            provider_calls.push(target.clone());
+            vec![snapshot_action("asset.snapshot", "Asset snapshot", target)]
+        },
+    );
+    assert_context_parity(&mut invoked, &captured_descriptor.id, &captured);
+    assert!(provider_calls.iter().all(|target| target == &captured));
+    assert_eq!(state.selection.selected(), vec![id(3)]);
+    assert_eq!(state.context_target(), None);
 }
 
 #[test]

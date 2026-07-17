@@ -351,6 +351,20 @@ the checkbox recipe size. Caller-owned rectangles and full-label interaction
 and semantic bounds remain unchanged. See
 [Exact Size Foundation Migration](size-migration.md).
 
+### Qualified collection context snapshots
+
+Selection context targets own sorted, deduplicated item IDs, and collection
+action metadata and requests retain the target acquired when a menu opens.
+Bounded public headless evidence proves Asset Browser and Outliner retain that
+snapshot when live selection changes after opening and before command display.
+This advances only `STERN-CONTEXT-001` to bounded Partial; Candidate remains
+Candidate.
+
+Target/owner destruction, dynamic command removal, other consumers,
+`STERN-CONTEXT-002` invocation convergence, `STERN-CONTEXT-003` focus return,
+and platform/native/browser/raster/GPU/Vello/manual/visual evidence remain
+unverified. `STERN-MENU-003` does not advance, and nothing is Accepted.
+
 ### Qualified shortcut presentation
 
 The additive `ShortcutPlatform`, `ShortcutModifier`, `ShortcutLabelToken`,
