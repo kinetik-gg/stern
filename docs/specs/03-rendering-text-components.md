@@ -893,6 +893,16 @@ localizer. Wide labels and present shortcut strings use separate exact slot
 clips; submenu rows add one decorative `›`. State, icon, and status slots are
 reserved but unpainted. Separators retain full-row geometry.
 
+Section headings and separators remain in deterministic semantic/read order.
+As bounded automated headless implementation evidence for the normative
+focus/activation rule, their row-center routes are blocked and they emit no
+response, focus/navigation selection, semantic action, activation, intent, or
+application-queue entry. This evidence covers legacy and explicit presented
+evaluation, repeated frames, and earlier-action visibility changes. Only
+`STERN-MENU-COMP-004` advances to bounded automated evidence; browser, raster,
+GPU, native, manual, and visual acceptance remain unverified, and nothing
+becomes Accepted.
+
 Presentation adds no response, target, focus stop, semantic node, or action.
 The original full-row rectangle, stable identity, descriptor, navigation,
 source/context, queue order, and action-only semantic label remain authoritative.

@@ -10,6 +10,13 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- Added bounded automated headless evidence for `STERN-MENU-COMP-004` only.
+  Section headings and separators retain deterministic semantic/read order while
+  row-center routing is blocked and no response, focus/navigation selection,
+  semantic action, activation, intent, or application-queue entry is emitted.
+  Evidence covers legacy and explicit presented evaluation, repeated frames,
+  and earlier-action visibility changes. Browser, raster, GPU, native, manual,
+  and visual acceptance remain unverified; nothing becomes Accepted.
 - Added qualified Experimental
   `Ui::overlay_scene_with_menu_presentation` through `stern_widgets::Ui` and
   `stern::widgets::Ui`. It borrows an explicit platform and caller-owned
