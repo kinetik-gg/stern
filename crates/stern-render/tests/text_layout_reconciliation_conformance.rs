@@ -149,6 +149,79 @@ fn reconciliation_retains_distinct_feature_bearing_layout_resources() {
 }
 
 #[test]
+fn incremental_reconciliation_preserves_weight_identity_and_coordinate_payloads() {
+    let regular_key = TextLayoutKey::new(
+        "weighted resource 12038475",
+        TextStyle::new("Inter", 20.0, 24.0),
+        240.0,
+        false,
+    );
+    let medium_key = TextLayoutKey::new(
+        "weighted resource 12038475",
+        TextStyle::new("Inter", 20.0, 24.0).with_weight(500),
+        240.0,
+        false,
+    );
+    let mut store = TextLayoutStore::new();
+    let regular_id = store.layout_id(regular_key);
+    let mut resources = RenderResources::new();
+    let mut sync = TextLayoutResourceSync::new();
+    let full = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(full.kind, TextLayoutResourceSyncKind::Full);
+    assert_eq!((full.added, full.retained), (1, 1));
+    assert_eq!(
+        resources.retained_text_layout_payload_bytes(),
+        Some(store.retained_payload_bytes())
+    );
+    let regular = resources
+        .text_layout_resource(regular_id)
+        .expect("regular resource");
+    let regular_layout = Arc::clone(&regular.layout);
+    assert_eq!(regular.key.style.weight, 400);
+    assert!(
+        regular
+            .layout
+            .runs
+            .iter()
+            .all(|run| run.normalized_coords == [0, 0])
+    );
+
+    let medium_id = store.layout_id(medium_key);
+    assert_ne!(regular_id, medium_id);
+    let incremental = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(incremental.kind, TextLayoutResourceSyncKind::Incremental);
+    assert_eq!(incremental.processed_changes, 1);
+    assert_eq!((incremental.added, incremental.retained), (1, 2));
+    assert!(Arc::ptr_eq(
+        &resources
+            .text_layout_resource(regular_id)
+            .expect("regular resource")
+            .layout,
+        &regular_layout
+    ));
+    let medium = resources
+        .text_layout_resource(medium_id)
+        .expect("medium resource");
+    assert_eq!(medium.key.style.weight, 500);
+    assert!(
+        medium
+            .layout
+            .runs
+            .iter()
+            .all(|run| run.normalized_coords == [0, 2_949])
+    );
+    assert_eq!(
+        resources.retained_text_layout_payload_bytes(),
+        Some(store.retained_payload_bytes())
+    );
+
+    let bytes = resources.retained_text_layout_payload_bytes();
+    let noop = resources.reconcile_text_layouts(&store, &mut sync);
+    assert!(noop.is_noop());
+    assert_eq!(resources.retained_text_layout_payload_bytes(), bytes);
+}
+
+#[test]
 fn reconciliation_preserves_complete_source_and_overflow_policy() {
     let source = "Renderer resources keep this complete source even when its presentation elides";
     let visible_key = key(source);

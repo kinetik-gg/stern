@@ -491,6 +491,10 @@ fn text_layout_resource_payload_bytes(resource: &TextLayoutResource) -> Option<u
     ])?;
     for run in &layout.runs {
         bytes = bytes.checked_add(checked_payload_product(
+            run.normalized_coords.capacity(),
+            size_of::<i16>(),
+        )?)?;
+        bytes = bytes.checked_add(checked_payload_product(
             run.glyphs.capacity(),
             size_of::<ShapedGlyph>(),
         )?)?;
@@ -1044,6 +1048,7 @@ mod tests {
             + layout.lines.capacity() * size_of::<ShapedTextLine>()
             + layout.runs.capacity() * size_of::<ShapedGlyphRun>();
         for run in &layout.runs {
+            expected += run.normalized_coords.capacity() * size_of::<i16>();
             expected += run.glyphs.capacity() * size_of::<ShapedGlyph>();
         }
 

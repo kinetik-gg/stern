@@ -62,6 +62,8 @@ pub struct TextStyle {
     pub size_bits: u32,
     /// Line height in logical units.
     pub line_height_bits: u32,
+    /// Requested font weight as an exact OpenType-compatible numeric value.
+    pub weight: u16,
     /// Optional low-level shaping features.
     pub features: TextFeatureSet,
 }
@@ -74,8 +76,16 @@ impl TextStyle {
             family: family.into(),
             size_bits: size.to_bits(),
             line_height_bits: line_height.to_bits(),
+            weight: 400,
             features: TextFeatureSet::NONE,
         }
+    }
+
+    /// Sets the exact requested font weight.
+    #[must_use]
+    pub const fn with_weight(mut self, weight: u16) -> Self {
+        self.weight = weight;
+        self
     }
 
     /// Sets the low-level shaping features for this style.

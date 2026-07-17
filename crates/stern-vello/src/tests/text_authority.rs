@@ -125,6 +125,10 @@ fn assert_registered_text_encoding_eq(actual: &VelloRenderer, expected: &VelloRe
         );
         assert_eq!(actual_run.font.index, expected_run.font.index);
         assert_eq!(
+            &actual.resources.normalized_coords[actual_run.normalized_coords.clone()],
+            &expected.resources.normalized_coords[expected_run.normalized_coords.clone()]
+        );
+        assert_eq!(
             actual_run.font_size.to_bits(),
             expected_run.font_size.to_bits()
         );
@@ -332,6 +336,57 @@ fn text_authority_registered_fixture_matrix_preserves_topology_at_fractional_sca
             assert_registered_encoding(fixture, scale);
         }
     }
+}
+
+#[test]
+fn explicit_regular_weight_matches_constructor_default_encoding() {
+    let default_key = TextLayoutKey::new(
+        "Regular weight equivalence",
+        TextStyle::new("Inter", 18.0, 24.0),
+        400.0,
+        false,
+    );
+    let explicit_key = TextLayoutKey::new(
+        "Regular weight equivalence",
+        TextStyle::new("Inter", 18.0, 24.0).with_weight(400),
+        400.0,
+        false,
+    );
+    let mut engine = CosmicTextEngine::new();
+    let default = Fixture {
+        id: TextLayoutId::from_raw(726),
+        layout: Arc::new(engine.shape_text(&default_key)),
+        key: default_key,
+    };
+    let explicit = Fixture {
+        id: default.id,
+        layout: Arc::new(engine.shape_text(&explicit_key)),
+        key: explicit_key,
+    };
+    assert_eq!(default.key, explicit.key);
+    assert_eq!(default.layout, explicit.layout);
+
+    let default_resources = default.resources();
+    let explicit_resources = explicit.resources();
+    let primitives = [default.primitive()];
+    let mut default_renderer = VelloRenderer::new();
+    let default_output = default_renderer.submit_frame(RenderFrameInput {
+        viewport: viewport(1.25),
+        primitives: &primitives,
+        resources: &default_resources,
+    });
+    let mut explicit_renderer = VelloRenderer::new();
+    let explicit_output = explicit_renderer.submit_frame(RenderFrameInput {
+        viewport: viewport(1.25),
+        primitives: &primitives,
+        resources: &explicit_resources,
+    });
+
+    assert!(default_output.diagnostics.is_empty());
+    assert!(explicit_output.diagnostics.is_empty());
+    assert_registered_text_encoding_eq(&default_renderer, &explicit_renderer);
+    assert_eq!(default_renderer.cached_text_layout_count(), 0);
+    assert_eq!(explicit_renderer.cached_text_layout_count(), 0);
 }
 
 #[test]

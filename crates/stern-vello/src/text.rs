@@ -83,6 +83,7 @@ pub(crate) fn encode_shaped_text(
     for run in &layout.runs {
         scene
             .draw_glyphs(&run.font)
+            .normalized_coords(&run.normalized_coords)
             .transform(transform)
             .font_size(run.font_size)
             .brush(vello_color(color))
@@ -111,6 +112,7 @@ pub(crate) fn encode_shaped_text_axis_aligned_device_space(
     for run in &layout.runs {
         let mut glyph_run = scene
             .draw_glyphs(&run.font)
+            .normalized_coords(&run.normalized_coords)
             .font_size(run.font_size * scale_y as f32)
             .hint(true)
             .brush(vello_color(color));

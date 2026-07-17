@@ -273,6 +273,8 @@ pub struct ShapedTextLine {
 pub struct ShapedGlyphRun {
     /// Font data used by the run.
     pub font: PenikoFont,
+    /// Renderer-ready normalized variable-font coordinates in font axis order.
+    pub normalized_coords: Vec<i16>,
     /// Font size in logical units.
     pub font_size: f32,
     /// Source text line index.

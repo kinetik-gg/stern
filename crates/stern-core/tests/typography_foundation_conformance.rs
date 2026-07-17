@@ -225,12 +225,14 @@ fn foundation_metadata_does_not_expand_core_resolved_or_primitive_shapes() {
 }
 
 #[test]
-fn text_style_transports_exactly_the_bounded_low_level_feature_set() {
+fn text_style_transports_exactly_the_bounded_low_level_weight_and_feature_set() {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let source = fs::read_to_string(workspace.join("crates/stern-text/src/style.rs"))
         .expect("read stern-text TextStyle source");
     let declaration = struct_declaration(&source, "TextStyle");
 
+    assert_eq!(declaration.matches("pub weight:").count(), 1);
+    assert_eq!(declaration.matches("pub weight: u16").count(), 1);
     assert_eq!(declaration.matches("pub features:").count(), 1);
     assert_eq!(
         declaration.matches("pub features: TextFeatureSet").count(),
@@ -245,7 +247,6 @@ fn text_style_transports_exactly_the_bounded_low_level_feature_set() {
         "FontWeightToken",
         "FontFeatureScale",
         "FontFeatureToken",
-        "pub weight:",
         "pub weights:",
         "pub feature:",
     ] {

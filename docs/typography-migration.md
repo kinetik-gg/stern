@@ -169,9 +169,43 @@ deterministic font-byte boundary; it does not establish optical suitability or
 accept any geometry or visual result.
 
 There is intentionally no `DEFAULT_BRAND_FONT_FAMILY`, Brand `TextRole`, Title
-remapping, fallback stack, or platform discovery. Although the bundled face
-contains a weight axis, the current shaping API does not select or transport
-that axis.
+remapping, fallback stack, or platform discovery. The qualified low-level
+weight transport below can instance the bundled face without assigning a
+semantic weight to Brand or any `TextRole`.
+
+## Variable-font weight transport
+
+Qualified retained text now transports an exact requested `u16` weight through
+`TextStyle`, `TextLayoutKey`, deterministic cache/store identity, Cosmic Text
+shaping, retained renderer resources, and both Vello glyph paths.
+`TextStyle::new(...)` remains behavior-compatible by selecting Regular `400`;
+callers resolve a value from the existing `FontWeightScale` and
+`FontWeightToken` authority, then opt in with `TextStyle::with_weight(value)`.
+Stern adds no second semantic weight enum or token scale.
+
+This is a prerelease breaking public-shape change. External `TextStyle` literals
+must add `weight: 400` to preserve constructor behavior. External
+`ShapedGlyphRun` literals must add `normalized_coords: Vec::new()` when they
+represent a static/default instance. The coordinate vector is renderer-ready
+2.14 fixed-point selected-font axis state, not a semantic token surface.
+
+The raw request remains in public style and retained-key identity. Cosmic Text
+selects the face and applies its own variable-axis endpoint mapping; Stern does
+not clamp, quantize to the four default tokens, substitute a family, synthesize
+bold, or reshape for rendering. Inter preserves its full `opsz, wght` vector,
+Space Grotesk preserves its `wght` vector, and static Space Mono preserves exact
+bundled bytes with an empty vector. Store and renderer reachability metrics
+count every coordinate vector's owned capacity and remain equal after full and
+incremental reconciliation.
+
+Deterministic evidence covers exact `400/500/600/700` vectors, raw out-of-range
+key distinction with selected-face endpoint coordinates, features, end
+ellipsis, Unicode/bidi/multiline topology, stable hot reuse, public facade
+resolution, and registered Vello encoding through axis-aligned and general
+affine paths at `1.0`, `1.25`, `1.5`, and `2.0` with no fallback-cache activity.
+It does not adopt weight into `FontToken`, `TextRole`, `TextPrimitive`, widgets,
+or layoutless text and does not establish optical, raster, DPI, browser, GPU,
+platform-font, manual, or visual acceptance.
 
 ## Tabular-number shaping transport
 
@@ -418,11 +452,13 @@ visual acceptance.
 
 ## Deliberate limits
 
-The semantic foundation still does not transport weights through `FontToken`,
-text primitives, text layout, shaping, or renderers. Numeric feature adoption
-does not change `FontToken`, `TextRole`, or `TextPrimitive`; the accepted
-retained layout ID remains the component-to-renderer authority. Generic text
-behavior remains feature-disabled.
+The semantic foundation still does not assign weights through `FontToken`,
+`TextRole`, text primitives, or components. Qualified `TextStyle` requests now
+transport exact low-level weights through retained layout, shaping, and
+renderers; layoutless/generic text remains Regular `400`. Numeric feature
+adoption does not change `FontToken`, `TextRole`, or `TextPrimitive`; the
+accepted retained layout ID remains the component-to-renderer authority.
+Generic text behavior remains feature-disabled.
 
 The Space Mono follow-up advances only deterministic Mono text-system
 alignment for `STERN-TYP-000`, which remains Partial. Exact asset and license
@@ -457,6 +493,7 @@ unverified, and nothing is Accepted.
 
 This bounded evidence does not prove direct/layoutless component parity,
 platform or non-Latin fallback, failed-load layout stability, IME behavior,
-weight transport, copied-value or tooltip workflows, editable or other
-component truncation, start/middle/multiline ellipsis, optical baselines, DPI
-legibility, renderer pixels, browser output, or GPU/manual visual review.
+semantic role/component weight adoption, copied-value or tooltip workflows,
+editable or other component truncation, start/middle/multiline ellipsis,
+optical baselines, DPI legibility, renderer pixels, browser output, or
+GPU/manual visual review.

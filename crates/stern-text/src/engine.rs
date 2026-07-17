@@ -1,6 +1,7 @@
 use cosmic_text::{
     Attrs, BidiParagraphs, Buffer, Ellipsize, EllipsizeHeightLimit, Family, FeatureTag,
     FontFeatures, FontSystem, Metrics, Shaping, Wrap, fontdb,
+    skrifa::{FontRef, MetadataProvider, Tag},
 };
 use stern_core::Size;
 
@@ -107,9 +108,11 @@ impl CosmicTextEngine {
                 let Some(font) = self.font_system.get_font(glyph.font_id, glyph.font_weight) else {
                     continue;
                 };
+                let normalized_coords = normalized_coords(&font, glyph.font_weight);
                 let font = font.as_peniko();
                 let needs_new_run = current.as_ref().is_none_or(|glyph_run| {
                     glyph_run.font != font
+                        || glyph_run.normalized_coords != normalized_coords
                         || glyph_run.font_size.to_bits() != glyph.font_size.to_bits()
                         || glyph_run.line_index != run.line_i
                 });
@@ -120,6 +123,7 @@ impl CosmicTextEngine {
                     }
                     current = Some(ShapedGlyphRun {
                         font: font.clone(),
+                        normalized_coords,
                         font_size: glyph.font_size,
                         line_index: run.line_i,
                         visual_line,
@@ -209,7 +213,24 @@ fn attrs_for_style(style: &TextStyle) -> Attrs<'_> {
     if style.features.has_tabular_numbers() {
         features.set(FeatureTag::new(b"tnum"), 1);
     }
-    Attrs::new().family(family).font_features(features)
+    Attrs::new()
+        .family(family)
+        .weight(fontdb::Weight(style.weight))
+        .font_features(features)
+}
+
+fn normalized_coords(font: &cosmic_text::Font, weight: fontdb::Weight) -> Vec<i16> {
+    let peniko = font.as_peniko();
+    let Ok(font_ref) = FontRef::from_index(font.data(), peniko.index) else {
+        return Vec::new();
+    };
+    font_ref
+        .axes()
+        .location([(Tag::new(b"wght"), f32::from(weight.0))])
+        .coords()
+        .iter()
+        .map(|coord| coord.to_bits())
+        .collect()
 }
 
 fn bundled_font_system() -> FontSystem {

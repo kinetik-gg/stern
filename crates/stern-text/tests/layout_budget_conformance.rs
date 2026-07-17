@@ -1,10 +1,12 @@
 //! Long-session and public-surface conformance for retained text layout budgets.
 
+use std::mem::size_of;
 use std::sync::Arc;
 
 use stern_core::TextLayoutId;
 use stern_text::{
-    TextFeatureSet, TextLayoutCache, TextLayoutKey, TextLayoutStore, TextOverflow, TextStyle,
+    ShapedGlyph, ShapedGlyphRun, ShapedTextLayout, ShapedTextLine, TextFeatureSet, TextLayoutCache,
+    TextLayoutKey, TextLayoutStore, TextOverflow, TextStyle,
 };
 
 const MAX_RETAINED_BYTES: usize = 32 * 1024 * 1024;
@@ -271,4 +273,39 @@ fn overflow_policy_has_distinct_stable_store_and_cache_identity() {
     assert_eq!(cache.retained_payload_bytes(), cache_bytes);
     assert_eq!(cache.get(&visible), Some(visible_measurement));
     assert_eq!(cache.get(&ellipsized), Some(ellipsized_measurement));
+}
+
+#[test]
+fn retained_payload_counts_exact_owned_variation_coordinate_capacity() {
+    let request = TextLayoutKey::new(
+        "weighted payload 12038475",
+        style().with_weight(600),
+        180.0,
+        false,
+    );
+    let mut store = TextLayoutStore::new();
+    let id = store.layout_id(request);
+    let entry = store.stored_layout(id).expect("weighted retained layout");
+    let coordinate_bytes = entry
+        .layout
+        .runs
+        .iter()
+        .map(|run| run.normalized_coords.capacity() * size_of::<i16>())
+        .sum::<usize>();
+    assert!(coordinate_bytes > 0);
+
+    let expected = size_of::<TextLayoutKey>()
+        + entry.key.text.capacity()
+        + entry.key.style.family.capacity()
+        + size_of::<ShapedTextLayout>()
+        + entry.layout.lines.capacity() * size_of::<ShapedTextLine>()
+        + entry.layout.runs.capacity() * size_of::<ShapedGlyphRun>()
+        + coordinate_bytes
+        + entry
+            .layout
+            .runs
+            .iter()
+            .map(|run| run.glyphs.capacity() * size_of::<ShapedGlyph>())
+            .sum::<usize>();
+    assert_eq!(store.retained_payload_bytes(), expected);
 }

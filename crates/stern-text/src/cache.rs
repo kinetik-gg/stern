@@ -363,6 +363,7 @@ fn compare_keys(left: &TextLayoutKey, right: &TextLayoutKey) -> Ordering {
                 .line_height_bits
                 .cmp(&right.style.line_height_bits)
         })
+        .then_with(|| left.style.weight.cmp(&right.style.weight))
         .then_with(|| {
             left.style
                 .features
@@ -647,6 +648,44 @@ mod budget_tests {
                 "feature-disabled key is the literal first victim"
             );
             assert!(cache.get(&tabular).is_some());
+            assert!(cache.get(&newcomer).is_some());
+            assert_eq!(cache.retained_payload_bytes(), entry_cost * 2);
+        }
+    }
+
+    #[test]
+    fn equal_lru_metadata_orders_weight_before_features_and_width() {
+        let regular = normalize_key(key("00000000"));
+        let medium = normalize_key(TextLayoutKey::new(
+            "00000000",
+            TextStyle::new("Inter", 12.0, 16.0).with_weight(500),
+            100.0,
+            false,
+        ));
+        let newcomer = normalize_key(key("zzzzzzzz"));
+        let entry_cost = cache_entry_payload_bytes(&regular).expect("cost");
+        assert_eq!(cache_entry_payload_bytes(&medium), Some(entry_cost));
+        assert_eq!(cache_entry_payload_bytes(&newcomer), Some(entry_cost));
+        assert_eq!(compare_keys(&regular, &medium), Ordering::Less);
+
+        for insertion_order in [
+            [regular.clone(), medium.clone()],
+            [medium.clone(), regular.clone()],
+        ] {
+            let mut cache = TextLayoutCache::with_policy(policy(entry_cost * 2, 120));
+            for request in insertion_order {
+                cache.get_or_measure(request);
+            }
+            cache.advance_generation();
+            for request in [&regular, &medium] {
+                let entry = cache.layouts.get_mut(request).expect("resident");
+                entry.last_generation = 0;
+                entry.touch_ordinal = 7;
+            }
+
+            cache.get_or_measure(newcomer.clone());
+            assert!(cache.get(&regular).is_none());
+            assert!(cache.get(&medium).is_some());
             assert!(cache.get(&newcomer).is_some());
             assert_eq!(cache.retained_payload_bytes(), entry_cost * 2);
         }

@@ -10,6 +10,21 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Added exact qualified variable-font weight transport through
+  public `TextStyle::weight`, `TextStyle::with_weight(u16)`, retained
+  style/key/ID identity, Cosmic Text shaping, public
+  `ShapedGlyphRun::normalized_coords`, checked store/renderer payload
+  accounting, and both Vello glyph paths. Constructors remain Regular `400`;
+  external `TextStyle` literals must add `weight: 400`, and external shaped-run
+  literals must add a coordinate vector. Inter and Space Grotesk retain their
+  exact selected-face 2.14 vectors, including endpoint mapping for raw
+  out-of-range requests; static Space Mono remains on exact bundled bytes with
+  an empty vector. This adds no second semantic weight authority and does not
+  change `FontToken`, `TextRole`, `TextPrimitive`, widgets, or layoutless text.
+  All numbered typography requirements preserve their prior disposition,
+  parity records remain unverified, and nothing is Accepted. Deterministic CPU
+  evidence does not establish browser, raster, pixels, GPU, platform-font, DPI,
+  optical, manual, or visual acceptance. See `docs/typography-migration.md`.
 - **Breaking:** Canonical retained `Ui::chrome_scene` now applies
   `TextOverflow::EndEllipsis` only to final complete-source toolbar-row labels at
   the final overflow-projected span `(row.rect.width -
@@ -146,11 +161,13 @@ published, or accepted as an alpha release.
   six-size `12/11/10/14/16/20`, three-line-height `16/15/14`, and four-weight
   `400/500/600/700` inventories plus the numeric feature value
   `"tabular-nums"`. Existing text-role family, size, and line-height resolution
-  is unchanged. Weight values remain metadata only. The feature scale remains
-  semantic metadata and does not automatically affect text or components; the
-  later opt-in `TextFeatureSet` path transports its numeric meaning through
-  shaping without changing this token authority. External `TypographyScale`
-  struct literals must initialize the four new scales. See
+  is unchanged. Weight values remain semantic metadata; the qualified
+  `TextStyle::with_weight` bridge above transports a caller-resolved exact value
+  without expanding `FontToken` or adopting components. The feature scale
+  remains semantic metadata and does not automatically affect text or
+  components; the later opt-in `TextFeatureSet` path transports its numeric
+  meaning through shaping without changing this token authority. External
+  `TypographyScale` struct literals must initialize the four new scales. See
   `docs/typography-migration.md`.
 - **Breaking:** Replaced the five resolved `FontToken` values stored by
   `TypographyScale` with exact UI, Brand, and Mono semantic family roles plus

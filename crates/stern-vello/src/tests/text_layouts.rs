@@ -1269,3 +1269,80 @@ fn translated_registered_text_uses_exact_scaled_font_size_and_absolute_snapping(
     );
     assert_eq!(renderer.cached_text_layout_count(), 0);
 }
+
+#[test]
+fn registered_weight_coordinates_cross_both_transform_paths_at_all_scales() {
+    let id = TextLayoutId::from_raw(726);
+    let key = TextLayoutKey::new(
+        "Weighted Vello 12038475",
+        TextStyle::new("Inter", 20.0, 24.0).with_weight(600),
+        320.0,
+        false,
+    );
+    let weighted = resource(id, key);
+    assert!(
+        weighted
+            .layout
+            .runs
+            .iter()
+            .all(|run| run.normalized_coords == [0, 5_898])
+    );
+    let mut resources = RenderResources::new();
+    resources.register_text_layout(weighted);
+    let axis_aligned = [primitive(Some(id), "conflicting fallback")];
+    let general_affine = [
+        Primitive::TransformBegin(Transform {
+            m11: 1.0,
+            m12: 0.01,
+            m21: -0.01,
+            m22: 1.0,
+            ..Transform::IDENTITY
+        }),
+        primitive(Some(id), "conflicting fallback"),
+        Primitive::TransformEnd,
+    ];
+
+    for scale in [1.0, 1.25, 1.5, 2.0] {
+        let mut axis_renderer = VelloRenderer::new();
+        let axis_output = axis_renderer.submit_frame(RenderFrameInput {
+            viewport: viewport(scale),
+            primitives: &axis_aligned,
+            resources: &resources,
+        });
+        let axis_encoding = axis_renderer.scene().encoding();
+        assert!(axis_output.diagnostics.is_empty());
+        assert!(
+            axis_encoding
+                .resources
+                .glyph_runs
+                .iter()
+                .all(|run| run.hint)
+        );
+        assert!(axis_encoding.resources.glyph_runs.iter().all(|run| {
+            axis_encoding.resources.normalized_coords[run.normalized_coords.clone()] == [0, 5_898]
+        }));
+        assert_eq!(axis_renderer.cached_text_layout_count(), 0);
+        assert_eq!(axis_renderer.cached_text_layout_payload_bytes(), 0);
+
+        let mut affine_renderer = VelloRenderer::new();
+        let affine_output = affine_renderer.submit_frame(RenderFrameInput {
+            viewport: viewport(scale),
+            primitives: &general_affine,
+            resources: &resources,
+        });
+        let affine_encoding = affine_renderer.scene().encoding();
+        assert!(affine_output.diagnostics.is_empty());
+        assert!(
+            affine_encoding
+                .resources
+                .glyph_runs
+                .iter()
+                .all(|run| !run.hint)
+        );
+        assert!(affine_encoding.resources.glyph_runs.iter().all(|run| {
+            affine_encoding.resources.normalized_coords[run.normalized_coords.clone()] == [0, 5_898]
+        }));
+        assert_eq!(affine_renderer.cached_text_layout_count(), 0);
+        assert_eq!(affine_renderer.cached_text_layout_payload_bytes(), 0);
+    }
+}

@@ -122,6 +122,7 @@ fn synthetic_layout(lines: &[LineSpec], cells: &[CellSpec]) -> ShapedTextLayout 
                 .collect::<Vec<_>>();
             (!glyphs.is_empty()).then(|| ShapedGlyphRun {
                 font: font.clone(),
+                normalized_coords: Vec::new(),
                 font_size: 18.0,
                 line_index: spec.source_line,
                 visual_line,
@@ -1475,4 +1476,38 @@ fn duplicate_cluster_union_overflow_fails_before_nodes_escape() {
         layout.navigation("a"),
         Err(TextNavigationError::InvalidGlyphGeometry)
     );
+}
+
+#[test]
+fn nondefault_weight_preserves_unicode_bidi_and_multiline_source_topology() {
+    let source = "Latin e\u{301} אבג 12038475\nSecond 👩‍🚀 line";
+    let request = TextLayoutKey::new(
+        source,
+        TextStyle::new("Inter", 18.0, 24.0).with_weight(700),
+        180.0,
+        true,
+    );
+    let layout = CosmicTextEngine::new().shape_text(&request);
+
+    assert_eq!(request.text, source);
+    assert_eq!(request.style.weight, 700);
+    assert!(layout.line_count >= 2);
+    assert_eq!(layout.lines.first().expect("first line").text_start, 0);
+    assert_eq!(
+        layout.lines.last().expect("last line").text_end,
+        source.len()
+    );
+    assert!(layout.navigation(source).is_ok());
+    assert!(
+        layout
+            .runs
+            .iter()
+            .all(|run| run.normalized_coords == [0, 8_848])
+    );
+    assert!(layout.runs.iter().flat_map(|run| &run.glyphs).all(|glyph| {
+        glyph.start <= glyph.end
+            && glyph.end <= source.len()
+            && source.is_char_boundary(glyph.start)
+            && source.is_char_boundary(glyph.end)
+    }));
 }

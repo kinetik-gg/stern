@@ -780,6 +780,26 @@ fn qualified_facade_constructs_and_resolves_typography_foundation() {
 }
 
 #[test]
+fn qualified_facade_resolves_semantic_weight_into_retained_coordinates() {
+    use stern::core::{FontFamilyRole, FontWeightToken, default_dark_theme};
+    use stern::text::{CosmicTextEngine, TextLayoutKey, TextStyle};
+
+    let theme = default_dark_theme();
+    let weight = theme.typography.weights.get(FontWeightToken::Semibold);
+    let style =
+        TextStyle::new(theme.font_family(FontFamilyRole::Ui), 20.0, 24.0).with_weight(weight);
+    assert_eq!(style.weight, 600);
+
+    let request = TextLayoutKey::new("Stern facade", style, 240.0, false);
+    let layout = CosmicTextEngine::new().shape_text(&request);
+    assert_eq!(request.style.weight, 600);
+    assert!(layout.runs.iter().all(|run| {
+        run.font.data.data() == stern::text::fonts::INTER_VARIABLE
+            && run.normalized_coords == [0, 5_898]
+    }));
+}
+
+#[test]
 fn qualified_facade_connects_numeric_token_to_tabular_shaping() {
     let theme = stern::core::default_dark_theme();
     let numeric_token = theme

@@ -681,6 +681,11 @@ fn retained_layout_payload_bytes(key: &TextLayoutKey, layout: &ShapedTextLayout)
     )?;
     for run in &layout.runs {
         bytes = bytes.checked_add(
+            run.normalized_coords
+                .capacity()
+                .checked_mul(size_of::<i16>())?,
+        )?;
+        bytes = bytes.checked_add(
             run.glyphs
                 .capacity()
                 .checked_mul(size_of::<ShapedGlyph>())?,
