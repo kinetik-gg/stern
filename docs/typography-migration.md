@@ -203,9 +203,40 @@ key distinction with selected-face endpoint coordinates, features, end
 ellipsis, Unicode/bidi/multiline topology, stable hot reuse, public facade
 resolution, and registered Vello encoding through axis-aligned and general
 affine paths at `1.0`, `1.25`, `1.5`, and `2.0` with no fallback-cache activity.
-It does not adopt weight into `FontToken`, `TextRole`, `TextPrimitive`, widgets,
-or layoutless text and does not establish optical, raster, DPI, browser, GPU,
-platform-font, manual, or visual acceptance.
+It does not adopt weight into `FontToken`, `TextRole`, `TextPrimitive`, or
+layoutless text. The bounded canonical component adoption below consumes this
+transport without expanding those public shapes.
+
+## Retained property-grid section weight
+
+Canonical retained `Ui::property_grid` section rows now resolve their family,
+size, and line height from `TextRole::Title` and their requested weight from
+`theme.typography.weights.get(FontWeightToken::Semibold)`. The default request
+is exact UI-family Inter `14/19` at weight `600`; Title remains mapped to UI,
+not Brand. A successfully admitted section owns one byte-exact complete-source,
+nonwrapping, feature-disabled `Visible` layout with positive-zero width. The
+selected bundled Inter face carries exact normalized coordinates `[0, 5_898]`.
+
+No-store and rejected generic/layoutless fallbacks remain Regular `400`
+because `TextPrimitive` still has no weight field. Ordinary property labels
+retain Label `12/16`, Regular construction, and their existing `EndEllipsis`
+policy; required markers, help/status glyphs, geometry, semantics, access,
+interactions, and public shapes are unchanged. Custom themes continue to own
+the UI family, Title metrics, and Semibold value, while selected-face
+coordinates follow the actual chosen face rather than a component constant.
+
+Deterministic CPU evidence covers strict admission and rejection, stable
+retained identity, selected font bytes and coordinates, complete-source
+semantics, and both registered Vello paths at `1.0`, `1.25`, `1.5`, and `2.0`.
+Exact `14/600` rendering is bounded unindexed candidate type-scale/component
+transport evidence only. `STERN-TYP-000`, `STERN-TYP-002`, `STERN-TYP-004`,
+and `STERN-TYP-006` remain Partial without advancement;
+`STERN-TYP-001`, `STERN-TYP-003`, `STERN-TYP-005`, and `STERN-TYP-007` do not
+advance. No parity record is verified and nothing becomes Accepted. Browser,
+raster, GPU, pixel, platform-font, failed-load, unsupported-script, IME,
+optical-baseline, DPI-legibility, manual, and visual evidence remain
+unverified; issue #653 remains the external browser/Vello visual-evidence
+blocker.
 
 ## Tabular-number shaping transport
 
@@ -352,8 +383,10 @@ controls are unchanged.
 Admitted nonpositive-width and multiline requests retain a complete-source
 `EndEllipsis` key and ID but shape visibly without a marker. Actual store
 rejection falls through to complete-source generic visible or layoutless
-attachment. Section titles retain their generic visible/layoutless behavior
-and existing `label_rect.x + 8` origin. This is a prerelease breaking rendering
+attachment. Admitted section titles use the separately documented retained
+Title + Semibold path; no-store or rejected generic fallback stays
+complete-source Regular at the existing `label_rect.x + 8` origin. This is a
+prerelease breaking rendering
 policy change without a public signature or export change. Registered
 property-label-to-Vello CPU evidence at `1.0`, `1.25`, `1.5`, and `2.0` proves
 resource/topology transport and separate help/status glyphs, not pixels,
@@ -453,9 +486,10 @@ visual acceptance.
 ## Deliberate limits
 
 The semantic foundation still does not assign weights through `FontToken`,
-`TextRole`, text primitives, or components. Qualified `TextStyle` requests now
-transport exact low-level weights through retained layout, shaping, and
-renderers; layoutless/generic text remains Regular `400`. Numeric feature
+`TextRole`, or text primitives. Qualified `TextStyle` requests transport exact
+low-level weights through retained layout, shaping, and renderers. The
+canonical retained property-grid section path is the sole semantic component
+weight adopter; layoutless/generic text remains Regular `400`. Numeric feature
 adoption does not change `FontToken`, `TextRole`, or `TextPrimitive`; the
 accepted retained layout ID remains the component-to-renderer authority.
 Generic text behavior remains feature-disabled.
@@ -493,7 +527,7 @@ unverified, and nothing is Accepted.
 
 This bounded evidence does not prove direct/layoutless component parity,
 platform or non-Latin fallback, failed-load layout stability, IME behavior,
-semantic role/component weight adoption, copied-value or tooltip workflows,
-editable or other component truncation, start/middle/multiline ellipsis,
-optical baselines, DPI legibility, renderer pixels, browser output, or
-GPU/manual visual review.
+additional semantic role/component weight adoption, copied-value or tooltip
+workflows, editable or other component truncation, start/middle/multiline
+ellipsis, optical baselines, DPI legibility, renderer pixels, browser output,
+or GPU/manual visual review.

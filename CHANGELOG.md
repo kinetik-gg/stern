@@ -20,11 +20,13 @@ published, or accepted as an alpha release.
   exact selected-face 2.14 vectors, including endpoint mapping for raw
   out-of-range requests; static Space Mono remains on exact bundled bytes with
   an empty vector. This adds no second semantic weight authority and does not
-  change `FontToken`, `TextRole`, `TextPrimitive`, widgets, or layoutless text.
-  All numbered typography requirements preserve their prior disposition,
-  parity records remain unverified, and nothing is Accepted. Deterministic CPU
-  evidence does not establish browser, raster, pixels, GPU, platform-font, DPI,
-  optical, manual, or visual acceptance. See `docs/typography-migration.md`.
+  change `FontToken`, `TextRole`, or the public `TextPrimitive` shape. The
+  canonical retained property-grid section adoption below is the sole semantic
+  component consumer; layoutless/generic text remains Regular `400`. All
+  numbered typography requirements preserve their prior disposition, parity
+  records remain unverified, and nothing is Accepted. Deterministic CPU evidence
+  does not establish browser, raster, pixels, GPU, platform-font, DPI, optical,
+  manual, or visual acceptance. See `docs/typography-migration.md`.
 - **Breaking:** Canonical retained `Ui::chrome_scene` now applies
   `TextOverflow::EndEllipsis` only to final complete-source toolbar-row labels at
   the final overflow-projected span `(row.rect.width -
@@ -81,15 +83,19 @@ published, or accepted as an alpha release.
   exact undecorated `row.label`. Width uses the existing `6.0` label inset and
   fixed leftmost trailing-glyph origin: help presence (including `Some("")`)
   reserves `22.0`, otherwise accented status reserves `10.0`. Help/status
-  glyphs and section titles remain separate generic visible/layoutless text.
-  Admission rejection, nonpositive spans, and multiline sources preserve
-  complete visible/layoutless text without changing public APIs, property-grid
-  models, callbacks, access, intents, ordering, virtualization, generic
-  attachment, text primitives, or renderer commands. Registered Vello evidence
-  covers CPU topology at `1.0`, `1.25`, `1.5`, and `2.0`, not pixels or visual
-  acceptance. `STERN-TYP-004` advances only to stronger bounded Partial, and
-  `STERN-DEN-004` advances only to bounded Partial for finite-positive computed
-  spans; nothing is Accepted. See `docs/typography-migration.md`.
+  glyphs remain separate Label/Regular generic visible text. Canonical retained
+  section rows now resolve UI-family Title metrics and the existing Semibold
+  token, attaching a complete-source, nonwrapping, feature-disabled `Visible`
+  layout only after strict store admission. The default is exact Inter `14/19`
+  at weight `600`, with selected coordinates `[0, 5_898]`; no-store or rejected
+  generic/layoutless fallback remains Regular `400`. This changes no public
+  shape, row geometry, semantics, access, interaction, ordinary-label overflow,
+  or renderer contract. Registered Vello CPU evidence covers both section glyph
+  paths at `1.0`, `1.25`, `1.5`, and `2.0`, not browser, raster, GPU, pixels,
+  DPI legibility, optical baselines, manual review, or visual acceptance. The
+  exact `14/600` result is bounded unindexed candidate evidence; all numbered
+  typography dispositions are preserved and nothing is Accepted. See
+  `docs/typography-migration.md`.
 - **Breaking:** Canonical retained `Ui::select_field` now applies
   `TextOverflow::EndEllipsis` to selected values and placeholders at the exact
   post-padding, post-disclosure text width. Complete source remains in the

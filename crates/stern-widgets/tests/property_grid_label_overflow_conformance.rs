@@ -723,7 +723,7 @@ fn row_access_geometry_callbacks_order_and_semantics_remain_application_owned() 
 }
 
 #[test]
-fn offscreen_rows_do_not_register_layouts_and_sections_keep_generic_policy() {
+fn offscreen_rows_do_not_register_layouts_and_sections_keep_explicit_retained_policy() {
     let rows = (0..6)
         .map(|index| {
             PropertyGridRow::property(
@@ -758,7 +758,7 @@ fn offscreen_rows_do_not_register_layouts_and_sections_keep_generic_policy() {
         .collect::<Vec<_>>();
     assert_eq!(retained_sources, vec!["Virtual property 5"]);
 
-    let section_source = "Long section title remains on its existing generic visible path";
+    let section_source = "Long section title remains on its explicit retained visible path";
     let section =
         PropertyGridRow::section(ItemId::from_raw(90), section_source).with_required(true);
     let mut section_store = TextLayoutStore::new();
@@ -778,7 +778,7 @@ fn offscreen_rows_do_not_register_layouts_and_sections_keep_generic_policy() {
         .stored_layout(
             section_text
                 .layout
-                .expect("generic retained section layout"),
+                .expect("explicit retained section layout"),
         )
         .expect("resident section layout");
     assert_eq!(section_layout.key.text, section_source);

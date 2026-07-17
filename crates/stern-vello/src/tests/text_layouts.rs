@@ -12,7 +12,7 @@ use stern_core::{
 use stern_render::TextLayoutResourceSync;
 use stern_text::{
     CosmicTextEngine, TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextOverflow,
-    TextStyle,
+    TextStyle, fonts,
 };
 use stern_widgets::{
     ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, CollectionProjection, DropdownItem,
@@ -1056,6 +1056,175 @@ fn retained_property_widget_encodes_label_ellipsis_without_state_glyph_fallback(
         );
         assert_eq!(renderer.cached_text_layout_count(), 0);
         assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+    }
+}
+
+fn assert_axis_aligned_property_section_encoding(
+    id: TextLayoutId,
+    primitives: &[Primitive],
+    resources: &RenderResources,
+    expected_ids: &[u32],
+    scale: f32,
+) {
+    let mut renderer = VelloRenderer::new();
+    let output = renderer.submit_frame(RenderFrameInput {
+        viewport: viewport(f64::from(scale)),
+        primitives,
+        resources,
+    });
+    let encoding = renderer.scene().encoding();
+    assert!(output.diagnostics.is_empty());
+    assert!(matches!(
+        primitives[0],
+        Primitive::Text(ref text) if text.layout == Some(id)
+    ));
+    assert_eq!(
+        encoding
+            .resources
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.id)
+            .collect::<Vec<_>>(),
+        expected_ids
+    );
+    let expected_size = 14.0_f32 * scale;
+    assert!(encoding.resources.glyph_runs.iter().all(|run| {
+        run.hint
+            && run.font_size.to_bits() == expected_size.to_bits()
+            && encoding.resources.normalized_coords[run.normalized_coords.clone()] == [0, 5_898]
+    }));
+    assert_eq!(renderer.cached_text_layout_count(), 0);
+    assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+}
+
+fn assert_affine_property_section_encoding(
+    primitives: &[Primitive],
+    resources: &RenderResources,
+    expected_ids: &[u32],
+    scale: f32,
+) {
+    let mut renderer = VelloRenderer::new();
+    let output = renderer.submit_frame(RenderFrameInput {
+        viewport: viewport(f64::from(scale)),
+        primitives,
+        resources,
+    });
+    let encoding = renderer.scene().encoding();
+    assert!(output.diagnostics.is_empty());
+    assert_eq!(
+        encoding
+            .resources
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.id)
+            .collect::<Vec<_>>(),
+        expected_ids
+    );
+    let expected_transform = [
+        f64::from(scale),
+        f64::from(0.01_f32 * scale),
+        f64::from(-0.01_f32 * scale),
+        f64::from(scale),
+        0.0,
+        0.0,
+    ];
+    assert!(encoding.resources.glyph_runs.iter().all(|run| {
+        !run.hint
+            && run.font_size.to_bits() == 14.0_f32.to_bits()
+            && run.transform.to_kurbo().as_coeffs().map(f64::to_bits)
+                == expected_transform.map(f64::to_bits)
+            && encoding.resources.normalized_coords[run.normalized_coords.clone()] == [0, 5_898]
+    }));
+    assert_eq!(renderer.cached_text_layout_count(), 0);
+    assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+}
+
+#[test]
+fn retained_property_section_encodes_semibold_coordinates_across_transform_paths() {
+    let source = "Canonical retained property section";
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let mut memory = UiMemory::new();
+    let mut store = TextLayoutStore::new();
+    let mut ui = Ui::new(&input, &mut memory, &theme).with_text_layouts(&mut store);
+    let _ = ui
+        .property_grid(
+            "properties",
+            Rect::new(0.0, 0.0, 320.0, 26.0),
+            &[PropertyGridRow::section(ItemId::from_raw(728), source)],
+            PropertyGridConfig::default().with_overscan(0),
+            |_, _| (),
+        )
+        .expect("valid retained property grid section");
+    let frame = ui.finish_output();
+    let section = frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) if text.text == source => Some(text.clone()),
+            _ => None,
+        })
+        .expect("retained property section primitive");
+    let id = section.layout.expect("registered property section ID");
+    let stored = store
+        .stored_layout(id)
+        .expect("resident property section layout");
+    assert_eq!(stored.key.text.as_bytes(), source.as_bytes());
+    assert_eq!(stored.key.style.family, "Inter");
+    assert_eq!(stored.key.style.size().to_bits(), 14.0_f32.to_bits());
+    assert_eq!(stored.key.style.line_height().to_bits(), 19.0_f32.to_bits());
+    assert_eq!(stored.key.style.weight, 600);
+    assert_eq!(stored.key.style.features, TextFeatureSet::NONE);
+    assert_eq!(stored.key.width_bits, 0.0_f32.to_bits());
+    assert!(!stored.key.wrap);
+    assert_eq!(stored.key.overflow, TextOverflow::Visible);
+    assert!(stored.layout.runs.iter().all(|run| {
+        run.font.data.data() == fonts::INTER_VARIABLE && run.normalized_coords == [0, 5_898]
+    }));
+    let expected_ids = stored
+        .layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
+        .collect::<Vec<_>>();
+
+    let mut resources = RenderResources::new();
+    let mut sync = TextLayoutResourceSync::new();
+    let report = resources.reconcile_text_layouts(&store, &mut sync);
+    assert_eq!(report.added, 1);
+    assert_eq!(report.retained, 1);
+    let reconciled = resources
+        .text_layout_resource(id)
+        .expect("reconciled property section resource");
+    assert_eq!(reconciled.id, id);
+    assert_eq!(&reconciled.key, stored.key);
+    assert_eq!(reconciled.key.text.as_bytes(), source.as_bytes());
+    assert!(reconciled.layout.runs.iter().all(|run| {
+        run.font.data.data() == fonts::INTER_VARIABLE && run.normalized_coords == [0, 5_898]
+    }));
+
+    let axis_aligned = [Primitive::Text(section.clone())];
+    let general_affine = [
+        Primitive::TransformBegin(Transform {
+            m11: 1.0,
+            m12: 0.01,
+            m21: -0.01,
+            m22: 1.0,
+            ..Transform::IDENTITY
+        }),
+        Primitive::Text(section),
+        Primitive::TransformEnd,
+    ];
+
+    for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+        assert_axis_aligned_property_section_encoding(
+            id,
+            &axis_aligned,
+            &resources,
+            &expected_ids,
+            scale,
+        );
+        assert_affine_property_section_encoding(&general_affine, &resources, &expected_ids, scale);
     }
 }
 

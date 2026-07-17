@@ -134,10 +134,13 @@ slice without synthetic emboldening or fallback reconstruction.
 
 Adding both public fields is a prerelease breaking struct-shape change;
 constructors remain source-compatible and exactly equivalent to explicit
-weight `400`. `FontToken`, `TextRole`, `TextPrimitive`, widgets, and layoutless
-text are unchanged. Deterministic CPU evidence covers Inter, Space Grotesk,
-Space Mono, Unicode/bidi/multiline, features, end ellipsis, resource
-reconciliation, and registered Vello scales `1.0`, `1.25`, `1.5`, and `2.0`.
+weight `400`. `FontToken`, `TextRole`, and the public `TextPrimitive` shape are
+unchanged. The canonical retained property-grid section path below is the sole
+semantic component weight adopter; layoutless/generic text remains Regular
+`400`. Deterministic CPU evidence covers Inter, Space Grotesk, Space Mono,
+Unicode/bidi/multiline, features, end ellipsis, resource reconciliation, the
+retained property-grid section, and registered Vello scales `1.0`, `1.25`,
+`1.5`, and `2.0`.
 This is unindexed foundation transport evidence only: all numbered typography
 requirements preserve their prior disposition, every parity record remains
 unverified, and nothing becomes Accepted. No fallback, optical, raster, DPI,
@@ -238,9 +241,16 @@ is added.
 Canonical retained `Ui::property_grid` now applies the same policy only to
 `PropertyGridRowKind::Property` main labels at the exact existing label inset
 and fixed help/status reservation. Complete required presentation text and
-undecorated semantic text remain distinct; help/status glyphs and section
-titles retain their existing generic visible/layoutless paths. This adoption
-also adds no public API: the existing `Ui::property_grid` signature,
+undecorated semantic text remain distinct; help/status glyphs retain their
+existing generic visible/layoutless paths.
+
+The same canonical method now resolves section primitive family, size, and
+line height from `TextRole::Title` and requests the existing Semibold token only
+for a strictly admitted complete-source `Visible` retained layout. It adds no
+weight to `TextPrimitive`: no-store and rejected generic/layoutless fallback
+remains Regular `400`. Ordinary labels retain their existing Label metrics,
+Regular request, and `EndEllipsis` policy. This bounded adoption adds no public
+API: the existing `Ui::property_grid` signature,
 `PropertyGridConfig`, row/layout models, callbacks, output, access, intents,
 semantics, exports, and qualified facade remain unchanged. No public overflow
 configuration, copied-value API, tooltip API, helper, alias, prelude item,
@@ -529,7 +539,7 @@ records the evidence needed for the final API decision.
 | --- | --- | --- |
 | `text::TextLayoutCache` versus shaped `text::TextLayoutStore` | Use `TextLayoutStore` for retained shaped layouts and renderer resources. `TextLayoutCache` remains a module-qualified approximate measurement compatibility API. | Desktop text behavior, renderer resource lifetime, and public workflow evidence determine deprecation/removal and migration wording. |
 | Legacy viewport `Guide`, `Crosshair`, and `ViewportComposition` helpers versus surface/descriptor paths | Keep legacy helpers compatible but noncanonical. New work starts with `widgets::viewport::ViewportSurface` and the relevant `ViewportGuideDescriptor`, `ViewportOverlayDescriptor`, or `ViewportToolSurfaceDescriptor`. | Viewport composition, external texture, pointer transform, painter, and public workflow proof determine the final retained set. |
-| Legacy `Theme` scalar fields versus token groups | New work uses grouped token surfaces including `Theme::radii`, `Theme::strokes`, `Theme::sizes`, `Theme::controls`, and `Theme::typography`. Typography stores semantic UI, Brand, and Mono family authority separately from per-role logical metrics, plus exact customizable size, line-height, weight, and feature foundation scales. Qualified foundation lookup is `theme.typography.<scale>.get(token)`; `Theme::font` remains the resolved compatibility boundary and `Theme::font_family` exposes typed family lookup. Title remains UI and Brand has no current `TextRole`. Foundation weight metadata does not expand `FontToken`; qualified callers may pass its exact value into low-level `TextStyle::with_weight`, which transports selected-font coordinates through retained shaping and rendering without component adoption. The numeric feature resolves through the qualified low-level `TextFeatureSet` bridge for canonical retained numeric fields without changing `FontToken` or primitives; generic components remain feature-disabled. Default icon geometry uses `Theme::sizes.icon.md`, while checkbox and radio recipes resolve their private exact `14.0` indicator dimension. Removed `ControlMetrics::{icon_size, check_size}` fields have no compatibility aliases. `radius`, `border_width`, and `text_size` remain compatible. | Complete theme-token migration and representative component paint proof precede deprecation or removal. Current typography evidence proves deterministic theme authority, bounded Space Mono and Space Grotesk asset loading with exact byte alignment for Mono and Brand, exact low-level selected-font weight-coordinate transport, bounded bundled-Inter `tnum=1` shaping with retained identity, and canonical retained numeric input/scrub/vector adoption through registered Vello glyphs. Direct/layoutless helpers, semantic weight adoption, and other specified numeric consumers remain unverified; no evidence is claimed for fallback, glyph-metric suitability, DPI legibility, renderer pixels, or visual review. Current selection-indicator evidence covers direct visual geometry and full-label bounds only; it does not establish mixed-state mark anatomy or renderer baselines. |
+| Legacy `Theme` scalar fields versus token groups | New work uses grouped token surfaces including `Theme::radii`, `Theme::strokes`, `Theme::sizes`, `Theme::controls`, and `Theme::typography`. Typography stores semantic UI, Brand, and Mono family authority separately from per-role logical metrics, plus exact customizable size, line-height, weight, and feature foundation scales. Qualified foundation lookup is `theme.typography.<scale>.get(token)`; `Theme::font` remains the resolved compatibility boundary and `Theme::font_family` exposes typed family lookup. Title remains UI and Brand has no current `TextRole`. Foundation weight metadata does not expand `FontToken`; qualified callers may pass its exact value into low-level `TextStyle::with_weight`, which transports selected-font coordinates through retained shaping and rendering, with one bounded canonical retained property-grid section adoption. The numeric feature resolves through the qualified low-level `TextFeatureSet` bridge for canonical retained numeric fields without changing `FontToken` or primitives; generic components remain feature-disabled. Default icon geometry uses `Theme::sizes.icon.md`, while checkbox and radio recipes resolve their private exact `14.0` indicator dimension. Removed `ControlMetrics::{icon_size, check_size}` fields have no compatibility aliases. `radius`, `border_width`, and `text_size` remain compatible. | Complete theme-token migration and representative component paint proof precede deprecation or removal. Current typography evidence proves deterministic theme authority, bounded Space Mono and Space Grotesk asset loading with exact byte alignment for Mono and Brand, exact low-level selected-font weight-coordinate transport, bounded bundled-Inter `tnum=1` shaping with retained identity, canonical retained numeric input/scrub/vector adoption, and canonical retained property-grid section Semibold transport through registered Vello glyphs. Direct/layoutless helpers, additional semantic weight adoption, and other specified numeric consumers remain unverified; no evidence is claimed for fallback, glyph-metric suitability, DPI legibility, renderer pixels, or visual review. Current selection-indicator evidence covers direct visual geometry and full-label bounds only; it does not establish mixed-state mark anatomy or renderer baselines. |
 | Dock `PanelId` versus `PanelInstanceId` | New instance-oriented APIs use `widgets::dock::PanelInstanceId`; the convertible legacy `PanelId` remains compatible. | Dock interaction, persistence round-trip, and public workflow evidence establish whether a migration can be enforced. |
 | `ActionContext`, `ActionPriority`, and `ActionRoutingContext` | Keep all three compatible and provisional; do not claim that their current overlap is final. | Action-routing, input precedence, modal/text reservation, and public workflow evidence must establish one non-contradictory public model. |
 

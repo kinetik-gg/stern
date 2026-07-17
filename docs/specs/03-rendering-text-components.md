@@ -431,14 +431,27 @@ An admitted property label keeps its full-source `EndEllipsis` key and retained
 identity even when a nonpositive span or multiline source makes elision
 ineligible; that shaped topology remains visible and contains no generated
 marker. Admission rejection falls through to the existing complete-source
-generic visible or layoutless path. Section titles remain at `label_rect.x + 8`
-on their existing generic visible/layoutless path. This adoption changes no
-property-grid model, layout, semantics, callback, access, intent,
-virtualization, public API, text primitive, or renderer command contract.
-Registered Vello evidence covers deterministic CPU topology transport at
-`1.0`, `1.25`, `1.5`, and `2.0`; it does not establish raster pixels, logical
-non-overlap for zero-width spans, tooltip or copied-value behavior, or visual
-acceptance.
+generic visible or layoutless path.
+
+A canonical retained `PropertyGridRowKind::Section` resolves family, size, and
+line height from `TextRole::Title`, then resolves `FontWeightToken::Semibold`
+through `theme.typography.weights.get(...)`. Successful strict admission owns
+one complete-source, nonwrapping, feature-disabled `Visible` layout at
+positive-zero width. The primitive remains at `label_rect.x + 8`; only its
+existing baseline now uses the Title size. Ordinary labels and separate help
+and status glyphs keep their Label metrics, Regular constructor weight, and
+existing overflow policies. The public `TextPrimitive` shape is unchanged, so
+no-store or rejected generic/layoutless section fallback remains Regular
+`400`; Stern does not simulate Semibold in that path.
+
+This bounded section adoption changes no property-grid model, row geometry,
+clipping, primitive order, colors, semantics, callback, access, intent,
+virtualization, focus, hit target, interaction, public API, or renderer command
+contract. Registered Vello evidence covers deterministic CPU resource and
+encoding transport through axis-aligned and general-affine paths at `1.0`,
+`1.25`, `1.5`, and `2.0`; it does not establish browser, raster, GPU, pixels,
+DPI legibility, optical baselines, tooltip or copied-value behavior, manual
+review, or visual acceptance.
 
 Canonical retained `Ui::button` now opts only the final complete-source label
 primitive into `EndEllipsis`. The label width follows the existing standard

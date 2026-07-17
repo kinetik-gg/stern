@@ -2,7 +2,7 @@
 
 #![allow(clippy::float_cmp)]
 
-use std::{fs, path::Path};
+use std::{collections::BTreeSet, fs, path::Path};
 
 use stern_core::{
     FontFeatureScale, FontFeatureToken, FontLineHeightScale, FontLineHeightToken, FontSizeScale,
@@ -258,6 +258,107 @@ fn text_style_transports_exactly_the_bounded_low_level_weight_and_feature_set() 
 }
 
 #[test]
+fn weight_assignment_inventory_distinguishes_assignments_from_field_access() {
+    for source in ["style.weight=600", "style.weight = local_weight"] {
+        let executable = mask_rust_comments_and_literals(source);
+        assert!(contains_weight_assignment(&executable));
+    }
+    for source in [
+        "layout.weight",
+        "layout.weight()",
+        "layout.weight == value",
+        "layout.weight => value",
+        r#"let claim = "style.weight = 600";"#,
+        "// style.weight = 600\nlayout.weight",
+    ] {
+        let executable = mask_rust_comments_and_literals(source);
+        assert!(!contains_weight_assignment(&executable));
+    }
+}
+
+#[test]
+fn production_weight_adoption_is_exactly_one_semantic_property_section() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let weight_use_indicators = [
+        "FontWeightToken",
+        "FontWeightScale",
+        ".with_weight(",
+        "typography.weights",
+        "weight:",
+    ];
+    let roots = [
+        workspace.join("crates/stern-widgets/src"),
+        workspace.join("apps/stern-demo/src"),
+    ];
+    let mut sources = Vec::new();
+    for root in roots {
+        collect_widget_app_production_sources(&root, &mut sources);
+    }
+
+    let mut adopters = BTreeSet::new();
+    let mut violations = Vec::new();
+    for path in sources {
+        let source = fs::read_to_string(&path).expect("read widget or app production source");
+        let executable = mask_rust_comments_and_literals(&source);
+        let relative = path
+            .strip_prefix(&workspace)
+            .expect("workspace production path")
+            .to_string_lossy()
+            .replace('\\', "/");
+        if weight_use_indicators
+            .iter()
+            .any(|indicator| executable.contains(indicator))
+            || contains_weight_assignment(&executable)
+        {
+            adopters.insert(relative.clone());
+        }
+        for forbidden in [
+            "FontWeightScale",
+            "FontWeightToken::Regular",
+            "FontWeightToken::Medium",
+            "FontWeightToken::Bold",
+        ] {
+            if executable.contains(forbidden) {
+                violations.push(format!("{relative} contains {forbidden}"));
+            }
+        }
+    }
+
+    assert_eq!(
+        adopters,
+        BTreeSet::from(["crates/stern-widgets/src/ui/property_grid.rs".to_owned()])
+    );
+    assert!(
+        violations.is_empty(),
+        "component weight adoption exceeded its bounded semantic path:\n{}",
+        violations.join("\n")
+    );
+
+    let property_source =
+        fs::read_to_string(workspace.join("crates/stern-widgets/src/ui/property_grid.rs"))
+            .expect("read canonical property-grid source");
+    let property = mask_rust_comments_and_literals(&property_source);
+    assert_eq!(property.matches("FontWeightToken::Semibold").count(), 1);
+    assert_eq!(
+        property
+            .matches("theme.typography.weights.get(FontWeightToken::Semibold)")
+            .count(),
+        1
+    );
+    assert_eq!(property.matches(".with_weight(").count(), 1);
+    let compact_property = property
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect::<String>();
+    for forbidden in [".weights.semibold", ".weight=", "weight:", "600"] {
+        assert!(
+            !compact_property.contains(forbidden),
+            "property-grid weight adoption must not contain {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn production_numeric_feature_adoption_is_narrow_and_semantically_resolved() {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let roots = [
@@ -284,7 +385,6 @@ fn production_numeric_feature_adoption_is_narrow_and_semantically_resolved() {
             "tabular-nums",
             "FontWeightScale",
             "FontFeatureScale",
-            "FontWeightToken",
             "FontFeatureToken",
             "TextFeatureSet::TABULAR_NUMBERS",
         ] {
@@ -354,6 +454,21 @@ fn struct_declaration<'a>(source: &'a str, name: &str) -> &'a str {
     &declaration[..end + 2]
 }
 
+fn contains_weight_assignment(source: &str) -> bool {
+    let mut remaining = source;
+    while let Some(index) = remaining.find(".weight") {
+        let after_weight = &remaining[index + ".weight".len()..];
+        let after_whitespace = after_weight.trim_start_matches(char::is_whitespace);
+        if let Some(after_equals) = after_whitespace.strip_prefix('=')
+            && !after_equals.starts_with(['=', '>'])
+        {
+            return true;
+        }
+        remaining = after_weight;
+    }
+    false
+}
+
 fn collect_rust_sources(root: &Path, sources: &mut Vec<std::path::PathBuf>) {
     for entry in fs::read_dir(root).expect("read production source directory") {
         let path = entry.expect("read production source entry").path();
@@ -363,4 +478,155 @@ fn collect_rust_sources(root: &Path, sources: &mut Vec<std::path::PathBuf>) {
             sources.push(path);
         }
     }
+}
+
+fn collect_widget_app_production_sources(root: &Path, sources: &mut Vec<std::path::PathBuf>) {
+    for entry in fs::read_dir(root).expect("read widget or app source directory") {
+        let path = entry.expect("read widget or app source entry").path();
+        if path.is_dir() {
+            if !matches!(
+                path.file_name().and_then(|name| name.to_str()),
+                Some("tests" | "test" | "benches" | "examples" | "fixtures" | "snapshots")
+            ) {
+                collect_widget_app_production_sources(&path, sources);
+            }
+        } else if path.extension().is_some_and(|extension| extension == "rs")
+            && !matches!(
+                path.file_stem().and_then(|name| name.to_str()),
+                Some("test" | "tests")
+            )
+        {
+            sources.push(path);
+        }
+    }
+}
+
+fn mask_rust_comments_and_literals(source: &str) -> String {
+    let bytes = source.as_bytes();
+    let mut masked = bytes.to_vec();
+    let mut cursor = 0_usize;
+    while cursor < bytes.len() {
+        if bytes[cursor..].starts_with(b"//") {
+            let end = bytes[cursor + 2..]
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(bytes.len(), |offset| cursor + 2 + offset);
+            mask_non_code(&mut masked, cursor, end, false);
+            cursor = end;
+        } else if bytes[cursor..].starts_with(b"/*") {
+            let end = nested_block_comment_end(bytes, cursor);
+            mask_non_code(&mut masked, cursor, end, false);
+            cursor = end;
+        } else if let Some(end) = raw_string_end(bytes, cursor) {
+            mask_non_code(&mut masked, cursor, end, true);
+            cursor = end;
+        } else if bytes[cursor] == b'"' {
+            let end = quoted_string_end(bytes, cursor);
+            mask_non_code(&mut masked, cursor, end, true);
+            cursor = end;
+        } else if bytes[cursor] == b'\'' {
+            if let Some(end) = character_literal_end(source, cursor) {
+                mask_non_code(&mut masked, cursor, end, true);
+                cursor = end;
+            } else {
+                cursor += 1;
+            }
+        } else {
+            cursor += 1;
+        }
+    }
+    String::from_utf8(masked).expect("masking valid Rust source must preserve UTF-8")
+}
+
+fn mask_non_code(masked: &mut [u8], start: usize, end: usize, literal: bool) {
+    for byte in &mut masked[start..end] {
+        if *byte != b'\n' && *byte != b'\r' {
+            *byte = b' ';
+        }
+    }
+    if literal && start < end {
+        masked[start] = b'~';
+    }
+}
+
+fn nested_block_comment_end(bytes: &[u8], start: usize) -> usize {
+    let mut depth = 1_usize;
+    let mut cursor = start + 2;
+    while cursor + 1 < bytes.len() {
+        if bytes[cursor..].starts_with(b"/*") {
+            depth += 1;
+            cursor += 2;
+        } else if bytes[cursor..].starts_with(b"*/") {
+            depth -= 1;
+            cursor += 2;
+            if depth == 0 {
+                return cursor;
+            }
+        } else {
+            cursor += 1;
+        }
+    }
+    bytes.len()
+}
+
+fn raw_string_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut cursor = match bytes.get(start..) {
+        Some([b'r', ..]) => start + 1,
+        Some([b'b' | b'c', b'r', ..]) => start + 2,
+        _ => return None,
+    };
+    let mut hashes = 0_usize;
+    while bytes.get(cursor) == Some(&b'#') {
+        hashes += 1;
+        cursor += 1;
+    }
+    if bytes.get(cursor) != Some(&b'"') {
+        return None;
+    }
+    cursor += 1;
+    while cursor < bytes.len() {
+        if bytes[cursor] == b'"'
+            && bytes
+                .get(cursor + 1..cursor + 1 + hashes)
+                .is_some_and(|suffix| suffix.iter().all(|byte| *byte == b'#'))
+        {
+            return Some(cursor + 1 + hashes);
+        }
+        cursor += 1;
+    }
+    Some(bytes.len())
+}
+
+fn quoted_string_end(bytes: &[u8], start: usize) -> usize {
+    let mut cursor = start + 1;
+    while cursor < bytes.len() {
+        match bytes[cursor] {
+            b'\\' => cursor = (cursor + 2).min(bytes.len()),
+            b'"' => return cursor + 1,
+            _ => cursor += 1,
+        }
+    }
+    bytes.len()
+}
+
+fn character_literal_end(source: &str, start: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let value_start = start + 1;
+    if bytes.get(value_start) == Some(&b'\\') {
+        let escape_start = value_start + 1;
+        let value_end = match bytes.get(escape_start) {
+            Some(b'x') => escape_start + 3,
+            Some(b'u') if bytes.get(escape_start + 1) == Some(&b'{') => bytes[escape_start + 2..]
+                .iter()
+                .position(|byte| *byte == b'}')
+                .map(|offset| escape_start + 3 + offset)?,
+            Some(_) => escape_start + 1,
+            None => return None,
+        };
+        return (bytes.get(value_end) == Some(&b'\'')).then_some(value_end + 1);
+    }
+
+    let character = source.get(value_start..)?.chars().next()?;
+    let value_end = value_start + character.len_utf8();
+    (bytes.get(value_end) == Some(&b'\'')).then_some(value_end + 1)
 }
