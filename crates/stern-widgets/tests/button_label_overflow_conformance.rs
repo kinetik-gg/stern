@@ -1073,7 +1073,7 @@ fn invalid_and_nonfinite_rects_preserve_preexisting_output_and_interaction_topol
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn end_ellipsis_adoption_is_limited_to_standard_and_delegated_action_buttons() {
+fn end_ellipsis_adoption_includes_buttons_and_canonical_chrome_toolbar_only() {
     let standard = "Complete standard button adoption source";
     let action_source = "Complete delegated action button adoption source";
     let icon_label = "Neighboring vector icon accessible label";
@@ -1082,7 +1082,7 @@ fn end_ellipsis_adoption_is_limited_to_standard_and_delegated_action_buttons() {
     let tab = "Neighboring tab source keeps generic retained policy";
     let row = "Neighboring list row source keeps generic retained policy";
     let menu = "Neighboring menu source keeps generic retained policy";
-    let toolbar = "Neighboring toolbar source keeps generic retained policy";
+    let toolbar = "Canonical chrome toolbar source uses explicit retained policy";
     let busy = "Neighboring busy source keeps generic retained policy";
     let busy_cancel = "Neighboring busy cancel keeps generic retained policy";
     let action = ActionDescriptor::new("adoption.action", action_source);
@@ -1187,7 +1187,22 @@ fn end_ellipsis_adoption_is_limited_to_standard_and_delegated_action_buttons() {
         );
     }
 
-    for source in [tab, row, menu, toolbar, busy, busy_cancel] {
+    let toolbar_label = button_text(&frame, toolbar);
+    let toolbar_layout = store
+        .stored_layout(
+            toolbar_label
+                .layout
+                .expect("explicit toolbar adoption identity"),
+        )
+        .expect("resident toolbar adoption identity");
+    assert_eq!(toolbar_layout.key.text, toolbar);
+    assert_eq!(toolbar_layout.key.overflow, TextOverflow::EndEllipsis);
+    assert_eq!(
+        toolbar_layout.key.width_bits,
+        (200.0_f32 - theme.controls.padding_x * 2.0_f32).to_bits()
+    );
+
+    for source in [tab, row, menu, busy, busy_cancel] {
         let label = frame
             .primitives
             .iter()
@@ -1229,7 +1244,11 @@ fn end_ellipsis_adoption_is_limited_to_standard_and_delegated_action_buttons() {
         .map(|entry| entry.key.text.clone())
         .collect::<Vec<_>>();
     adopters.sort();
-    let mut expected = vec![standard.to_owned(), action_source.to_owned()];
+    let mut expected = vec![
+        standard.to_owned(),
+        action_source.to_owned(),
+        toolbar.to_owned(),
+    ];
     expected.sort();
     assert_eq!(adopters, expected);
 }
@@ -1253,6 +1272,7 @@ fn production_call_graph_bounds_button_adoption_and_absent_split_busy_consumers(
         vec![
             ("src/components/selector_fields.rs", 1),
             ("src/ui/basic_controls.rs", 1),
+            ("src/ui/chrome.rs", 1),
             ("src/ui/property_grid.rs", 1),
             ("src/ui/virtual_table.rs", 1),
         ]
