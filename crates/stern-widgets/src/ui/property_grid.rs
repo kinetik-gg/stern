@@ -1,9 +1,9 @@
 use std::hash::Hash;
 
 use stern_core::{
-    Brush, ClipId, Color, InteractionState, Point, Primitive, Rect, RectPrimitive, RepaintRequest,
-    Response, ScrollResponse, SemanticNode, SemanticRole, SemanticValue, Size, Stroke,
-    TextPrimitive, TextRole, Vec2, WidgetId, scrollable,
+    Brush, ClipId, Color, FontWeightToken, InteractionState, Point, Primitive, Rect, RectPrimitive,
+    RepaintRequest, Response, ScrollResponse, SemanticNode, SemanticRole, SemanticValue, Size,
+    Stroke, TextPrimitive, TextRole, Vec2, WidgetId, scrollable,
 };
 use stern_text::{TextLayoutKey, TextOverflow, TextStyle};
 
@@ -225,10 +225,19 @@ impl Ui<'_> {
         };
         let label_origin = Point::new(
             geometry.label_rect.x + if section { 8.0 } else { 6.0 },
-            text_baseline(geometry.label_rect, self.theme.font(TextRole::Label).size),
+            text_baseline(
+                geometry.label_rect,
+                self.theme
+                    .font(if section {
+                        TextRole::Title
+                    } else {
+                        TextRole::Label
+                    })
+                    .size,
+            ),
         );
         if section {
-            self.paint_property_grid_text(label_origin, label, label_color);
+            self.paint_property_grid_section(label_origin, label, label_color);
         } else {
             let reserved_right = if row.state.help_text.is_some() {
                 22.0_f32
@@ -270,6 +279,35 @@ impl Ui<'_> {
 
     fn paint_property_grid_text(&mut self, origin: Point, text: String, color: Color) {
         let primitive = self.property_grid_text_primitive(origin, text, color);
+        self.primitive(primitive);
+    }
+
+    fn paint_property_grid_section(&mut self, origin: Point, text: String, color: Color) {
+        let font = self.theme.font(TextRole::Title);
+        let weight = self.theme.typography.weights.get(FontWeightToken::Semibold);
+        let mut primitive = Primitive::Text(TextPrimitive {
+            layout: None,
+            origin,
+            text,
+            family: font.family.to_owned(),
+            size: font.size,
+            line_height: font.line_height,
+            brush: Brush::Solid(color),
+        });
+        if let (Some(text_layouts), Primitive::Text(text)) =
+            (self.text_layouts.as_deref_mut(), &mut primitive)
+        {
+            text.layout = text_layouts.try_layout_id(
+                TextLayoutKey::new(
+                    text.text.clone(),
+                    TextStyle::new(text.family.clone(), text.size, text.line_height)
+                        .with_weight(weight),
+                    0.0,
+                    false,
+                )
+                .with_overflow(TextOverflow::Visible),
+            );
+        }
         self.primitive(primitive);
     }
 
