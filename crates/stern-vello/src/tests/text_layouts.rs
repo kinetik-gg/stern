@@ -1059,6 +1059,86 @@ fn retained_property_widget_encodes_label_ellipsis_without_state_glyph_fallback(
     }
 }
 
+fn assert_axis_aligned_property_section_encoding(
+    id: TextLayoutId,
+    primitives: &[Primitive],
+    resources: &RenderResources,
+    expected_ids: &[u32],
+    scale: f32,
+) {
+    let mut renderer = VelloRenderer::new();
+    let output = renderer.submit_frame(RenderFrameInput {
+        viewport: viewport(f64::from(scale)),
+        primitives,
+        resources,
+    });
+    let encoding = renderer.scene().encoding();
+    assert!(output.diagnostics.is_empty());
+    assert!(matches!(
+        primitives[0],
+        Primitive::Text(ref text) if text.layout == Some(id)
+    ));
+    assert_eq!(
+        encoding
+            .resources
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.id)
+            .collect::<Vec<_>>(),
+        expected_ids
+    );
+    let expected_size = 14.0_f32 * scale;
+    assert!(encoding.resources.glyph_runs.iter().all(|run| {
+        run.hint
+            && run.font_size.to_bits() == expected_size.to_bits()
+            && encoding.resources.normalized_coords[run.normalized_coords.clone()] == [0, 5_898]
+    }));
+    assert_eq!(renderer.cached_text_layout_count(), 0);
+    assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+}
+
+fn assert_affine_property_section_encoding(
+    primitives: &[Primitive],
+    resources: &RenderResources,
+    expected_ids: &[u32],
+    scale: f32,
+) {
+    let mut renderer = VelloRenderer::new();
+    let output = renderer.submit_frame(RenderFrameInput {
+        viewport: viewport(f64::from(scale)),
+        primitives,
+        resources,
+    });
+    let encoding = renderer.scene().encoding();
+    assert!(output.diagnostics.is_empty());
+    assert_eq!(
+        encoding
+            .resources
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.id)
+            .collect::<Vec<_>>(),
+        expected_ids
+    );
+    let expected_transform = [
+        f64::from(scale),
+        f64::from(0.01_f32 * scale),
+        f64::from(-0.01_f32 * scale),
+        f64::from(scale),
+        0.0,
+        0.0,
+    ];
+    assert!(encoding.resources.glyph_runs.iter().all(|run| {
+        !run.hint
+            && run.font_size.to_bits() == 14.0_f32.to_bits()
+            && run.transform.to_kurbo().as_coeffs().map(f64::to_bits)
+                == expected_transform.map(f64::to_bits)
+            && encoding.resources.normalized_coords[run.normalized_coords.clone()] == [0, 5_898]
+    }));
+    assert_eq!(renderer.cached_text_layout_count(), 0);
+    assert_eq!(renderer.cached_text_layout_payload_bytes(), 0);
+}
+
 #[test]
 fn retained_property_section_encodes_semibold_coordinates_across_transform_paths() {
     let source = "Canonical retained property section";
@@ -1136,74 +1216,15 @@ fn retained_property_section_encodes_semibold_coordinates_across_transform_paths
         Primitive::TransformEnd,
     ];
 
-    for scale in [1.0_f64, 1.25, 1.5, 2.0] {
-        let expected_size = 14.0_f32 * scale as f32;
-        let mut axis_renderer = VelloRenderer::new();
-        let axis_output = axis_renderer.submit_frame(RenderFrameInput {
-            viewport: viewport(scale),
-            primitives: &axis_aligned,
-            resources: &resources,
-        });
-        let axis_encoding = axis_renderer.scene().encoding();
-        assert!(axis_output.diagnostics.is_empty());
-        assert!(matches!(
-            axis_aligned[0],
-            Primitive::Text(ref text) if text.layout == Some(id)
-        ));
-        assert_eq!(
-            axis_encoding
-                .resources
-                .glyphs
-                .iter()
-                .map(|glyph| glyph.id)
-                .collect::<Vec<_>>(),
-            expected_ids
-        );
-        assert!(axis_encoding.resources.glyph_runs.iter().all(|run| {
-            run.hint
-                && run.font_size.to_bits() == expected_size.to_bits()
-                && axis_encoding.resources.normalized_coords[run.normalized_coords.clone()]
-                    == [0, 5_898]
-        }));
-        assert_eq!(axis_renderer.cached_text_layout_count(), 0);
-        assert_eq!(axis_renderer.cached_text_layout_payload_bytes(), 0);
-
-        let mut affine_renderer = VelloRenderer::new();
-        let affine_output = affine_renderer.submit_frame(RenderFrameInput {
-            viewport: viewport(scale),
-            primitives: &general_affine,
-            resources: &resources,
-        });
-        let affine_encoding = affine_renderer.scene().encoding();
-        assert!(affine_output.diagnostics.is_empty());
-        assert_eq!(
-            affine_encoding
-                .resources
-                .glyphs
-                .iter()
-                .map(|glyph| glyph.id)
-                .collect::<Vec<_>>(),
-            expected_ids
-        );
-        let scale_f32 = scale as f32;
-        let expected_transform = [
+    for scale in [1.0_f32, 1.25, 1.5, 2.0] {
+        assert_axis_aligned_property_section_encoding(
+            id,
+            &axis_aligned,
+            &resources,
+            &expected_ids,
             scale,
-            f64::from(0.01_f32 * scale_f32),
-            f64::from(-0.01_f32 * scale_f32),
-            scale,
-            0.0,
-            0.0,
-        ];
-        assert!(affine_encoding.resources.glyph_runs.iter().all(|run| {
-            !run.hint
-                && run.font_size.to_bits() == 14.0_f32.to_bits()
-                && run.transform.to_kurbo().as_coeffs().map(f64::to_bits)
-                    == expected_transform.map(f64::to_bits)
-                && affine_encoding.resources.normalized_coords[run.normalized_coords.clone()]
-                    == [0, 5_898]
-        }));
-        assert_eq!(affine_renderer.cached_text_layout_count(), 0);
-        assert_eq!(affine_renderer.cached_text_layout_payload_bytes(), 0);
+        );
+        assert_affine_property_section_encoding(&general_affine, &resources, &expected_ids, scale);
     }
 }
 
