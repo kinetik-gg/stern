@@ -10,6 +10,18 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- Added a qualified Experimental shortcut-presentation policy in `stern-core`.
+  `Shortcut::localized_label` now asks a caller-owned object-safe localizer for
+  complete modifier and logical/physical key tokens under an explicit Windows,
+  macOS, or Linux policy; `Shortcut::english_label` supplies deterministic
+  English reference labels. Presentation remains owned, pure, logical-key
+  first, and fail-closed, with no stored display text, platform/locale
+  discovery, routing mutation, action invocation, widget/menu adoption, or
+  prelude expansion. This advances only bounded Partial evidence for
+  `STERN-SHORTCUT-001`, `STERN-SHORTCUT-002`, and `STERN-SHORTCUT-003`.
+  Runtime active-platform selection, non-English quality, sequential chords,
+  menu requirements, browser, raster, GPU, manual, and visual evidence remain
+  unverified; nothing is Accepted.
 - **Breaking:** Added exact qualified variable-font weight transport through
   public `TextStyle::weight`, `TextStyle::with_weight(u16)`, retained
   style/key/ID identity, Cosmic Text shaping, public
