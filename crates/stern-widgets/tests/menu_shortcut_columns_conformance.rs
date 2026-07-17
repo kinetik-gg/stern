@@ -3,13 +3,16 @@
 use std::{cell::RefCell, time::Duration};
 
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionIcon, ActionSource, FrameContext, Key, Modifiers,
-    PhysicalSize, PointerOrder, Primitive, Rect, Shortcut, ShortcutLabelLocalizer,
-    ShortcutLabelToken, ShortcutModifier, ShortcutPlatform, Size, TextPrimitive, TimeInfo, UiInput,
-    UiMemory, ViewportInfo, WidgetId, default_dark_theme,
+    ActionContext, ActionDescriptor, ActionIcon, ActionSource, FrameContext, Key, KeyEvent,
+    KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput,
+    PointerOrder, Primitive, Rect, Shortcut, ShortcutLabelLocalizer, ShortcutLabelToken,
+    ShortcutModifier, ShortcutPlatform, Size, TextPrimitive, TimeInfo, UiInput, UiMemory,
+    ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::{
-    Menu, MenuItem, MenuOverlay, OverlayEntry, OverlayId, OverlayKind, OverlayScene,
+    CommandPaletteOverlay, DropdownItem, DropdownItemId, DropdownModel, DropdownOverlay, Menu,
+    MenuItem, MenuOverlay, ModalAction, ModalActionRole, ModalDialog, ModalDialogOverlay,
+    OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayScene, OverlaySceneMetrics,
     OverlaySceneOutput, OverlaySceneSurface, Ui,
 };
 
@@ -156,6 +159,21 @@ fn run_presented(
     (output, ui.finish_output())
 }
 
+fn run_legacy(
+    scene: &mut OverlayScene,
+    memory: &mut UiMemory,
+    input: UiInput,
+) -> (OverlaySceneOutput, stern_core::FrameOutput) {
+    let theme = default_dark_theme();
+    let mut ui = Ui::begin_frame(frame_context(input), memory, &theme);
+    ui.resolve_pointer_targets(|plan| {
+        scene.declare_pointer_targets(plan, PointerOrder::new(100));
+    })
+    .expect("valid pointer plan");
+    let output = ui.overlay_scene(scene);
+    (output, ui.finish_output())
+}
+
 fn text_primitives(frame: &stern_core::FrameOutput) -> Vec<&TextPrimitive> {
     frame
         .primitives
@@ -201,6 +219,35 @@ fn mixed_menu() -> (Menu, Vec<Shortcut>) {
     menu.push(MenuItem::Action(disabled_action));
 
     (menu, vec![primary, icon, submenu, disabled])
+}
+
+fn pointer_input(position: Point, pressed: bool) -> UiInput {
+    UiInput {
+        pointer: PointerInput {
+            position: Some(position),
+            primary: if pressed {
+                PointerButtonState::new(true, true, false)
+            } else {
+                PointerButtonState::new(false, false, true)
+            },
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    }
+}
+
+fn key_sequence(keys: &[Key]) -> UiInput {
+    UiInput {
+        keyboard: KeyboardInput {
+            events: keys
+                .iter()
+                .cloned()
+                .map(|key| KeyEvent::new(key, KeyState::Pressed, Modifiers::default(), false))
+                .collect(),
+            ..KeyboardInput::default()
+        },
+        ..UiInput::default()
+    }
 }
 
 #[test]
@@ -432,4 +479,307 @@ fn widget_uses_each_explicit_platform_and_caller_owned_localizer_policy_verbatim
             1
         );
     }
+}
+
+#[test]
+fn rejected_or_empty_tokens_fail_closed_without_separator_or_routing_changes() {
+    for failure in [Failure::RejectAlt, Failure::EmptyKey] {
+        let shortcut = shortcut("x");
+        let direct = RecordingLocalizer::new(" + ", failure);
+        assert_eq!(
+            shortcut.localized_label(ShortcutPlatform::Windows, &direct),
+            None
+        );
+        let expected_callbacks = direct.callbacks();
+        assert!(
+            expected_callbacks
+                .iter()
+                .all(|callback| !matches!(callback, Callback::Separator(_)))
+        );
+
+        let mut scene = menu_scene(
+            Rect::new(20.0, 20.0, 280.0, 40.0),
+            Menu::from_actions([action_with_shortcut(
+                "menu.rejected",
+                "Rejected shortcut",
+                shortcut,
+            )]),
+        );
+        let before = scene.clone();
+        let widget = RecordingLocalizer::new(" + ", failure);
+        let (output, frame) = run_presented(
+            &mut scene,
+            &mut UiMemory::new(),
+            UiInput::default(),
+            ShortcutPlatform::Windows,
+            &widget,
+        );
+        assert_eq!(widget.callbacks(), expected_callbacks);
+        assert_eq!(scene, before);
+        assert_eq!(output.responses.len(), 1);
+        assert_eq!(output.responses[0].rect, Rect::new(24.0, 24.0, 272.0, 28.0));
+        assert_eq!(
+            text_primitives(&frame)
+                .iter()
+                .map(|text| text.text.as_str())
+                .collect::<Vec<_>>(),
+            ["Rejected shortcut"]
+        );
+        let row_id = WidgetId::from_raw(41)
+            .child("overlay-scene")
+            .child(("overlay-action", "menu.rejected"));
+        let semantics = frame.semantics.get(row_id).expect("row semantics");
+        assert_eq!(semantics.label.as_deref(), Some("Rejected shortcut"));
+        assert!(semantics.state.value.is_none());
+        assert_eq!(
+            frame
+                .primitives
+                .iter()
+                .filter(|primitive| matches!(primitive, Primitive::ClipBegin { .. }))
+                .count(),
+            2,
+            "surface and label clips only"
+        );
+    }
+}
+
+#[test]
+fn narrow_rows_and_non_menu_surfaces_remain_value_equal_to_legacy_presentation() {
+    let shortcut = shortcut("n");
+    let narrow_menu = Menu::from_actions([action_with_shortcut(
+        "menu.narrow",
+        "Narrow",
+        shortcut.clone(),
+    )]);
+    let mut legacy_scene = menu_scene(Rect::new(20.0, 20.0, 272.0, 40.0), narrow_menu.clone());
+    let mut presented_scene = legacy_scene.clone();
+    let (legacy_output, legacy_frame) =
+        run_legacy(&mut legacy_scene, &mut UiMemory::new(), UiInput::default());
+    let localizer = RecordingLocalizer::new("::", Failure::None);
+    let (presented_output, presented_frame) = run_presented(
+        &mut presented_scene,
+        &mut UiMemory::new(),
+        UiInput::default(),
+        ShortcutPlatform::Linux,
+        &localizer,
+    );
+    assert!(localizer.callbacks().is_empty());
+    assert_eq!(presented_output, legacy_output);
+    assert_eq!(presented_frame, legacy_frame);
+    assert!(
+        text_primitives(&presented_frame)
+            .iter()
+            .all(|text| text.text != "›")
+    );
+
+    let below = f32::from_bits(272.0_f32.to_bits() - 1);
+    for width in [below, 271.0, 120.0] {
+        let metrics = OverlaySceneMetrics {
+            inset: 0.0,
+            ..OverlaySceneMetrics::default()
+        };
+        let mut scene = OverlayScene::with_metrics(metrics);
+        scene.push(OverlaySceneSurface::menu(
+            "Narrow",
+            MenuOverlay::new(
+                OverlayEntry::new(
+                    OverlayId::from_raw(42),
+                    OverlayKind::Menu,
+                    Rect::new(7.0, 11.0, width, 28.0),
+                ),
+                narrow_menu.clone(),
+                ActionSource::Menu,
+                ActionContext::Global,
+            ),
+        ));
+        let localizer = RecordingLocalizer::new("::", Failure::None);
+        let (_, frame) = run_presented(
+            &mut scene,
+            &mut UiMemory::new(),
+            UiInput::default(),
+            ShortcutPlatform::Linux,
+            &localizer,
+        );
+        assert!(localizer.callbacks().is_empty());
+        assert_eq!(
+            frame
+                .primitives
+                .iter()
+                .filter(|primitive| matches!(primitive, Primitive::ClipBegin { .. }))
+                .count(),
+            1
+        );
+    }
+
+    let mut non_menu = OverlayScene::new();
+    non_menu.push(OverlaySceneSurface::dropdown(
+        "Dropdown",
+        DropdownOverlay::new(
+            OverlayEntry::new(
+                OverlayId::from_raw(50),
+                OverlayKind::Dropdown,
+                Rect::new(10.0, 10.0, 180.0, 40.0),
+            ),
+            WidgetId::from_key("dropdown-trigger"),
+            DropdownModel::from_items([DropdownItem::new(DropdownItemId::from_raw(1), "Choice")]),
+        ),
+    ));
+    non_menu.push(OverlaySceneSurface::command_palette(
+        "Palette",
+        CommandPaletteOverlay::from_actions(
+            OverlayEntry::new(
+                OverlayId::from_raw(51),
+                OverlayKind::CommandPalette,
+                Rect::new(200.0, 10.0, 200.0, 70.0),
+            ),
+            &[action_with_shortcut("palette.action", "Palette", shortcut)],
+            ActionContext::Global,
+        ),
+    ));
+    let modal =
+        ModalDialog::new(WidgetId::from_key("modal"), "Modal").with_actions([ModalAction::new(
+            ActionDescriptor::new("modal.action", "Confirm"),
+            ModalActionRole::Primary,
+        )]);
+    non_menu.push(OverlaySceneSurface::modal(ModalDialogOverlay::placed(
+        OverlayId::from_raw(52),
+        Rect::new(10.0, 100.0, 180.0, 70.0),
+        modal,
+        OverlayDismissal::Escape,
+        ActionContext::Global,
+    )));
+    non_menu.push(OverlaySceneSurface::passive(
+        OverlayEntry::new(
+            OverlayId::from_raw(53),
+            OverlayKind::Popover,
+            Rect::new(200.0, 100.0, 180.0, 40.0),
+        ),
+        "Passive",
+        "Passive text",
+    ));
+    let mut legacy_non_menu = non_menu.clone();
+    let (legacy_output, legacy_frame) = run_legacy(
+        &mut legacy_non_menu,
+        &mut UiMemory::new(),
+        UiInput::default(),
+    );
+    let localizer = RecordingLocalizer::new("::", Failure::None);
+    let (presented_output, presented_frame) = run_presented(
+        &mut non_menu,
+        &mut UiMemory::new(),
+        UiInput::default(),
+        ShortcutPlatform::MacOs,
+        &localizer,
+    );
+    assert!(localizer.callbacks().is_empty());
+    assert_eq!(presented_output, legacy_output);
+    assert_eq!(presented_frame, legacy_frame);
+}
+
+#[test]
+fn presentation_preserves_full_row_pointer_keyboard_and_fifo_action_routing() {
+    let (menu, _) = mixed_menu();
+    let mut legacy_scene = menu_scene(SURFACE_RECT, menu);
+    let mut presented_scene = legacy_scene.clone();
+    let mut legacy_memory = UiMemory::new();
+    let mut presented_memory = UiMemory::new();
+    let localizer = RecordingLocalizer::new("::", Failure::None);
+    for pressed in [true, false] {
+        let input = pointer_input(Point::new(200.0, 30.0), pressed);
+        let (legacy_output, mut legacy_frame) =
+            run_legacy(&mut legacy_scene, &mut legacy_memory, input.clone());
+        let (presented_output, mut presented_frame) = run_presented(
+            &mut presented_scene,
+            &mut presented_memory,
+            input,
+            ShortcutPlatform::Windows,
+            &localizer,
+        );
+        assert_eq!(presented_output.intents, legacy_output.intents);
+        assert_eq!(presented_output.responses, legacy_output.responses);
+        assert_eq!(presented_frame.actions, legacy_frame.actions);
+        if !pressed {
+            let invocation = presented_frame.actions.pop_front().expect("menu action");
+            assert_eq!(invocation.action_id.as_str(), "menu.primary");
+            assert_eq!(invocation.source, ActionSource::Menu);
+            assert_eq!(
+                invocation.context,
+                ActionContext::Frame(WidgetId::from_key("document:alpha"))
+            );
+            assert!(legacy_frame.actions.pop_front().is_some());
+        }
+    }
+
+    let first = action_with_shortcut("queue.first", "First", shortcut("1"));
+    let second = action_with_shortcut("queue.second", "Second", shortcut("2"));
+    let mut legacy_scene = menu_scene(
+        Rect::new(20.0, 20.0, 280.0, 68.0),
+        Menu::from_actions([first, second]),
+    );
+    let mut presented_scene = legacy_scene.clone();
+    let input = key_sequence(&[Key::ArrowDown, Key::Enter, Key::ArrowDown, Key::Enter]);
+    let (legacy_output, legacy_frame) =
+        run_legacy(&mut legacy_scene, &mut UiMemory::new(), input.clone());
+    let localizer = RecordingLocalizer::new("::", Failure::None);
+    let (presented_output, mut presented_frame) = run_presented(
+        &mut presented_scene,
+        &mut UiMemory::new(),
+        input,
+        ShortcutPlatform::Windows,
+        &localizer,
+    );
+    assert_eq!(presented_output.intents, legacy_output.intents);
+    assert_eq!(presented_frame.actions, legacy_frame.actions);
+    assert_eq!(
+        [
+            presented_frame
+                .actions
+                .pop_front()
+                .expect("first action")
+                .action_id
+                .as_str()
+                .to_owned(),
+            presented_frame
+                .actions
+                .pop_front()
+                .expect("second action")
+                .action_id
+                .as_str()
+                .to_owned(),
+        ],
+        ["queue.first", "queue.second"]
+    );
+}
+
+#[test]
+fn widget_source_uses_the_core_policy_without_public_shape_or_naming_duplication() {
+    let ui = include_str!("../src/ui/overlays.rs");
+    assert_eq!(
+        ui.matches("pub fn overlay_scene_with_menu_presentation(")
+            .count(),
+        1
+    );
+    assert_eq!(ui.matches(".localized_label(").count(), 1);
+    for duplicated_policy in [
+        "ShortcutModifier::",
+        "\"Ctrl\"",
+        "\"Command\"",
+        "\"Option\"",
+        "\"Super\"",
+    ] {
+        assert!(!ui.contains(duplicated_policy));
+    }
+
+    let menu = include_str!("../src/overlays/menu.rs");
+    let scene = include_str!("../src/overlays/scene.rs");
+    for stored_policy in [
+        "ShortcutPlatform",
+        "ShortcutLabelLocalizer",
+        "shortcut_label",
+    ] {
+        assert!(!menu.contains(stored_policy));
+        assert!(!scene.contains(stored_policy));
+    }
+    assert!(scene.contains("pub(crate) menu_columns: bool"));
+    assert!(scene.contains("pub(crate) shortcut: Option<Shortcut>"));
 }
