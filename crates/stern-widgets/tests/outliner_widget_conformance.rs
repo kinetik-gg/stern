@@ -278,6 +278,47 @@ fn semantic_center(frame: &FrameOutput, label: &str) -> Point {
         .center()
 }
 
+fn run_snapshot_frame(
+    model: &OutlinerModel,
+    state: &mut OutlinerState,
+    memory: &mut UiMemory,
+    input: UiInput,
+    provider_calls: &mut Vec<CollectionContextTarget>,
+) -> Run {
+    let theme = default_dark_theme();
+    let mut ui = Ui::begin_frame(context(input), memory, &theme);
+    let scene = ui
+        .prepare_outliner("scene-outliner", config(), model, state)
+        .expect("valid outliner scene");
+    let root = scene.widget_id();
+    let rows = scene.rows().to_vec();
+    ui.resolve_pointer_targets(|plan| {
+        scene.declare_pointer_targets(plan, PointerOrder::new(100), state);
+    })
+    .expect("valid snapshot pointer plan");
+    let output = ui.outliner(&scene, state, |target| {
+        provider_calls.push(target.clone());
+        let ids = target
+            .target_ids()
+            .into_iter()
+            .map(|item| item.raw().to_string())
+            .collect::<Vec<_>>()
+            .join("-");
+        vec![ActionDescriptor::new(
+            format!("scene.snapshot.{ids}"),
+            format!("Outliner snapshot {ids}"),
+        )]
+    });
+    let frame = ui.finish_output();
+    Run {
+        root,
+        rows,
+        lower: None,
+        output,
+        frame,
+    }
+}
+
 #[test]
 fn prepared_scene_freezes_virtual_rows_pointer_routing_paint_and_semantics() {
     let model = roots(0..10_000);
@@ -838,6 +879,100 @@ fn row_and_background_context_menus_preserve_targets_and_match_the_action_queue(
     assert_eq!(invocation.action_id, request.action_id);
     assert_eq!(invocation.source, ActionSource::Menu);
     assert_eq!(invocation.context, ActionContext::Widget(selected.root));
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn outliner_menu_keeps_open_snapshot_when_live_selection_changes_before_display() {
+    let model = roots([1, 2, 3]);
+    let mut state = OutlinerState::new();
+    state.selection.replace(id(1));
+    state.selection.toggle(id(2));
+    let mut memory = UiMemory::new();
+    let idle = run_frame(
+        &model,
+        config(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+    );
+    let trigger = idle.rows[0].label_rect.center();
+    let captured =
+        CollectionContextTarget::selection([id(1), id(2)]).expect("captured selection target");
+    let mut provider_calls = Vec::new();
+
+    let _ = run_snapshot_frame(
+        &model,
+        &mut state,
+        &mut memory,
+        secondary_input(trigger, true, true, false),
+        &mut provider_calls,
+    );
+    let opened = run_snapshot_frame(
+        &model,
+        &mut state,
+        &mut memory,
+        secondary_input(trigger, false, false, true),
+        &mut provider_calls,
+    );
+    assert_eq!(opened.output.context_opened, Some(captured.clone()));
+    assert_eq!(state.context_target(), Some(&captured));
+    assert!(!provider_calls.is_empty());
+    assert!(provider_calls.iter().all(|target| target == &captured));
+
+    state.selection.replace(id(3));
+    let menu = run_snapshot_frame(
+        &model,
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        &mut provider_calls,
+    );
+    assert_eq!(state.selection.selected(), vec![id(3)]);
+    assert_eq!(state.context_target(), Some(&captured));
+    assert!(provider_calls.iter().all(|target| target == &captured));
+    let command = semantic_center(&menu.frame, "Outliner snapshot 1-2");
+    assert!(
+        menu.frame
+            .semantics
+            .nodes()
+            .iter()
+            .all(|node| node.label.as_deref() != Some("Outliner snapshot 3"))
+    );
+
+    let _ = run_snapshot_frame(
+        &model,
+        &mut state,
+        &mut memory,
+        primary_input(command, true, true, false, 1),
+        &mut provider_calls,
+    );
+    let mut invoked = run_snapshot_frame(
+        &model,
+        &mut state,
+        &mut memory,
+        primary_input(command, false, false, true, 1),
+        &mut provider_calls,
+    );
+    let Some(OutlinerRequest::Context(request)) = invoked.output.requests.first() else {
+        panic!("snapshot menu must emit a typed request");
+    };
+    let invocation = invoked
+        .frame
+        .actions
+        .pop_front()
+        .expect("matching snapshot frame action");
+    assert_eq!(request.action_id, ActionId::new("scene.snapshot.1-2"));
+    assert_eq!(request.target, captured);
+    assert_eq!(request.target_ids, vec![id(1), id(2)]);
+    assert_eq!(invocation.action_id, request.action_id);
+    assert_eq!(invocation.source, ActionSource::Menu);
+    assert_eq!(invocation.context, ActionContext::Widget(invoked.root));
+    assert!(invoked.frame.actions.is_empty());
+    assert!(provider_calls.iter().all(|target| target == &captured));
+    assert_eq!(state.selection.selected(), vec![id(3)]);
+    assert_eq!(state.context_target(), None);
 }
 
 #[test]
