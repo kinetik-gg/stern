@@ -182,11 +182,7 @@ fn shortcut_presentation_is_qualified_experimental_core_api() {
         std::any::type_name::<EnglishShortcutLabels>(),
         std::any::type_name::<dyn ShortcutLabelLocalizer>(),
     ];
-    assert!(
-        qualified
-            .iter()
-            .all(|path| path.contains("stern_core::"))
-    );
+    assert!(qualified.iter().all(|path| path.contains("stern_core::")));
 }
 
 #[test]
