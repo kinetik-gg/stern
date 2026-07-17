@@ -386,3 +386,149 @@ fn over_budget_section_rejection_is_transactional_and_leaks_no_identity() {
         node.role == SemanticRole::Label && node.label.as_deref() == Some(source.as_str())
     }));
 }
+
+#[test]
+fn section_row_preserves_geometry_primitive_order_and_semantic_topology() {
+    let source = "Required section remains complete";
+    let row = PropertyGridRow::section(ItemId::from_raw(51), source)
+        .with_required(true)
+        .with_help_text("Section help")
+        .with_status(PropertyGridRowStatus::warning("Section warning"));
+    let rows = [row];
+    let theme = default_dark_theme();
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let (output, frame) = retained_grid(&mut store, &mut memory, &rows, BOUNDS, &theme);
+
+    assert_eq!(
+        output.visible_rows,
+        PropertyGridConfig::default()
+            .layout
+            .visible_row_rects(BOUNDS, &rows, 0.0, 0)
+    );
+    assert!(output.values.is_empty());
+    assert!(output.intents.is_empty());
+    assert_eq!(frame.primitives.len(), 7);
+    assert!(matches!(frame.primitives[0], Primitive::ClipBegin { .. }));
+    assert!(matches!(frame.primitives[1], Primitive::Rect(_)));
+    assert!(matches!(frame.primitives[2], Primitive::Rect(_)));
+    assert!(matches!(frame.primitives[3], Primitive::Text(ref text) if text.text == source));
+    assert!(matches!(frame.primitives[4], Primitive::Text(ref text) if text.text == "?"));
+    assert!(matches!(frame.primitives[5], Primitive::Text(ref text) if text.text == "!"));
+    assert!(matches!(frame.primitives[6], Primitive::ClipEnd { .. }));
+    assert!(!frame.primitives.iter().any(
+        |primitive| matches!(primitive, Primitive::Text(text) if text.text == format!("{source} *"))
+    ));
+
+    let section_node = frame
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| node.role == SemanticRole::Label && node.label.as_deref() == Some(source))
+        .expect("section semantic node");
+    assert_eq!(section_node.bounds, output.visible_rows[0].rect);
+    assert!(
+        section_node
+            .description
+            .as_deref()
+            .expect("section description")
+            .contains("Section help")
+    );
+}
+
+#[test]
+fn ordinary_label_overflow_help_status_and_rejection_contracts_remain_unchanged() {
+    const RETAINED_PAYLOAD_CEILING: usize = 32 * 1024 * 1024;
+
+    let source = "Ordinary property source remains complete while its presentation is elided";
+    let row = PropertyGridRow::property(ItemId::from_raw(61), source, 0)
+        .with_help_text("Property help")
+        .with_status(PropertyGridRowStatus::error("Property error"));
+    let bounds = Rect::new(0.0, 0.0, 96.0, 24.0);
+    let theme = default_dark_theme();
+    let mut store = TextLayoutStore::new();
+    let mut memory = UiMemory::new();
+    let (output, frame) = retained_grid(
+        &mut store,
+        &mut memory,
+        std::slice::from_ref(&row),
+        bounds,
+        &theme,
+    );
+
+    assert_eq!(output.values.len(), 1);
+    assert!(output.intents.is_empty());
+    let label = text(&frame, source);
+    let retained = store
+        .stored_layout(layout_id(&frame, source))
+        .expect("ordinary retained label");
+    assert_eq!(retained.key.text.as_bytes(), source.as_bytes());
+    assert_eq!(retained.key.style.weight, 400);
+    assert_eq!(retained.key.style.features, TextFeatureSet::NONE);
+    assert_eq!(retained.key.overflow, TextOverflow::EndEllipsis);
+    assert!(!retained.key.wrap);
+    assert_eq!(
+        retained.key.width_bits,
+        ((output.visible_rows[0].label_rect.width - 6.0_f32) - 22.0_f32)
+            .max(0.0)
+            .to_bits()
+    );
+    assert!(retained.layout.is_elided());
+    assert_eq!(
+        retained
+            .layout
+            .runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .filter(|glyph| glyph.elided)
+            .count(),
+        1
+    );
+    assert_eq!(label.text.as_bytes(), source.as_bytes());
+    for trailing in [text(&frame, "?"), text(&frame, "x")] {
+        let stored = store
+            .stored_layout(trailing.layout.expect("trailing glyph layout"))
+            .expect("trailing glyph entry");
+        assert_eq!(stored.key.style.weight, 400);
+        assert_eq!(stored.key.overflow, TextOverflow::Visible);
+    }
+    assert!(matches!(frame.primitives[0], Primitive::ClipBegin { .. }));
+    assert!(matches!(frame.primitives[1], Primitive::Rect(_)));
+    assert!(matches!(frame.primitives[2], Primitive::Rect(_)));
+    assert!(matches!(frame.primitives[3], Primitive::Text(ref text) if text.text == source));
+    assert!(matches!(frame.primitives[4], Primitive::Text(ref text) if text.text == "?"));
+    assert!(matches!(frame.primitives[5], Primitive::Text(ref text) if text.text == "x"));
+    assert!(matches!(frame.primitives[6], Primitive::ClipEnd { .. }));
+    assert!(
+        frame.semantics.nodes().iter().any(|node| {
+            node.role == SemanticRole::Row && node.label.as_deref() == Some(source)
+        })
+    );
+
+    let rejection_source = "y".repeat(RETAINED_PAYLOAD_CEILING + 1);
+    let accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
+    let (_, rejected) = retained_grid(
+        &mut store,
+        &mut memory,
+        &[PropertyGridRow::property(
+            ItemId::from_raw(62),
+            &rejection_source,
+            0,
+        )],
+        bounds,
+        &theme,
+    );
+    assert_eq!(text(&rejected, &rejection_source).layout, None);
+    assert_eq!(
+        (
+            store.len(),
+            store.retained_payload_bytes(),
+            store.change_cursor()
+        ),
+        accounting
+    );
+}
