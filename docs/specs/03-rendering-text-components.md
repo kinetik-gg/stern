@@ -866,6 +866,45 @@ The toolkit should support thousands of rows without laying out or painting ever
 
 Menus are custom-rendered.
 
+The qualified Experimental
+`stern_widgets::Ui::overlay_scene_with_menu_presentation` and
+`stern::widgets::Ui::overlay_scene_with_menu_presentation` entrypoint accepts
+an explicit platform plus a caller-owned localizer for one UI evaluation. It
+delegates shortcut text to `Shortcut::localized_label`; the legacy
+`Ui::overlay_scene` path remains label-only.
+
+Wide menu rows use post-inset row width only. At `272.0` logical pixels or
+wider, sibling action and section-label rows reserve these exact slots:
+
+| Segment | Logical width |
+| --- | ---: |
+| outer padding, each side | `8.0` |
+| state / gap / icon / gap | `16.0 / 8.0 / 16.0 / 8.0` |
+| label / gap | flexible remainder / `8.0` |
+| status / gap | `16.0 / 8.0` |
+| shortcut / gap | `112.0 / 8.0` |
+| disclosure | `16.0` |
+
+The threshold leaves an exact `40.0` label slot. Default inset `4.0` therefore
+requires a `280.0` surface; a `272.0` surface yields a `264.0` row and uses the
+legacy path. Any row below the threshold, including the immediately preceding
+`f32` value, paints only the legacy label and never calls the caller-owned
+localizer. Wide labels and present shortcut strings use separate exact slot
+clips; submenu rows add one decorative `›`. State, icon, and status slots are
+reserved but unpainted. Separators retain full-row geometry.
+
+Presentation adds no response, target, focus stop, semantic node, or action.
+The original full-row rectangle, stable identity, descriptor, navigation,
+source/context, queue order, and action-only semantic label remain authoritative.
+This is bounded Partial evidence for `STERN-MENU-COMP-002` and `STERN-MENU-001`;
+the existing bounded Partial shortcut dispositions are preserved. Unverified
+areas are active-platform and locale discovery, non-English translation
+quality, sequential chords, check/radio/icon/status/destructive painting, mixed
+state, right-to-left layout, narrow-menu columns, work-area fitting and
+scrolling, platform-menu entry, context-menu convergence, browser/raster/GPU
+output, manual review, and reference-image equivalence. Maturity does not
+advance beyond bounded Partial.
+
 Overlay primitives must be first-class because menus, tooltips, command palettes, dropdowns, context menus, drag previews, and popovers often escape normal parent clipping.
 
 Overlay responsibilities:
