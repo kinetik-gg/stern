@@ -71,6 +71,15 @@ Recommended layout contracts:
 - `Frame` owns editor-region behavior and chrome.
 - `Panel` is a passive content surface.
 
+`STERN-STRUCT-006` remains Candidate. Bounded automated headless evidence covers
+exact logical viewport, extent, offset, and maxima; horizontal-only row,
+vertical-only column, and generic two-axis policy; deterministic sanitization
+and clamping; staged one-frame wheel snapshots; and nested clip and semantic
+ownership. Scrollbar painting, gestures, keyboard scrolling, target-scale,
+browser, raster, GPU, Vello, native, manual, and visual evidence remain
+unverified. This evidence does not advance `STERN-STRUCT-001` through
+`STERN-STRUCT-005`, and no requirement becomes Accepted.
+
 Layout code should avoid web-like CSS complexity unless a feature is explicitly needed.
 
 ## 12. Dock, Frame, And Panel
