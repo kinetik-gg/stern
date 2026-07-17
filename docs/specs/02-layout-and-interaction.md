@@ -71,6 +71,17 @@ Recommended layout contracts:
 - `Frame` owns editor-region behavior and chrome.
 - `Panel` is a passive content surface.
 
+`STERN-STRUCT-002` remains Candidate. Bounded automated public-API evidence
+covers only the generic `Ui::separator`/`separator` path: it emits passive
+presentation without a semantic node, focus stop, response, capture, or queued
+action; interleaved focusable controls retain their exact semantic and focus
+order; and pointer, keyboard, fractional-bounds, and zero-bounds cases do not
+create separator interaction. This does not forbid passive semantics for other
+separator families. Spacer and skeleton coverage, menu separators, token and
+stroke conformance, DPI and target-scale behavior, and browser, raster, GPU,
+Vello, native/platform, manual, and visual evidence remain unverified. No
+requirement becomes Accepted.
+
 `STERN-STRUCT-006` remains Candidate. Bounded automated headless evidence covers
 exact logical viewport, extent, offset, and maxima; horizontal-only row,
 vertical-only column, and generic two-axis policy; deterministic sanitization
