@@ -163,6 +163,74 @@ fn facade_root_and_feature_qualified_paths_compile() {
 }
 
 #[test]
+fn shortcut_presentation_is_qualified_experimental_core_api() {
+    use stern::core::{
+        EnglishShortcutLabels, Key, Modifiers, Shortcut, ShortcutLabelLocalizer,
+        ShortcutLabelToken, ShortcutModifier, ShortcutPlatform,
+    };
+
+    let localizer: &dyn ShortcutLabelLocalizer = &EnglishShortcutLabels;
+    let shortcut = Shortcut::new(Modifiers::default(), Key::Character("s".into()));
+    assert_eq!(
+        shortcut.localized_label(ShortcutPlatform::Windows, localizer),
+        Some("S".into())
+    );
+    let qualified = [
+        std::any::type_name::<ShortcutPlatform>(),
+        std::any::type_name::<ShortcutModifier>(),
+        std::any::type_name::<ShortcutLabelToken<'static>>(),
+        std::any::type_name::<EnglishShortcutLabels>(),
+        std::any::type_name::<dyn ShortcutLabelLocalizer>(),
+    ];
+    assert!(
+        qualified
+            .iter()
+            .all(|path| path.contains("stern_core::"))
+    );
+}
+
+#[test]
+fn shortcut_routing_shapes_and_prelude_inventory_remain_unexpanded() {
+    let actions = include_str!("../../stern-core/src/actions.rs");
+    let descriptor_shape = actions
+        .split_once("pub struct ActionDescriptor")
+        .expect("action descriptor declaration")
+        .1
+        .split_once("impl ActionDescriptor")
+        .expect("action descriptor implementation")
+        .0;
+    let shortcut_shape = actions
+        .split_once("pub struct Shortcut")
+        .expect("shortcut declaration")
+        .1
+        .split_once("impl Shortcut")
+        .expect("shortcut implementation")
+        .0;
+    for field in ["pub display", "pub platform", "pub locale"] {
+        assert!(!descriptor_shape.contains(field));
+        assert!(!shortcut_shape.contains(field));
+    }
+
+    let facade = include_str!("../src/lib.rs");
+    let prelude = facade
+        .split_once("pub mod prelude {")
+        .expect("prelude declaration")
+        .1
+        .split_once("#[cfg(test)]")
+        .expect("end of prelude")
+        .0;
+    for qualified_only in [
+        "EnglishShortcutLabels",
+        "ShortcutLabelLocalizer",
+        "ShortcutLabelToken",
+        "ShortcutModifier",
+        "ShortcutPlatform",
+    ] {
+        assert!(!prelude.contains(qualified_only));
+    }
+}
+
+#[test]
 fn facade_supports_mutation_first_semantic_palette_customization() {
     use stern::core::{
         AccentColors, BorderColors, Color, ContentColors, FocusColors, OverlayColors,
