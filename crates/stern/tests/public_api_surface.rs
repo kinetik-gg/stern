@@ -87,6 +87,15 @@ fn ordered_text_input_method(
     ui.claim_ordered_text_input_events(id)
 }
 
+fn qualified_menu_presentation_method(
+    ui: &mut stern::widgets::Ui<'_>,
+    scene: &mut stern::widgets::OverlayScene,
+    platform: stern::core::ShortcutPlatform,
+    localizer: &dyn stern::core::ShortcutLabelLocalizer,
+) -> stern::widgets::OverlaySceneOutput {
+    ui.overlay_scene_with_menu_presentation(scene, platform, localizer)
+}
+
 #[test]
 fn facade_root_and_feature_qualified_paths_compile() {
     use stern::{UiState, core, render, text, widgets};
@@ -183,6 +192,7 @@ fn shortcut_presentation_is_qualified_experimental_core_api() {
         std::any::type_name::<dyn ShortcutLabelLocalizer>(),
     ];
     assert!(qualified.iter().all(|path| path.contains("stern_core::")));
+    let _ = qualified_menu_presentation_method;
 }
 
 #[test]

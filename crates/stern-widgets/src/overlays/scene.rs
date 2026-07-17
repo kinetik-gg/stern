@@ -1,6 +1,6 @@
 use stern_core::{
     ActionId, ActionInvocation, PointerOrder, PointerTarget, PointerTargetPlan, Rect, Response,
-    SemanticRole, WidgetId,
+    SemanticRole, Shortcut, WidgetId,
 };
 
 use super::{
@@ -252,6 +252,8 @@ impl OverlayScene {
                                 checked: action.state.checked,
                                 expanded: has_submenu.then_some(false),
                                 action_id: Some(action.id.clone()),
+                                menu_columns: true,
+                                shortcut: action.shortcut.clone(),
                                 kind: OverlaySceneRowKind::Action,
                                 behavior: OverlaySceneRowBehavior::Menu {
                                     visible_index,
@@ -262,7 +264,7 @@ impl OverlayScene {
                         }
                         MenuItem::Label(label) => {
                             let occurrence = label_occurrences.entry(label.as_str()).or_default();
-                            rows.push(OverlaySceneRow::passive(
+                            rows.push(OverlaySceneRow::menu_label(
                                 root.child(("overlay-label", label.as_str(), *occurrence)),
                                 layout.next(false),
                                 label.clone(),
@@ -293,6 +295,8 @@ impl OverlayScene {
                         checked: Some(overlay.model.selected_id() == Some(item.id)),
                         expanded: None,
                         action_id: None,
+                        menu_columns: false,
+                        shortcut: None,
                         kind: OverlaySceneRowKind::Action,
                         behavior: OverlaySceneRowBehavior::Dropdown { item_id: item.id },
                     });
@@ -316,6 +320,8 @@ impl OverlayScene {
                         checked: entry.checked,
                         expanded: None,
                         action_id: Some(entry.action_id.clone()),
+                        menu_columns: false,
+                        shortcut: None,
                         kind: OverlaySceneRowKind::Action,
                         behavior: OverlaySceneRowBehavior::Command {
                             action_id: entry.action_id.clone(),
@@ -349,6 +355,8 @@ impl OverlayScene {
                         checked: action.action.state.checked,
                         expanded: None,
                         action_id: Some(action.action.id.clone()),
+                        menu_columns: false,
+                        shortcut: None,
                         kind: OverlaySceneRowKind::Action,
                         behavior: OverlaySceneRowBehavior::Modal { visible_index },
                     });
@@ -665,6 +673,8 @@ pub(crate) struct OverlaySceneRow {
     pub(crate) checked: Option<bool>,
     pub(crate) expanded: Option<bool>,
     pub(crate) action_id: Option<ActionId>,
+    pub(crate) menu_columns: bool,
+    pub(crate) shortcut: Option<Shortcut>,
     pub(crate) kind: OverlaySceneRowKind,
     pub(crate) behavior: OverlaySceneRowBehavior,
 }
@@ -681,8 +691,17 @@ impl OverlaySceneRow {
             checked: None,
             expanded: None,
             action_id: None,
+            menu_columns: false,
+            shortcut: None,
             kind: OverlaySceneRowKind::Passive,
             behavior: OverlaySceneRowBehavior::None,
+        }
+    }
+
+    fn menu_label(id: WidgetId, rect: Rect, label: String, role: SemanticRole) -> Self {
+        Self {
+            menu_columns: true,
+            ..Self::passive(id, rect, label, role)
         }
     }
 
@@ -697,6 +716,8 @@ impl OverlaySceneRow {
             checked: None,
             expanded: None,
             action_id: None,
+            menu_columns: false,
+            shortcut: None,
             kind: OverlaySceneRowKind::Separator,
             behavior: OverlaySceneRowBehavior::None,
         }

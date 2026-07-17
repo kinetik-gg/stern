@@ -1,7 +1,8 @@
 use stern_core::{
-    Brush, ClipId, ComponentState, ElevationLevel, Key, KeyState, MouseButton, Point, Primitive,
-    Rect, RectPrimitive, RepaintRequest, SemanticAction, SemanticActionKind, SemanticNode,
-    TextInputEvent, TextPrimitive, TextRole, UiInput, UiInputEvent, WidgetId, pressable,
+    Brush, ClipId, Color, ComponentState, ElevationLevel, FontToken, Key, KeyState, MouseButton,
+    Point, Primitive, Rect, RectPrimitive, RepaintRequest, SemanticAction, SemanticActionKind,
+    SemanticNode, ShortcutLabelLocalizer, ShortcutPlatform, TextInputEvent, TextPrimitive,
+    TextRole, UiInput, UiInputEvent, WidgetId, pressable,
 };
 
 use super::Ui;
@@ -10,14 +11,79 @@ use crate::overlays::{
     OverlaySceneRow, OverlaySceneRowKind, overlay_semantics,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct MenuColumnGeometry {
+    state: Rect,
+    icon: Rect,
+    label: Rect,
+    status: Rect,
+    shortcut: Rect,
+    disclosure: Rect,
+}
+
+#[derive(Clone, Copy)]
+struct MenuPresentation<'a> {
+    platform: ShortcutPlatform,
+    localizer: &'a dyn ShortcutLabelLocalizer,
+}
+
+fn menu_column_geometry(row: Rect) -> Option<MenuColumnGeometry> {
+    if !row.width.is_finite() || row.width < 272.0 {
+        return None;
+    }
+
+    let state = Rect::new(row.x + 8.0, row.y, 16.0, row.height);
+    let icon = Rect::new(state.max_x() + 8.0, row.y, 16.0, row.height);
+    let label = Rect::new(icon.max_x() + 8.0, row.y, row.width - 232.0, row.height);
+    let status = Rect::new(label.max_x() + 8.0, row.y, 16.0, row.height);
+    let shortcut = Rect::new(status.max_x() + 8.0, row.y, 112.0, row.height);
+    let disclosure = Rect::new(shortcut.max_x() + 8.0, row.y, 16.0, row.height);
+
+    Some(MenuColumnGeometry {
+        state,
+        icon,
+        label,
+        status,
+        shortcut,
+        disclosure,
+    })
+}
+
 impl Ui<'_> {
     /// Paints and evaluates one public overlay scene after its targets joined the frame plan.
     ///
     /// Call [`OverlayScene::declare_pointer_targets`] from the closure passed to
     /// [`Self::resolve_pointer_targets`] before evaluating lower UI and this scene. Action intents
     /// are also appended to the frame's application-owned action queue.
-    #[allow(clippy::too_many_lines)]
     pub fn overlay_scene(&mut self, scene: &mut OverlayScene) -> OverlaySceneOutput {
+        self.overlay_scene_impl(scene, None)
+    }
+
+    /// Paints a scene with an explicit one-evaluation menu shortcut presentation policy.
+    ///
+    /// Wide menu rows use [`stern_core::Shortcut::localized_label`] with the supplied platform
+    /// and caller-owned localizer. Other surfaces and narrow menu rows retain legacy painting.
+    pub fn overlay_scene_with_menu_presentation(
+        &mut self,
+        scene: &mut OverlayScene,
+        platform: ShortcutPlatform,
+        localizer: &dyn ShortcutLabelLocalizer,
+    ) -> OverlaySceneOutput {
+        self.overlay_scene_impl(
+            scene,
+            Some(MenuPresentation {
+                platform,
+                localizer,
+            }),
+        )
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn overlay_scene_impl(
+        &mut self,
+        scene: &mut OverlayScene,
+        menu_presentation: Option<MenuPresentation<'_>>,
+    ) -> OverlaySceneOutput {
         let mut output = OverlaySceneOutput::default();
         let keyboard_events = self.input().keyboard.events.clone();
         let text_events = self.input().text_events.clone();
@@ -119,7 +185,7 @@ impl Ui<'_> {
                     None
                 };
 
-                self.paint_overlay_row(&row, response.as_ref());
+                self.paint_overlay_row(&row, response.as_ref(), menu_presentation);
                 self.push_semantic_node(overlay_row_semantics(&row, response.as_ref()));
 
                 if response.is_some_and(|response| response.clicked && !response.keyboard_activated)
@@ -183,6 +249,7 @@ impl Ui<'_> {
         &mut self,
         row: &OverlaySceneRow,
         response: Option<&stern_core::Response>,
+        menu_presentation: Option<MenuPresentation<'_>>,
     ) {
         if row.kind == OverlaySceneRowKind::Separator {
             let height = self.theme.strokes.hairline;
@@ -220,13 +287,81 @@ impl Ui<'_> {
         };
         let font = self.theme.font(TextRole::Label);
         let extra = (row.rect.height - font.line_height).max(0.0) * 0.5;
+        let baseline = row.rect.y + extra + font.size;
+
+        if row.menu_columns
+            && let Some(presentation) = menu_presentation
+            && let Some(columns) = menu_column_geometry(row.rect)
+        {
+            self.paint_clipped_overlay_text(
+                row.id.child("menu-label-clip"),
+                columns.label,
+                row.label.clone(),
+                Point::new(columns.label.x, baseline),
+                font,
+                foreground,
+            );
+            let shortcut_label = row.shortcut.as_ref().and_then(|shortcut| {
+                shortcut.localized_label(presentation.platform, presentation.localizer)
+            });
+            if let Some(shortcut_label) = shortcut_label.filter(|label| !label.is_empty()) {
+                self.paint_clipped_overlay_text(
+                    row.id.child("menu-shortcut-clip"),
+                    columns.shortcut,
+                    shortcut_label,
+                    Point::new(columns.shortcut.x, baseline),
+                    font,
+                    foreground,
+                );
+            }
+            if row.expanded.is_some() {
+                self.paint_overlay_text(
+                    "›".to_owned(),
+                    Point::new(columns.disclosure.x, baseline),
+                    font,
+                    foreground,
+                );
+            }
+            return;
+        }
+
+        self.paint_overlay_text(
+            row.label.clone(),
+            Point::new(row.rect.x + self.theme.controls.padding_x, baseline),
+            font,
+            foreground,
+        );
+    }
+
+    fn paint_clipped_overlay_text(
+        &mut self,
+        clip_owner: WidgetId,
+        clip_rect: Rect,
+        text: String,
+        origin: Point,
+        font: FontToken,
+        foreground: Color,
+    ) {
+        let clip = ClipId::from_raw(clip_owner.raw());
+        self.primitive(Primitive::ClipBegin {
+            id: clip,
+            rect: clip_rect,
+        });
+        self.paint_overlay_text(text, origin, font, foreground);
+        self.primitive(Primitive::ClipEnd { id: clip });
+    }
+
+    fn paint_overlay_text(
+        &mut self,
+        text: String,
+        origin: Point,
+        font: FontToken,
+        foreground: Color,
+    ) {
         self.primitive(Primitive::Text(TextPrimitive {
             layout: None,
-            origin: Point::new(
-                row.rect.x + self.theme.controls.padding_x,
-                row.rect.y + extra + font.size,
-            ),
-            text: row.label.clone(),
+            origin,
+            text,
             family: font.family.to_owned(),
             size: font.size,
             line_height: font.line_height,
@@ -310,4 +445,51 @@ fn primary_activation(input: &UiInput) -> Option<Point> {
         } => (*position).or(input.pointer.position),
         _ => None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MenuColumnGeometry, Rect, menu_column_geometry};
+
+    #[test]
+    fn menu_column_geometry_conformance() {
+        assert_eq!(
+            menu_column_geometry(Rect::new(0.0, 0.0, 272.0, 28.0)),
+            Some(MenuColumnGeometry {
+                state: Rect::new(8.0, 0.0, 16.0, 28.0),
+                icon: Rect::new(32.0, 0.0, 16.0, 28.0),
+                label: Rect::new(56.0, 0.0, 40.0, 28.0),
+                status: Rect::new(104.0, 0.0, 16.0, 28.0),
+                shortcut: Rect::new(128.0, 0.0, 112.0, 28.0),
+                disclosure: Rect::new(248.0, 0.0, 16.0, 28.0),
+            })
+        );
+        assert_eq!(
+            menu_column_geometry(Rect::new(0.0, 0.0, 320.0, 36.0)),
+            Some(MenuColumnGeometry {
+                state: Rect::new(8.0, 0.0, 16.0, 36.0),
+                icon: Rect::new(32.0, 0.0, 16.0, 36.0),
+                label: Rect::new(56.0, 0.0, 88.0, 36.0),
+                status: Rect::new(152.0, 0.0, 16.0, 36.0),
+                shortcut: Rect::new(176.0, 0.0, 112.0, 36.0),
+                disclosure: Rect::new(296.0, 0.0, 16.0, 36.0),
+            })
+        );
+        assert_eq!(
+            menu_column_geometry(Rect::new(13.0, 17.0, 272.0, 24.0)),
+            Some(MenuColumnGeometry {
+                state: Rect::new(21.0, 17.0, 16.0, 24.0),
+                icon: Rect::new(45.0, 17.0, 16.0, 24.0),
+                label: Rect::new(69.0, 17.0, 40.0, 24.0),
+                status: Rect::new(117.0, 17.0, 16.0, 24.0),
+                shortcut: Rect::new(141.0, 17.0, 112.0, 24.0),
+                disclosure: Rect::new(261.0, 17.0, 16.0, 24.0),
+            })
+        );
+
+        let below_threshold = f32::from_bits(272.0_f32.to_bits() - 1);
+        for width in [below_threshold, 271.0, 264.0, 0.0] {
+            assert_eq!(menu_column_geometry(Rect::new(3.0, 5.0, width, 28.0)), None);
+        }
+    }
 }

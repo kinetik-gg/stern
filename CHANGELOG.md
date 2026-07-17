@@ -10,6 +10,31 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- Added qualified Experimental
+  `Ui::overlay_scene_with_menu_presentation` through `stern_widgets::Ui` and
+  `stern::widgets::Ui`. It borrows an explicit platform and caller-owned
+  localizer for one evaluation and delegates to `Shortcut::localized_label`;
+  the legacy `Ui::overlay_scene` path remains label-only, and no presentation
+  input or formatted shortcut text is stored or added to the prelude. At
+  post-inset row width `272.0` or greater, menu actions and section labels use
+  `8.0` outer padding and reserve state `16.0`, gap `8.0`, icon `16.0`, gap
+  `8.0`, flexible label, gap `8.0`, status `16.0`, gap `8.0`, shortcut `112.0`,
+  gap `8.0`, disclosure `16.0`, and `8.0` trailing padding. The threshold
+  leaves a `40.0` label slot; default inset `4.0` requires a `280.0` surface.
+  Default surface width `272.0`, the immediately preceding row-width `f32`,
+  and every narrower row use the legacy path without a localizer call. Wide
+  labels and present shortcut strings have exact independent clips; submenu
+  rows paint one `›`; state, icon, and status slots remain unpainted. Full-row
+  responses/targets, stable IDs, semantics, focus/navigation, descriptors,
+  source/context, and FIFO routing are unchanged. This advances
+  `STERN-MENU-COMP-002` and `STERN-MENU-001` only to bounded Partial evidence
+  and preserves the bounded Partial shortcut dispositions. Unverified areas
+  are active-platform and locale discovery, non-English translation quality,
+  sequential chords, check/radio/icon/status/destructive painting, mixed
+  state, right-to-left layout, narrow-menu columns, work-area fitting and
+  scrolling, platform-menu entry, context-menu convergence,
+  browser/raster/GPU output, manual review, and reference-image equivalence.
+  Maturity does not advance beyond bounded Partial.
 - Added a qualified Experimental shortcut-presentation policy in `stern-core`.
   `Shortcut::localized_label` now asks a caller-owned object-safe localizer for
   complete modifier and logical/physical key tokens under an explicit Windows,
