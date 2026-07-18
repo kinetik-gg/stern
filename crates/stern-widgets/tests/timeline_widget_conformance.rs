@@ -1,18 +1,19 @@
 //! Retained timeline widget conformance.
 use std::time::Duration;
 use stern_core::{
-    Brush, FrameContext, Modifiers, MouseButton, PhysicalSize, Point, PointerOrder, Rect,
-    ScaleFactor, Size, TimeInfo, UiInput, UiInputEvent, UiMemory, ViewportInfo, WidgetId,
-    default_dark_theme,
+    Brush, FrameContext, Key, KeyEvent, KeyState, Modifiers, MouseButton, PhysicalSize, Point,
+    PointerOrder, Rect, ScaleFactor, Size, TimeInfo, UiInput, UiInputEvent, UiMemory, Vec2,
+    ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::{
     TimelineDescriptor, TimelineDescriptorError, TimelineDescriptorState, TimelineFrame,
     TimelineFrameRate, TimelineHitTarget, TimelineItemDescriptor, TimelineItemId,
     TimelineKeyframeDescriptor, TimelineKeyframeId, TimelineLaneDescriptor, TimelineLaneId,
     TimelineLayout, TimelineMarkerDescriptor, TimelineMarkerId, TimelineRange, TimelineScale,
-    TimelineSelection, TimelineSelectionOperation, TimelineSelectionTarget, TimelineTime,
-    TimelineViewportState, TimelineWidget, TimelineWidgetConfig, TimelineWidgetIntent,
-    TimelineWidgetOutput, TimelineZoom, Ui, timeline_item_widget_id,
+    TimelineScrubController, TimelineScrubIntent, TimelineSelection, TimelineSelectionOperation,
+    TimelineSelectionTarget, TimelineTime, TimelineViewportState, TimelineWidget,
+    TimelineWidgetConfig, TimelineWidgetIntent, TimelineWidgetOutput, TimelineZoom, Ui,
+    timeline_item_widget_id,
 };
 const ROOT: WidgetId = WidgetId::from_raw(0x71);
 const BOUNDS: Rect = Rect::new(0.0, 0.0, 320.0, 120.0);
@@ -92,6 +93,27 @@ fn run<'a>(
     let frame = ui.finish_output();
     (widget, output, frame)
 }
+fn run_scrub<'a>(
+    config: TimelineWidgetConfig<'a>,
+    controller: &mut TimelineScrubController,
+    memory: &mut UiMemory,
+    input: UiInput,
+) -> (
+    TimelineWidget<'a>,
+    TimelineWidgetOutput,
+    stern_core::FrameOutput,
+) {
+    let theme = default_dark_theme();
+    let mut ui = Ui::begin_frame(context(input), memory, &theme);
+    let widget = ui.prepare_timeline_widget(config).expect("valid timeline");
+    ui.resolve_pointer_targets(|plan| {
+        widget.declare_pointer_targets(plan, PointerOrder::new(10));
+    })
+    .expect("valid plan");
+    let output = ui.timeline_widget_with_scrub(&widget, controller);
+    let frame = ui.finish_output();
+    (widget, output, frame)
+}
 fn pointer(point: Point, down: bool, modifiers: Modifiers) -> UiInput {
     let mut input = UiInput::default();
     input.keyboard.modifiers = modifiers;
@@ -101,6 +123,34 @@ fn pointer(point: Point, down: bool, modifiers: Modifiers) -> UiInput {
         click_count: 1,
         position: Some(point),
     });
+    input
+}
+fn pointer_move(point: Point, delta: Vec2) -> UiInput {
+    let mut input = UiInput::default();
+    input.pointer.primary.down = true;
+    input.push_event(UiInputEvent::PointerMoved {
+        position: point,
+        delta,
+    });
+    input
+}
+fn escape_while_captured(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.pointer.position = Some(point);
+    input.pointer.primary.down = true;
+    input.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::Escape,
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    )));
+    input
+}
+fn capture_lost(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.pointer.position = Some(point);
+    input.pointer.primary.down = true;
+    input.push_event(UiInputEvent::WindowFocusChanged(false));
     input
 }
 fn click(
@@ -365,4 +415,207 @@ fn disabled_invalid_and_overlapping_targets_are_inert_and_deterministic() {
         )),
         Err(TimelineDescriptorError::DuplicateLaneId { .. })
     ));
+}
+
+#[test]
+fn scrub_lifecycle_uses_the_press_time_transform_and_stable_source_identity() {
+    let descriptor = descriptor();
+    let state = state();
+    let mut controller = TimelineScrubController::default();
+    let mut memory = UiMemory::new();
+    let config = |state| {
+        TimelineWidgetConfig::new(
+            ROOT,
+            BOUNDS,
+            TimelineFrameRate::integer(24),
+            &descriptor,
+            state,
+        )
+        .with_lane_header_width(80.0)
+        .with_ruler_height(20.0)
+    };
+
+    let (_, pressed, pressed_frame) = run_scrub(
+        config(&state),
+        &mut controller,
+        &mut memory,
+        pointer(Point::new(128.0, 10.0), true, Modifiers::default()),
+    );
+    let source = controller.source().expect("captured ruler source");
+    let frozen = controller.frozen_scale().expect("frozen press transform");
+    assert!(matches!(source, TimelineHitTarget::Ruler(_)));
+    assert!(pressed.scrub_intents.is_empty());
+
+    let mut zoomed_state = state.clone();
+    zoomed_state.scale.zoom = TimelineZoom::new(48.0);
+    let (_, begin_output, began_frame) = run_scrub(
+        config(&zoomed_state),
+        &mut controller,
+        &mut memory,
+        pointer_move(Point::new(200.0, 10.0), Vec2::new(72.0, 0.0)),
+    );
+    let [TimelineScrubIntent::Begin(request)] = begin_output.scrub_intents.as_slice() else {
+        panic!("one scrub begin intent")
+    };
+    assert_eq!(request.source, source);
+    assert_eq!(request.previous_time, TimelineTime::from_seconds(2.0));
+    assert_eq!(request.current_time, TimelineTime::from_seconds(5.0));
+    assert_eq!(controller.frozen_scale(), Some(frozen));
+    assert!(controller.is_scrubbing());
+
+    let (_, updated, _) = run_scrub(
+        config(&zoomed_state),
+        &mut controller,
+        &mut memory,
+        pointer_move(Point::new(224.0, 10.0), Vec2::new(24.0, 0.0)),
+    );
+    let [TimelineScrubIntent::Update(update)] = updated.scrub_intents.as_slice() else {
+        panic!("one scrub update intent")
+    };
+    assert_eq!(update.source, source);
+    assert_eq!(update.previous_time, TimelineTime::from_seconds(5.0));
+    assert_eq!(update.current_time, TimelineTime::from_seconds(6.0));
+
+    let (_, ended, ended_frame) = run_scrub(
+        config(&zoomed_state),
+        &mut controller,
+        &mut memory,
+        pointer(Point::new(248.0, 10.0), false, Modifiers::default()),
+    );
+    let [TimelineScrubIntent::End(end)] = ended.scrub_intents.as_slice() else {
+        panic!("one scrub end intent")
+    };
+    assert_eq!(end.source, source);
+    assert_eq!(end.start_time, TimelineTime::from_seconds(2.0));
+    assert_eq!(end.previous_time, TimelineTime::from_seconds(6.0));
+    assert_eq!(end.current_time, TimelineTime::from_seconds(7.0));
+    assert!(!end.pointer_capture_requested);
+    assert!(!controller.is_scrubbing());
+
+    assert_eq!(
+        pressed_frame.semantics.traversal_order(),
+        began_frame.semantics.traversal_order()
+    );
+    assert_eq!(
+        began_frame.semantics.traversal_order(),
+        ended_frame.semantics.traversal_order()
+    );
+}
+
+#[test]
+fn escape_and_capture_loss_cancel_to_the_committed_start_time() {
+    let descriptor = descriptor();
+    let state = state();
+    let config = TimelineWidgetConfig::new(
+        ROOT,
+        BOUNDS,
+        TimelineFrameRate::integer(24),
+        &descriptor,
+        &state,
+    )
+    .with_lane_header_width(80.0)
+    .with_ruler_height(20.0);
+    for cancellation in [
+        escape_while_captured(Point::new(200.0, 10.0)),
+        capture_lost(Point::new(200.0, 10.0)),
+    ] {
+        let mut controller = TimelineScrubController::default();
+        let mut memory = UiMemory::new();
+        let _ = run_scrub(
+            config,
+            &mut controller,
+            &mut memory,
+            pointer(Point::new(128.0, 10.0), true, Modifiers::default()),
+        );
+        let (_, began, _) = run_scrub(
+            config,
+            &mut controller,
+            &mut memory,
+            pointer_move(Point::new(200.0, 10.0), Vec2::new(72.0, 0.0)),
+        );
+        assert!(matches!(
+            began.scrub_intents.as_slice(),
+            [TimelineScrubIntent::Begin(_)]
+        ));
+        let (_, cancelled, _) = run_scrub(config, &mut controller, &mut memory, cancellation);
+        let [TimelineScrubIntent::Cancel(cancel)] = cancelled.scrub_intents.as_slice() else {
+            panic!("one scrub cancellation intent")
+        };
+        assert_eq!(cancel.start_time, TimelineTime::from_seconds(2.0));
+        assert_eq!(cancel.previous_time, TimelineTime::from_seconds(5.0));
+        assert_eq!(cancel.current_time, TimelineTime::from_seconds(2.0));
+        assert!(!cancel.pointer_capture_requested);
+        assert!(controller.source().is_none());
+        assert!(!memory.has_pointer_capture(ROOT));
+    }
+}
+
+#[test]
+fn disabled_and_read_only_timelines_never_begin_scrub_mutation() {
+    let descriptor = descriptor();
+    let state = state();
+    let config = TimelineWidgetConfig::new(
+        ROOT,
+        BOUNDS,
+        TimelineFrameRate::integer(24),
+        &descriptor,
+        &state,
+    )
+    .with_lane_header_width(80.0)
+    .with_ruler_height(20.0);
+    for (inert, response_disabled) in [
+        (config.disabled(true), true),
+        (config.read_only(true), false),
+    ] {
+        let mut controller = TimelineScrubController::default();
+        let mut memory = UiMemory::new();
+        let (_, pressed, _) = run_scrub(
+            inert,
+            &mut controller,
+            &mut memory,
+            pointer(Point::new(128.0, 10.0), true, Modifiers::default()),
+        );
+        let (_, moved, _) = run_scrub(
+            inert,
+            &mut controller,
+            &mut memory,
+            pointer_move(Point::new(200.0, 10.0), Vec2::new(72.0, 0.0)),
+        );
+        assert!(pressed.intent.is_none() && pressed.scrub_intents.is_empty());
+        assert!(moved.intent.is_none() && moved.scrub_intents.is_empty());
+        assert_eq!(pressed.response.state.disabled, response_disabled);
+        assert!(controller.source().is_none());
+    }
+
+    for inert in [config.disabled(true), config.read_only(true)] {
+        let mut controller = TimelineScrubController::default();
+        let mut memory = UiMemory::new();
+        let _ = run_scrub(
+            config,
+            &mut controller,
+            &mut memory,
+            pointer(Point::new(128.0, 10.0), true, Modifiers::default()),
+        );
+        let (_, began, _) = run_scrub(
+            config,
+            &mut controller,
+            &mut memory,
+            pointer_move(Point::new(200.0, 10.0), Vec2::new(72.0, 0.0)),
+        );
+        assert!(matches!(
+            began.scrub_intents.as_slice(),
+            [TimelineScrubIntent::Begin(_)]
+        ));
+
+        let mut held = UiInput::default();
+        held.pointer.position = Some(Point::new(200.0, 10.0));
+        held.pointer.primary.down = true;
+        let (_, cancelled, _) = run_scrub(inert, &mut controller, &mut memory, held);
+        assert!(matches!(
+            cancelled.scrub_intents.as_slice(),
+            [TimelineScrubIntent::Cancel(_)]
+        ));
+        assert!(controller.source().is_none());
+        assert!(!memory.has_pointer_capture(ROOT));
+    }
 }

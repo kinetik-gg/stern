@@ -3,15 +3,17 @@ use super::{
     TimelineDescriptor, TimelineDescriptorError, TimelineDescriptorState, TimelineFrameRate,
     TimelineHitMetadata, TimelineHitTarget, TimelineHitTestConfig, TimelineId, TimelineLayout,
     TimelineLayoutResult, TimelinePlayheadSeekRequest, TimelineRulerId, TimelineRulerTickKind,
-    TimelineRulerTickRequest, TimelineScale, TimelineSelectionOperation, TimelineSelectionTarget,
-    TimelineSnapMetadata, TimelineViewportState, timeline_item_widget_id,
-    timeline_keyframe_widget_id, timeline_lane_widget_id, timeline_marker_widget_id,
-    timeline_semantics,
+    TimelineRulerTickRequest, TimelineScale, TimelineScrubBeginRequest, TimelineScrubEndRequest,
+    TimelineScrubUpdateRequest, TimelineSelectionOperation, TimelineSelectionTarget,
+    TimelineSnapMetadata, TimelineTime, TimelineViewportState, clamp_timeline_time,
+    timeline_item_widget_id, timeline_keyframe_widget_id, timeline_lane_widget_id,
+    timeline_marker_widget_id, timeline_semantics,
 };
 use crate::{Ui, label, panel, separator};
 use stern_core::{
-    Brush, Color, CornerRadius, Modifiers, Point, PointerOrder, PointerTarget, PointerTargetPlan,
-    Primitive, Rect, RectPrimitive, Response, WidgetId,
+    Brush, Color, CornerRadius, DomainDragGestureAction, DomainDragGesturePhase, Key, KeyState,
+    Modifiers, Point, PointerOrder, PointerTarget, PointerTargetPlan, Primitive, Rect,
+    RectPrimitive, Response, UiInputEvent, WidgetId,
 };
 /// Caller-owned inputs for one immutable timeline frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -26,6 +28,7 @@ pub struct TimelineWidgetConfig<'a> {
     ruler_height: f32,
     lane_header_width: f32,
     disabled: bool,
+    read_only: bool,
 }
 impl<'a> TimelineWidgetConfig<'a> {
     /// Creates an enabled timeline with compact default geometry.
@@ -48,6 +51,7 @@ impl<'a> TimelineWidgetConfig<'a> {
             ruler_height: 24.0,
             lane_header_width: 120.0,
             disabled: false,
+            read_only: false,
         }
     }
     /// Sets the accessible label.
@@ -78,6 +82,12 @@ impl<'a> TimelineWidgetConfig<'a> {
     #[must_use]
     pub const fn disabled(mut self, value: bool) -> Self {
         self.disabled = value;
+        self
+    }
+    /// Sets whether mutation intents are suppressed while preserving presentation.
+    #[must_use]
+    pub const fn read_only(mut self, value: bool) -> Self {
+        self.read_only = value;
         self
     }
 }
@@ -231,8 +241,51 @@ pub enum TimelineWidgetIntent {
     /// Seeks the application-owned playhead.
     Seek(TimelinePlayheadSeekRequest),
 }
-/// Output from one timeline evaluation.
+/// Ordered application-owned timeline scrub lifecycle intent.
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TimelineScrubIntent {
+    /// Begins a preview transaction from the committed playhead time.
+    Begin(TimelineScrubBeginRequest),
+    /// Updates the current preview transaction.
+    Update(TimelineScrubUpdateRequest),
+    /// Commits the current preview transaction.
+    End(TimelineScrubEndRequest),
+    /// Cancels the transaction and requests restoration of its starting time.
+    Cancel(TimelineScrubEndRequest),
+}
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TimelineScrubCapture {
+    owner: WidgetId,
+    source: TimelineHitTarget,
+    scale: TimelineScale,
+    start_time: TimelineTime,
+    previous_time: TimelineTime,
+    started: bool,
+}
+/// Caller-owned state retained across frames of one timeline scrub gesture.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TimelineScrubController {
+    capture: Option<TimelineScrubCapture>,
+}
+impl TimelineScrubController {
+    /// Returns true after a scrub has crossed the drag threshold.
+    #[must_use]
+    pub fn is_scrubbing(&self) -> bool {
+        self.capture.is_some_and(|capture| capture.started)
+    }
+    /// Returns the stable source captured for the current gesture.
+    #[must_use]
+    pub fn source(&self) -> Option<TimelineHitTarget> {
+        self.capture.map(|capture| capture.source)
+    }
+    /// Returns the transform frozen at pointer press.
+    #[must_use]
+    pub fn frozen_scale(&self) -> Option<TimelineScale> {
+        self.capture.map(|capture| capture.scale)
+    }
+}
+/// Output from one timeline evaluation.
+#[derive(Debug, Clone, PartialEq)]
 pub struct TimelineWidgetOutput {
     /// Common surface response.
     pub response: Response,
@@ -240,6 +293,8 @@ pub struct TimelineWidgetOutput {
     pub hit: Option<TimelineHitMetadata>,
     /// Typed app-owned intent emitted by activation.
     pub intent: Option<TimelineWidgetIntent>,
+    /// Ordered scrub lifecycle intents emitted from canonical input events.
+    pub scrub_intents: Vec<TimelineScrubIntent>,
 }
 impl Ui<'_> {
     /// Prepares one immutable timeline frame.
@@ -254,9 +309,19 @@ impl Ui<'_> {
     }
     /// Evaluates, paints, and exposes semantics for one prepared timeline.
     pub fn timeline_widget(&mut self, widget: &TimelineWidget<'_>) -> TimelineWidgetOutput {
+        self.timeline_widget_with_scrub(widget, &mut TimelineScrubController::default())
+    }
+    /// Evaluates a prepared timeline with caller-owned scrub lifecycle state.
+    pub fn timeline_widget_with_scrub(
+        &mut self,
+        widget: &TimelineWidget<'_>,
+        controller: &mut TimelineScrubController,
+    ) -> TimelineWidgetOutput {
         let disabled = widget.config.disabled || !widget.valid();
         self.register_id(widget.widget_id());
-        let response = self.pressable_with_id(widget.widget_id(), widget.bounds, disabled);
+        let gesture =
+            self.captured_domain_drag_gesture_with_id(widget.widget_id(), widget.bounds, disabled);
+        let response = gesture.response;
         let hit = self
             .input()
             .pointer
@@ -266,8 +331,9 @@ impl Ui<'_> {
             .clicked
             .then_some(hit)
             .flatten()
-            .filter(|hit| !hit.disabled() && !hit.read_only())
+            .filter(|hit| !widget.config.read_only && !hit.disabled() && !hit.read_only())
             .and_then(|hit| intent(hit, widget, self.input().keyboard.modifiers));
+        let scrub_intents = self.resolve_timeline_scrub(widget, controller, &gesture.actions);
         paint(self, widget);
         let selected = widget.config.state.selection.targets();
         for mut node in timeline_semantics(
@@ -283,6 +349,8 @@ impl Ui<'_> {
                 node.state.disabled = true;
                 node.focusable = false;
                 node.actions.clear();
+            } else if widget.config.read_only {
+                node.description = Some("Read-only".to_owned());
             }
             self.push_semantic_node(node);
         }
@@ -290,7 +358,188 @@ impl Ui<'_> {
             response,
             hit,
             intent,
+            scrub_intents,
         }
+    }
+
+    fn resolve_timeline_scrub(
+        &mut self,
+        widget: &TimelineWidget<'_>,
+        controller: &mut TimelineScrubController,
+        actions: &[DomainDragGestureAction],
+    ) -> Vec<TimelineScrubIntent> {
+        if widget.config.disabled || widget.config.read_only {
+            let mut intents = Vec::new();
+            if controller.capture.is_some() {
+                push_scrub_cancel(controller, &mut intents);
+                self.cancel_pointer_interaction();
+            }
+            return intents;
+        }
+        if controller
+            .capture
+            .is_some_and(|capture| capture.owner != widget.widget_id())
+        {
+            controller.capture = None;
+        }
+        let escape_ordinal = self.input().events.iter().position(|event| {
+            matches!(event, UiInputEvent::Key(event) if event.state == KeyState::Pressed && !event.repeat && matches!(event.key, Key::Escape))
+        });
+        let drag_crossed_threshold = self.memory().is_drag_source(widget.widget_id())
+            || self.memory().released_drag_source() == Some(widget.widget_id());
+        let start_move = (!controller.is_scrubbing() && drag_crossed_threshold)
+            .then(|| {
+                actions
+                    .iter()
+                    .rposition(|action| matches!(action.phase, DomainDragGesturePhase::Move))
+            })
+            .flatten();
+        let mut intents = Vec::new();
+        for (index, action) in actions.iter().enumerate() {
+            if escape_ordinal
+                .is_some_and(|escape| action.ordinal.is_some_and(|ordinal| ordinal >= escape))
+            {
+                break;
+            }
+            Self::apply_timeline_scrub_action(
+                widget,
+                controller,
+                action,
+                drag_crossed_threshold,
+                start_move == Some(index),
+                &mut intents,
+            );
+        }
+        if escape_ordinal.is_some() && controller.capture.is_some() {
+            push_scrub_cancel(controller, &mut intents);
+            self.cancel_pointer_interaction();
+        }
+        intents
+    }
+
+    fn apply_timeline_scrub_action(
+        widget: &TimelineWidget<'_>,
+        controller: &mut TimelineScrubController,
+        action: &DomainDragGestureAction,
+        drag_crossed_threshold: bool,
+        starts_scrub: bool,
+        intents: &mut Vec<TimelineScrubIntent>,
+    ) {
+        match action.phase {
+            DomainDragGesturePhase::Press => {
+                let Some(point) = action.position else {
+                    return;
+                };
+                let Some(hit) = widget.hit(point).filter(scrub_source_is_mutable) else {
+                    return;
+                };
+                if widget.config.disabled || widget.config.read_only || !scrub_source(hit.target) {
+                    return;
+                }
+                let start_time = widget.config.state.playhead_time.unwrap_or(hit.time);
+                controller.capture = Some(TimelineScrubCapture {
+                    owner: widget.widget_id(),
+                    source: hit.target,
+                    scale: widget.scale,
+                    start_time,
+                    previous_time: start_time,
+                    started: false,
+                });
+            }
+            DomainDragGesturePhase::Move => {
+                if !controller.is_scrubbing() && !starts_scrub {
+                    return;
+                }
+                let Some(capture) = controller.capture.as_mut() else {
+                    return;
+                };
+                let current_time =
+                    scrub_time(capture.scale, action.position, capture.previous_time);
+                let snap = TimelineSnapMetadata::unsnapped(current_time);
+                if capture.started {
+                    intents.push(TimelineScrubIntent::Update(
+                        TimelineScrubUpdateRequest::new(
+                            capture.source,
+                            capture.previous_time,
+                            current_time,
+                            snap,
+                        ),
+                    ));
+                } else {
+                    capture.started = true;
+                    intents.push(TimelineScrubIntent::Begin(TimelineScrubBeginRequest::new(
+                        capture.source,
+                        capture.start_time,
+                        current_time,
+                        snap,
+                    )));
+                }
+                capture.previous_time = current_time;
+            }
+            DomainDragGesturePhase::Release => {
+                let Some(mut capture) = controller.capture.take() else {
+                    return;
+                };
+                let current_time =
+                    scrub_time(capture.scale, action.position, capture.previous_time);
+                if !capture.started && drag_crossed_threshold {
+                    capture.started = true;
+                    intents.push(TimelineScrubIntent::Begin(TimelineScrubBeginRequest::new(
+                        capture.source,
+                        capture.start_time,
+                        current_time,
+                        TimelineSnapMetadata::unsnapped(current_time),
+                    )));
+                }
+                if capture.started {
+                    intents.push(TimelineScrubIntent::End(TimelineScrubEndRequest::new(
+                        capture.source,
+                        capture.start_time,
+                        capture.previous_time,
+                        current_time,
+                        TimelineSnapMetadata::unsnapped(current_time),
+                    )));
+                }
+            }
+            DomainDragGesturePhase::Cancel => push_scrub_cancel(controller, intents),
+        }
+    }
+}
+fn scrub_source(target: TimelineHitTarget) -> bool {
+    matches!(
+        target,
+        TimelineHitTarget::Background(_)
+            | TimelineHitTarget::Ruler(_)
+            | TimelineHitTarget::Playhead(_)
+    )
+}
+fn scrub_source_is_mutable(hit: &TimelineHitMetadata) -> bool {
+    !hit.disabled() && !hit.read_only()
+}
+fn scrub_time(
+    scale: TimelineScale,
+    position: Option<Point>,
+    fallback: TimelineTime,
+) -> TimelineTime {
+    position.map_or(fallback, |point| {
+        clamp_timeline_time(scale.screen_x_to_time(point.x), scale.content_range)
+    })
+}
+fn push_scrub_cancel(
+    controller: &mut TimelineScrubController,
+    intents: &mut Vec<TimelineScrubIntent>,
+) {
+    let Some(capture) = controller.capture.take() else {
+        return;
+    };
+    if capture.started {
+        intents.push(TimelineScrubIntent::Cancel(TimelineScrubEndRequest::new(
+            capture.source,
+            capture.start_time,
+            capture.previous_time,
+            capture.start_time,
+            TimelineSnapMetadata::unsnapped(capture.start_time),
+        )));
     }
 }
 fn intent(

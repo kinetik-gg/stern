@@ -2,12 +2,12 @@ use std::hash::Hash;
 
 #[allow(unused_imports)]
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionSource, ClipId, Color,
-    ComponentState, DropTargetResponse, FrameContext, FrameOutput, ImageId, Insets, PhysicalSize,
-    PlatformRequest, Primitive, Rect, RepaintRequest, Response, ScaleFactor, ScrollResponse,
-    SemanticNode, Size, TextPrimitive, Theme, TimeInfo, Transform, Ui as CoreUi, UiInput, UiMemory,
-    Vec2, ViewportInfo, WidgetId, context_menu_trigger, draggable, drop_target, focusable,
-    pressable, scrollable, selectable, tooltip_trigger,
+    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionSource,
+    CapturedDomainDragGesture, ClipId, Color, ComponentState, DropTargetResponse, FrameContext,
+    FrameOutput, ImageId, Insets, PhysicalSize, PlatformRequest, Primitive, Rect, RepaintRequest,
+    Response, ScaleFactor, ScrollResponse, SemanticNode, Size, TextPrimitive, Theme, TimeInfo,
+    Transform, Ui as CoreUi, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, context_menu_trigger,
+    draggable, drop_target, focusable, pressable, scrollable, selectable, tooltip_trigger,
 };
 #[allow(unused_imports)]
 use stern_text::{
@@ -115,6 +115,20 @@ impl Ui<'_> {
         let id = self.id(key);
         let (input, memory) = self.runtime.input_and_memory_mut();
         draggable(id, rect, input, memory, disabled)
+    }
+
+    pub(crate) fn captured_domain_drag_gesture_with_id(
+        &mut self,
+        id: WidgetId,
+        rect: Rect,
+        disabled: bool,
+    ) -> CapturedDomainDragGesture {
+        self.runtime
+            .captured_domain_drag_gesture(id, rect, disabled)
+    }
+
+    pub(crate) fn cancel_pointer_interaction(&mut self) {
+        self.runtime.memory_mut().cancel_pointer_interaction();
     }
 
     /// Resolves neutral context-menu trigger behavior without painting.
