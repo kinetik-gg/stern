@@ -34,6 +34,7 @@ function assertExact(actual, wanted, label) {
 }
 
 assert(fixture && typeof fixture === "object" && !Array.isArray(fixture), "fixture must be an object");
+assertExact(Object.keys(fixture).sort(), ["acceptedComponentIds", "acceptedJourneyIds", "coverageSource", "formatVersion", "gateIds", "journeys", "passedGateIds", "requiredComponentIds", "specificationSha256", "status", "sternVersion", "workspaces"].sort(), "top-level keys");
 assert(fixture.formatVersion === 1, "formatVersion must be 1");
 assert(fixture.sternVersion === "1.0.0-rc.2.dev", "unexpected Stern version");
 assert(fixture.specificationSha256 === "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed", "unexpected specification hash");

@@ -15,16 +15,48 @@ fn rust_sources(path: &Path, sources: &mut Vec<PathBuf>) {
     }
 }
 
+fn dependency_name(dependency: &str) -> &str {
+    dependency
+        .split_once("\"name\":\"")
+        .and_then(|(_, tail)| tail.split_once('"'))
+        .map(|(name, _)| name)
+        .expect("dependency name")
+}
+
+fn import_root(line: &str) -> Option<&str> {
+    let mut words = line.split_whitespace();
+    let first = words.next()?;
+    if first == "pub" {
+        if words.next() != Some("use") {
+            return None;
+        }
+    } else if first != "use" {
+        return None;
+    }
+    let import = words.next()?;
+    import.split([':', '{', ';']).next()
+}
+
 #[test]
+#[allow(clippy::too_many_lines)]
 fn prohibited_techniques_are_absent_from_public_consumer() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut paths = Vec::new();
     rust_sources(&root.join("src"), &mut paths);
     paths.sort();
     assert!(!paths.is_empty(), "demo source tree must not be empty");
-    let source = paths
+    let sources = paths
         .iter()
-        .map(|path| fs::read_to_string(path).expect("source"))
+        .map(|path| (path, fs::read_to_string(path).expect("source")))
+        .collect::<Vec<_>>();
+    let source = sources
+        .iter()
+        .map(|(_, source)| source.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let compact = source
+        .chars()
+        .filter(|character| !character.is_whitespace())
         .collect::<String>();
 
     let output = Command::new(env!("CARGO"))
@@ -42,18 +74,27 @@ fn prohibited_techniques_are_absent_from_public_consumer() {
         .and_then(|(_, tail)| tail.split_once("],\"targets\""))
         .map(|(dependencies, _)| dependencies)
         .expect("dependency metadata");
-    let normal_dependencies = dependencies
-        .split("},{")
+    let dependency_entries = dependencies.split("},{").collect::<Vec<_>>();
+    let normal_dependencies = dependency_entries
+        .iter()
         .filter(|dependency| dependency.contains("\"kind\":null"))
-        .map(|dependency| {
-            dependency
-                .split_once("\"name\":\"")
-                .and_then(|(_, tail)| tail.split_once('"'))
-                .map(|(name, _)| name)
-                .expect("dependency name")
-        })
+        .map(|dependency| dependency_name(dependency))
         .collect::<Vec<_>>();
-    assert_eq!(normal_dependencies, ["stern"]);
+    assert_eq!(
+        normal_dependencies
+            .iter()
+            .filter(|name| **name == "stern")
+            .count(),
+        1
+    );
+    for dependency in dependency_entries {
+        let name = dependency_name(dependency);
+        assert!(["stern", "winit", "pollster"].contains(&name), "{name}");
+        assert!(
+            dependency.contains("\"rename\":null"),
+            "renamed dependency: {name}"
+        );
+    }
 
     for private_dependency in [
         "stern_core",
@@ -66,33 +107,51 @@ fn prohibited_techniques_are_absent_from_public_consumer() {
         assert!(!source.contains(private_dependency), "{private_dependency}");
     }
     for substitute in [
-        "RectPrimitive",
-        "TextPrimitive",
-        "LinePrimitive",
-        "PathPrimitive",
-        "SemanticNode::",
+        "Primitive",
+        "SemanticNode",
+        ".primitive(",
         "push_primitive",
         "fixtures_paint",
-        "fn paint_",
-        "struct DemoWidget",
-        "struct DemoTheme",
-        "struct DemoFramework",
-        "unsafe ",
-        "extern crate",
+        "fnpaint_",
+        "fndraw_",
+        "fnrender_widget",
+        "fnrender_control",
+        "fnrender_component",
+        "fnrender_overlay",
+        "fnrender_scene",
+        "fnrender_primitive",
+        "fnhit_test",
+        "fnpointer_",
+        "fnfocus_",
+        "structDemoWidget",
+        "structDemoControl",
+        "structDemoTheme",
+        "structDemoRenderer",
+        "structDemoFramework",
+        "modwidgets",
+        "modcontrols",
+        "modtheme",
+        "modrenderer",
+        "unsafe",
+        "externcrate",
         "#[path",
         "include!",
         "include_str!",
     ] {
-        assert!(!source.contains(substitute), "{substitute}");
+        assert!(!compact.contains(substitute), "{substitute}");
     }
-    for line in source.lines() {
-        let import = line
-            .trim_start()
-            .strip_prefix("use ")
-            .or_else(|| line.trim_start().strip_prefix("pub use "));
-        if let Some(import) = import {
-            let root = import.split([':', '{', ';']).next().expect("import root");
-            assert!(["std", "stern", "stern_demo"].contains(&root), "{line}");
+    assert!(
+        !compact.contains(".extend(") || !compact.contains(".primitives"),
+        "primitive extension"
+    );
+    for (path, source) in sources {
+        for line in source.lines() {
+            if let Some(import) = import_root(line.trim_start()) {
+                let bootstrap = path.ends_with(Path::new("src/bin/native_shell.rs"));
+                let allowed = ["std", "stern", "stern_demo"].contains(&import)
+                    || (bootstrap && ["winit", "pollster"].contains(&import));
+                assert!(allowed, "{}: {line}", path.display());
+            }
         }
     }
 }
