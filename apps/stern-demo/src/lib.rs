@@ -1,6 +1,7 @@
 //! Public-consumer baseline for the Stern integration demo.
 
 mod app_model;
+mod graph_workspace;
 
 use stern::UiState;
 use stern::core::{
@@ -12,6 +13,7 @@ use stern::render::RenderResources;
 use stern::text::TextEditState;
 
 pub use app_model::{DemoActionRegistry, DemoApplicationModel, DemoWorkspace};
+pub use graph_workspace::GraphWorkspaceState;
 
 /// Canonical integration-demo title.
 pub const DEMO_TITLE: &str = "Stern Integration Demo";
@@ -22,6 +24,7 @@ pub struct DemoApp {
     model: DemoApplicationModel,
     actions: DemoActionRegistry,
     document_name: TextEditState,
+    graph_workspace: GraphWorkspaceState,
 }
 
 impl DemoApp {
@@ -33,6 +36,7 @@ impl DemoApp {
             model: DemoApplicationModel::new(),
             actions: DemoActionRegistry::new(),
             document_name: TextEditState::new("Untitled Stern Document"),
+            graph_workspace: GraphWorkspaceState::new(),
         }
     }
 
@@ -48,8 +52,15 @@ impl DemoApp {
         self.model.applied_revision()
     }
 
+    /// Returns the application-owned Graph workspace state.
+    #[must_use]
+    pub const fn graph_workspace(&self) -> &GraphWorkspaceState {
+        &self.graph_workspace
+    }
+
     /// Builds and dispatches one frame through public toolkit APIs.
     pub fn frame(&mut self, context: FrameContext) -> FrameOutput {
+        let logical_size = context.viewport.logical_size;
         let edit = self.actions.edit_workspace().clone();
         let graph = self.actions.graph_workspace().clone();
         let apply = self.actions.apply_shared_state().clone();
@@ -82,7 +93,13 @@ impl DemoApp {
                     );
                 }
                 DemoWorkspace::Graph => {
-                    ui.label(Rect::new(24.0, 108.0, 280.0, 20.0), "Shared graph revision");
+                    let graph_bounds = Rect::new(
+                        24.0,
+                        230.0,
+                        (logical_size.width - 48.0).max(0.0),
+                        (logical_size.height - 254.0).max(0.0),
+                    );
+                    self.graph_workspace.compose(&mut ui, graph_bounds);
                 }
             }
             let _ = ui.action_button(

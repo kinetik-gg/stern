@@ -62,6 +62,22 @@ fn public_consumer_contract_routes_workspace_actions_to_application_state() {
             .any(|invocation| invocation.action_id.as_str() == "workspace.graph")
     );
     assert_eq!(app.workspace(), DemoWorkspace::Graph);
+
+    let graph_output = app.frame(demo_context(UiInput::default()));
+    assert!(
+        graph_output
+            .semantics
+            .nodes()
+            .iter()
+            .any(|node| matches!(&node.role, SemanticRole::Custom(role) if role == "node-graph"))
+    );
+    assert!(
+        graph_output
+            .semantics
+            .get(app.graph_workspace().root_id())
+            .expect("public Graph workspace root")
+            .focusable
+    );
 }
 
 fn pointer_input(point: Point, down: bool, pressed: bool, released: bool) -> UiInput {
