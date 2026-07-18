@@ -385,9 +385,17 @@ impl FeedbackStack {
         self.items = items.into_iter().collect();
     }
 
-    /// Appends one feedback item.
+    /// Replaces the first matching feedback identity in place or appends a new identity.
     pub fn push_item(&mut self, item: FeedbackItem) {
-        self.items.push(item);
+        if let Some(existing) = self
+            .items
+            .iter_mut()
+            .find(|existing| existing.id == item.id)
+        {
+            *existing = item;
+        } else {
+            self.items.push(item);
+        }
     }
 
     /// Returns a feedback item by stable identity.
