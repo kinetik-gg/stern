@@ -158,6 +158,33 @@ fn frame_output_accumulates_render_semantics_and_platform_requests() {
 }
 
 #[test]
+fn ui_system_menu_requests_require_finite_points_preserve_fifo_and_emit_no_actions() {
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(UiInput::default()), &mut memory);
+    let first = Point::new(12.0, 18.0);
+    let second = Point::new(-4.0, 32.0);
+
+    ui.push_platform_request(PlatformRequest::SetWindowTitle("before".to_owned()));
+    assert!(ui.request_window_system_menu(first));
+    assert!(!ui.request_window_system_menu(Point::new(f32::NAN, 1.0)));
+    ui.push_platform_request(PlatformRequest::SetCursor(CursorShape::PointingHand));
+    assert!(!ui.request_window_system_menu(Point::new(1.0, f32::INFINITY)));
+    assert!(ui.request_window_system_menu(second));
+    let output = ui.end_frame();
+
+    assert_eq!(
+        output.platform_requests,
+        vec![
+            PlatformRequest::SetWindowTitle("before".to_owned()),
+            PlatformRequest::ShowWindowSystemMenu { position: first },
+            PlatformRequest::SetCursor(CursorShape::PointingHand),
+            PlatformRequest::ShowWindowSystemMenu { position: second },
+        ]
+    );
+    assert!(output.actions.is_empty());
+}
+
+#[test]
 fn platform_request_and_frame_debug_redact_external_payloads() {
     let clipboard = "private clipboard payload";
     let title = "private title";
