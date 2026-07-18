@@ -142,6 +142,33 @@ fn qualified_menu_presentation_method(
 }
 
 #[test]
+fn facade_exposes_retained_timeline_widget_surface() {
+    use stern::widgets::{
+        TimelineDescriptor, TimelineFrameRate, TimelineRange, TimelineScale, TimelineViewportState,
+        TimelineWidget, TimelineWidgetConfig, TimelineZoom,
+    };
+    let descriptor = TimelineDescriptor::new([], [], [], []);
+    let state = TimelineViewportState::new(TimelineScale::new(
+        0.0,
+        1.0,
+        TimelineRange::seconds(0.0, 1.0),
+        TimelineZoom::default(),
+        0.0,
+    ));
+    let config = TimelineWidgetConfig::new(
+        stern::core::WidgetId::from_raw(1),
+        stern::core::Rect::new(0.0, 0.0, 200.0, 80.0),
+        TimelineFrameRate::integer(24),
+        &descriptor,
+        &state,
+    );
+    let widget = TimelineWidget::new(config).expect("public timeline widget");
+    assert_eq!(widget.widget_id(), stern::core::WidgetId::from_raw(1));
+    let _ = stern::widgets::Ui::prepare_timeline_widget;
+    let _ = stern::widgets::Ui::timeline_widget;
+}
+
+#[test]
 fn facade_root_and_feature_qualified_paths_compile() {
     use stern::{UiState, core, render, text, widgets};
 

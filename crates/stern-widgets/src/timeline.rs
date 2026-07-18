@@ -22,6 +22,8 @@ mod semantics;
 pub use semantics::*;
 mod ruler;
 pub use ruler::*;
+mod widget;
+pub use widget::*;
 mod internal;
 #[allow(clippy::wildcard_imports)]
 use internal::*;
