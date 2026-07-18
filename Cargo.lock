@@ -2353,6 +2353,8 @@ dependencies = [
 name = "stern-vello"
 version = "1.0.0-rc.2.dev"
 dependencies = [
+ "png",
+ "pollster",
  "stern-core",
  "stern-render",
  "stern-text",
