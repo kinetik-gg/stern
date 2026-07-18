@@ -1,0 +1,14 @@
+package = "@phosphor-icons/core"
+version = "2.1.1"
+source_url = "https://registry.npmjs.org/@phosphor-icons/core/-/core-2.1.1.tgz"
+sha256 = "313332be6190b724da24107addd781799b48bf76b13963f24501112ffe1baadd"
+npm_integrity = "sha512-v4ARvrip4qBCImOE5rmPUylOEK4iiED9ZyKjcvzuezqMaiRASCHKcRIuvvxL/twvLpkfnEODCOJp5dM4eZilxQ=="
+archive_entries = 9081
+canonical_icons = 1512
+aliases = 18
+weights = ["thin", "light", "regular", "bold", "fill", "duotone"]
+assets = 9072
+license = "MIT"
+catalog_path = "package/dist/icons.d.ts"
+schema_path = "package/dist/types.d.ts"
+rtl_metadata = "absent-in-upstream-schema"

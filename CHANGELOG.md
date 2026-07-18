@@ -10,6 +10,10 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- Added the development-only, pure-Rust `stern-icon-atlas` foundation with an
+  exact offline Phosphor Core 2.1.1 source snapshot, provenance verification,
+  catalog and six-weight discovery, collision-safe names and IDs, and strict
+  SVG path normalization. Ordinary Stern builds do not inspect the snapshot.
 - **Breaking:** Added library-neutral `StaticIcon`, borrowed immutable
   `IconGraphic` layers, and `Primitive::Icon` for allocation-free static vector
   geometry scaling and tinting. `PathPrimitive::elements` is now `PathData`

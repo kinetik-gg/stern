@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/stern",
     "crates/stern-core",
+    "crates/stern-icon-atlas",
     "crates/stern-render",
     "crates/stern-text",
     "crates/stern-vello",
