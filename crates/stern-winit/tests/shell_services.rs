@@ -2,11 +2,11 @@
 
 use std::collections::VecDeque;
 
-use stern_core::{ClipboardText, RepaintRequest, UiInputEvent, WidgetId};
+use stern_core::{ClipboardText, Point, RepaintRequest, UiInputEvent, WidgetId};
 use stern_winit::{
     WinitInputAdapter, WinitShellFailure, WinitShellFailureReason, WinitShellOperation,
-    WinitShellRequest, WinitShellRequests, WinitShellResult, WinitShellServiceError,
-    WinitShellServices,
+    WinitShellOutcome, WinitShellRequest, WinitShellRequests, WinitShellResult,
+    WinitShellServiceError, WinitShellServices,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -39,6 +39,41 @@ impl WinitShellServices for FakeServices {
         self.calls.push(Call::Open(url.to_owned()));
         self.opens.pop_front().unwrap_or(Ok(()))
     }
+}
+
+#[test]
+fn window_bound_signature_and_existing_service_injection_remain_compatible() {
+    let signature: fn(
+        WinitShellRequests,
+        &winit::window::Window,
+        &mut dyn WinitShellServices,
+    ) -> WinitShellOutcome = WinitShellRequests::execute_for_window;
+    let _ = signature;
+    let mut services = FakeServices::default();
+    let outcome = WinitShellRequests::from_operations([
+        WinitShellRequest::CopyToClipboard("kept".to_owned()),
+        WinitShellRequest::ShowWindowSystemMenu {
+            position: Point::new(3.0, 4.0),
+        },
+        WinitShellRequest::OpenUrl("https://example.com".to_owned()),
+    ])
+    .execute(&mut services);
+
+    assert_eq!(
+        services.calls,
+        [
+            Call::Write("kept".to_owned()),
+            Call::Open("https://example.com".to_owned())
+        ]
+    );
+    assert!(matches!(
+        outcome.results(),
+        [WinitShellResult::Failure(WinitShellFailure {
+            operation: WinitShellOperation::ShowWindowSystemMenu,
+            reason: WinitShellFailureReason::ServiceUnavailable,
+            ..
+        })]
+    ));
 }
 
 #[test]
