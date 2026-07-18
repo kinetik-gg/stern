@@ -1084,3 +1084,16 @@ fn facade_native_texture_api_is_qualified_only() {
     assert!(qualified.iter().all(|name| !name.is_empty()));
     let _ = (register, update, replace, remove);
 }
+
+#[test]
+#[rustfmt::skip]
+fn public_facade_exposes_canonical_node_graph_widget_surface() {
+    use stern::{core, widgets};
+    let graph = widgets::node_graph::NodeGraphDescriptor::new();
+    let viewport = widgets::node_graph::NodeGraphViewport::new(core::Rect::new(0.0, 0.0, 320.0, 200.0), widgets::node_graph::NodeGraphPanZoom::default());
+    let view = widgets::node_graph::NodeGraphStaticView::new(core::WidgetId::from_raw(90), viewport, &graph);
+    let _: widgets::node_graph::NodeGraphWidgetConfig<'_> = widgets::node_graph::NodeGraphWidgetConfig::new(view)
+        .disabled(false)
+        .with_hit_test(widgets::node_graph::NodeGraphHitTestConfig::new());
+    let _: Option<(widgets::node_graph::NodeGraphWidgetIntent, widgets::node_graph::NodeGraphWidgetOutput)> = None;
+}
