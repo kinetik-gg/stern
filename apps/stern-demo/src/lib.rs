@@ -68,20 +68,28 @@ impl DemoApp {
         let theme = default_dark_theme();
         let output = {
             let mut ui = self.ui_state.begin_frame(context, &theme);
+            let edit_rect = Rect::new(24.0, 56.0, 112.0, 30.0);
+            let graph_rect = Rect::new(148.0, 56.0, 120.0, 30.0);
+            let apply_rect = Rect::new(24.0, 188.0, 160.0, 30.0);
             ui.push_platform_request(PlatformRequest::SetWindowTitle(DEMO_TITLE.to_owned()));
             ui.label(Rect::new(24.0, 20.0, 320.0, 24.0), DEMO_TITLE);
-            let _ = ui.action_button(
-                edit.id.as_str(),
-                Rect::new(24.0, 56.0, 112.0, 30.0),
-                &edit,
-                ActionContext::Global,
-            );
-            let _ = ui.action_button(
-                graph.id.as_str(),
-                Rect::new(148.0, 56.0, 120.0, 30.0),
-                &graph,
-                ActionContext::Global,
-            );
+            if workspace == DemoWorkspace::Graph {
+                let graph_bounds = Rect::new(
+                    24.0,
+                    230.0,
+                    (logical_size.width - 48.0).max(0.0),
+                    (logical_size.height - 254.0).max(0.0),
+                );
+                let app_targets = [
+                    (ui.make_id(edit.id.as_str()), edit_rect),
+                    (ui.make_id(graph.id.as_str()), graph_rect),
+                    (ui.make_id(apply.id.as_str()), apply_rect),
+                ];
+                self.graph_workspace
+                    .compose(&mut ui, graph_bounds, &app_targets);
+            }
+            let _ = ui.action_button(edit.id.as_str(), edit_rect, &edit, ActionContext::Global);
+            let _ = ui.action_button(graph.id.as_str(), graph_rect, &graph, ActionContext::Global);
             match workspace {
                 DemoWorkspace::Edit => {
                     ui.label(Rect::new(24.0, 108.0, 180.0, 20.0), "Document name");
@@ -92,22 +100,9 @@ impl DemoApp {
                         false,
                     );
                 }
-                DemoWorkspace::Graph => {
-                    let graph_bounds = Rect::new(
-                        24.0,
-                        230.0,
-                        (logical_size.width - 48.0).max(0.0),
-                        (logical_size.height - 254.0).max(0.0),
-                    );
-                    self.graph_workspace.compose(&mut ui, graph_bounds);
-                }
+                DemoWorkspace::Graph => {}
             }
-            let _ = ui.action_button(
-                apply.id.as_str(),
-                Rect::new(24.0, 188.0, 160.0, 30.0),
-                &apply,
-                ActionContext::Global,
-            );
+            let _ = ui.action_button(apply.id.as_str(), apply_rect, &apply, ActionContext::Global);
             ui.finish_output()
         };
         let mut actions = output.actions.clone();
@@ -130,7 +125,9 @@ impl DemoApp {
     }
 
     fn dispatch(&mut self, invocation: &ActionInvocation) {
-        let _ = self.model.execute(invocation);
+        if !self.graph_workspace.handle_action(invocation) {
+            let _ = self.model.execute(invocation);
+        }
     }
 }
 

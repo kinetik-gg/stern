@@ -8,6 +8,12 @@ use stern::core::{
 use stern::widgets::node_graph::{NodeGraphSelectionTarget, NodeId};
 use stern_demo::{DemoApp, DemoWorkspace, demo_context};
 
+const SOURCE_POINT: Point = Point::new(100.0, 370.0);
+const SOURCE_PORT_POINT: Point = Point::new(216.0, 390.0);
+const VIEWER_POINT: Point = Point::new(440.0, 414.0);
+const CANVAS_POINT: Point = Point::new(300.0, 350.0);
+const CLEAR_SELECTION_POINT: Point = Point::new(70.0, 244.0);
+
 #[test]
 fn graph_workspace_composes_public_retained_node_graph() {
     let mut app = DemoApp::new();
@@ -34,7 +40,7 @@ fn graph_workspace_composes_public_dock_panels() {
     let mut app = DemoApp::new();
     activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
     let output = app.frame(demo_context(graph_click(
-        Point::new(100.0, 300.0),
+        SOURCE_POINT,
         Modifiers::default(),
     )));
     let semantics = output.semantics.nodes();
@@ -79,7 +85,7 @@ fn graph_workspace_composes_public_dock_panels() {
 fn graph_pointer_selection_updates_application_owned_state() {
     let mut app = DemoApp::new();
     activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
-    select(&mut app, Point::new(100.0, 300.0), Modifiers::default());
+    select(&mut app, SOURCE_POINT, Modifiers::default());
     assert_eq!(
         app.graph_workspace().selection().selected_nodes(),
         [NodeId::from_raw(1)]
@@ -87,7 +93,7 @@ fn graph_pointer_selection_updates_application_owned_state() {
 
     select(
         &mut app,
-        Point::new(440.0, 360.0),
+        VIEWER_POINT,
         Modifiers::new(true, false, false, false),
     );
     assert_eq!(
@@ -96,14 +102,14 @@ fn graph_pointer_selection_updates_application_owned_state() {
     );
     select(
         &mut app,
-        Point::new(100.0, 300.0),
+        SOURCE_POINT,
         Modifiers::new(false, true, false, false),
     );
     assert_eq!(
         app.graph_workspace().selection().selected_nodes(),
         [NodeId::from_raw(2)]
     );
-    select(&mut app, Point::new(300.0, 430.0), Modifiers::default());
+    select(&mut app, CANVAS_POINT, Modifiers::default());
     assert!(app.graph_workspace().selection().is_empty());
 }
 
@@ -113,7 +119,7 @@ fn graph_inspector_values_follow_public_node_selection() {
     activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
 
     let source = app.frame(demo_context(graph_click(
-        Point::new(100.0, 300.0),
+        SOURCE_POINT,
         Modifiers::default(),
     )));
     assert_eq!(
@@ -123,7 +129,7 @@ fn graph_inspector_values_follow_public_node_selection() {
     assert!(has_inspector_rows(&source));
 
     let viewer = app.frame(demo_context(graph_click(
-        Point::new(440.0, 360.0),
+        VIEWER_POINT,
         Modifiers::default(),
     )));
     assert_eq!(inspector_text_values(&viewer), ["Viewer", "360", "88", "1"]);
@@ -149,12 +155,13 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
     let mut app = DemoApp::new();
     activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
     let first = app.frame(demo_context(graph_click(
-        Point::new(100.0, 300.0),
+        SOURCE_POINT,
         Modifiers::default(),
     )));
     let ids = graph_ids(&first);
     let expected_dock_ids = dock_ids(&first);
     let expected_inspector_ids = inspector_ids(&first);
+    let expected_chrome_ids = chrome_ids(&first);
     assert_eq!(app.focused(), Some(app.graph_workspace().root_id()));
 
     activate_workspace(&mut app, Point::new(60.0, 70.0), DemoWorkspace::Edit);
@@ -170,6 +177,7 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
     assert_eq!(graph_ids(&resized), ids);
     assert_eq!(dock_ids(&resized), expected_dock_ids);
     assert_eq!(inspector_ids(&resized), expected_inspector_ids);
+    assert_eq!(chrome_ids(&resized), expected_chrome_ids);
     assert!(
         app.graph_workspace()
             .selection()
@@ -178,10 +186,10 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
 }
 
 #[test]
-fn graph_workspace_reports_exact_four_runtime_component_ids() {
+fn graph_workspace_reports_exact_seven_runtime_component_ids() {
     let mut app = DemoApp::new();
     activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
-    select(&mut app, Point::new(100.0, 300.0), Modifiers::default());
+    select(&mut app, SOURCE_POINT, Modifiers::default());
     let output = app.frame(demo_context(UiInput::default()));
     let mut qualified = Vec::new();
     if has_public_dock(&output) {
@@ -199,13 +207,25 @@ fn graph_workspace_reports_exact_four_runtime_component_ids() {
     if has_inspector_rows(&output) {
         qualified.push("inspector-components");
     }
+    if has_workspace_chrome(&output) {
+        qualified.push("workspace-chrome");
+    }
+    if has_public_toolbar(&output) && has_action_semantic(&output, "graph.clear-selection") {
+        qualified.push("toolbar-components");
+    }
+    if has_public_navigation(&output) {
+        qualified.push("navigation-surface-components");
+    }
     assert_eq!(
         qualified,
         [
             "dock",
             "node-graph",
             "node-components",
-            "inspector-components"
+            "inspector-components",
+            "workspace-chrome",
+            "toolbar-components",
+            "navigation-surface-components"
         ]
     );
 
@@ -223,11 +243,85 @@ fn graph_workspace_reports_exact_four_runtime_component_ids() {
         .split(',')
         .filter(|id| !qualified.contains(id))
         .collect::<Vec<_>>();
-    assert_eq!(uncovered.len(), 30);
-    assert!(!uncovered.contains(&"dock"));
-    assert!(!uncovered.contains(&"node-graph"));
-    assert!(!uncovered.contains(&"node-components"));
-    assert!(!uncovered.contains(&"inspector-components"));
+    assert_eq!(uncovered.len(), 27);
+    for id in qualified {
+        assert!(!uncovered.contains(&id));
+    }
+}
+
+#[test]
+fn graph_workspace_composes_public_chrome_above_dock() {
+    let mut app = DemoApp::new();
+    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    let output = app.frame(demo_context(UiInput::default()));
+
+    assert!(has_workspace_chrome(&output));
+    let dock_index = semantic_index(&output, |node| node.role == SemanticRole::Dock);
+    for label in ["Application toolbar", "Document tabs", "Application status"] {
+        assert!(semantic_index(&output, |node| node.label.as_deref() == Some(label)) > dock_index);
+    }
+    let clear = clear_node(&output);
+    assert!(clear.state.disabled);
+    assert_eq!(status_text(&output), "0 selected");
+    let _ = app.frame(demo_context(pointer_input(
+        CLEAR_SELECTION_POINT,
+        true,
+        true,
+        false,
+    )));
+    let disabled = app.frame(demo_context(pointer_input(
+        CLEAR_SELECTION_POINT,
+        false,
+        false,
+        true,
+    )));
+    assert!(disabled.actions.is_empty());
+    assert!(app.graph_workspace().selection().is_empty());
+}
+
+#[test]
+fn graph_toolbar_clear_selection_routes_once_and_updates_next_frame() {
+    let mut app = DemoApp::new();
+    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    select(&mut app, SOURCE_PORT_POINT, Modifiers::default());
+    assert!(matches!(
+        app.graph_workspace().selection().selected().as_slice(),
+        [NodeGraphSelectionTarget::Port(_)]
+    ));
+    let selected = app.frame(demo_context(UiInput::default()));
+    assert!(!clear_node(&selected).state.disabled);
+    assert!(has_action_semantic(&selected, "graph.clear-selection"));
+    assert_eq!(status_text(&selected), "1 selected");
+
+    let _ = app.frame(demo_context(pointer_input(
+        CLEAR_SELECTION_POINT,
+        true,
+        true,
+        false,
+    )));
+    let activated = app.frame(demo_context(pointer_input(
+        CLEAR_SELECTION_POINT,
+        false,
+        false,
+        true,
+    )));
+    assert_eq!(activated.actions.len(), 1);
+    assert_eq!(
+        activated
+            .actions
+            .clone()
+            .pop_front()
+            .unwrap()
+            .action_id
+            .as_str(),
+        "graph.clear-selection"
+    );
+    assert!(app.graph_workspace().selection().is_empty());
+
+    let next = app.frame(demo_context(UiInput::default()));
+    assert!(clear_node(&next).state.disabled);
+    assert!(inspector_text_values(&next).is_empty());
+    assert_eq!(status_text(&next), "0 selected");
 }
 
 #[test]
@@ -241,6 +335,9 @@ fn graph_workspace_source_uses_only_public_stern_composition() {
     assert!(source.contains("node_graph_widget"));
     assert!(source.contains("DockScene::new"));
     assert!(source.contains(".dock_scene("));
+    assert!(source.contains("ChromeScene::new"));
+    assert!(source.contains(".declare_pointer_targets"));
+    assert!(source.contains(".chrome_scene("));
     let forbidden_source = concat!(
         "stern_core|stern_widgets|Primitive|SemanticNode|.emit(|push_primitive|push_semantic|",
         "rustfmt::skip|unsafe|include!(|#[path|mod widget|mod theme|fn paint_",
@@ -266,6 +363,84 @@ fn has_public_dock(output: &stern::core::FrameOutput) -> bool {
                 node.role == SemanticRole::Panel && node.label.as_deref() == Some(title)
             })
         })
+}
+
+fn has_workspace_chrome(output: &stern::core::FrameOutput) -> bool {
+    has_public_toolbar(output)
+        && has_public_navigation(output)
+        && output.semantics.nodes().iter().any(|node| {
+            matches!(&node.role, SemanticRole::Custom(role) if role == "status-bar")
+                && node.children.iter().any(|id| {
+                    output
+                        .semantics
+                        .get(*id)
+                        .is_some_and(|item| item.label.as_deref() == Some(status_text(output)))
+                })
+        })
+}
+
+fn has_public_toolbar(output: &stern::core::FrameOutput) -> bool {
+    output.semantics.nodes().iter().any(|node| {
+        matches!(&node.role, SemanticRole::Custom(role) if role == "toolbar")
+            && node.children.contains(&clear_node(output).id)
+    })
+}
+
+fn has_action_semantic(output: &stern::core::FrameOutput, action_id: &str) -> bool {
+    output.semantics.nodes().iter().any(|node| {
+        node.actions.iter().any(|action| {
+            action
+                .action_id
+                .as_ref()
+                .is_some_and(|id| id.as_str() == action_id)
+        })
+    })
+}
+
+fn has_public_navigation(output: &stern::core::FrameOutput) -> bool {
+    output.semantics.nodes().iter().any(|node| {
+        node.role == SemanticRole::TabList
+            && node.children.iter().any(|id| {
+                output.semantics.get(*id).is_some_and(|tab| {
+                    tab.role == SemanticRole::Tab
+                        && tab.label.as_deref() == Some("Graph")
+                        && tab.state.selected
+                })
+            })
+    })
+}
+
+fn clear_node(output: &stern::core::FrameOutput) -> &stern::core::SemanticNode {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| node.label.as_deref() == Some("Clear selection"))
+        .expect("public clear-selection control")
+}
+
+fn status_text(output: &stern::core::FrameOutput) -> &str {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| matches!(&node.role, SemanticRole::Custom(role) if role == "status-bar"))
+        .and_then(|surface| surface.children.first())
+        .and_then(|id| output.semantics.get(*id))
+        .and_then(|node| node.label.as_deref())
+        .expect("public selection status")
+}
+
+fn semantic_index(
+    output: &stern::core::FrameOutput,
+    predicate: impl Fn(&stern::core::SemanticNode) -> bool,
+) -> usize {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .position(predicate)
+        .expect("runtime semantic")
 }
 
 fn panel<'a>(output: &'a stern::core::FrameOutput, title: &str) -> &'a stern::core::SemanticNode {
@@ -407,6 +582,23 @@ fn dock_ids(output: &stern::core::FrameOutput) -> Vec<WidgetId> {
                     | SemanticRole::TabList
                     | SemanticRole::Tab
             )
+        })
+        .map(|node| node.id)
+        .collect()
+}
+
+fn chrome_ids(output: &stern::core::FrameOutput) -> Vec<WidgetId> {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .filter(|node| {
+            node.label.as_deref() == Some("Clear selection")
+                || node.label.as_deref() == Some("Application toolbar")
+                || node.label.as_deref() == Some("Application status")
+                || (node.role == SemanticRole::TabList
+                    && node.label.as_deref() == Some("Document tabs"))
+                || (node.role == SemanticRole::Tab && node.label.as_deref() == Some("Graph"))
         })
         .map(|node| node.id)
         .collect()
