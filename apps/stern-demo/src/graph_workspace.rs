@@ -1,5 +1,8 @@
-use stern::core::{Rect, WidgetId};
+use stern::core::{Axis, Rect, WidgetId};
 use stern::text::TextEditState;
+use stern::widgets::dock::{
+    Dock, DockNode, DockScene, DockSceneConfig, Frame, FrameId, Panel, PanelId,
+};
 use stern::widgets::inspector::{PropertyGridConfig, PropertyGridRow};
 use stern::widgets::node_graph::{
     EdgeDescriptor, EdgeId, GraphRect, NodeDescriptor, NodeGraphDescriptor, NodeGraphPanZoom,
@@ -15,8 +18,11 @@ const OUTPUT_NODE: NodeId = NodeId::from_raw(2);
 const IMAGE_OUTPUT: PortId = PortId::from_raw(1);
 const IMAGE_INPUT: PortId = PortId::from_raw(1);
 const IMAGE_TYPE: PortTypeId = PortTypeId::from_raw(1);
-const INSPECTOR_WIDTH: f32 = 224.0;
-const INSPECTOR_GAP: f32 = 12.0;
+const DOCK_ROOT: WidgetId = WidgetId::from_raw(0x0044_4f43_4b00);
+const GRAPH_FRAME: FrameId = FrameId::from_raw(1);
+const INSPECTOR_FRAME: FrameId = FrameId::from_raw(2);
+const GRAPH_PANEL: PanelId = PanelId::from_raw(1);
+const INSPECTOR_PANEL: PanelId = PanelId::from_raw(2);
 const INSPECTOR_SECTION: ItemId = ItemId::from_raw(1);
 const INSPECTOR_TITLE: ItemId = ItemId::from_raw(2);
 const INSPECTOR_X: ItemId = ItemId::from_raw(3);
@@ -26,6 +32,7 @@ const INSPECTOR_PORTS: ItemId = ItemId::from_raw(5);
 /// Application-owned deterministic fixture and selection for the Graph workspace.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GraphWorkspaceState {
+    dock: Dock,
     graph: NodeGraphDescriptor,
     selection: NodeGraphSelection,
 }
@@ -58,7 +65,22 @@ impl GraphWorkspaceState {
         let mut graph = NodeGraphDescriptor::new();
         graph.nodes = vec![source, output];
         graph.edges = vec![edge];
+        let dock = Dock::new(DockNode::Split {
+            axis: Axis::Horizontal,
+            ratio: 2.0 / 3.0,
+            min_first: 260.0,
+            min_second: 180.0,
+            first: Box::new(DockNode::Frame(Frame::new(
+                GRAPH_FRAME,
+                vec![Panel::new(GRAPH_PANEL, "Graph")],
+            ))),
+            second: Box::new(DockNode::Frame(Frame::new(
+                INSPECTOR_FRAME,
+                vec![Panel::new(INSPECTOR_PANEL, "Inspector")],
+            ))),
+        });
         Self {
+            dock,
             graph,
             selection: NodeGraphSelection::new(),
         }
@@ -77,21 +99,16 @@ impl GraphWorkspaceState {
     }
 
     pub(crate) fn compose(&mut self, ui: &mut Ui<'_>, bounds: Rect) {
-        let inspector_width = bounds.width.clamp(0.0, INSPECTOR_WIDTH);
-        let gap = (bounds.width - inspector_width).clamp(0.0, INSPECTOR_GAP);
-        let graph_bounds = Rect::new(
-            bounds.x,
-            bounds.y,
-            (bounds.width - inspector_width - gap).max(0.0),
-            bounds.height,
-        );
-        let inspector_bounds = Rect::new(
-            graph_bounds.max_x() + gap,
-            bounds.y,
-            inspector_width,
-            bounds.height,
-        );
-        let viewport = NodeGraphViewport::new(graph_bounds, NodeGraphPanZoom::default());
+        let scene = DockScene::new(DockSceneConfig::new(DOCK_ROOT, bounds), &self.dock);
+        let _ = ui.dock_scene(&scene, |ui, panel| match panel.panel {
+            GRAPH_PANEL => self.compose_graph(ui, panel.rect),
+            INSPECTOR_PANEL => self.compose_inspector(ui, panel.rect),
+            _ => unreachable!("demo Dock contains only Graph and Inspector panels"),
+        });
+    }
+
+    fn compose_graph(&mut self, ui: &mut Ui<'_>, bounds: Rect) {
+        let viewport = NodeGraphViewport::new(bounds, NodeGraphPanZoom::default());
         let view = NodeGraphStaticView::new(GRAPH_ROOT, viewport, &self.graph)
             .with_selection(self.selection.clone());
         let widget = ui
@@ -103,7 +120,6 @@ impl GraphWorkspaceState {
         for NodeGraphWidgetIntent::Selection(operation) in output.intents {
             self.selection = self.selection.apply(operation);
         }
-        self.compose_inspector(ui, inspector_bounds);
     }
 
     fn compose_inspector(&self, ui: &mut Ui<'_>, bounds: Rect) {

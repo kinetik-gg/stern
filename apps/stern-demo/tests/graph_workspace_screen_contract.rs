@@ -30,6 +30,52 @@ fn graph_workspace_composes_public_retained_node_graph() {
 }
 
 #[test]
+fn graph_workspace_composes_public_dock_panels() {
+    let mut app = DemoApp::new();
+    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    let output = app.frame(demo_context(graph_click(
+        Point::new(100.0, 300.0),
+        Modifiers::default(),
+    )));
+    let semantics = output.semantics.nodes();
+    let dock = semantics
+        .iter()
+        .find(|node| node.role == SemanticRole::Dock)
+        .expect("public Dock semantic root");
+    assert_eq!(dock.label.as_deref(), Some("Editor dock"));
+    assert_eq!(dock.children.len(), 2);
+    assert!(dock.children.iter().all(|id| {
+        output
+            .semantics
+            .get(*id)
+            .is_some_and(|node| node.role == SemanticRole::Frame)
+    }));
+
+    let graph_panel = panel(&output, "Graph");
+    let inspector_panel = panel(&output, "Inspector");
+    let graph = output
+        .semantics
+        .get(app.graph_workspace().root_id())
+        .expect("docked graph semantic");
+    let inspector = semantics
+        .iter()
+        .find(|node| node.role == SemanticRole::Grid)
+        .expect("docked inspector grid semantic");
+    assert_eq!(
+        graph_panel.bounds.intersection(graph.bounds),
+        Some(graph.bounds)
+    );
+    assert_eq!(
+        inspector_panel.bounds.intersection(inspector.bounds),
+        Some(inspector.bounds)
+    );
+    assert_eq!(
+        inspector_text_values(&output),
+        ["Image Source", "36", "28", "1"]
+    );
+}
+
+#[test]
 fn graph_pointer_selection_updates_application_owned_state() {
     let mut app = DemoApp::new();
     activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
@@ -107,6 +153,7 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
         Modifiers::default(),
     )));
     let ids = graph_ids(&first);
+    let expected_dock_ids = dock_ids(&first);
     let expected_inspector_ids = inspector_ids(&first);
     assert_eq!(app.focused(), Some(app.graph_workspace().root_id()));
 
@@ -121,6 +168,7 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
     let resized = app.frame(resized_context(UiInput::default()));
     assert_eq!(app.focused(), Some(graph_action));
     assert_eq!(graph_ids(&resized), ids);
+    assert_eq!(dock_ids(&resized), expected_dock_ids);
     assert_eq!(inspector_ids(&resized), expected_inspector_ids);
     assert!(
         app.graph_workspace()
@@ -130,12 +178,15 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
 }
 
 #[test]
-fn graph_workspace_reports_exact_three_runtime_component_ids() {
+fn graph_workspace_reports_exact_four_runtime_component_ids() {
     let mut app = DemoApp::new();
     activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
     select(&mut app, Point::new(100.0, 300.0), Modifiers::default());
     let output = app.frame(demo_context(UiInput::default()));
     let mut qualified = Vec::new();
+    if has_public_dock(&output) {
+        qualified.push("dock");
+    }
     if has_role(&output, "node-graph") {
         qualified.push("node-graph");
     }
@@ -150,7 +201,12 @@ fn graph_workspace_reports_exact_three_runtime_component_ids() {
     }
     assert_eq!(
         qualified,
-        ["node-graph", "node-components", "inspector-components"]
+        [
+            "dock",
+            "node-graph",
+            "node-components",
+            "inspector-components"
+        ]
     );
 
     let required = concat!(
@@ -167,7 +223,8 @@ fn graph_workspace_reports_exact_three_runtime_component_ids() {
         .split(',')
         .filter(|id| !qualified.contains(id))
         .collect::<Vec<_>>();
-    assert_eq!(uncovered.len(), 31);
+    assert_eq!(uncovered.len(), 30);
+    assert!(!uncovered.contains(&"dock"));
     assert!(!uncovered.contains(&"node-graph"));
     assert!(!uncovered.contains(&"node-components"));
     assert!(!uncovered.contains(&"inspector-components"));
@@ -182,6 +239,8 @@ fn graph_workspace_source_uses_only_public_stern_composition() {
     assert!(source.contains("use stern::"));
     assert!(source.contains("prepare_node_graph_widget"));
     assert!(source.contains("node_graph_widget"));
+    assert!(source.contains("DockScene::new"));
+    assert!(source.contains(".dock_scene("));
     let forbidden_source = concat!(
         "stern_core|stern_widgets|Primitive|SemanticNode|.emit(|push_primitive|push_semantic|",
         "rustfmt::skip|unsafe|include!(|#[path|mod widget|mod theme|fn paint_",
@@ -192,6 +251,30 @@ fn graph_workspace_source_uses_only_public_stern_composition() {
             "forbidden Graph source: {forbidden}"
         );
     }
+}
+
+fn has_public_dock(output: &stern::core::FrameOutput) -> bool {
+    let semantics = output.semantics.nodes();
+    semantics.iter().any(|node| node.role == SemanticRole::Dock)
+        && semantics
+            .iter()
+            .filter(|node| node.role == SemanticRole::Frame)
+            .count()
+            == 2
+        && ["Graph", "Inspector"].into_iter().all(|title| {
+            semantics.iter().any(|node| {
+                node.role == SemanticRole::Panel && node.label.as_deref() == Some(title)
+            })
+        })
+}
+
+fn panel<'a>(output: &'a stern::core::FrameOutput, title: &str) -> &'a stern::core::SemanticNode {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| node.role == SemanticRole::Panel && node.label.as_deref() == Some(title))
+        .expect("titled public Dock panel")
 }
 
 fn rust_sources(path: &std::path::Path) -> String {
@@ -304,6 +387,25 @@ fn inspector_ids(output: &stern::core::FrameOutput) -> Vec<WidgetId> {
             matches!(
                 node.role,
                 SemanticRole::Grid | SemanticRole::Row | SemanticRole::TextField
+            )
+        })
+        .map(|node| node.id)
+        .collect()
+}
+
+fn dock_ids(output: &stern::core::FrameOutput) -> Vec<WidgetId> {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .filter(|node| {
+            matches!(
+                node.role,
+                SemanticRole::Dock
+                    | SemanticRole::Frame
+                    | SemanticRole::Panel
+                    | SemanticRole::TabList
+                    | SemanticRole::Tab
             )
         })
         .map(|node| node.id)
