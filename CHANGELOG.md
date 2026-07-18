@@ -10,6 +10,9 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- Added the complete allocation-free Phosphor 2.1.1 catalog with 9,072
+  independently linkable static vector definitions, flat six-weight APIs, a
+  deterministic pure-Rust generator/checker, and release linkage verification.
 - Added the development-only, pure-Rust `stern-icon-atlas` foundation with an
   exact offline Phosphor Core 2.1.1 source snapshot, provenance verification,
   catalog and six-weight discovery, collision-safe names and IDs, and strict

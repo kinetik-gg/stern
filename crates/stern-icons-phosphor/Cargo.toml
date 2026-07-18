@@ -1,0 +1,14 @@
+[package]
+name = "stern-icons-phosphor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Complete allocation-free Phosphor icon definitions for Stern"
+
+[dependencies]
+stern-core = { path = "../stern-core" }
+
+[lints]
+workspace = true

@@ -4,6 +4,7 @@ members = [
     "crates/stern",
     "crates/stern-core",
     "crates/stern-icon-atlas",
+    "crates/stern-icons-phosphor",
     "crates/stern-render",
     "crates/stern-text",
     "crates/stern-vello",
@@ -30,3 +31,6 @@ missing_docs = "warn"
 [workspace.lints.clippy]
 all = "warn"
 pedantic = "warn"
+
+[profile.release]
+lto = "thin"
