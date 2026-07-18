@@ -5,17 +5,20 @@
 use std::time::Duration;
 
 use stern_core::{
-    ActionDescriptor, Brush, Color, ComponentState, FrameContext, Key, KeyEvent, KeyState,
-    KeyboardInput, Modifiers, PathElement, PhysicalSize, Point, PointerButtonState, PointerInput,
-    PointerOrder, Primitive, Rect, RepaintRequest, ScaleFactor, SemanticActionKind, SemanticNode,
-    Size, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionSource, Brush, Color,
+    ComponentState, FrameContext, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PathElement,
+    PhysicalSize, Point, PointerButtonState, PointerInput, PointerOrder, Primitive, Rect,
+    RepaintRequest, ScaleFactor, SemanticActionKind, SemanticNode, Size, TimeInfo, UiInput,
+    UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::outliner::{
-    OutlinerConfig, OutlinerOutput, OutlinerRequest, OutlinerSelectionMode, OutlinerState,
+    OutlinerConfig, OutlinerContextMenuConfig, OutlinerOutput, OutlinerRequest,
+    OutlinerSelectionMode, OutlinerState,
 };
 use stern_widgets::{
-    CollectionContextTarget, InlineEditCancelReason, InlineEditCommitReason, InlineEditRequest,
-    ItemId, OutlinerItem, OutlinerModel, OutlinerRowFlags, OutlinerRowZones, Ui,
+    CollectionContextActionRequest, CollectionContextTarget, InlineEditCancelReason,
+    InlineEditCommitReason, InlineEditRequest, ItemId, OutlinerItem, OutlinerModel,
+    OutlinerRowFlags, OutlinerRowZones, Ui,
 };
 
 const BOUNDS: Rect = Rect::new(10.25, 20.5, 260.0, 120.0);
@@ -1005,6 +1008,147 @@ fn context_escape_dismissal_restores_outliner_trigger_focus_without_mutating_sel
             .iter()
             .all(|node| node.label.as_deref() != Some("Delete"))
     );
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn context_outside_release_and_focused_command_restore_outliner_trigger_without_click_through() {
+    let model = OutlinerModel::new(vec![
+        OutlinerItem::new(id(1), "One"),
+        OutlinerItem::new(id(2), "Two"),
+        OutlinerItem::new(id(3), "Three"),
+        OutlinerItem::new(id(4), "Four"),
+    ]);
+    let cfg = config(BOUNDS).context_menu(OutlinerContextMenuConfig {
+        size: Size::new(110.0, 40.0),
+        offset: 4.0,
+    });
+    let captured_target =
+        CollectionContextTarget::selection([id(1)]).expect("captured outliner selection");
+    let frame = |state: &mut OutlinerState, memory: &mut UiMemory, input| {
+        run_frame(&model, cfg.clone(), state, memory, input)
+    };
+
+    for invoke_command in [false, true] {
+        let mut state = OutlinerState::new();
+        let mut memory = UiMemory::new();
+        let seed = frame(&mut state, &mut memory, UiInput::default());
+        let trigger_point = row_zones(&seed, id(1)).label_rect.center();
+        let selected = click(
+            trigger_point,
+            1,
+            &model,
+            cfg.clone(),
+            &mut state,
+            &mut memory,
+        );
+        let trigger = selected.root.child(("outliner-row", 1_u64));
+        assert_eq!(state.cursor.active(), Some(id(1)));
+        assert_eq!(state.selection.selected(), vec![id(1)]);
+        assert_eq!(memory.focused(), Some(trigger));
+
+        let opened = context_click(
+            row_zones(&selected, id(1)).context_rect.center(),
+            &model,
+            cfg.clone(),
+            &mut state,
+            &mut memory,
+        );
+        assert_eq!(opened.output.context_opened, Some(captured_target.clone()));
+        let shown = frame(&mut state, &mut memory, UiInput::default());
+        let menu_bounds = shown
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .find(|node| node.label.as_deref() == Some("Outliner actions"))
+            .expect("outliner context menu surface")
+            .bounds;
+        let command = shown
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .find(|node| node.label.as_deref() == Some("Delete"))
+            .expect("outliner context command")
+            .id;
+
+        let closed = if invoke_command {
+            memory.focus(command);
+            assert_eq!(memory.focused(), Some(command));
+            let mut invoked = frame(&mut state, &mut memory, key_input(Key::Enter));
+            let expected_action = ActionId::new("scene.delete");
+            assert_eq!(
+                invoked.output.requests,
+                vec![OutlinerRequest::Context(
+                    CollectionContextActionRequest::new(expected_action.clone(), &captured_target)
+                )]
+            );
+            assert_eq!(
+                invoked.frame.actions.drain().collect::<Vec<_>>(),
+                vec![ActionInvocation::new(
+                    expected_action,
+                    ActionSource::Menu,
+                    ActionContext::Widget(invoked.root),
+                )]
+            );
+            invoked
+        } else {
+            let outside_point = row_zones(&shown, id(4)).label_rect.center();
+            assert!(!menu_bounds.contains_point(outside_point));
+            assert!(!row_response(&shown, id(4)).row.state.disabled);
+            let pressed = frame(
+                &mut state,
+                &mut memory,
+                primary_input(outside_point, true, true, false, 1),
+            );
+            assert_eq!(state.context_target(), Some(&captured_target));
+            assert_eq!(memory.focused(), Some(trigger));
+            assert_eq!(state.cursor.active(), Some(id(1)));
+            assert_eq!(state.selection.selected(), vec![id(1)]);
+            assert!(!row_response(&pressed, id(4)).row.clicked);
+            assert!(!row_response(&pressed, id(4)).row.state.pressed);
+            assert!(pressed.output.requests.is_empty() && pressed.frame.actions.is_empty());
+            let dismissed = frame(
+                &mut state,
+                &mut memory,
+                primary_input(outside_point, false, false, true, 1),
+            );
+            assert!(!row_response(&dismissed, id(4)).row.clicked);
+            assert!(dismissed.output.requests.is_empty() && dismissed.frame.actions.is_empty());
+            dismissed
+        };
+
+        assert_eq!(state.context_target(), None);
+        assert_eq!(memory.focused(), Some(trigger));
+        assert_eq!(state.cursor.active(), Some(id(1)));
+        assert_eq!(state.selection.selected(), vec![id(1)]);
+        assert_eq!(closed.frame.repaint, RepaintRequest::NextFrame);
+        assert!(closed.frame.actions.is_empty());
+        let settled = frame(&mut state, &mut memory, UiInput::default());
+        assert_eq!(state.context_target(), None);
+        assert_eq!(memory.focused(), Some(trigger));
+        assert_eq!(state.cursor.active(), Some(id(1)));
+        assert_eq!(state.selection.selected(), vec![id(1)]);
+        assert!(settled.output.requests.is_empty() && settled.frame.actions.is_empty());
+        assert!(
+            settled
+                .frame
+                .semantics
+                .get(trigger)
+                .expect("settled outliner trigger")
+                .state
+                .focused
+        );
+        assert!(
+            settled
+                .frame
+                .semantics
+                .nodes()
+                .iter()
+                .all(|node| !matches!(node.label.as_deref(), Some("Outliner actions" | "Delete")))
+        );
+    }
 }
 
 fn row_label_is_painted(run: &Run, target: ItemId, label: &str) -> bool {
