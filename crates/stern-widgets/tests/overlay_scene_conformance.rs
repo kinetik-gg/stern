@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use stern_core::{
     ActionContext, ActionDescriptor, ActionId, ActionSource, Brush, Color, FrameContext, Key,
-    KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState,
-    PointerInput, PointerOrder, PointerTarget, Primitive, RadiusScale, Rect, Response, ScaleFactor,
-    SemanticActionKind, SemanticRole, ShadowPrimitive, Size, StrokeScale, Theme, TimeInfo, UiInput,
-    UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PhysicalSize, Point,
+    PointerButtonState, PointerInput, PointerOrder, PointerTarget, Primitive, RadiusScale, Rect,
+    Response, ScaleFactor, SemanticActionKind, SemanticRole, ShadowPrimitive, Size, StrokeScale,
+    Theme, TimeInfo, UiInput, UiInputEvent, UiMemory, Vec2, ViewportInfo, WidgetId,
+    default_dark_theme,
 };
 use stern_widgets::overlays::OverlayNavigationInput;
 use stern_widgets::{
@@ -265,7 +266,7 @@ fn overlay_row_wins_pointer_arbitration_and_mouse_emits_the_action() {
 }
 
 #[test]
-fn outside_dismissal_blocks_the_lower_click() {
+fn outside_press_dismisses_before_lower_activation_and_consumes_release() {
     let mut scene = OverlayScene::new();
     scene.push(menu_surface(
         2,
@@ -274,13 +275,15 @@ fn outside_dismissal_blocks_the_lower_click() {
     ));
     let mut memory = UiMemory::new();
 
-    let (lower_press, _, _) = run_frame(&mut scene, &mut memory, pressed_at(4.0, 4.0), true);
-    assert!(!lower_press.expect("lower response").state.hovered);
-    let (lower_release, release, _) =
-        run_frame(&mut scene, &mut memory, released_at(4.0, 4.0), true);
-    assert!(!lower_release.expect("lower response").clicked);
+    let (lower_press, press, press_frame) =
+        run_frame(&mut scene, &mut memory, pressed_at(4.0, 4.0), true);
+    let lower_press = lower_press.expect("lower press response");
+    assert!(!lower_press.state.hovered);
+    assert!(!lower_press.state.pressed);
+    assert!(!lower_press.clicked);
+    assert!(press_frame.actions.is_empty());
     assert_eq!(
-        release.intents,
+        press.intents,
         vec![OverlaySceneIntent::Dismiss(
             stern_widgets::OverlaySceneDismissRequest {
                 overlay_id: OverlayId::from_raw(2),
@@ -289,6 +292,61 @@ fn outside_dismissal_blocks_the_lower_click() {
             }
         )]
     );
+
+    scene = OverlayScene::new();
+    let (lower_release, release, release_frame) =
+        run_frame(&mut scene, &mut memory, released_at(4.0, 4.0), true);
+    assert!(!lower_release.expect("lower release response").clicked);
+    assert!(release.intents.is_empty());
+    assert!(release_frame.actions.is_empty());
+}
+
+#[test]
+fn ordered_outside_press_uses_event_position_and_blocks_lower_activation() {
+    let mut scene = OverlayScene::new();
+    for raw in [21, 22] {
+        scene.push(menu_surface(
+            raw,
+            OverlayKind::ContextMenu,
+            Menu::from_actions([action("edit.copy", "Copy")]),
+        ));
+    }
+    let mut ordered = UiInput::default();
+    ordered.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 1,
+        position: Some(Point::new(4.0, 4.0)),
+    });
+    ordered.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(30.0, 30.0),
+        delta: Vec2::new(26.0, 26.0),
+    });
+    assert_eq!(ordered.pointer.position, Some(Point::new(30.0, 30.0)));
+
+    let mut memory = UiMemory::new();
+    let (lower_press, press, press_frame) = run_frame(&mut scene, &mut memory, ordered, true);
+    let lower_press = lower_press.expect("lower press response");
+    assert!(!lower_press.state.pressed);
+    assert!(!lower_press.clicked);
+    assert!(press_frame.actions.is_empty());
+    assert_eq!(
+        press.intents,
+        vec![OverlaySceneIntent::Dismiss(
+            stern_widgets::OverlaySceneDismissRequest {
+                overlay_id: OverlayId::from_raw(22),
+                reason: OverlaySceneDismissReason::OutsideClick,
+                focus_return: None,
+            }
+        )]
+    );
+
+    scene = OverlayScene::new();
+    let (lower_release, release, release_frame) =
+        run_frame(&mut scene, &mut memory, released_at(4.0, 4.0), true);
+    assert!(!lower_release.expect("lower release response").clicked);
+    assert!(release.intents.is_empty());
+    assert!(release_frame.actions.is_empty());
 }
 
 #[test]

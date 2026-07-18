@@ -1730,7 +1730,7 @@ fn invalid_asset_context_reconciles_focus_without_selection_or_action() {
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn context_outside_release_and_focused_command_restore_asset_trigger_without_click_through() {
+fn context_outside_press_and_focused_command_restore_asset_trigger_without_click_through() {
     let model = AssetBrowserModel::new(vec![
         asset(1, "One", "mesh"),
         asset(2, "Two", "mesh"),
@@ -1811,25 +1811,29 @@ fn context_outside_release_and_focused_command_restore_asset_trigger_without_cli
             let outside_point = item_rect(&shown, id(4)).rect.center();
             assert!(!menu_bounds.contains_point(outside_point));
             assert!(!item_response(&shown, id(4)).state.disabled);
-            let pressed = frame(
+            let dismissed = frame(
                 &mut state,
                 &mut memory,
                 pointer_input(outside_point, true, true, false),
             );
-            assert_eq!(state.context_target(), Some(&captured_target));
+            assert_eq!(state.context_target(), None);
             assert_eq!(memory.focused(), Some(trigger));
             assert_eq!(state.cursor.active(), Some(id(1)));
             assert_eq!(state.selection.selected(), vec![id(1)]);
-            assert!(!item_response(&pressed, id(4)).clicked);
-            assert!(!item_response(&pressed, id(4)).state.pressed);
-            assert!(pressed.output.requests.is_empty() && pressed.frame.actions.is_empty());
-            let dismissed = frame(
+            assert!(!item_response(&dismissed, id(4)).clicked);
+            assert!(!item_response(&dismissed, id(4)).state.pressed);
+            assert!(dismissed.output.requests.is_empty() && dismissed.frame.actions.is_empty());
+            let released = frame(
                 &mut state,
                 &mut memory,
                 pointer_input(outside_point, false, false, true),
             );
-            assert!(!item_response(&dismissed, id(4)).clicked);
-            assert!(dismissed.output.requests.is_empty() && dismissed.frame.actions.is_empty());
+            assert_eq!(state.context_target(), None);
+            assert_eq!(memory.focused(), Some(trigger));
+            assert_eq!(state.cursor.active(), Some(id(1)));
+            assert_eq!(state.selection.selected(), vec![id(1)]);
+            assert!(!item_response(&released, id(4)).clicked);
+            assert!(released.output.requests.is_empty() && released.frame.actions.is_empty());
             dismissed
         };
 
