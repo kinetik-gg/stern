@@ -217,6 +217,7 @@ fn actual_table_header_focus_translates_with_fractional_scroll_at_release_scales
                 elements,
                 fill,
                 stroke,
+                ..
             } = &command.kind
             else {
                 unreachable!()

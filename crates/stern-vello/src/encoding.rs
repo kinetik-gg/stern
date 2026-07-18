@@ -1,13 +1,13 @@
 use stern_core::{
-    Brush, Color, CornerRadius, ImageId, PathElement, Point, Rect, ShadowPrimitive, Size, Stroke,
-    TextLayoutId, TextureId,
+    Brush, Color, CornerRadius, ImageId, Point, Rect, ShadowPrimitive, Size, Stroke, TextLayoutId,
+    TextureId,
 };
 use stern_render::{RenderImage, RenderImageSampling, RenderResources};
 use stern_text::TextLayoutStore;
 use vello::{
     Scene,
-    kurbo::{Affine, BezPath, Line as KurboLine, Shape},
-    peniko::{Fill, ImageBrush, ImageData},
+    kurbo::{Affine, Line as KurboLine, Shape},
+    peniko::{BlendMode, Fill, ImageBrush, ImageData},
 };
 
 use crate::{
@@ -15,15 +15,16 @@ use crate::{
     geometry::{
         crisp_rect_border_segments, kurbo_rect, logical_size_matches,
         quantize_stroke_width_to_device, radius_is_zero, root_transform, rounded_rect,
-        snap_axis_aligned_translation, snap_image_rect_to_device, snap_point_to_device,
-        snap_radius_to_device, snap_rect_to_device, snap_stroked_line_to_device,
-        snap_stroked_rect_to_device, transform_to_affine, vello_color, vello_gradient,
+        snap_axis_aligned_translation, snap_image_rect_to_device, snap_radius_to_device,
+        snap_rect_to_device, snap_stroked_line_to_device, snap_stroked_rect_to_device,
+        transform_to_affine, vello_color, vello_gradient,
     },
     image::{
         ImageDataCache, atlas_source_fits_image, atlas_source_is_finite_positive,
         full_image_source, image_quality, image_resource_size_matches_atlas_source,
         image_resource_size_matches_pixels, source_size_matches_snapshot,
     },
+    path::{encode_path, stroke_shape},
     text::{encode_text_layout, shape_fallback_text},
     texture::{VelloNativeTextureRegistry, VelloNativeTextureScope},
 };
@@ -104,6 +105,7 @@ pub(crate) fn encode_command(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 pub(crate) fn encode_command_with_native(
     scene: &mut Scene,
     command: &RenderCommand,
@@ -116,6 +118,14 @@ pub(crate) fn encode_command_with_native(
     let raw_transform = root_transform(device_scale) * transform_to_affine(command.transform);
     let transform = snap_axis_aligned_translation(raw_transform);
     match &command.kind {
+        RenderCommandKind::OpacityGroupBegin { bounds, opacity } => scene.push_layer(
+            Fill::NonZero,
+            BlendMode::default(),
+            *opacity,
+            transform,
+            &kurbo_rect(*bounds),
+        ),
+        RenderCommandKind::OpacityGroupEnd => scene.pop_layer(),
         RenderCommandKind::Rect {
             rect,
             fill,
@@ -160,7 +170,18 @@ pub(crate) fn encode_command_with_native(
             elements,
             fill,
             stroke,
-        } => encode_path(scene, transform, elements, *fill, *stroke, device_scale),
+            fill_rule,
+            opacity,
+        } => encode_path(
+            scene,
+            transform,
+            elements,
+            *fill,
+            *stroke,
+            *fill_rule,
+            *opacity,
+            device_scale,
+        ),
         RenderCommandKind::Text {
             layout,
             origin,
@@ -526,175 +547,6 @@ pub(crate) fn fill_shape(scene: &mut Scene, transform: Affine, brush: &Brush, sh
             scene.fill(Fill::NonZero, transform, &gradient, None, shape);
         }
     }
-}
-
-pub(crate) fn stroke_shape(
-    scene: &mut Scene,
-    transform: Affine,
-    stroke: &Stroke,
-    shape: &impl Shape,
-    device_scale: f64,
-) {
-    let style = vello::kurbo::Stroke::new(f64::from(quantize_stroke_width_to_device(
-        stroke.width,
-        device_scale,
-    )));
-    match stroke.brush {
-        Brush::Solid(color) => {
-            scene.stroke(&style, transform, vello_color(color), None, shape);
-        }
-        Brush::LinearGradient(gradient) => {
-            let gradient = vello_gradient(&gradient);
-            scene.stroke(&style, transform, &gradient, None, shape);
-        }
-    }
-}
-
-pub(crate) fn encode_path(
-    scene: &mut Scene,
-    transform: Affine,
-    elements: &[PathElement],
-    fill: Option<Brush>,
-    stroke: Option<Stroke>,
-    device_scale: f64,
-) {
-    if let Some(fill) = fill {
-        let snapped_elements = snap_filled_path_elements_to_device(elements, device_scale);
-        let path = bez_path(&snapped_elements);
-        fill_shape(scene, transform, &fill, &path);
-    }
-    if let Some(stroke) = stroke {
-        let snapped_elements =
-            snap_stroked_path_elements_to_device(elements, stroke.width, device_scale);
-        let path = bez_path(&snapped_elements);
-        stroke_shape(scene, transform, &stroke, &path, device_scale);
-    }
-}
-
-pub(crate) fn bez_path(elements: &[PathElement]) -> BezPath {
-    let mut path = BezPath::new();
-    for element in elements {
-        match *element {
-            PathElement::MoveTo(point) => {
-                path.move_to((f64::from(point.x), f64::from(point.y)));
-            }
-            PathElement::LineTo(point) => {
-                path.line_to((f64::from(point.x), f64::from(point.y)));
-            }
-            PathElement::QuadTo { ctrl, to } => {
-                path.quad_to(
-                    (f64::from(ctrl.x), f64::from(ctrl.y)),
-                    (f64::from(to.x), f64::from(to.y)),
-                );
-            }
-            PathElement::CubicTo { ctrl1, ctrl2, to } => {
-                path.curve_to(
-                    (f64::from(ctrl1.x), f64::from(ctrl1.y)),
-                    (f64::from(ctrl2.x), f64::from(ctrl2.y)),
-                    (f64::from(to.x), f64::from(to.y)),
-                );
-            }
-            PathElement::Close => path.close_path(),
-        }
-    }
-    path
-}
-
-pub(crate) fn snap_filled_path_elements_to_device(
-    elements: &[PathElement],
-    device_scale: f64,
-) -> Vec<PathElement> {
-    if elements.iter().any(|element| {
-        matches!(
-            element,
-            PathElement::QuadTo { .. } | PathElement::CubicTo { .. }
-        )
-    }) {
-        return elements.to_vec();
-    }
-
-    elements
-        .iter()
-        .map(|element| match *element {
-            PathElement::MoveTo(point) => {
-                PathElement::MoveTo(snap_point_to_device(point, device_scale))
-            }
-            PathElement::LineTo(point) => {
-                PathElement::LineTo(snap_point_to_device(point, device_scale))
-            }
-            PathElement::Close => PathElement::Close,
-            PathElement::QuadTo { .. } | PathElement::CubicTo { .. } => unreachable!(),
-        })
-        .collect()
-}
-
-pub(crate) fn snap_stroked_path_elements_to_device(
-    elements: &[PathElement],
-    stroke_width: f32,
-    device_scale: f64,
-) -> Vec<PathElement> {
-    if elements.iter().any(|element| {
-        matches!(
-            element,
-            PathElement::QuadTo { .. } | PathElement::CubicTo { .. }
-        )
-    }) {
-        return elements.to_vec();
-    }
-
-    let mut snapped = Vec::with_capacity(elements.len());
-    let mut pending_move = None;
-    let mut current = None;
-
-    for element in elements {
-        match *element {
-            PathElement::MoveTo(point) => {
-                if let Some(point) = pending_move.replace(point) {
-                    snapped.push(PathElement::MoveTo(snap_point_to_device(
-                        point,
-                        device_scale,
-                    )));
-                }
-                current = Some(point);
-            }
-            PathElement::LineTo(point) => {
-                if let Some(from) = current {
-                    let (from, to) =
-                        snap_stroked_line_to_device(from, point, stroke_width, device_scale);
-                    if pending_move.take().is_some() {
-                        snapped.push(PathElement::MoveTo(from));
-                    }
-                    snapped.push(PathElement::LineTo(to));
-                } else {
-                    snapped.push(PathElement::LineTo(snap_point_to_device(
-                        point,
-                        device_scale,
-                    )));
-                }
-                current = Some(point);
-            }
-            PathElement::Close => {
-                if let Some(point) = pending_move.take() {
-                    snapped.push(PathElement::MoveTo(snap_point_to_device(
-                        point,
-                        device_scale,
-                    )));
-                }
-                snapped.push(PathElement::Close);
-                current = None;
-            }
-            PathElement::QuadTo { .. } | PathElement::CubicTo { .. } => unreachable!(),
-        }
-    }
-
-    if let Some(point) = pending_move {
-        snapped.push(PathElement::MoveTo(snap_point_to_device(
-            point,
-            device_scale,
-        )));
-    }
-
-    snapped
 }
 
 pub(crate) fn encode_image_region(

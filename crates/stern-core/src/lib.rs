@@ -7,6 +7,7 @@ pub mod accessibility;
 pub mod actions;
 pub mod debug;
 pub mod geometry;
+pub mod icon;
 pub mod identity;
 pub mod input;
 pub mod interaction;
@@ -21,6 +22,7 @@ mod shortcut_presentation;
 pub mod test_harness;
 pub mod theme;
 pub mod units;
+pub mod vector;
 
 pub use accessibility::{
     AccessibilityAdapter, AccessibilityNode, AccessibilitySnapshot, FocusTraversal, SemanticAction,
@@ -37,6 +39,7 @@ pub use debug::{
     PrimitiveInspection, PrimitiveKind, inspect_primitives, primitive_bounds, primitive_kind,
 };
 pub use geometry::{Point, Rect, Size, Vec2};
+pub use icon::{IconGraphic, IconLayer, IconPath, IconPrimitive, IconStroke, StaticIcon};
 pub use identity::{DuplicateWidgetId, IdStack, WidgetId};
 pub use input::{
     ClipboardText, InputStreamConflict, InputWheelDelta, Key, KeyEvent, KeyState, KeyboardInput,
@@ -75,9 +78,9 @@ pub use perf::{
 };
 pub use render::{
     Brush, ClipId, Color, CornerRadius, GradientBuildError, GradientStop, IconId, ImageId,
-    ImagePrimitive, LayerId, LinePrimitive, LinearGradient, MAX_GRADIENT_STOPS, PathElement,
-    PathPrimitive, Primitive, RectPrimitive, ShadowPrimitive, Stroke, TextLayoutId, TextPrimitive,
-    TextureId, TexturePrimitive, Transform,
+    ImagePrimitive, LayerId, LinePrimitive, LinearGradient, MAX_GRADIENT_STOPS, Primitive,
+    RectPrimitive, ShadowPrimitive, TextLayoutId, TextPrimitive, TextureId, TexturePrimitive,
+    Transform,
 };
 pub use runtime::{
     CursorShape, FrameContext, FrameOutput, FrameWarning, PlatformRequest, PointerOrder,
@@ -104,6 +107,7 @@ pub use theme::{
     Theme, ThemeColors, ToggleRecipe, TypographyScale, default_dark_theme,
 };
 pub use units::{PhysicalPoint, PhysicalRect, PhysicalSize, ScaleFactor};
+pub use vector::{FillRule, PathData, PathElement, PathPrimitive, Stroke, StrokeCap, StrokeJoin};
 
 /// Returns the crate name.
 #[must_use]

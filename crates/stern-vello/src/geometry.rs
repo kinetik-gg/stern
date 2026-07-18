@@ -317,10 +317,22 @@ pub(crate) fn vello_color(color: Color) -> AlphaColor<Srgb> {
 }
 
 pub(crate) fn vello_gradient(gradient: &LinearGradient) -> PenikoGradient {
+    vello_gradient_with_opacity(gradient, 1.0)
+}
+
+pub(crate) fn vello_gradient_with_opacity(
+    gradient: &LinearGradient,
+    opacity: f32,
+) -> PenikoGradient {
     let stops: Vec<(f32, vello::peniko::Color)> = gradient
         .stops()
         .iter()
-        .map(|stop| (stop.offset, vello_color(stop.color)))
+        .map(|stop| {
+            (
+                stop.offset,
+                vello_color(stop.color.with_alpha(stop.color.a * opacity)),
+            )
+        })
         .collect();
     PenikoGradient::new_linear(
         (f64::from(gradient.start().x), f64::from(gradient.start().y)),

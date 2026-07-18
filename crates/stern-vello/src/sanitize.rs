@@ -1,6 +1,6 @@
 use stern_core::{
-    Brush, Color, CornerRadius, LinearGradient, PathElement, Point, Rect, ShadowPrimitive, Size,
-    Stroke, Transform, Vec2,
+    Brush, Color, CornerRadius, LinearGradient, PathData, PathElement, Point, Rect,
+    ShadowPrimitive, Size, Stroke, Transform, Vec2,
 };
 use stern_render::RenderDiagnostic;
 
@@ -186,10 +186,11 @@ pub(crate) fn sanitize_stroke(
         diagnostics.push(RenderDiagnostic::InvalidGeometry(context));
         return None;
     };
-    Some(Stroke::new(
-        width,
-        sanitize_brush(stroke.brush, diagnostics, context),
-    ))
+    Some(
+        Stroke::new(width, sanitize_brush(stroke.brush, diagnostics, context))
+            .with_cap(stroke.cap)
+            .with_join(stroke.join),
+    )
 }
 
 pub(crate) fn sanitize_shadow(
@@ -268,51 +269,55 @@ pub(crate) fn sanitize_radius(
 }
 
 pub(crate) fn sanitize_path_elements(
-    elements: &[PathElement],
+    elements: &PathData,
     diagnostics: &mut Vec<RenderDiagnostic>,
     context: &'static str,
-) -> Option<Vec<PathElement>> {
+) -> Option<PathData> {
     if elements.is_empty() {
         diagnostics.push(RenderDiagnostic::InvalidGeometry(context));
         return None;
     }
 
-    let mut sanitized = Vec::with_capacity(elements.len());
     let mut saw_point = false;
-    for element in elements {
+    for element in elements.as_slice() {
         match *element {
-            PathElement::MoveTo(point) => {
-                let point = sanitize_point(point, diagnostics, context)?;
+            PathElement::MoveTo(point) | PathElement::LineTo(point) => {
+                sanitize_point(point, diagnostics, context)?;
                 saw_point = true;
-                sanitized.push(PathElement::MoveTo(point));
-            }
-            PathElement::LineTo(point) => {
-                let point = sanitize_point(point, diagnostics, context)?;
-                saw_point = true;
-                sanitized.push(PathElement::LineTo(point));
             }
             PathElement::QuadTo { ctrl, to } => {
-                let ctrl = sanitize_point(ctrl, diagnostics, context)?;
-                let to = sanitize_point(to, diagnostics, context)?;
+                sanitize_point(ctrl, diagnostics, context)?;
+                sanitize_point(to, diagnostics, context)?;
                 saw_point = true;
-                sanitized.push(PathElement::QuadTo { ctrl, to });
             }
             PathElement::CubicTo { ctrl1, ctrl2, to } => {
-                let ctrl1 = sanitize_point(ctrl1, diagnostics, context)?;
-                let ctrl2 = sanitize_point(ctrl2, diagnostics, context)?;
-                let to = sanitize_point(to, diagnostics, context)?;
+                sanitize_point(ctrl1, diagnostics, context)?;
+                sanitize_point(ctrl2, diagnostics, context)?;
+                sanitize_point(to, diagnostics, context)?;
                 saw_point = true;
-                sanitized.push(PathElement::CubicTo { ctrl1, ctrl2, to });
             }
-            PathElement::Close => sanitized.push(PathElement::Close),
+            PathElement::Close => {}
         }
     }
 
     if saw_point {
-        Some(sanitized)
+        Some(elements.clone())
     } else {
         diagnostics.push(RenderDiagnostic::InvalidGeometry(context));
         None
+    }
+}
+
+pub(crate) fn sanitize_opacity(
+    opacity: f32,
+    diagnostics: &mut Vec<RenderDiagnostic>,
+    context: &'static str,
+) -> f32 {
+    if opacity.is_finite() && (0.0..=1.0).contains(&opacity) {
+        opacity
+    } else {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry(context));
+        finite_unit(opacity)
     }
 }
 

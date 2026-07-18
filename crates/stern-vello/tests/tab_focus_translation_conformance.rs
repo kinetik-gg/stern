@@ -125,6 +125,7 @@ fn actual_tab_focus_translates_as_contained_fill_only_annuli_at_release_scales()
                 elements,
                 fill,
                 stroke,
+                ..
             } = &command.kind
             else {
                 panic!("focus command must remain a path");

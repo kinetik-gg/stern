@@ -36,6 +36,7 @@ pub(super) fn validate_primitive_stack(primitives: &[Primitive]) -> Vec<FrameWar
             | Primitive::Line(_)
             | Primitive::Shadow(_)
             | Primitive::Path(_)
+            | Primitive::Icon(_)
             | Primitive::Text(_)
             | Primitive::Image(_)
             | Primitive::Texture(_) => {}

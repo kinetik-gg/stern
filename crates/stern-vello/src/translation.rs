@@ -1,4 +1,6 @@
-use stern_core::{ClipId, ImageId, LayerId, Primitive, Transform};
+use stern_core::{
+    Brush, ClipId, IconPrimitive, ImageId, LayerId, PathData, Primitive, Stroke, Transform,
+};
 use stern_render::{RenderDiagnostic, RenderResources};
 
 use crate::{
@@ -10,7 +12,7 @@ use crate::{
         logical_size_matches_snapshot,
     },
     sanitize::{
-        brush_fallback_color, finite_positive, sanitize_brush, sanitize_color,
+        brush_fallback_color, finite_positive, sanitize_brush, sanitize_color, sanitize_opacity,
         sanitize_path_elements, sanitize_point, sanitize_radius, sanitize_rect, sanitize_shadow,
         sanitize_size, sanitize_stroke, sanitize_transform,
     },
@@ -127,9 +129,19 @@ pub(crate) fn translate_primitives_with_native(
                         stroke: path.stroke.and_then(|stroke| {
                             sanitize_stroke(stroke, &mut diagnostics, "path_stroke")
                         }),
+                        fill_rule: path.fill_rule,
+                        opacity: sanitize_opacity(path.opacity, &mut diagnostics, "path_opacity"),
                     },
                 ));
             }
+            Primitive::Icon(icon) => translate_icon(
+                *icon,
+                &layers,
+                &clips,
+                transform,
+                &mut commands,
+                &mut diagnostics,
+            ),
             Primitive::Text(text) => {
                 let Some(origin) = sanitize_point(text.origin, &mut diagnostics, "text") else {
                     continue;
@@ -315,6 +327,122 @@ pub(crate) fn translate_primitives_with_native(
     Translation {
         commands,
         diagnostics,
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+fn translate_icon(
+    icon: IconPrimitive,
+    layers: &[LayerId],
+    clips: &[(ClipId, RenderClip)],
+    transform: Transform,
+    commands: &mut Vec<RenderCommand>,
+    diagnostics: &mut Vec<RenderDiagnostic>,
+) {
+    let Some(rect) = sanitize_rect(icon.rect, diagnostics, "icon") else {
+        return;
+    };
+    let graphic = icon.icon.graphic();
+    let view_box = graphic.view_box;
+    if !view_box.x.is_finite()
+        || !view_box.y.is_finite()
+        || !view_box.width.is_finite()
+        || !view_box.height.is_finite()
+        || view_box.width <= 0.0
+        || view_box.height <= 0.0
+    {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("icon_view_box"));
+        return;
+    }
+    if graphic.layers.is_empty() {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("icon"));
+        return;
+    }
+
+    let scale = (rect.width / view_box.width).min(rect.height / view_box.height);
+    if !scale.is_finite() || scale <= 0.0 {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("icon_transform"));
+        return;
+    }
+    let width = view_box.width * scale;
+    let height = view_box.height * scale;
+    let icon_transform = Transform {
+        m11: scale,
+        m22: scale,
+        dx: rect.x + (rect.width - width) * 0.5 - view_box.x * scale,
+        dy: rect.y + (rect.height - height) * 0.5 - view_box.y * scale,
+        ..Transform::IDENTITY
+    };
+    let transform = compose_transform(transform, icon_transform);
+    if !transform_is_finite(transform) {
+        diagnostics.push(RenderDiagnostic::InvalidGeometry("icon_transform"));
+        return;
+    }
+    let tint = sanitize_color(icon.tint, diagnostics, "icon_tint");
+
+    for layer in graphic.layers {
+        let layer_opacity = sanitize_opacity(layer.opacity, diagnostics, "icon_opacity");
+        if layer.paths.is_empty() {
+            diagnostics.push(RenderDiagnostic::InvalidGeometry("icon_layer"));
+            continue;
+        }
+        let mut layer_commands = Vec::with_capacity(layer.paths.len());
+        let mut max_stroke_width = 0.0_f32;
+        for path in layer.paths {
+            if path.fill.is_none() && path.stroke.is_none() {
+                diagnostics.push(RenderDiagnostic::InvalidGeometry("icon_path_style"));
+                continue;
+            }
+            let elements = PathData::from_static(path.elements);
+            let Some(elements) = sanitize_path_elements(&elements, diagnostics, "icon_path") else {
+                continue;
+            };
+            let opacity = sanitize_opacity(path.opacity, diagnostics, "icon_opacity");
+            let stroke = path.stroke.and_then(|stroke| {
+                sanitize_stroke(
+                    Stroke::new(stroke.width, Brush::Solid(tint))
+                        .with_cap(stroke.cap)
+                        .with_join(stroke.join),
+                    diagnostics,
+                    "icon_stroke",
+                )
+            });
+            if path.fill.is_none() && stroke.is_none() {
+                continue;
+            }
+            if let Some(stroke) = stroke {
+                max_stroke_width = max_stroke_width.max(stroke.width);
+            }
+            layer_commands.push(RenderCommandKind::Path {
+                elements,
+                fill: path.fill.map(|_| Brush::Solid(tint)),
+                stroke,
+                fill_rule: path.fill.unwrap_or_default(),
+                opacity,
+            });
+        }
+        if layer_commands.is_empty() {
+            continue;
+        }
+        let group_bounds = view_box.outset(max_stroke_width * 4.0);
+        commands.push(render_command(
+            layers,
+            &[],
+            transform,
+            RenderCommandKind::OpacityGroupBegin {
+                bounds: group_bounds,
+                opacity: layer_opacity,
+            },
+        ));
+        for kind in layer_commands {
+            commands.push(render_command(layers, clips, transform, kind));
+        }
+        commands.push(render_command(
+            layers,
+            &[],
+            transform,
+            RenderCommandKind::OpacityGroupEnd,
+        ));
     }
 }
 

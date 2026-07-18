@@ -1,6 +1,6 @@
 use stern_core::{
-    Brush, Color, CornerRadius, ImageId, LayerId, PathElement, Rect, Size, Stroke, TextLayoutId,
-    TextureId, Transform, Vec2,
+    Brush, Color, CornerRadius, FillRule, ImageId, LayerId, PathData, Rect, Size, Stroke,
+    TextLayoutId, TextureId, Transform, Vec2,
 };
 use stern_render::Translation as RenderTranslation;
 
@@ -29,6 +29,15 @@ pub struct RenderClip {
 /// Command kind produced by primitive translation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RenderCommandKind {
+    /// Begins an isolated paint group whose combined result receives opacity.
+    OpacityGroupBegin {
+        /// Conservative bounds for the isolated group.
+        bounds: Rect,
+        /// Opacity applied once when the group is composited.
+        opacity: f32,
+    },
+    /// Ends the most recently begun opacity group.
+    OpacityGroupEnd,
     /// Filled and/or stroked rectangle.
     Rect {
         /// Rectangle bounds.
@@ -71,11 +80,15 @@ pub enum RenderCommandKind {
     /// Filled and/or stroked vector path.
     Path {
         /// Path elements in drawing order.
-        elements: Vec<PathElement>,
+        elements: PathData,
         /// Fill brush.
         fill: Option<Brush>,
         /// Stroke style.
         stroke: Option<Stroke>,
+        /// Fill winding rule.
+        fill_rule: FillRule,
+        /// Opacity applied to both fill and stroke.
+        opacity: f32,
     },
     /// Text command backed by a shaped layout resource or renderer fallback shaping.
     Text {

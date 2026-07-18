@@ -65,6 +65,7 @@ fn assert_translated_compound_paths(primitives: &[Primitive; 2]) {
             elements,
             fill,
             stroke,
+            ..
         } = &command.kind
         else {
             panic!("annulus must translate as one compound path command");

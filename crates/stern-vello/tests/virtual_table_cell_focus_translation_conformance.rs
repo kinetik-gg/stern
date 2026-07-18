@@ -305,6 +305,7 @@ fn actual_table_cell_focus_submits_the_fractionally_scrolled_full_body_scope_at_
                 elements,
                 fill,
                 stroke,
+                ..
             } = &command.kind
             else {
                 unreachable!()
