@@ -2258,6 +2258,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "stern-icons-phosphor"
+version = "1.0.0-rc.2.dev"
+dependencies = [
+ "stern-core",
+]
+
+[[package]]
 name = "stern-render"
 version = "1.0.0-rc.2.dev"
 dependencies = [
