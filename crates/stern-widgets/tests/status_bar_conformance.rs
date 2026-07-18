@@ -323,6 +323,140 @@ fn feedback_idle_stack_returns_no_repaint_recommendation() {
 }
 
 #[test]
+fn feedback_push_item_replaces_identity_in_place_with_complete_latest_item() {
+    let first = FeedbackItem::pinned(feedback_id(1), FeedbackKind::Info, "First", "First item");
+    let last = FeedbackItem::pinned(feedback_id(3), FeedbackKind::Success, "Last", "Last item");
+    let mut stack = FeedbackStack::from_items([
+        first.clone(),
+        FeedbackItem::pinned(
+            feedback_id(2),
+            FeedbackKind::Warning,
+            "Original",
+            "Original item",
+        ),
+        last.clone(),
+    ]);
+
+    stack.push_item(FeedbackItem::pinned(
+        feedback_id(2),
+        FeedbackKind::Info,
+        "Intermediate",
+        "Intermediate item",
+    ));
+    let latest = FeedbackItem::timed(
+        feedback_id(2),
+        FeedbackKind::Error,
+        "Latest",
+        "Latest item",
+        Duration::from_secs(20),
+        Duration::from_secs(30),
+    )
+    .with_dismissed(true)
+    .with_action(FeedbackAction::new(
+        ActionDescriptor::new("feedback.retry.latest", "Retry latest"),
+        ActionContext::Editor,
+    ))
+    .with_dismiss(FeedbackDismiss::new(
+        ActionDescriptor::new("feedback.dismiss.latest", "Dismiss latest"),
+        ActionContext::Global,
+    ));
+    stack.push_item(latest.clone());
+
+    assert_eq!(stack.items(), &[first, latest, last]);
+}
+
+#[test]
+fn feedback_push_item_reactivates_inactive_items_and_appends_new_identity() {
+    let expired_id = feedback_id(7);
+    let dismissed_id = feedback_id(8);
+    let appended_id = feedback_id(9);
+    let now = Duration::from_secs(10);
+    let mut stack = FeedbackStack::from_items([
+        FeedbackItem::timed(
+            expired_id,
+            FeedbackKind::Info,
+            "Expired",
+            "Expired item",
+            Duration::ZERO,
+            Duration::from_secs(1),
+        ),
+        FeedbackItem::pinned(
+            dismissed_id,
+            FeedbackKind::Warning,
+            "Dismissed",
+            "Dismissed item",
+        )
+        .with_dismissed(true),
+    ]);
+    assert!(stack.active_items(now).is_empty());
+    assert_eq!(stack.repaint_request(now), RepaintRequest::None);
+
+    stack.push_item(
+        FeedbackItem::timed(
+            expired_id,
+            FeedbackKind::Success,
+            "Ready",
+            "Ready again",
+            now,
+            Duration::from_secs(4),
+        )
+        .with_action(FeedbackAction::new(
+            ActionDescriptor::new("feedback.open.ready", "Open ready item"),
+            ActionContext::Editor,
+        ))
+        .with_dismiss(FeedbackDismiss::new(
+            ActionDescriptor::new("feedback.dismiss.ready", "Dismiss ready item"),
+            ActionContext::Global,
+        )),
+    );
+    stack.push_item(FeedbackItem::pinned(
+        dismissed_id,
+        FeedbackKind::Info,
+        "Restored",
+        "Restored item",
+    ));
+    stack.push_item(FeedbackItem::pinned(
+        appended_id,
+        FeedbackKind::Warning,
+        "New",
+        "New item",
+    ));
+
+    assert_eq!(
+        stack.items().iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![expired_id, dismissed_id, appended_id]
+    );
+    assert_eq!(
+        stack
+            .active_items(now)
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![expired_id, dismissed_id, appended_id]
+    );
+    assert_eq!(
+        stack
+            .action_request(expired_id, now)
+            .expect("latest action request")
+            .invocation
+            .action_id,
+        ActionId::new("feedback.open.ready")
+    );
+    assert_eq!(
+        stack
+            .dismiss_request(expired_id, now)
+            .expect("latest dismiss request")
+            .invocation
+            .action_id,
+        ActionId::new("feedback.dismiss.ready")
+    );
+    assert_eq!(
+        stack.repaint_request(now),
+        RepaintRequest::After(Duration::from_secs(4))
+    );
+}
+
+#[test]
 fn status_bar_diagnostics_strip_orders_by_severity_and_preserves_insertion_order_within_severity() {
     let strip = DiagnosticStrip::from_items([
         DiagnosticStripItem::new(
