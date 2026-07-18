@@ -8,8 +8,10 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+pollster = "0.4.0"
 stern = { version = "=1.0.0-rc.2.dev", path = "../../crates/stern" }
 stern-icons-phosphor = { version = "=1.0.0-rc.2.dev", path = "../../crates/stern-icons-phosphor" }
+winit = "0.30.12"
 
 [lints]
 workspace = true
