@@ -11,6 +11,7 @@ mod frame;
 mod inspector_fields;
 mod inspector_pickers;
 mod layout;
+mod node_graph;
 mod outliner;
 mod output;
 mod overlays;

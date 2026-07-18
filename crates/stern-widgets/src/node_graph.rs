@@ -27,6 +27,8 @@ mod hit_test;
 pub use hit_test::*;
 mod render;
 pub use render::*;
+mod widget;
+pub use widget::*;
 mod internal;
 #[allow(clippy::wildcard_imports)]
 use internal::*;
