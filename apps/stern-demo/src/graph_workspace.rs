@@ -1,10 +1,13 @@
 use stern::core::{Rect, WidgetId};
-use stern::widgets::Ui;
+use stern::text::TextEditState;
+use stern::widgets::inspector::{PropertyGridConfig, PropertyGridRow};
 use stern::widgets::node_graph::{
     EdgeDescriptor, EdgeId, GraphRect, NodeDescriptor, NodeGraphDescriptor, NodeGraphPanZoom,
-    NodeGraphSelection, NodeGraphStaticView, NodeGraphViewport, NodeGraphWidgetConfig,
-    NodeGraphWidgetIntent, NodeId, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
+    NodeGraphSelection, NodeGraphSelectionTarget, NodeGraphStaticView, NodeGraphViewport,
+    NodeGraphWidgetConfig, NodeGraphWidgetIntent, NodeId, PortDescriptor, PortDirection,
+    PortEndpoint, PortId, PortTypeId,
 };
+use stern::widgets::{ItemId, TextFieldAccess, Ui};
 
 const GRAPH_ROOT: WidgetId = WidgetId::from_raw(0x0047_5241_5048);
 const SOURCE_NODE: NodeId = NodeId::from_raw(1);
@@ -12,6 +15,13 @@ const OUTPUT_NODE: NodeId = NodeId::from_raw(2);
 const IMAGE_OUTPUT: PortId = PortId::from_raw(1);
 const IMAGE_INPUT: PortId = PortId::from_raw(1);
 const IMAGE_TYPE: PortTypeId = PortTypeId::from_raw(1);
+const INSPECTOR_WIDTH: f32 = 224.0;
+const INSPECTOR_GAP: f32 = 12.0;
+const INSPECTOR_SECTION: ItemId = ItemId::from_raw(1);
+const INSPECTOR_TITLE: ItemId = ItemId::from_raw(2);
+const INSPECTOR_X: ItemId = ItemId::from_raw(3);
+const INSPECTOR_Y: ItemId = ItemId::from_raw(4);
+const INSPECTOR_PORTS: ItemId = ItemId::from_raw(5);
 
 /// Application-owned deterministic fixture and selection for the Graph workspace.
 #[derive(Debug, Clone, PartialEq)]
@@ -67,7 +77,21 @@ impl GraphWorkspaceState {
     }
 
     pub(crate) fn compose(&mut self, ui: &mut Ui<'_>, bounds: Rect) {
-        let viewport = NodeGraphViewport::new(bounds, NodeGraphPanZoom::default());
+        let inspector_width = bounds.width.clamp(0.0, INSPECTOR_WIDTH);
+        let gap = (bounds.width - inspector_width).clamp(0.0, INSPECTOR_GAP);
+        let graph_bounds = Rect::new(
+            bounds.x,
+            bounds.y,
+            (bounds.width - inspector_width - gap).max(0.0),
+            bounds.height,
+        );
+        let inspector_bounds = Rect::new(
+            graph_bounds.max_x() + gap,
+            bounds.y,
+            inspector_width,
+            bounds.height,
+        );
+        let viewport = NodeGraphViewport::new(graph_bounds, NodeGraphPanZoom::default());
         let view = NodeGraphStaticView::new(GRAPH_ROOT, viewport, &self.graph)
             .with_selection(self.selection.clone());
         let widget = ui
@@ -79,6 +103,57 @@ impl GraphWorkspaceState {
         for NodeGraphWidgetIntent::Selection(operation) in output.intents {
             self.selection = self.selection.apply(operation);
         }
+        self.compose_inspector(ui, inspector_bounds);
+    }
+
+    fn compose_inspector(&self, ui: &mut Ui<'_>, bounds: Rect) {
+        let selected = match self.selection.active() {
+            Some(NodeGraphSelectionTarget::Node(id))
+                if self.selection.contains(NodeGraphSelectionTarget::Node(id)) =>
+            {
+                self.graph.nodes.iter().find(|node| node.id == id)
+            }
+            _ => None,
+        };
+        let rows = selected.map_or_else(Vec::new, |_| {
+            vec![
+                PropertyGridRow::section(INSPECTOR_SECTION, "Selected node"),
+                PropertyGridRow::property(INSPECTOR_TITLE, "Title", 0).with_read_only(true),
+                PropertyGridRow::property(INSPECTOR_X, "Position X", 0).with_read_only(true),
+                PropertyGridRow::property(INSPECTOR_Y, "Position Y", 0).with_read_only(true),
+                PropertyGridRow::property(INSPECTOR_PORTS, "Ports", 0).with_read_only(true),
+            ]
+        });
+        let mut values = selected.map_or_else(Vec::new, |node| {
+            vec![
+                TextEditState::new(node.title.clone()),
+                TextEditState::new(node.rect.x.to_string()),
+                TextEditState::new(node.rect.y.to_string()),
+                TextEditState::new(node.ports.len().to_string()),
+            ]
+        });
+        ui.property_grid(
+            "graph.inspector",
+            bounds,
+            &rows,
+            PropertyGridConfig::default(),
+            |ui, cell| {
+                let index = match cell.row.id {
+                    INSPECTOR_TITLE => 0,
+                    INSPECTOR_X => 1,
+                    INSPECTOR_Y => 2,
+                    INSPECTOR_PORTS => 3,
+                    _ => unreachable!("property-grid callback skips section rows"),
+                };
+                ui.text_field_with_access(
+                    "value",
+                    cell.value_rect,
+                    &mut values[index],
+                    TextFieldAccess::ReadOnly,
+                )
+            },
+        )
+        .expect("deterministic inspector rows have unique identities");
     }
 }
 
