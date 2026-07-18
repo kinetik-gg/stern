@@ -1161,6 +1161,159 @@ fn mixed_and_checked_menu_rows_preserve_geometry_semantics_and_routing() {
 }
 
 #[test]
+fn tall_menu_keyboard_and_typeahead_reveal_clipped_rows() {
+    let rect = Rect::new(20.0, 20.0, 280.0, 64.0);
+    let ids = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
+    let menu = Menu::from_actions(
+        ids.into_iter()
+            .map(|id| ActionDescriptor::new(id, id.to_uppercase())),
+    );
+    let mut scene = menu_scene(rect, menu);
+    let mut memory = UiMemory::new();
+    let row_id = |id: &str| {
+        WidgetId::from_raw(41)
+            .child("overlay-scene")
+            .child(("overlay-action", id))
+    };
+    let children = |frame: &stern_core::FrameOutput| {
+        frame
+            .semantics
+            .get(WidgetId::from_raw(41))
+            .expect("menu semantics")
+            .children
+            .clone()
+    };
+    let selected = |frame: &stern_core::FrameOutput, id| {
+        frame
+            .semantics
+            .get(id)
+            .is_some_and(|node| node.state.selected)
+    };
+
+    let (initial_output, initial) = run_legacy(&mut scene, &mut memory, UiInput::default());
+    assert_eq!(children(&initial), [row_id("alpha"), row_id("bravo")]);
+    let (previous_output, previous) = run_legacy(
+        &mut scene,
+        &mut memory,
+        key_sequence(&[Key::End, Key::ArrowUp]),
+    );
+    assert_eq!(children(&previous), [row_id("echo"), row_id("foxtrot")]);
+    assert!(selected(&previous, row_id("echo")));
+    let (next_output, next) = run_legacy(
+        &mut scene,
+        &mut memory,
+        key_sequence(&[Key::Home, Key::ArrowDown]),
+    );
+    assert_eq!(children(&next), [row_id("alpha"), row_id("bravo")]);
+    assert!(selected(&next, row_id("bravo")));
+    let (typeahead_output, typeahead) = run_legacy(
+        &mut scene,
+        &mut memory,
+        key_sequence(&[Key::Character("e".to_owned())]),
+    );
+    assert_eq!(children(&typeahead), [row_id("delta"), row_id("echo")]);
+    assert!(selected(&typeahead, row_id("echo")));
+
+    for (output, frame) in [
+        (&initial_output, &initial),
+        (&previous_output, &previous),
+        (&next_output, &next),
+        (&typeahead_output, &typeahead),
+    ] {
+        assert!(output.intents.is_empty() && frame.actions.is_empty());
+        assert_eq!(output.responses.len(), 2);
+        assert!(
+            output
+                .responses
+                .iter()
+                .all(|response| { response.rect.y >= 24.0 && response.rect.max_y() <= 80.0 })
+        );
+    }
+}
+
+#[test]
+fn tall_menu_reveals_submenu_trigger_and_emits_open_intent() {
+    let rect = Rect::new(20.0, 20.0, 280.0, 64.0);
+    let mut disabled = ActionDescriptor::new("menu.disabled", "Disabled");
+    disabled.state.enabled = false;
+    let mut menu = Menu::new();
+    menu.push(MenuItem::Action(ActionDescriptor::new(
+        "menu.first",
+        "First",
+    )));
+    menu.push(MenuItem::Label("Section".to_owned()));
+    menu.push(MenuItem::Separator);
+    menu.push(MenuItem::Action(disabled));
+    menu.push_submenu(
+        ActionDescriptor::new("menu.more", "More"),
+        Menu::from_actions([ActionDescriptor::new("menu.child", "Child")]),
+    );
+    let mut scene = menu_scene(rect, menu);
+    let mut memory = UiMemory::new();
+    let root = WidgetId::from_raw(41).child("overlay-scene");
+    let disabled_id = root.child(("overlay-action", "menu.disabled"));
+    let submenu_id = root.child(("overlay-action", "menu.more"));
+
+    let (revealed_output, revealed) = run_legacy(
+        &mut scene,
+        &mut memory,
+        key_sequence(&[Key::ArrowDown, Key::ArrowDown]),
+    );
+    let surface = revealed
+        .semantics
+        .get(WidgetId::from_raw(41))
+        .expect("menu semantics");
+    assert_eq!(surface.children, [disabled_id, submenu_id]);
+    let submenu = revealed.semantics.get(submenu_id).expect("submenu row");
+    assert!(submenu.state.selected && submenu.focusable);
+    assert_eq!(submenu.state.expanded, Some(false));
+    assert!(
+        !revealed
+            .semantics
+            .get(disabled_id)
+            .expect("disabled row")
+            .focusable
+    );
+    assert!(revealed_output.intents.is_empty() && revealed.actions.is_empty());
+    assert_eq!(revealed_output.responses.len(), 1);
+
+    let (activated, activated_frame) =
+        run_legacy(&mut scene, &mut memory, key_sequence(&[Key::Enter]));
+    let [OverlaySceneIntent::OpenSubmenu(intent)] = activated.intents.as_slice() else {
+        panic!("one submenu intent");
+    };
+    assert_eq!(intent.parent_overlay, OverlayId::from_raw(41));
+    assert_eq!(intent.trigger_action.as_str(), "menu.more");
+    assert_eq!(intent.visible_index, 4);
+    assert_eq!(intent.source, ActionSource::Menu);
+    assert_eq!(
+        intent.context,
+        ActionContext::Frame(WidgetId::from_key("document:alpha"))
+    );
+    assert!(activated_frame.actions.is_empty());
+
+    let replacement_menu = Menu::from_actions([
+        ActionDescriptor::new("replacement.first", "First"),
+        ActionDescriptor::new("replacement.second", "Second"),
+        ActionDescriptor::new("replacement.third", "Third"),
+    ]);
+    let replacement = menu_scene(rect, replacement_menu).surfaces()[0].clone();
+    scene.push(replacement);
+    let (replacement_output, replacement_frame) =
+        run_legacy(&mut scene, &mut memory, UiInput::default());
+    let replacement_root = replacement_frame
+        .semantics
+        .get(WidgetId::from_raw(41))
+        .expect("replacement semantics");
+    let expected = [
+        root.child(("overlay-action", "replacement.first")),
+        root.child(("overlay-action", "replacement.second")),
+    ];
+    assert_eq!(replacement_root.children, expected);
+    assert!(replacement_output.intents.is_empty() && replacement_frame.actions.is_empty());
+}
+
+#[test]
 fn widget_source_uses_the_core_policy_without_public_shape_or_naming_duplication() {
     let ui = include_str!("../src/ui/overlays.rs");
     assert_eq!(
@@ -1218,6 +1371,6 @@ fn widget_source_uses_the_core_policy_without_public_shape_or_naming_duplication
     );
     assert_eq!(
         declaration_shape(scene, "pub struct OverlayScene {", "impl OverlayScene {"),
-        "pub struct OverlayScene {surfaces: Vec<OverlaySceneSurface>,metrics: OverlaySceneMetrics,}"
+        "pub struct OverlayScene {surfaces: Vec<OverlaySceneSurface>,metrics: OverlaySceneMetrics,menu_scroll_offsets: BTreeMap<OverlayId, f32>,}"
     );
 }

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use stern_core::{
     ActionId, ActionInvocation, ActionState, PointerOrder, PointerTarget, PointerTargetPlan, Rect,
     Response, SemanticRole, Shortcut, StaticIcon, WidgetId,
@@ -151,6 +153,7 @@ impl OverlaySceneSurface {
 pub struct OverlayScene {
     surfaces: Vec<OverlaySceneSurface>,
     metrics: OverlaySceneMetrics,
+    menu_scroll_offsets: BTreeMap<OverlayId, f32>,
 }
 
 impl OverlayScene {
@@ -166,6 +169,7 @@ impl OverlayScene {
         Self {
             surfaces: Vec::new(),
             metrics,
+            menu_scroll_offsets: BTreeMap::new(),
         }
     }
 
@@ -181,7 +185,10 @@ impl OverlayScene {
                 descendant_overlay_ids(self.surfaces.iter().map(OverlaySceneSurface::entry), id);
             self.surfaces
                 .retain(|candidate| !closing.contains(&candidate.entry().id));
+            self.menu_scroll_offsets
+                .retain(|candidate, _| !closing.contains(candidate));
         }
+        self.menu_scroll_offsets.remove(&id);
         self.surfaces.push(surface);
     }
 
@@ -239,7 +246,15 @@ impl OverlayScene {
         let Some(surface) = self.surfaces.get(surface_index) else {
             return Vec::new();
         };
-        let mut layout = RowLayout::new(surface.entry().rect, self.metrics);
+        let id = surface.entry().id;
+        let retained_scroll = self.menu_scroll_offsets.get(&id).copied().unwrap_or(0.0);
+        let scroll_offset = match surface {
+            OverlaySceneSurface::Menu { overlay, .. } => {
+                menu_scroll_offset(overlay, self.metrics, retained_scroll)
+            }
+            _ => 0.0,
+        };
+        let mut layout = RowLayout::new(surface.entry().rect, self.metrics, scroll_offset);
         let root = surface_widget_id(surface.entry().id);
         let mut rows = Vec::new();
 
@@ -434,7 +449,10 @@ impl OverlayScene {
         };
         match surface {
             OverlaySceneSurface::Menu { overlay, .. } => match overlay.navigate(input) {
-                Some(MenuNavigationIntent::Highlighted { .. }) => OverlaySceneNavigation::changed(),
+                Some(MenuNavigationIntent::Highlighted { .. }) => {
+                    reveal_menu_row(overlay, self.metrics, &mut self.menu_scroll_offsets);
+                    OverlaySceneNavigation::changed()
+                }
                 Some(MenuNavigationIntent::Invoke(invocation)) => {
                     OverlaySceneNavigation::intent(OverlaySceneIntent::Action(invocation))
                 }
@@ -507,10 +525,16 @@ impl OverlayScene {
         match self.surfaces.get_mut(surface_index) {
             Some(OverlaySceneSurface::Menu {
                 overlay, typeahead, ..
-            }) => overlay
-                .menu
-                .typeahead(typeahead, text, now_millis)
-                .is_some(),
+            }) => {
+                let changed = overlay
+                    .menu
+                    .typeahead(typeahead, text, now_millis)
+                    .is_some();
+                if changed {
+                    reveal_menu_row(overlay, self.metrics, &mut self.menu_scroll_offsets);
+                }
+                changed
+            }
             Some(OverlaySceneSurface::Dropdown {
                 overlay, typeahead, ..
             }) => overlay
@@ -856,20 +880,22 @@ struct RowLayout {
     x: f32,
     y: f32,
     width: f32,
+    min_y: f32,
     max_y: f32,
     row_height: f32,
     separator_height: f32,
 }
 
 impl RowLayout {
-    fn new(rect: Rect, metrics: OverlaySceneMetrics) -> Self {
+    fn new(rect: Rect, metrics: OverlaySceneMetrics, scroll_offset: f32) -> Self {
         let inset = finite_non_negative(metrics.inset);
-        let y = rect.y + inset;
+        let min_y = rect.y + inset;
         Self {
             x: rect.x + inset,
-            y,
+            y: min_y - finite_non_negative(scroll_offset),
             width: (rect.width - inset * 2.0).max(0.0),
-            max_y: (rect.max_y() - inset).max(y),
+            min_y,
+            max_y: (rect.max_y() - inset).max(min_y),
             row_height: finite_non_negative(metrics.row_height),
             separator_height: finite_non_negative(metrics.separator_height),
         }
@@ -881,11 +907,87 @@ impl RowLayout {
         } else {
             self.row_height
         };
-        let height = requested.min((self.max_y - self.y).max(0.0));
-        let rect = Rect::new(self.x, self.y, self.width, height);
-        self.y += height;
-        rect
+        let logical_top = self.y;
+        let logical_bottom = logical_top + requested;
+        self.y = logical_bottom;
+        let clipped_top = logical_top.max(self.min_y);
+        let clipped_bottom = logical_bottom.min(self.max_y).max(clipped_top);
+        Rect::new(
+            self.x,
+            clipped_top,
+            self.width,
+            clipped_bottom - clipped_top,
+        )
     }
+}
+
+fn reveal_menu_row(
+    overlay: &MenuOverlay,
+    metrics: OverlaySceneMetrics,
+    offsets: &mut BTreeMap<OverlayId, f32>,
+) {
+    let Some(highlighted) = overlay.menu.highlighted_visible_index() else {
+        return;
+    };
+    let viewport_height = menu_viewport_height(overlay.entry.rect, metrics);
+    let max_scroll = (menu_content_height(overlay, metrics) - viewport_height).max(0.0);
+    let current =
+        finite_non_negative(offsets.get(&overlay.entry.id).copied().unwrap_or(0.0)).min(max_scroll);
+    let Some((row_top, row_bottom)) = menu_row_span(overlay, metrics, highlighted) else {
+        return;
+    };
+    let revealed = if row_top < current {
+        row_top
+    } else if row_bottom > current + viewport_height {
+        row_bottom - viewport_height
+    } else {
+        current
+    }
+    .clamp(0.0, max_scroll);
+    if revealed.to_bits() == 0.0_f32.to_bits() {
+        offsets.remove(&overlay.entry.id);
+    } else {
+        offsets.insert(overlay.entry.id, revealed);
+    }
+}
+
+fn menu_scroll_offset(overlay: &MenuOverlay, metrics: OverlaySceneMetrics, retained: f32) -> f32 {
+    let viewport_height = menu_viewport_height(overlay.entry.rect, metrics);
+    finite_non_negative(retained)
+        .min((menu_content_height(overlay, metrics) - viewport_height).max(0.0))
+}
+
+fn menu_content_height(overlay: &MenuOverlay, metrics: OverlaySceneMetrics) -> f32 {
+    overlay.visible_items_iter().fold(0.0, |height, item| {
+        (height + menu_item_height(item, metrics)).min(f32::MAX)
+    })
+}
+
+fn menu_row_span(
+    overlay: &MenuOverlay,
+    metrics: OverlaySceneMetrics,
+    visible_index: usize,
+) -> Option<(f32, f32)> {
+    let mut top = 0.0_f32;
+    for (index, item) in overlay.visible_items_iter().enumerate() {
+        let bottom = (top + menu_item_height(item, metrics)).min(f32::MAX);
+        if index == visible_index {
+            return Some((top, bottom));
+        }
+        top = bottom;
+    }
+    None
+}
+
+fn menu_item_height(item: &MenuItem, metrics: OverlaySceneMetrics) -> f32 {
+    match item {
+        MenuItem::Separator => finite_non_negative(metrics.separator_height),
+        MenuItem::Label(_) | MenuItem::Action(_) => finite_non_negative(metrics.row_height),
+    }
+}
+
+fn menu_viewport_height(rect: Rect, metrics: OverlaySceneMetrics) -> f32 {
+    (rect.height - finite_non_negative(metrics.inset) * 2.0).max(0.0)
 }
 
 fn finite_non_negative(value: f32) -> f32 {
