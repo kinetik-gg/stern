@@ -5,20 +5,22 @@
 use std::time::Duration;
 
 use stern_core::{
-    ActionDescriptor, Brush, Color, ComponentState, FrameContext, ImageId, Key, KeyEvent, KeyState,
-    KeyboardInput, Modifiers, PathElement, PhysicalSize, Point, PointerButtonState, PointerInput,
-    PointerOrder, Primitive, Rect, RepaintRequest, ScaleFactor, SemanticActionKind, SemanticNode,
-    Size, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionSource, Brush, Color,
+    ComponentState, FrameContext, ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
+    PathElement, PhysicalSize, Point, PointerButtonState, PointerInput, PointerOrder, Primitive,
+    Rect, RepaintRequest, ScaleFactor, SemanticActionKind, SemanticNode, Size, TimeInfo, UiInput,
+    UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::asset_browser::{
-    AssetBrowserConfig, AssetBrowserDropTargetKind, AssetBrowserItem, AssetBrowserItemRect,
-    AssetBrowserLayout, AssetBrowserModel, AssetBrowserOutput, AssetBrowserRequest,
-    AssetBrowserSort, AssetBrowserSortKey, AssetBrowserState, AssetBrowserViewMode,
-    AssetIconFallback,
+    AssetBrowserConfig, AssetBrowserContextMenuConfig, AssetBrowserDropTargetKind,
+    AssetBrowserItem, AssetBrowserItemRect, AssetBrowserLayout, AssetBrowserModel,
+    AssetBrowserOutput, AssetBrowserRequest, AssetBrowserSort, AssetBrowserSortKey,
+    AssetBrowserState, AssetBrowserViewMode, AssetIconFallback,
 };
 use stern_widgets::{
-    CollectionContextTarget, GridColumns, GridLayout, InlineEditCancelReason,
-    InlineEditCommitReason, InlineEditRequest, ItemId, ListLayout, SortDirection, Ui,
+    CollectionContextActionRequest, CollectionContextTarget, GridColumns, GridLayout,
+    InlineEditCancelReason, InlineEditCommitReason, InlineEditRequest, ItemId, ListLayout,
+    SortDirection, Ui,
 };
 
 const BOUNDS: Rect = Rect::new(10.25, 20.5, 240.0, 112.0);
@@ -1533,6 +1535,142 @@ fn context_escape_dismissal_restores_asset_trigger_focus_without_mutating_select
     );
 }
 
+#[test]
+#[allow(clippy::too_many_lines)]
+fn context_outside_release_and_focused_command_restore_asset_trigger_without_click_through() {
+    let model = AssetBrowserModel::new(vec![
+        asset(1, "One", "mesh"),
+        asset(2, "Two", "mesh"),
+        asset(3, "Three", "mesh"),
+        asset(4, "Four", "mesh"),
+    ]);
+    let cfg = config(AssetBrowserViewMode::List).context_menu(AssetBrowserContextMenuConfig {
+        size: Size::new(110.0, 40.0),
+        offset: 4.0,
+    });
+    let captured_target =
+        CollectionContextTarget::selection([id(1)]).expect("captured asset selection");
+    let frame = |state: &mut AssetBrowserState, memory: &mut UiMemory, input| {
+        run_frame_with_options(&model, cfg.clone(), state, memory, input, false, true)
+    };
+
+    for invoke_command in [false, true] {
+        let mut state = AssetBrowserState::new();
+        let mut memory = UiMemory::new();
+        let seed = frame(&mut state, &mut memory, UiInput::default());
+        let trigger_point = item_rect(&seed, id(1)).rect.center();
+        let selected = click(trigger_point, &model, cfg.clone(), &mut state, &mut memory);
+        let trigger = selected.root.child(("asset-browser-item", 1_u64));
+        assert_eq!(state.cursor.active(), Some(id(1)));
+        assert_eq!(state.selection.selected(), vec![id(1)]);
+        assert_eq!(memory.focused(), Some(trigger));
+
+        let opened = context_click(trigger_point, &model, cfg.clone(), &mut state, &mut memory);
+        assert_eq!(opened.output.context_opened, Some(captured_target.clone()));
+        let shown = frame(&mut state, &mut memory, UiInput::default());
+        let menu_bounds = shown
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .find(|node| node.label.as_deref() == Some("Asset actions"))
+            .expect("asset context menu surface")
+            .bounds;
+        let command = shown
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .find(|node| node.label.as_deref() == Some("Delete"))
+            .expect("asset context command")
+            .id;
+
+        let closed = if invoke_command {
+            memory.focus(command);
+            let focused = frame(&mut state, &mut memory, UiInput::default());
+            assert!(
+                focused
+                    .frame
+                    .semantics
+                    .get(command)
+                    .expect("focused asset command")
+                    .state
+                    .focused
+            );
+            let mut invoked = frame(&mut state, &mut memory, key_input(Key::Enter));
+            let expected_action = ActionId::new("asset.delete");
+            assert_eq!(
+                invoked.output.requests,
+                vec![AssetBrowserRequest::Context(
+                    CollectionContextActionRequest::new(expected_action.clone(), &captured_target)
+                )]
+            );
+            assert_eq!(
+                invoked.frame.actions.drain().collect::<Vec<_>>(),
+                vec![ActionInvocation::new(
+                    expected_action,
+                    ActionSource::Menu,
+                    ActionContext::Widget(invoked.root),
+                )]
+            );
+            invoked
+        } else {
+            let outside_point = item_rect(&shown, id(4)).rect.center();
+            assert!(!menu_bounds.contains_point(outside_point));
+            assert!(!item_response(&shown, id(4)).state.disabled);
+            let pressed = frame(
+                &mut state,
+                &mut memory,
+                pointer_input(outside_point, true, true, false),
+            );
+            assert_eq!(state.context_target(), Some(&captured_target));
+            assert_eq!(memory.focused(), Some(trigger));
+            assert_eq!(state.cursor.active(), Some(id(1)));
+            assert_eq!(state.selection.selected(), vec![id(1)]);
+            assert!(!item_response(&pressed, id(4)).clicked);
+            assert!(!item_response(&pressed, id(4)).state.pressed);
+            assert!(pressed.output.requests.is_empty() && pressed.frame.actions.is_empty());
+            let dismissed = frame(
+                &mut state,
+                &mut memory,
+                pointer_input(outside_point, false, false, true),
+            );
+            assert!(!item_response(&dismissed, id(4)).clicked);
+            assert!(dismissed.output.requests.is_empty() && dismissed.frame.actions.is_empty());
+            dismissed
+        };
+
+        assert_eq!(state.context_target(), None);
+        assert_eq!(memory.focused(), Some(trigger));
+        assert_eq!(state.cursor.active(), Some(id(1)));
+        assert_eq!(state.selection.selected(), vec![id(1)]);
+        assert_eq!(closed.frame.repaint, RepaintRequest::NextFrame);
+        assert!(closed.frame.actions.is_empty());
+        let settled = frame(&mut state, &mut memory, UiInput::default());
+        assert_eq!(state.context_target(), None);
+        assert_eq!(memory.focused(), Some(trigger));
+        assert_eq!(state.cursor.active(), Some(id(1)));
+        assert_eq!(state.selection.selected(), vec![id(1)]);
+        assert!(settled.output.requests.is_empty() && settled.frame.actions.is_empty());
+        assert!(
+            settled
+                .frame
+                .semantics
+                .get(trigger)
+                .expect("settled asset trigger")
+                .state
+                .focused
+        );
+        assert!(
+            settled
+                .frame
+                .semantics
+                .nodes()
+                .iter()
+                .all(|node| !matches!(node.label.as_deref(), Some("Asset actions" | "Delete")))
+        );
+    }
+}
 #[test]
 #[allow(clippy::too_many_lines)]
 fn selected_names_inventory_only_the_named_exception_while_muted_kind_remains_nonconforming() {
