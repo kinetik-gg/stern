@@ -41,14 +41,24 @@ fn public_consumer_contract_emits_components_semantics_focus_and_platform_eviden
     let translated_requests = WinitPlatformRequests::from_frame_output(&normalized_output);
     assert_eq!(translated_requests.window_title(), Some(DEMO_TITLE));
 
-    let point = Point::new(60.0, 70.0);
+    let point = semantic_center(
+        &normalized_output,
+        &SemanticRole::IconButton,
+        "Edit Workspace",
+    );
     let _ = app.frame(demo_context(pointer_input(point, true, true, false)));
     let output = app.frame(demo_context(pointer_input(point, false, false, true)));
 
     assert!(has_component_semantics(&output));
     assert!(output.semantics.nodes().iter().any(|node| {
-        node.role == SemanticRole::Button
-            && node.label.as_deref() == Some("Edit Workspace")
+        node.role == SemanticRole::IconButton && node.label.as_deref() == Some("Edit Workspace")
+    }));
+    let row = semantic_center(&output, &SemanticRole::ListItem, "Backdrop");
+    let _ = app.frame(demo_context(pointer_input(row, true, true, false)));
+    let focused_output = app.frame(demo_context(pointer_input(row, false, false, true)));
+    assert!(focused_output.semantics.nodes().iter().any(|node| {
+        node.role == SemanticRole::ListItem
+            && node.label.as_deref() == Some("Backdrop")
             && node.state.focused
     }));
     assert!(output.platform_requests.iter().any(
@@ -56,18 +66,22 @@ fn public_consumer_contract_emits_components_semantics_focus_and_platform_eviden
     ));
 
     let resources = app.render_resources();
-    let translation = stern::render_vello::translate_primitives(&output.primitives, &resources);
+    let translation =
+        stern::render_vello::translate_primitives(&focused_output.primitives, &resources);
     assert!(!translation.commands.is_empty());
-    let accessibility =
-        stern::platform_winit::WinitAccessibilityUpdate::from_frame_output(&output, app.focused())
-            .expect("public semantic output is structurally valid");
+    let accessibility = stern::platform_winit::WinitAccessibilityUpdate::from_frame_output(
+        &focused_output,
+        app.focused(),
+    )
+    .expect("public semantic output is structurally valid");
     assert!(!accessibility.snapshot.nodes.is_empty());
 }
 
 #[test]
 fn public_consumer_contract_routes_workspace_actions_to_application_state() {
     let mut app = DemoApp::new();
-    let point = Point::new(180.0, 70.0);
+    let initial = app.frame(demo_context(UiInput::default()));
+    let point = semantic_center(&initial, &SemanticRole::IconButton, "Graph Workspace");
     let _ = app.frame(demo_context(pointer_input(point, true, true, false)));
     let output = app.frame(demo_context(pointer_input(point, false, false, true)));
 
@@ -94,6 +108,17 @@ fn public_consumer_contract_routes_workspace_actions_to_application_state() {
             .expect("public Graph workspace root")
             .focusable
     );
+}
+
+fn semantic_center(output: &stern::core::FrameOutput, role: &SemanticRole, label: &str) -> Point {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| &node.role == role && node.label.as_deref() == Some(label))
+        .expect("semantic control")
+        .bounds
+        .center()
 }
 
 fn pointer_input(point: Point, down: bool, pressed: bool, released: bool) -> UiInput {

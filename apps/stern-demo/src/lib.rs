@@ -1,6 +1,7 @@
 //! Public-consumer baseline for the Stern integration demo.
 
 mod app_model;
+mod edit_workspace;
 mod graph_workspace;
 
 use stern::UiState;
@@ -10,7 +11,8 @@ use stern::core::{
     default_dark_theme,
 };
 use stern::render::RenderResources;
-use stern::text::TextEditState;
+
+use edit_workspace::EditWorkspace;
 
 pub use app_model::{DemoActionRegistry, DemoApplicationModel, DemoWorkspace};
 pub use graph_workspace::GraphWorkspaceState;
@@ -23,7 +25,7 @@ pub struct DemoApp {
     ui_state: UiState,
     model: DemoApplicationModel,
     actions: DemoActionRegistry,
-    document_name: TextEditState,
+    edit_workspace: EditWorkspace,
     graph_workspace: GraphWorkspaceState,
 }
 
@@ -35,7 +37,7 @@ impl DemoApp {
             ui_state: UiState::new(),
             model: DemoApplicationModel::new(),
             actions: DemoActionRegistry::new(),
-            document_name: TextEditState::new("Untitled Stern Document"),
+            edit_workspace: EditWorkspace::new(),
             graph_workspace: GraphWorkspaceState::new(),
         }
     }
@@ -65,6 +67,8 @@ impl DemoApp {
         let graph = self.actions.graph_workspace().clone();
         let apply = self.actions.apply_shared_state().clone();
         let workspace = self.model.workspace();
+        let revision = self.model.applied_revision();
+        let bounds = context.viewport.logical_size;
         let theme = default_dark_theme();
         let output = {
             let mut ui = self.ui_state.begin_frame(context, &theme);
@@ -72,37 +76,47 @@ impl DemoApp {
             let graph_rect = Rect::new(148.0, 56.0, 120.0, 30.0);
             let apply_rect = Rect::new(24.0, 188.0, 160.0, 30.0);
             ui.push_platform_request(PlatformRequest::SetWindowTitle(DEMO_TITLE.to_owned()));
-            ui.label(Rect::new(24.0, 20.0, 320.0, 24.0), DEMO_TITLE);
-            if workspace == DemoWorkspace::Graph {
-                let graph_bounds = Rect::new(
-                    24.0,
-                    230.0,
-                    (logical_size.width - 48.0).max(0.0),
-                    (logical_size.height - 254.0).max(0.0),
-                );
-                let app_targets = [
-                    (ui.make_id(edit.id.as_str()), edit_rect),
-                    (ui.make_id(graph.id.as_str()), graph_rect),
-                    (ui.make_id(apply.id.as_str()), apply_rect),
-                ];
-                self.graph_workspace
-                    .compose(&mut ui, graph_bounds, &app_targets);
-            }
-            let _ = ui.action_button(edit.id.as_str(), edit_rect, &edit, ActionContext::Global);
-            let _ = ui.action_button(graph.id.as_str(), graph_rect, &graph, ActionContext::Global);
             match workspace {
                 DemoWorkspace::Edit => {
-                    ui.label(Rect::new(24.0, 108.0, 180.0, 20.0), "Document name");
-                    let _ = ui.text_field(
-                        "document.name",
-                        Rect::new(24.0, 136.0, 300.0, 30.0),
-                        &mut self.document_name,
-                        false,
+                    self.edit_workspace.compose(
+                        &mut ui,
+                        &self.actions,
+                        workspace,
+                        revision,
+                        bounds,
                     );
                 }
-                DemoWorkspace::Graph => {}
+                DemoWorkspace::Graph => {
+                    ui.label(Rect::new(24.0, 20.0, 320.0, 24.0), DEMO_TITLE);
+                    let graph_bounds = Rect::new(
+                        24.0,
+                        230.0,
+                        (logical_size.width - 48.0).max(0.0),
+                        (logical_size.height - 254.0).max(0.0),
+                    );
+                    let app_targets = [
+                        (ui.make_id(edit.id.as_str()), edit_rect),
+                        (ui.make_id(graph.id.as_str()), graph_rect),
+                        (ui.make_id(apply.id.as_str()), apply_rect),
+                    ];
+                    self.graph_workspace
+                        .compose(&mut ui, graph_bounds, &app_targets);
+                    let _ =
+                        ui.action_button(edit.id.as_str(), edit_rect, &edit, ActionContext::Global);
+                    let _ = ui.action_button(
+                        graph.id.as_str(),
+                        graph_rect,
+                        &graph,
+                        ActionContext::Global,
+                    );
+                    let _ = ui.action_button(
+                        apply.id.as_str(),
+                        apply_rect,
+                        &apply,
+                        ActionContext::Global,
+                    );
+                }
             }
-            let _ = ui.action_button(apply.id.as_str(), apply_rect, &apply, ActionContext::Global);
             ui.finish_output()
         };
         let mut actions = output.actions.clone();
@@ -115,7 +129,9 @@ impl DemoApp {
     /// Returns renderer resources for the latest public frame.
     #[must_use]
     pub fn render_resources(&self) -> RenderResources {
-        self.ui_state.text_render_resources()
+        let mut resources = self.ui_state.text_render_resources();
+        self.edit_workspace.register_resources(&mut resources);
+        resources
     }
 
     /// Returns the retained focused widget.
@@ -125,6 +141,13 @@ impl DemoApp {
     }
 
     fn dispatch(&mut self, invocation: &ActionInvocation) {
+        if invocation.action_id.as_str() == self.actions.edit_workspace().id.as_str()
+            || invocation.action_id.as_str() == self.actions.graph_workspace().id.as_str()
+        {
+            self.ui_state
+                .memory_mut()
+                .focus(WidgetId::from_key("root").child(invocation.action_id.as_str()));
+        }
         if !self.graph_workspace.handle_action(invocation) {
             let _ = self.model.execute(invocation);
         }
@@ -155,11 +178,21 @@ pub fn has_component_semantics(output: &FrameOutput) -> bool {
         .semantics
         .nodes()
         .iter()
-        .any(|node| node.role == SemanticRole::Button);
-    let has_text = output
+        .any(|node| matches!(node.role, SemanticRole::Button | SemanticRole::IconButton));
+    let has_dock = output
         .semantics
         .nodes()
         .iter()
-        .any(|node| node.role == SemanticRole::TextField);
-    has_button && has_text
+        .any(|node| node.role == SemanticRole::Dock);
+    let has_collection = output
+        .semantics
+        .nodes()
+        .iter()
+        .any(|node| node.role == SemanticRole::List);
+    let has_inspector = output
+        .semantics
+        .nodes()
+        .iter()
+        .any(|node| node.role == SemanticRole::Grid);
+    has_button && has_dock && has_collection && has_inspector
 }
