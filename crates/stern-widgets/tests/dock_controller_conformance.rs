@@ -57,7 +57,11 @@ fn context(input: UiInput) -> FrameContext {
 }
 
 fn scene(dock: &Dock) -> DockScene {
-    DockScene::new(DockSceneConfig::new(ROOT, BOUNDS), dock)
+    scene_with_disabled(dock, false)
+}
+
+fn scene_with_disabled(dock: &Dock, disabled: bool) -> DockScene {
+    DockScene::new(DockSceneConfig::new(ROOT, BOUNDS).disabled(disabled), dock)
 }
 
 fn run_frame(
@@ -67,7 +71,18 @@ fn run_frame(
     input: UiInput,
     new_frame: FrameId,
 ) -> (DockControllerOutput, stern_core::FrameOutput) {
-    let prepared = scene(dock);
+    run_frame_with_disabled(dock, controller, memory, input, new_frame, false)
+}
+
+fn run_frame_with_disabled(
+    dock: &mut Dock,
+    controller: &mut DockController,
+    memory: &mut UiMemory,
+    input: UiInput,
+    new_frame: FrameId,
+    disabled: bool,
+) -> (DockControllerOutput, stern_core::FrameOutput) {
+    let prepared = scene_with_disabled(dock, disabled);
     let theme = default_dark_theme();
     let mut ui = Ui::begin_frame(context(input), memory, &theme);
     ui.resolve_pointer_targets(|plan| {
@@ -112,6 +127,16 @@ fn key_input(key: Key, ctrl: bool) -> UiInput {
         keyboard: KeyboardInput {
             modifiers,
             events: vec![KeyEvent::new(key, KeyState::Pressed, modifiers, false)],
+        },
+        ..UiInput::default()
+    }
+}
+
+fn key_event_input(key: Key, state: KeyState, modifiers: Modifiers) -> UiInput {
+    UiInput {
+        keyboard: KeyboardInput {
+            modifiers,
+            events: vec![KeyEvent::new(key, state, modifiers, false)],
         },
         ..UiInput::default()
     }
@@ -422,6 +447,100 @@ fn splitter_resize_and_context_metadata_use_existing_model_requests() {
     let mut swap_dock = dock.clone();
     assert!(join_dock.apply_join_request(BOUNDS, join));
     assert!(swap_dock.apply_swap_request(BOUNDS, swap));
+}
+
+#[test]
+fn splitter_context_pointer_menu_key_and_shift_f10_converge() {
+    let new_frame = FrameId::from_raw(90);
+    let mut requests = Vec::new();
+
+    {
+        let mut dock = split_dock();
+        let splitter = scene(&dock).layout().splitters[0].clone();
+        let point = center(splitter.rect);
+        let before = dock.snapshot();
+        let mut controller = DockController::new();
+        let mut memory = UiMemory::new();
+        let (pressed, _) = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_button(point, MouseButton::Secondary, true),
+            new_frame,
+        );
+        assert!(pressed.splitter_context_requests.is_empty());
+        let (mut released, _) = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_button(point, MouseButton::Secondary, false),
+            new_frame,
+        );
+        assert_eq!(released.splitter_context_requests.len(), 1);
+        requests.push(
+            released
+                .splitter_context_requests
+                .pop()
+                .expect("pointer request"),
+        );
+        assert_eq!(dock.snapshot(), before);
+    }
+
+    for (key, modifiers) in [
+        (Key::ContextMenu, Modifiers::default()),
+        (Key::Function(10), Modifiers::new(true, false, false, false)),
+    ] {
+        let mut dock = split_dock();
+        let splitter = scene(&dock).layout().splitters[0].clone();
+        let before = dock.snapshot();
+        let mut controller = DockController::new();
+        let mut memory = UiMemory::new();
+        memory.focus(splitter.id);
+        let (mut output, _) = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            key_event_input(key, KeyState::Pressed, modifiers),
+            new_frame,
+        );
+        assert_eq!(output.splitter_context_requests.len(), 1);
+        requests.push(
+            output
+                .splitter_context_requests
+                .pop()
+                .expect("keyboard request"),
+        );
+        assert_eq!(dock.snapshot(), before);
+    }
+
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[1], requests[0]);
+    assert_eq!(requests[2], requests[0]);
+
+    for (focused, disabled, state) in [
+        (true, false, KeyState::Released),
+        (false, false, KeyState::Pressed),
+        (true, true, KeyState::Pressed),
+    ] {
+        let mut dock = split_dock();
+        let splitter = scene(&dock).layout().splitters[0].clone();
+        let before = dock.snapshot();
+        let mut controller = DockController::new();
+        let mut memory = UiMemory::new();
+        if focused {
+            memory.focus(splitter.id);
+        }
+        let (output, _) = run_frame_with_disabled(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            key_event_input(Key::ContextMenu, state, Modifiers::default()),
+            new_frame,
+            disabled,
+        );
+        assert!(output.splitter_context_requests.is_empty());
+        assert_eq!(dock.snapshot(), before);
+    }
 }
 
 #[test]
