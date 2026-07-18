@@ -1,4 +1,6 @@
-use stern_core::{ActionContext, ActionDescriptor, ActionSource, Rect, Size};
+use stern_core::{
+    ActionContext, ActionDescriptor, ActionSource, Key, KeyEvent, KeyState, Rect, Size,
+};
 
 use crate::{Menu, MenuOverlay, OverlayDismissal, OverlayId, OverlayKind, PopoverPlacement};
 
@@ -180,6 +182,24 @@ impl MenuBar {
             return false;
         }
         self.open(id)
+    }
+
+    /// Opens the first visible menu for an exact platform entry event.
+    pub fn open_platform_entry(&mut self, event: &KeyEvent) -> Option<MenuBarMenuId> {
+        if self.active.is_some()
+            || event.state != KeyState::Pressed
+            || event.repeat
+            || !event.modifiers.is_empty()
+            || event.key != Key::Function(10)
+        {
+            return None;
+        }
+        let id = self
+            .visible_indices()
+            .next()
+            .map(|index| self.menus[index].id)?;
+        self.active = Some(id);
+        Some(id)
     }
 
     /// Moves the active menu to the next visible heading and wraps deterministically.
