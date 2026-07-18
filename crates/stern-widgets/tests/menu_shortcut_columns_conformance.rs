@@ -1058,6 +1058,109 @@ fn destructive_menu_rows_preserve_geometry_paint_precedence_and_invocation() {
 }
 
 #[test]
+#[allow(clippy::float_cmp, clippy::too_many_lines)]
+fn mixed_and_checked_menu_rows_preserve_geometry_semantics_and_routing() {
+    let mut mixed = ActionDescriptor::new("menu.mixed", "Mixed");
+    mixed.state.checked = Some(true);
+    mixed.state.mixed = true;
+    let mut checked = ActionDescriptor::new("menu.checked", "Checked");
+    checked.state.checked = Some(true);
+    let mut scene = menu_scene(
+        Rect::new(20.0, 20.0, 280.0, 68.0),
+        Menu::from_actions([mixed, checked]),
+    );
+    let localizer = RecordingLocalizer::new("::", Failure::None);
+    let (output, frame) = run_presented(
+        &mut scene,
+        &mut UiMemory::new(),
+        UiInput::default(),
+        ShortcutPlatform::Windows,
+        &localizer,
+    );
+
+    assert!(output.intents.is_empty());
+    assert_eq!(
+        output
+            .responses
+            .iter()
+            .map(|response| response.rect)
+            .collect::<Vec<_>>(),
+        [
+            Rect::new(24.0, 24.0, 272.0, 28.0),
+            Rect::new(24.0, 52.0, 272.0, 28.0),
+        ]
+    );
+    let row_id = |action: &'static str| {
+        WidgetId::from_raw(41)
+            .child("overlay-scene")
+            .child(("overlay-action", action))
+    };
+    let mixed_node = frame
+        .semantics
+        .get(row_id("menu.mixed"))
+        .expect("mixed row semantics");
+    let checked_node = frame
+        .semantics
+        .get(row_id("menu.checked"))
+        .expect("checked row semantics");
+    assert_eq!(mixed_node.bounds.width, checked_node.bounds.width);
+    assert_eq!(mixed_node.bounds.height, checked_node.bounds.height);
+    assert_eq!(mixed_node.state.checked, Some(true));
+    assert!(mixed_node.state.mixed);
+    assert_eq!(checked_node.state.checked, Some(true));
+    assert!(!checked_node.state.mixed);
+
+    let marks = frame
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Line(line) => Some((line.from, line.to)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        marks,
+        [
+            (Point::new(35.0, 38.0), Point::new(45.0, 38.0)),
+            (Point::new(35.0, 66.0), Point::new(38.5, 69.0)),
+            (Point::new(38.5, 69.0), Point::new(45.0, 62.0)),
+        ]
+    );
+
+    let mut memory = UiMemory::new();
+    let (pressed, pressed_frame) = run_presented(
+        &mut scene,
+        &mut memory,
+        pointer_input(Point::new(160.0, 38.0), true),
+        ShortcutPlatform::Windows,
+        &localizer,
+    );
+    assert!(pressed.intents.is_empty());
+    assert!(pressed_frame.actions.is_empty());
+    let (released, mut released_frame) = run_presented(
+        &mut scene,
+        &mut memory,
+        pointer_input(Point::new(160.0, 38.0), false),
+        ShortcutPlatform::Windows,
+        &localizer,
+    );
+    let [OverlaySceneIntent::Action(invocation)] = released.intents.as_slice() else {
+        panic!("one unchanged menu invocation");
+    };
+    assert_eq!(invocation.action_id.as_str(), "menu.mixed");
+    assert_eq!(invocation.source, ActionSource::Menu);
+    assert_eq!(
+        invocation.context,
+        ActionContext::Frame(WidgetId::from_key("document:alpha"))
+    );
+    assert_eq!(released_frame.actions.len(), 1);
+    assert_eq!(
+        released_frame.actions.pop_front().as_ref(),
+        Some(invocation)
+    );
+}
+
+#[test]
 fn widget_source_uses_the_core_policy_without_public_shape_or_naming_duplication() {
     let ui = include_str!("../src/ui/overlays.rs");
     assert_eq!(

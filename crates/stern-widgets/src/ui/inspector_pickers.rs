@@ -404,7 +404,7 @@ impl Ui<'_> {
                     .focusable(row.enabled);
                 node.state.disabled = !row.enabled;
                 node.state.selected = row.selected;
-                node.state.checked = row.checked;
+                node.state.checked = row.semantic_checked();
                 node.state.expanded = row.expanded;
                 node.state.value = Some(SemanticValue::Text(row.label.clone()));
                 if row.enabled {

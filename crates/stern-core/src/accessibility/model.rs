@@ -87,6 +87,8 @@ pub struct SemanticState {
     pub selected: bool,
     /// Node is checked, when the role supports checked state.
     pub checked: Option<bool>,
+    /// Node represents a mixed or indeterminate checked state.
+    pub mixed: bool,
     /// Node is expanded, when the role supports disclosure state.
     pub expanded: Option<bool>,
     /// Node is actively pressed.

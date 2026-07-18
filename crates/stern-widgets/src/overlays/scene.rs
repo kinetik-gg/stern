@@ -1,6 +1,6 @@
 use stern_core::{
-    ActionId, ActionInvocation, PointerOrder, PointerTarget, PointerTargetPlan, Rect, Response,
-    SemanticRole, Shortcut, WidgetId,
+    ActionId, ActionInvocation, ActionState, PointerOrder, PointerTarget, PointerTargetPlan, Rect,
+    Response, SemanticRole, Shortcut, WidgetId,
 };
 
 use super::{
@@ -259,7 +259,7 @@ impl OverlayScene {
                                 role: SemanticRole::MenuItem,
                                 enabled: action.can_invoke(),
                                 selected: overlay.menu.highlighted_action_id() == Some(&action.id),
-                                checked: action.state.checked,
+                                check_state: RowCheckState::from_action(action.state, true),
                                 expanded: has_submenu.then_some(false),
                                 action_id: Some(action.id.clone()),
                                 menu_columns: true,
@@ -307,7 +307,9 @@ impl OverlayScene {
                         enabled: item.enabled,
                         selected: overlay.model.highlighted_id() == Some(item.id)
                             || overlay.model.selected_id() == Some(item.id),
-                        checked: Some(overlay.model.selected_id() == Some(item.id)),
+                        check_state: RowCheckState::from_checked(Some(
+                            overlay.model.selected_id() == Some(item.id),
+                        )),
                         expanded: None,
                         action_id: None,
                         menu_columns: false,
@@ -333,7 +335,7 @@ impl OverlayScene {
                         role: SemanticRole::MenuItem,
                         enabled: entry.enabled,
                         selected: overlay.palette.selected == visible_index,
-                        checked: entry.checked,
+                        check_state: RowCheckState::from_checked(entry.checked),
                         expanded: None,
                         action_id: Some(entry.action_id.clone()),
                         menu_columns: false,
@@ -369,7 +371,7 @@ impl OverlayScene {
                         role: SemanticRole::Button,
                         enabled: action.can_invoke(),
                         selected: false,
-                        checked: action.action.state.checked,
+                        check_state: RowCheckState::from_action(action.action.state, false),
                         expanded: None,
                         action_id: Some(action.action.id.clone()),
                         menu_columns: false,
@@ -682,6 +684,30 @@ pub(crate) enum OverlaySceneRowTone {
     Destructive,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RowCheckState {
+    NotCheckable,
+    Checked(bool),
+    Mixed(bool),
+}
+
+impl RowCheckState {
+    const fn from_action(state: ActionState, allow_mixed: bool) -> Self {
+        match state.checked {
+            None => Self::NotCheckable,
+            Some(checked) if allow_mixed && state.is_mixed() => Self::Mixed(checked),
+            Some(checked) => Self::Checked(checked),
+        }
+    }
+
+    const fn from_checked(checked: Option<bool>) -> Self {
+        match checked {
+            None => Self::NotCheckable,
+            Some(checked) => Self::Checked(checked),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum OverlaySceneRowBehavior {
     None,
@@ -709,7 +735,7 @@ pub(crate) struct OverlaySceneRow {
     pub(crate) role: SemanticRole,
     pub(crate) enabled: bool,
     pub(crate) selected: bool,
-    pub(crate) checked: Option<bool>,
+    check_state: RowCheckState,
     pub(crate) expanded: Option<bool>,
     pub(crate) action_id: Option<ActionId>,
     pub(crate) menu_columns: bool,
@@ -724,6 +750,24 @@ impl OverlaySceneRow {
         self.tone == OverlaySceneRowTone::Destructive
     }
 
+    pub(crate) const fn is_checked(&self) -> bool {
+        matches!(
+            self.check_state,
+            RowCheckState::Checked(true) | RowCheckState::Mixed(true)
+        )
+    }
+
+    pub(crate) const fn is_mixed(&self) -> bool {
+        matches!(self.check_state, RowCheckState::Mixed(_))
+    }
+
+    pub(crate) const fn semantic_checked(&self) -> Option<bool> {
+        match self.check_state {
+            RowCheckState::NotCheckable => None,
+            RowCheckState::Checked(checked) | RowCheckState::Mixed(checked) => Some(checked),
+        }
+    }
+
     fn passive(id: WidgetId, rect: Rect, label: String, role: SemanticRole) -> Self {
         Self {
             id,
@@ -732,7 +776,7 @@ impl OverlaySceneRow {
             role,
             enabled: false,
             selected: false,
-            checked: None,
+            check_state: RowCheckState::NotCheckable,
             expanded: None,
             action_id: None,
             menu_columns: false,
@@ -758,7 +802,7 @@ impl OverlaySceneRow {
             role: SemanticRole::Custom("separator".to_owned()),
             enabled: false,
             selected: false,
-            checked: None,
+            check_state: RowCheckState::NotCheckable,
             expanded: None,
             action_id: None,
             menu_columns: false,
