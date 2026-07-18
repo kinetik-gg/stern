@@ -1,7 +1,9 @@
 use core::fmt;
 
 use stern_core::{ClipboardText, Point, RepaintRequest, WidgetId};
-use winit::{dpi::LogicalPosition, window::Window};
+#[cfg(any(target_os = "windows", test))]
+use winit::dpi::LogicalPosition;
+use winit::window::Window;
 
 /// One ordered application-shell operation.
 #[derive(PartialEq)]
@@ -162,10 +164,12 @@ impl WinitShellRequests {
 }
 
 trait WindowSystemMenuTarget {
+    #[cfg(any(target_os = "windows", test))]
     fn show_window_menu(&self, position: LogicalPosition<f64>);
 }
 
 impl WindowSystemMenuTarget for Window {
+    #[cfg(any(target_os = "windows", test))]
     fn show_window_menu(&self, position: LogicalPosition<f64>) {
         Window::show_window_menu(self, position);
     }
@@ -540,6 +544,8 @@ mod tests {
         }
         #[cfg(not(target_os = "windows"))]
         {
+            let _show_window_menu: fn(&Target, LogicalPosition<f64>) =
+                <Target as WindowSystemMenuTarget>::show_window_menu;
             assert!(target.0.borrow().is_empty());
             assert_eq!(
                 outcome.results(),
