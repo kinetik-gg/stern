@@ -2,10 +2,10 @@
 
 use std::time::Duration;
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionId, ActionSource, FrameContext, PhysicalSize, Point,
-    PointerButtonState, PointerInput, PointerOrder, PointerRoute, Rect, ScaleFactor,
-    SemanticActionKind, Size, TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId,
-    default_dark_theme,
+    ActionContext, ActionDescriptor, ActionId, ActionSource, FrameContext, Key, KeyEvent, KeyState,
+    Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput, PointerOrder, PointerRoute,
+    Rect, ScaleFactor, SemanticActionKind, Size, TimeInfo, UiInput, UiMemory, ViewportInfo,
+    WidgetId, default_dark_theme,
 };
 use stern_widgets::{
     Menu, MenuBar, MenuBarMenu, MenuBarMenuId, MenuBarOverlayRequest, MenuItem, MenuOverlay,
@@ -18,8 +18,12 @@ const EDIT: MenuBarMenuId = MenuBarMenuId::from_raw(2);
 const HIDDEN: MenuBarMenuId = MenuBarMenuId::from_raw(3);
 const EMPTY: MenuBarMenuId = MenuBarMenuId::from_raw(4);
 const VIEW: MenuBarMenuId = MenuBarMenuId::from_raw(5);
+const NONE: Modifiers = Modifiers::new(false, false, false, false);
 fn action(id: impl Into<String>, label: impl Into<String>) -> ActionDescriptor {
     ActionDescriptor::new(id, label)
+}
+fn key_event(key: Key, state: KeyState, modifiers: Modifiers, repeat: bool) -> KeyEvent {
+    KeyEvent::new(key, state, modifiers, repeat)
 }
 fn menu_definitions() -> Vec<MenuBarMenu> {
     let mut hidden = action("hidden.only", "Hidden");
@@ -193,6 +197,52 @@ fn run_frame(
     let route = ui.memory().pointer_route();
     let output = ui.overlay_scene(scene);
     (route, output, ui.finish_output())
+}
+
+#[test]
+fn platform_entry_opens_first_eligible_heading_and_preserves_traversal() {
+    let mut definitions = menu_definitions();
+    definitions.rotate_left(1);
+    let mut bar = MenuBar::from_menus(definitions);
+    let event = key_event(Key::Function(10), KeyState::Pressed, NONE, false);
+
+    assert_eq!(bar.open_platform_entry(&event), Some(EDIT));
+    for (next, expected) in [(true, VIEW), (true, FILE), (true, EDIT), (false, FILE)] {
+        let actual = if next {
+            bar.move_next()
+        } else {
+            bar.move_previous()
+        };
+        assert_eq!(actual, Some(expected));
+    }
+}
+
+#[test]
+#[rustfmt::skip]
+fn platform_entry_fails_closed_without_mutating_active_state() {
+    let cases = [
+        ("release", key_event(Key::Function(10), KeyState::Released, NONE, false)),
+        ("repeat", key_event(Key::Function(10), KeyState::Pressed, NONE, true)),
+        ("shift", key_event(Key::Function(10), KeyState::Pressed, Modifiers::new(true, false, false, false), false)),
+        ("ctrl-alt-super", key_event(Key::Function(10), KeyState::Pressed, Modifiers::new(false, true, true, true), false)),
+        ("unrelated", key_event(Key::Function(9), KeyState::Pressed, NONE, false)),
+    ];
+    for (case, event) in cases {
+        let mut bar = MenuBar::from_menus(menu_definitions());
+        assert_eq!(bar.open_platform_entry(&event), None, "{case}");
+        assert_eq!(bar.active_id(), None, "{case}");
+    }
+
+    let event = key_event(Key::Function(10), KeyState::Pressed, NONE, false);
+    let mut active = MenuBar::from_menus(menu_definitions());
+    assert!(active.open(EDIT));
+    assert_eq!(active.open_platform_entry(&event), None);
+    assert_eq!(active.active_id(), Some(EDIT));
+
+    let mut unavailable = MenuBar::from_menus(menu_definitions().into_iter()
+        .filter(|menu| menu.id == HIDDEN || menu.id == EMPTY));
+    assert_eq!(unavailable.open_platform_entry(&event), None);
+    assert_eq!(unavailable.active_id(), None);
 }
 
 #[test]

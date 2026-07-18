@@ -10,6 +10,11 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- Added bounded headless evidence for `STERN-APPMENU-001`: an inactive
+  `MenuBar` opens its first visible, non-empty heading only for exact unmodified,
+  non-repeat pressed `F10`; invalid entry leaves state unchanged. Existing
+  previous/next traversal remains authoritative. The requirement stays
+  Candidate, with platform integration and visual evidence still unverified.
 - **Breaking:** Added public `Key::ContextMenu`; exhaustive `Key` matches must
   handle the new variant or add a wildcard. In the Asset Browser and Outliner,
   a focused selection now opens the same context target through a secondary
