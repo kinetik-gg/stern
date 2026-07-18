@@ -586,4 +586,36 @@ fn disabled_and_read_only_timelines_never_begin_scrub_mutation() {
         assert_eq!(pressed.response.state.disabled, response_disabled);
         assert!(controller.source().is_none());
     }
+
+    for inert in [config.disabled(true), config.read_only(true)] {
+        let mut controller = TimelineScrubController::default();
+        let mut memory = UiMemory::new();
+        let _ = run_scrub(
+            config,
+            &mut controller,
+            &mut memory,
+            pointer(Point::new(128.0, 10.0), true, Modifiers::default()),
+        );
+        let (_, began, _) = run_scrub(
+            config,
+            &mut controller,
+            &mut memory,
+            pointer_move(Point::new(200.0, 10.0), Vec2::new(72.0, 0.0)),
+        );
+        assert!(matches!(
+            began.scrub_intents.as_slice(),
+            [TimelineScrubIntent::Begin(_)]
+        ));
+
+        let mut held = UiInput::default();
+        held.pointer.position = Some(Point::new(200.0, 10.0));
+        held.pointer.primary.down = true;
+        let (_, cancelled, _) = run_scrub(inert, &mut controller, &mut memory, held);
+        assert!(matches!(
+            cancelled.scrub_intents.as_slice(),
+            [TimelineScrubIntent::Cancel(_)]
+        ));
+        assert!(controller.source().is_none());
+        assert!(!memory.has_pointer_capture(ROOT));
+    }
 }
