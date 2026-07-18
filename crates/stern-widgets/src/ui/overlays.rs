@@ -93,9 +93,17 @@ impl Ui<'_> {
             .any(|event| event.state == KeyState::Pressed && matches!(event.key, Key::Escape));
         let now_millis = u64::try_from(self.time().now.as_millis()).unwrap_or(u64::MAX);
 
+        let mut escape_consumed = false;
         if let Some(surface_index) = scene.top_keyboard_surface() {
+            if escape_pressed && scene.clear_command_palette_query(surface_index) {
+                self.request_repaint(RepaintRequest::NextFrame);
+                escape_consumed = true;
+            }
             for event in &keyboard_events {
-                if event.state != KeyState::Pressed || matches!(event.key, Key::Escape) {
+                if escape_consumed
+                    || event.state != KeyState::Pressed
+                    || matches!(event.key, Key::Escape)
+                {
                     continue;
                 }
                 if let Some(input) = navigation_input(&event.key) {
@@ -141,7 +149,8 @@ impl Ui<'_> {
             }
 
             for event in &text_events {
-                if let TextInputEvent::Commit(text) = event
+                if !escape_consumed
+                    && let TextInputEvent::Commit(text) = event
                     && scene.typeahead(surface_index, text, now_millis)
                 {
                     self.request_repaint(RepaintRequest::NextFrame);
@@ -149,7 +158,9 @@ impl Ui<'_> {
             }
         }
 
-        if let Some(request) = scene.dismissal_request(outside_activation, escape_pressed) {
+        if let Some(request) =
+            scene.dismissal_request(outside_activation, escape_pressed && !escape_consumed)
+        {
             self.record_overlay_intent(&mut output, OverlaySceneIntent::Dismiss(request));
         }
 
@@ -188,7 +199,9 @@ impl Ui<'_> {
                 self.paint_overlay_row(&row, response.as_ref(), menu_presentation);
                 self.push_semantic_node(overlay_row_semantics(&row, response.as_ref()));
 
-                if response.is_some_and(|response| response.clicked && !response.keyboard_activated)
+                if !escape_consumed
+                    && response
+                        .is_some_and(|response| response.clicked && !response.keyboard_activated)
                     && let Some(intent) = scene.activate_row(surface_index, &row)
                 {
                     self.record_overlay_intent(&mut output, intent);

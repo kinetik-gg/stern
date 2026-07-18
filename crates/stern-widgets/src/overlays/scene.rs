@@ -395,6 +395,21 @@ impl OverlayScene {
             .rposition(|surface| surface.entry().receives_focus())
     }
 
+    pub(crate) fn clear_command_palette_query(&mut self, surface_index: usize) -> bool {
+        let Some(OverlaySceneSurface::CommandPalette { overlay, .. }) =
+            self.surfaces.get_mut(surface_index)
+        else {
+            return false;
+        };
+        if overlay.palette.query.is_empty() {
+            return false;
+        }
+
+        overlay.palette.query.clear();
+        overlay.palette.clamp_selection();
+        true
+    }
+
     pub(crate) fn navigate(
         &mut self,
         surface_index: usize,
