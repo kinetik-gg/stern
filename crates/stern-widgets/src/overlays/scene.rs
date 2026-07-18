@@ -264,6 +264,11 @@ impl OverlayScene {
                                 action_id: Some(action.id.clone()),
                                 menu_columns: true,
                                 shortcut: action.shortcut.clone(),
+                                tone: if action.destructive {
+                                    OverlaySceneRowTone::Destructive
+                                } else {
+                                    OverlaySceneRowTone::Neutral
+                                },
                                 kind: OverlaySceneRowKind::Action,
                                 behavior: OverlaySceneRowBehavior::Menu {
                                     visible_index,
@@ -307,6 +312,7 @@ impl OverlayScene {
                         action_id: None,
                         menu_columns: false,
                         shortcut: None,
+                        tone: OverlaySceneRowTone::Neutral,
                         kind: OverlaySceneRowKind::Action,
                         behavior: OverlaySceneRowBehavior::Dropdown { item_id: item.id },
                     });
@@ -332,6 +338,7 @@ impl OverlayScene {
                         action_id: Some(entry.action_id.clone()),
                         menu_columns: false,
                         shortcut: None,
+                        tone: OverlaySceneRowTone::Neutral,
                         kind: OverlaySceneRowKind::Action,
                         behavior: OverlaySceneRowBehavior::Command {
                             action_id: entry.action_id.clone(),
@@ -367,6 +374,7 @@ impl OverlayScene {
                         action_id: Some(action.action.id.clone()),
                         menu_columns: false,
                         shortcut: None,
+                        tone: OverlaySceneRowTone::Neutral,
                         kind: OverlaySceneRowKind::Action,
                         behavior: OverlaySceneRowBehavior::Modal { visible_index },
                     });
@@ -668,6 +676,12 @@ pub(crate) enum OverlaySceneRowKind {
     Separator,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OverlaySceneRowTone {
+    Neutral,
+    Destructive,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum OverlaySceneRowBehavior {
     None,
@@ -700,11 +714,16 @@ pub(crate) struct OverlaySceneRow {
     pub(crate) action_id: Option<ActionId>,
     pub(crate) menu_columns: bool,
     pub(crate) shortcut: Option<Shortcut>,
+    pub(crate) tone: OverlaySceneRowTone,
     pub(crate) kind: OverlaySceneRowKind,
     pub(crate) behavior: OverlaySceneRowBehavior,
 }
 
 impl OverlaySceneRow {
+    pub(crate) fn is_destructive(&self) -> bool {
+        self.tone == OverlaySceneRowTone::Destructive
+    }
+
     fn passive(id: WidgetId, rect: Rect, label: String, role: SemanticRole) -> Self {
         Self {
             id,
@@ -718,6 +737,7 @@ impl OverlaySceneRow {
             action_id: None,
             menu_columns: false,
             shortcut: None,
+            tone: OverlaySceneRowTone::Neutral,
             kind: OverlaySceneRowKind::Passive,
             behavior: OverlaySceneRowBehavior::None,
         }
@@ -743,6 +763,7 @@ impl OverlaySceneRow {
             action_id: None,
             menu_columns: false,
             shortcut: None,
+            tone: OverlaySceneRowTone::Neutral,
             kind: OverlaySceneRowKind::Separator,
             behavior: OverlaySceneRowBehavior::None,
         }

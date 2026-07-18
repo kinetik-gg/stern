@@ -294,7 +294,11 @@ impl Ui<'_> {
                 stroke: Some(recipe.border),
                 radius: recipe.radius,
             }));
-            recipe.foreground
+            if row.enabled && row.is_destructive() {
+                self.theme.colors.status.danger.foreground
+            } else {
+                recipe.foreground
+            }
         } else {
             self.theme.label(TextRole::Label, false).foreground
         };

@@ -926,6 +926,138 @@ fn presentation_preserves_full_row_pointer_keyboard_and_fifo_action_routing() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
+fn destructive_menu_rows_preserve_geometry_paint_precedence_and_invocation() {
+    let neutral = action_with_shortcut("menu.neutral", "Neutral", shortcut("n"));
+    let mut destructive = action_with_shortcut("menu.destructive", "Destructive", shortcut("d"));
+    destructive.destructive = true;
+    let mut submenu = action_with_shortcut(
+        "menu.destructive-submenu",
+        "Destructive submenu",
+        shortcut("s"),
+    );
+    submenu.destructive = true;
+    submenu.state.checked = Some(true);
+    let mut disabled = action_with_shortcut("menu.disabled", "Disabled destructive", shortcut("x"));
+    disabled.destructive = true;
+    disabled.state.enabled = false;
+    let mut terminal = ActionDescriptor::new("menu.delete", "Delete permanently");
+    terminal.destructive = true;
+    let mut menu = Menu::new();
+    menu.push(MenuItem::Action(neutral));
+    menu.push(MenuItem::Action(destructive));
+    menu.push_submenu(
+        submenu,
+        Menu::from_actions([ActionDescriptor::new("submenu.child", "Child")]),
+    );
+    menu.push(MenuItem::Action(disabled));
+    menu.push(MenuItem::Action(terminal));
+    let mut scene = menu_scene(SURFACE_RECT, menu);
+    let localizer = RecordingLocalizer::new("::", Failure::None);
+    let (output, frame) = run_presented(
+        &mut scene,
+        &mut UiMemory::new(),
+        UiInput::default(),
+        ShortcutPlatform::Windows,
+        &localizer,
+    );
+    assert!(output.intents.is_empty());
+
+    let root = WidgetId::from_raw(41).child("overlay-scene");
+    let row_ids = [
+        "menu.neutral",
+        "menu.destructive",
+        "menu.destructive-submenu",
+        "menu.disabled",
+        "menu.delete",
+    ]
+    .map(|id| root.child(("overlay-action", id)));
+    assert_eq!(
+        row_ids.map(|id| frame.semantics.get(id).expect("menu row semantics").bounds),
+        [24.0, 52.0, 80.0, 108.0, 136.0].map(|y| Rect::new(24.0, y, 272.0, 28.0))
+    );
+
+    let theme = default_dark_theme();
+    let danger = Brush::Solid(theme.colors.status.danger.foreground);
+    let disabled = Brush::Solid(
+        theme
+            .row(ComponentState {
+                disabled: true,
+                ..ComponentState::default()
+            })
+            .foreground,
+    );
+    let text_brush = |content: &str| {
+        text_primitives(&frame)
+            .into_iter()
+            .find(|text| text.text == content)
+            .unwrap_or_else(|| panic!("missing text {content}"))
+            .brush
+    };
+    assert_ne!(text_brush("Neutral"), danger);
+    for content in [
+        "Destructive",
+        "control-label-that-is-intentionally-long::alternate-label-that-is-intentionally-long::shift-label-that-is-intentionally-long::logical-key:Character(\"d\")",
+        "Destructive submenu",
+        "control-label-that-is-intentionally-long::alternate-label-that-is-intentionally-long::shift-label-that-is-intentionally-long::logical-key:Character(\"s\")",
+        "›",
+        "Delete permanently",
+    ] {
+        assert_eq!(
+            text_brush(content),
+            danger,
+            "danger foreground for {content}"
+        );
+    }
+    assert_eq!(text_brush("Disabled destructive"), disabled);
+    assert_eq!(
+        text_brush(
+            "control-label-that-is-intentionally-long::alternate-label-that-is-intentionally-long::shift-label-that-is-intentionally-long::logical-key:Character(\"x\")"
+        ),
+        disabled
+    );
+    let check_lines = frame
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Line(line) => Some(line),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(check_lines.len(), 2);
+    assert!(check_lines.iter().all(|line| line.stroke.brush == danger));
+
+    let mut memory = UiMemory::new();
+    let (pressed, pressed_frame) = run_presented(
+        &mut scene,
+        &mut memory,
+        pointer_input(Point::new(280.0, 140.0), true),
+        ShortcutPlatform::Windows,
+        &localizer,
+    );
+    assert!(pressed.intents.is_empty() && pressed_frame.actions.is_empty());
+    let (released, mut released_frame) = run_presented(
+        &mut scene,
+        &mut memory,
+        pointer_input(Point::new(280.0, 140.0), false),
+        ShortcutPlatform::Windows,
+        &localizer,
+    );
+    let [OverlaySceneIntent::Action(invocation)] = released.intents.as_slice() else {
+        panic!("one terminal action invocation");
+    };
+    assert_eq!(invocation.action_id.as_str(), "menu.delete");
+    assert_eq!(invocation.source, ActionSource::Menu);
+    assert_eq!(
+        invocation.context,
+        ActionContext::Frame(WidgetId::from_key("document:alpha"))
+    );
+    assert_eq!(released_frame.actions.len(), 1);
+    let queued = released_frame.actions.pop_front();
+    assert_eq!(queued.as_ref(), Some(invocation));
+}
+
+#[test]
 fn widget_source_uses_the_core_policy_without_public_shape_or_naming_duplication() {
     let ui = include_str!("../src/ui/overlays.rs");
     assert_eq!(

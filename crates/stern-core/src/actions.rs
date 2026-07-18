@@ -101,6 +101,8 @@ pub struct ActionDescriptor {
     pub keywords: Vec<String>,
     /// Optional shortcut shown by UI surfaces and matched by the action router.
     pub shortcut: Option<Shortcut>,
+    /// Whether menu surfaces should present this action as destructive.
+    pub destructive: bool,
     /// Presentation and availability state.
     pub state: ActionState,
 }
@@ -116,6 +118,7 @@ impl ActionDescriptor {
             tooltip: None,
             keywords: Vec::new(),
             shortcut: None,
+            destructive: false,
             state: ActionState::default(),
         }
     }
@@ -687,6 +690,25 @@ mod tests {
         assert_eq!(descriptor.icon.as_ref().expect("icon").as_str(), "save");
         assert!(descriptor.can_invoke());
         assert_eq!(descriptor.state, ActionState::default());
+    }
+
+    #[test]
+    fn destructive_metadata_is_opt_in_without_changing_identity_or_invocability() {
+        use std::{collections::hash_map::DefaultHasher, hash::Hasher};
+
+        let neutral = ActionDescriptor::new("file.delete", "Delete");
+        let mut destructive = neutral.clone();
+        destructive.destructive = true;
+        let mut neutral_hash = DefaultHasher::new();
+        let mut destructive_hash = DefaultHasher::new();
+        std::hash::Hash::hash(&neutral, &mut neutral_hash);
+        std::hash::Hash::hash(&destructive, &mut destructive_hash);
+
+        assert!(!neutral.destructive);
+        assert!(destructive.destructive);
+        assert_eq!(neutral.id, destructive.id);
+        assert_eq!(neutral_hash.finish(), destructive_hash.finish());
+        assert!(neutral.can_invoke() && destructive.can_invoke());
     }
 
     #[test]
