@@ -6,6 +6,7 @@ pub mod collection_actions;
 pub mod collections;
 mod components;
 pub mod dock;
+pub mod gradient_editor;
 pub mod inline_edit;
 pub mod inspector;
 pub mod node_graph;

@@ -80,6 +80,51 @@ fn captured_domain_drag_action(
     )
 }
 
+#[test]
+fn public_facade_exposes_canonical_gradient_editor_surface() {
+    use stern::{core, widgets};
+    use widgets::gradient_editor::{
+        GradientEditorConfig, GradientEditorIntent, GradientEditorOutput,
+        GradientEditorPrepareError, GradientEditorStop, GradientEditorStopId, GradientEditorWidget,
+        GradientInterpolationSpace,
+    };
+
+    let red = core::Color::rgba(1.0, 0.0, 0.0, 1.0);
+    let blue = core::Color::rgba(0.0, 0.0, 1.0, 1.0);
+    let stops = [
+        GradientEditorStop::new(GradientEditorStopId::from_raw(1), 0.0, red),
+        GradientEditorStop::new(GradientEditorStopId::from_raw(2), 1.0, blue).removable(true),
+    ];
+    let config = GradientEditorConfig::new(
+        core::WidgetId::from_raw(9),
+        core::Rect::new(0.0, 0.0, 240.0, 80.0),
+        GradientInterpolationSpace::Srgb,
+        &stops,
+    )
+    .selected_stop(stops[1].id)
+    .disabled(false)
+    .read_only(false)
+    .keyboard_step(0.05);
+    let mut memory = core::UiMemory::new();
+    let input = core::UiInput::default();
+    let theme = core::default_dark_theme();
+    let mut ui = widgets::Ui::new(&input, &mut memory, &theme);
+    let widget: GradientEditorWidget<'_> = ui.prepare_gradient_editor(config).unwrap();
+    let output: GradientEditorOutput = ui.gradient_editor(&widget);
+
+    assert_eq!(stops[1].id.raw(), 2);
+    assert_eq!(widget.stops(), stops);
+    assert!(output.intents.is_empty());
+    let _: Option<GradientEditorIntent> = None;
+    let _: Option<GradientEditorPrepareError> = None;
+    let spaces = [
+        GradientInterpolationSpace::Srgb,
+        GradientInterpolationSpace::LinearSrgb,
+        GradientInterpolationSpace::DisplayP3,
+    ];
+    assert_eq!(spaces.len(), 3);
+}
+
 fn ordered_text_input_method(
     ui: &mut stern::core::Ui<'_>,
     id: stern::core::WidgetId,

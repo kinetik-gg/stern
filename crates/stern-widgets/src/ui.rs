@@ -8,6 +8,7 @@ mod chrome;
 mod collections;
 mod dock;
 mod frame;
+mod gradient_editor;
 mod inspector_fields;
 mod inspector_pickers;
 mod layout;
