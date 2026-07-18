@@ -1,0 +1,488 @@
+{
+  "schema_version": "1.0",
+  "requirement_id": "STERN-DPI-009",
+  "issue": 653,
+  "stern_version": "1.0.0-rc.2.dev",
+  "specification_sha256": "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed",
+  "source": {
+    "commit": "43d1559cd2c3f577e74b7fbe8cdf9804994a20c7",
+    "tree": "2100fd928e0228a1ff37e84664695b934b66b7c4"
+  },
+  "capture_utc": "2026-07-18T09:57:12.704Z",
+  "host": {
+    "os": "win32",
+    "architecture": "x64"
+  },
+  "scene": {
+    "logical_size": [
+      640,
+      360
+    ],
+    "tokens": {
+      "surface.application": "#111111",
+      "surface.panel_raised": "#181818",
+      "surface.control": "#181818",
+      "surface.sunken": "#0b0b0b",
+      "surface.control_hover": "#1c1c1c",
+      "surface.control_pressed": "#2a2a2a",
+      "border.subtle": "#222222",
+      "border.default": "#2a2a2a",
+      "border.strong": "#3d3d3d",
+      "accent.subtle": "#0b2a3f",
+      "accent.default": "#0c8ce9",
+      "accent.focus": "#4db2ff"
+    },
+    "named_geometry": {
+      "panel": [
+        40,
+        32,
+        560,
+        296
+      ],
+      "shared_edge": {
+        "x": 168,
+        "y1": 76,
+        "y2": 140
+      },
+      "control_swatch": [
+        72,
+        76,
+        96,
+        64
+      ],
+      "accent_swatch": [
+        168,
+        76,
+        96,
+        64
+      ],
+      "sunken_swatch": [
+        296,
+        76,
+        272,
+        64
+      ]
+    },
+    "strokes": [
+      {
+        "name": "hairline",
+        "logical_width": 1,
+        "y": 180
+      },
+      {
+        "name": "emphasis",
+        "logical_width": 2,
+        "y": 220
+      }
+    ],
+    "expected_physical": [
+      {
+        "scale": 1,
+        "width": 640,
+        "height": 360,
+        "parity": true
+      },
+      {
+        "scale": 1.25,
+        "width": 800,
+        "height": 450,
+        "parity": true
+      },
+      {
+        "scale": 1.5,
+        "width": 960,
+        "height": 540,
+        "parity": true
+      },
+      {
+        "scale": 2,
+        "width": 1280,
+        "height": 720,
+        "parity": true
+      }
+    ],
+    "overflow_free": true
+  },
+  "chrome": {
+    "product": "Chrome/150.0.7871.115",
+    "protocol_version": "1.3",
+    "revision": "@25f5b661e5b08141ec24b17d1ce96c5ceb5828da",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+    "executable": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "command": [
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "--headless=new",
+      "--remote-debugging-port=0",
+      "--user-data-dir=C:\\Users\\afterlab\\AppData\\Local\\Temp\\stern-dpi-009-7mUL8n",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--hide-scrollbars",
+      "about:blank"
+    ],
+    "captures": [
+      {
+        "scale": 1,
+        "label": "1.00x",
+        "cdp_parameters": {
+          "width": 640,
+          "height": 360,
+          "mobile": false,
+          "scale": 1,
+          "deviceScaleFactor": 1
+        },
+        "observed": {
+          "ready": "complete",
+          "dpr": 1,
+          "innerWidth": 640,
+          "innerHeight": 360,
+          "rootZoom": "1",
+          "bodyZoom": "1",
+          "scrollWidth": 640,
+          "scrollHeight": 360,
+          "bodyScrollWidth": 640,
+          "bodyScrollHeight": 360
+        }
+      },
+      {
+        "scale": 1.25,
+        "label": "1.25x",
+        "cdp_parameters": {
+          "width": 640,
+          "height": 360,
+          "mobile": false,
+          "scale": 1,
+          "deviceScaleFactor": 1.25
+        },
+        "observed": {
+          "ready": "complete",
+          "dpr": 1.25,
+          "innerWidth": 640,
+          "innerHeight": 360,
+          "rootZoom": "1",
+          "bodyZoom": "1",
+          "scrollWidth": 640,
+          "scrollHeight": 360,
+          "bodyScrollWidth": 640,
+          "bodyScrollHeight": 360
+        }
+      },
+      {
+        "scale": 1.5,
+        "label": "1.50x",
+        "cdp_parameters": {
+          "width": 640,
+          "height": 360,
+          "mobile": false,
+          "scale": 1,
+          "deviceScaleFactor": 1.5
+        },
+        "observed": {
+          "ready": "complete",
+          "dpr": 1.5,
+          "innerWidth": 640,
+          "innerHeight": 360,
+          "rootZoom": "1",
+          "bodyZoom": "1",
+          "scrollWidth": 640,
+          "scrollHeight": 360,
+          "bodyScrollWidth": 640,
+          "bodyScrollHeight": 360
+        }
+      },
+      {
+        "scale": 2,
+        "label": "2.00x",
+        "cdp_parameters": {
+          "width": 640,
+          "height": 360,
+          "mobile": false,
+          "scale": 1,
+          "deviceScaleFactor": 2
+        },
+        "observed": {
+          "ready": "complete",
+          "dpr": 2,
+          "innerWidth": 640,
+          "innerHeight": 360,
+          "rootZoom": "1",
+          "bodyZoom": "1",
+          "scrollWidth": 640,
+          "scrollHeight": 360,
+          "bodyScrollWidth": 640,
+          "bodyScrollHeight": 360
+        }
+      }
+    ]
+  },
+  "vello": {
+    "wgpu_version": "29.0.3",
+    "vello_version": "0.9.0",
+    "backend": "Dx12",
+    "adapter": "NVIDIA GeForce RTX 5080",
+    "vendor": 4318,
+    "device": 11266,
+    "driver": "32.0.15.9174",
+    "driver_info": "",
+    "device_type": "DiscreteGpu",
+    "texture_format": "Rgba8Unorm",
+    "aa": "Area",
+    "captures": [
+      {
+        "scale": 1,
+        "label": "1.00x",
+        "width": 640,
+        "height": 360,
+        "unpadded_row_bytes": 2560,
+        "padded_row_bytes": 2560
+      },
+      {
+        "scale": 1.25,
+        "label": "1.25x",
+        "width": 800,
+        "height": 450,
+        "unpadded_row_bytes": 3200,
+        "padded_row_bytes": 3328
+      },
+      {
+        "scale": 1.5,
+        "label": "1.50x",
+        "width": 960,
+        "height": 540,
+        "unpadded_row_bytes": 3840,
+        "padded_row_bytes": 3840
+      },
+      {
+        "scale": 2,
+        "label": "2.00x",
+        "width": 1280,
+        "height": 720,
+        "unpadded_row_bytes": 5120,
+        "padded_row_bytes": 5120
+      }
+    ],
+    "command": [
+      "WGPU_BACKEND=dx12",
+      "cargo",
+      "+1.92.0",
+      "run",
+      "-p",
+      "stern-vello",
+      "--example",
+      "capture_dpi_evidence",
+      "--all-features",
+      "--",
+      "--output",
+      "C:\\Users\\afterlab\\Documents\\Repositories\\stern-dpi-four-scale-evidence\\evidence\\stern-dpi-009\\vello"
+    ]
+  },
+  "artifacts": [
+    {
+      "renderer": "browser",
+      "scale": 1,
+      "path": "evidence/stern-dpi-009/browser/1.00x.png",
+      "mime": "image/png",
+      "logical_size": [
+        640,
+        360
+      ],
+      "physical_size": [
+        640,
+        360
+      ],
+      "byte_length": 1779,
+      "sha256": "66dd1280c616b71ef1abdba7399650de0e74ed90c2d4270a5b8cb9e45b93686f",
+      "observations": "deterministic capture checks and approved human visual review passed"
+    },
+    {
+      "renderer": "vello",
+      "scale": 1,
+      "path": "evidence/stern-dpi-009/vello/1.00x.png",
+      "mime": "image/png",
+      "logical_size": [
+        640,
+        360
+      ],
+      "physical_size": [
+        640,
+        360
+      ],
+      "byte_length": 2015,
+      "sha256": "f567d70e4adbcfd45c0a3291701107543b41104778eb19f1b8a7242d7e0fab5d",
+      "observations": "deterministic capture checks and approved human visual review passed"
+    },
+    {
+      "renderer": "browser",
+      "scale": 1.25,
+      "path": "evidence/stern-dpi-009/browser/1.25x.png",
+      "mime": "image/png",
+      "logical_size": [
+        640,
+        360
+      ],
+      "physical_size": [
+        800,
+        450
+      ],
+      "byte_length": 2444,
+      "sha256": "02baa9b3cea9def4b95209c3ddf197d1ac8603d55cb04d5142c8ca2dac57ce09",
+      "observations": "deterministic capture checks and approved human visual review passed"
+    },
+    {
+      "renderer": "vello",
+      "scale": 1.25,
+      "path": "evidence/stern-dpi-009/vello/1.25x.png",
+      "mime": "image/png",
+      "logical_size": [
+        640,
+        360
+      ],
+      "physical_size": [
+        800,
+        450
+      ],
+      "byte_length": 2729,
+      "sha256": "7b63cdf7ad76fcb9a6bb87b40e4d806994269e2882219bcd18d284eacf2691f1",
+      "observations": "deterministic capture checks and approved human visual review passed"
+    },
+    {
+      "renderer": "browser",
+      "scale": 1.5,
+      "path": "evidence/stern-dpi-009/browser/1.50x.png",
+      "mime": "image/png",
+      "logical_size": [
+        640,
+        360
+      ],
+      "physical_size": [
+        960,
+        540
+      ],
+      "byte_length": 3033,
+      "sha256": "3015f79c48e9ab29831c2ad411be7c9a90a9a1b0f69790a3bb92abaf3bacd2d5",
+      "observations": "deterministic capture checks and approved human visual review passed"
+    },
+    {
+      "renderer": "vello",
+      "scale": 1.5,
+      "path": "evidence/stern-dpi-009/vello/1.50x.png",
+      "mime": "image/png",
+      "logical_size": [
+        640,
+        360
+      ],
+      "physical_size": [
+        960,
+        540
+      ],
+      "byte_length": 3540,
+      "sha256": "387464820c7dfb174dd6246df5757e8e7114be6f59fcda9396fb4db28867b120",
+      "observations": "deterministic capture checks and approved human visual review passed"
+    },
+    {
+      "renderer": "browser",
+      "scale": 2,
+      "path": "evidence/stern-dpi-009/browser/2.00x.png",
+      "mime": "image/png",
+      "logical_size": [
+        640,
+        360
+      ],
+      "physical_size": [
+        1280,
+        720
+      ],
+      "byte_length": 4546,
+      "sha256": "a944bd5a72d1aa35eab7fee4d24850d03f90e0005ae00b020c97d20d4ca21dd7",
+      "observations": "deterministic capture checks and approved human visual review passed"
+    },
+    {
+      "renderer": "vello",
+      "scale": 2,
+      "path": "evidence/stern-dpi-009/vello/2.00x.png",
+      "mime": "image/png",
+      "logical_size": [
+        640,
+        360
+      ],
+      "physical_size": [
+        1280,
+        720
+      ],
+      "byte_length": 5618,
+      "sha256": "d1b367803a1e6e4fa1f6444cb67a09c5f001759d3249245263deae8e4858b3f2",
+      "observations": "deterministic capture checks and approved human visual review passed"
+    }
+  ],
+  "comparison": {
+    "policy": "independent renderer review of named assertions",
+    "cross_renderer_pixel_equality": false,
+    "limitations": {
+      "browser": "Chromium SVG anti-aliasing and rasterization are renderer-specific.",
+      "vello": "Vello Area AA and GPU rasterization are renderer-specific."
+    }
+  },
+  "review": {
+    "status": "approved",
+    "disposition": "verified",
+    "reviewer": "drizki",
+    "reviewed_utc": "2026-07-18T10:05:06.203Z",
+    "approval_reference": "Runway event issue_653.human_visual_approval_2026-07-18",
+    "artifact_verdicts": [
+      {
+        "path": "evidence/stern-dpi-009/browser/1.00x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "evidence/stern-dpi-009/browser/1.25x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "evidence/stern-dpi-009/browser/1.50x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "evidence/stern-dpi-009/browser/2.00x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "evidence/stern-dpi-009/vello/1.00x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "evidence/stern-dpi-009/vello/1.25x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "evidence/stern-dpi-009/vello/1.50x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "evidence/stern-dpi-009/vello/2.00x.png",
+        "verdict": "PASS"
+      }
+    ],
+    "assertion_results": [
+      {
+        "name": "named_theme_tokens",
+        "result": "PASS"
+      },
+      {
+        "name": "named_geometry_and_shared_edges",
+        "result": "PASS"
+      },
+      {
+        "name": "named_logical_strokes",
+        "result": "PASS"
+      },
+      {
+        "name": "overflow_free_scene",
+        "result": "PASS"
+      },
+      {
+        "name": "expected_physical_dimensions",
+        "result": "PASS"
+      }
+    ],
+    "overall": "PASS"
+  }
+}
