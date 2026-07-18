@@ -191,6 +191,7 @@ fn english_logical_key_label(platform: ShortcutPlatform, key: &Key) -> Option<St
         Key::ArrowUp => "Up".to_owned(),
         Key::ArrowDown => "Down".to_owned(),
         Key::Space => "Space".to_owned(),
+        Key::ContextMenu => "Context Menu".to_owned(),
         Key::Function(0) | Key::Unidentified => return None,
         Key::Function(number) => format!("F{number}"),
     };

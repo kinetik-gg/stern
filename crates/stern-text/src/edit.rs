@@ -1179,6 +1179,7 @@ impl TextEditState {
             | Key::ArrowUp
             | Key::ArrowDown
             | Key::Space
+            | Key::ContextMenu
             | Key::Function(_)
             | Key::Unidentified => {}
         }
@@ -1274,6 +1275,7 @@ impl TextEditState {
             | Key::PageDown
             | Key::ArrowUp
             | Key::ArrowDown
+            | Key::ContextMenu
             | Key::Function(_) => {
                 self.undo.fence();
                 true

@@ -10,6 +10,12 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Added public `Key::ContextMenu`; exhaustive `Key` matches must
+  handle the new variant or add a wildcard. In the Asset Browser and Outliner,
+  a focused selection now opens the same context target through a secondary
+  click, the Menu key, or unmodified `Shift+F10`, with identical enabled-command
+  routing and fail-closed released, unfocused, and disabled cases. This advances
+  only `STERN-CONTEXT-002` to bounded Partial; nothing becomes Accepted.
 - Added bounded automated headless evidence for `STERN-APPMENU-002`. Adjacent
   top-level movement reuses one caller-owned root overlay identity; replacing
   it closes the complete retained stack and scene descendant branch while

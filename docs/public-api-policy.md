@@ -372,12 +372,21 @@ tests alone advance only the
 covered Asset Browser and Outliner portion of `STERN-CONTEXT-003` to bounded
 Partial. Candidate remains Candidate.
 
+Public `Key::ContextMenu` is a prerelease breaking enum addition; exhaustive
+`Key` matches must handle it or add a wildcard. The two Asset Browser and
+Outliner tests in issue #750 prove that a real focused selection converges on
+the same target, ordered enabled/disabled command inventory, enabled command
+request, and application action through secondary click, the Menu key, and
+unmodified `Shift+F10`. Released Menu keys, unfocused collections, and disabled
+collections fail closed. This advances only the covered portion of
+`STERN-CONTEXT-002` to bounded Partial; Candidate remains Candidate.
+
 Outside-click dismissal, target or owner destruction, focus loss, dynamic
 command removal, other consumers, generic `MenuOverlay` focus return,
-command-owned selection mutation, and `STERN-CONTEXT-002` menu-key/`Shift+F10`
-convergence remain unverified. Platform/native/browser/raster/GPU/Vello/manual/
-visual evidence also remains unverified. `STERN-MENU-003` does not advance, and
-nothing is Accepted.
+command-owned selection mutation, and context invocation beyond the Asset
+Browser and Outliner remain unverified. Platform/native/browser/raster/GPU/
+Vello/manual/visual evidence also remains unverified. `STERN-MENU-003` does not
+advance, and nothing is Accepted.
 
 ### Qualified shortcut presentation
 

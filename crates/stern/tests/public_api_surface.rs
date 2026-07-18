@@ -184,6 +184,11 @@ fn shortcut_presentation_is_qualified_experimental_core_api() {
         shortcut.localized_label(ShortcutPlatform::Windows, localizer),
         Some("S".into())
     );
+    let context_menu = Shortcut::new(Modifiers::default(), Key::ContextMenu);
+    assert_eq!(
+        context_menu.localized_label(ShortcutPlatform::Windows, localizer),
+        Some("Context Menu".into())
+    );
     let qualified = [
         std::any::type_name::<ShortcutPlatform>(),
         std::any::type_name::<ShortcutModifier>(),

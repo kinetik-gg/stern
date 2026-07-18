@@ -52,6 +52,7 @@ pub fn key_from_winit(key: &WinitKey) -> Key {
         WinitKey::Named(NamedKey::ArrowUp) => Key::ArrowUp,
         WinitKey::Named(NamedKey::ArrowDown) => Key::ArrowDown,
         WinitKey::Named(NamedKey::Space) => Key::Space,
+        WinitKey::Named(NamedKey::ContextMenu) => Key::ContextMenu,
         WinitKey::Named(NamedKey::F1) => Key::Function(1),
         WinitKey::Named(NamedKey::F2) => Key::Function(2),
         WinitKey::Named(NamedKey::F3) => Key::Function(3),

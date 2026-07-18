@@ -627,6 +627,11 @@ fn losing_window_focus_releases_pressed_buttons() {
 fn keyboard_conversion_maps_named_and_character_keys() {
     let mut adapter = WinitInputAdapter::new(ScaleFactor::ONE);
 
+    assert_eq!(
+        key_from_winit(&WinitKey::Named(NamedKey::ContextMenu)),
+        Key::ContextMenu
+    );
+
     adapter.keyboard_event(
         &WinitKey::Named(NamedKey::Enter),
         ElementState::Pressed,
