@@ -10,6 +10,7 @@ mod status_bar;
 mod system_feedback;
 mod tab_strip;
 mod toolbar;
+mod window_system_menu;
 
 pub use diagnostics::{
     DiagnosticField, DiagnosticFieldValue, DiagnosticSource, DiagnosticStrip, DiagnosticStripItem,
@@ -46,3 +47,4 @@ pub(crate) use system_feedback::{
 };
 pub use tab_strip::{TabStrip, TabStripMove, TabStripTarget};
 pub use toolbar::{Toolbar, ToolbarGroup, ToolbarGroupId, ToolbarItem, ToolbarItemPresentation};
+pub use window_system_menu::WindowSystemMenuTrigger;
