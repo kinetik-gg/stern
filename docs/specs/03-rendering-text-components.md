@@ -490,14 +490,26 @@ retain positive-zero width bits and make no endpoint or non-overlap claim. The
 layout key derives its family, size, and line height from the unchanged final
 `TextPrimitive`, disables wrapping, and keeps default text features.
 
-`Ui::action_button` receives the same policy only through its unchanged
-delegation to `Ui::button`. Hidden actions still emit nothing; disabled actions
-remain visible and inert; pointer and keyboard activation still enqueue exactly
-the existing action ID, `ActionSource::Button`, context, and FIFO order.
-Descriptor icon, shortcut, checked, tooltip, and keyword metadata do not add
-button-label topology. The standalone public `button(...)` component remains
-complete-source and layoutless, while neighboring button-family and generic
-text consumers retain their existing policies.
+`Ui::action_button` uses an icon-aware action-button component rather than
+delegating to `Ui::button`. Its surface is followed by an optional borrowed
+static `Icon` primitive and the complete visible label primitive. When an icon
+is present, its leading width is `theme.sizes.icon.md +
+theme.spacing.resolve(SpacingRole::IconLabelGap)` and the retained label width
+is calculated in this exact order: `let padding_x =
+theme.controls.padding_x; let leading_width = action.icon.map_or(0.0, |_| {
+theme.sizes.icon.md +
+theme.spacing.resolve(SpacingRole::IconLabelGap) }); let label_width =
+(rect.width - padding_x * 2.0 - leading_width).max(0.0);`. The painted icon is
+clamped to the available padded width and row height, is tinted with the button
+foreground, and shifts the label origin to its trailing edge plus the same gap.
+The complete label remains the accessible semantic name. Hidden actions still
+emit nothing; disabled actions remain visible and inert; pointer and keyboard
+activation still enqueue exactly the existing action ID,
+`ActionSource::Button`, context, and FIFO order. Shortcut, checked, tooltip, and
+keyword metadata do not add button-label topology. The standalone public
+`button(...)` component remains complete-source and layoutless, while
+neighboring button-family and generic text consumers retain their existing
+policies.
 
 An admitted narrow, nonpositive, or multiline button label retains its
 full-source `EndEllipsis` key and ID without synthesizing a marker. Strict store
@@ -513,12 +525,19 @@ bounded Partial for the pinned positive `119.3` and `80.0` button-label fixture
 spans. Nothing is Accepted.
 
 Canonical retained `Ui::chrome_scene` now also opts only final complete-source
-`ChromeSceneRowKind::Toolbar` labels into `EndEllipsis`. The width authority is
-the final overflow-projected `row.rect.width`, never a requested model or
-surface width, and uses the existing control padding in this exact order: `let
-padding_x = theme.controls.padding_x; let raw_span = row.rect.width - padding_x
-* 2.0_f32; let label_width = raw_span.max(0.0_f32);`. With canonical
-`padding_x == 8.0`, projected widths `119.3` and `80.0` retain exact
+`ChromeSceneRowKind::Toolbar` labels into `EndEllipsis`. A toolbar action row
+paints its button surface, then its optional borrowed static `Icon` primitive,
+then its complete visible label. The width authority is the final
+overflow-projected `row.rect`, never a requested model or surface width. In the
+icon-free case, `text_x = row.rect.x + padding_x`. With an icon, the painted
+size is calculated in this exact order: `let icon_size =
+theme.sizes.icon.md.min((row.rect.width - padding_x * 2.0).max(0.0))
+.min(row.rect.height.max(0.0));`; then `text_x = icon_rect.max_x() +
+theme.spacing.resolve(SpacingRole::IconLabelGap)`. Both cases resolve the
+retained width as `let raw_span = row.rect.max_x() - padding_x - text_x; let
+label_width = raw_span.max(0.0_f32);`. Thus the optional icon slot and gap reduce
+the label span while preserving the trailing padding. Without an icon and with
+canonical `padding_x == 8.0`, projected widths `119.3` and `80.0` retain exact
 content-width bits `0x42CE999A` and `0x42800000`; `16.0`, `15.999`, and `1.0`
 retain positive-zero bits and make no endpoint or non-overlap claim.
 
@@ -532,20 +551,23 @@ emit no toolbar-row primitive, semantic row, or retained label registration.
 The separate overflow trigger remains a generic Visible/layoutless literal
 glyph, and overflow projection preserves its existing stable action-key order.
 
-Hover, press, focus, checked, disabled, icon, shortcut, tooltip, and keyword
-metadata do not change the retained key when source, effective width, and style
-are equal. Existing surface and row rectangles, clips, origins, baselines,
-focus annuli, primitive order, semantics, responses, repaint, action ID,
-`ActionSource::Button`, context, and FIFO action routing remain unchanged.
+Hover, press, focus, checked, disabled, shortcut, tooltip, and keyword metadata
+do not change the retained key when source, effective width, and style are
+equal. Icon metadata adds the leading primitive and changes the effective label
+width and origin, but preserves the complete label, accessible semantics,
+enabled state, surface and row rectangles, clips, baseline, focus annuli,
+responses, repaint, action ID, `ActionSource::Button`, context, and FIFO action
+routing.
 Admission rejection is transactional and falls through only to the existing
 complete-source generic Visible or layoutless attachment; admitted narrow,
 nonpositive, newline, and Unicode paragraph requests retain full-source policy
 without synthesizing a marker.
 
 Menu, tab, tab-close, status, overflow-trigger, overlay, command-palette, and
-system-feedback text remain generic Visible/layoutless consumers. This adoption
-adds no toolbar, action, chrome, overflow, text, theme, primitive, renderer, or
-public API. Registered chrome-toolbar Vello evidence covers deterministic CPU
+system-feedback text remain generic Visible/layoutless consumers. The retained
+toolbar-label overflow policy adds no model, action-routing, theme, renderer, or
+public API beyond the icon-aware row topology described above. Registered
+chrome-toolbar Vello evidence covers deterministic CPU
 resource and glyph topology at `1.0`, `1.25`, `1.5`, and `2.0` with no fallback
 cache activity. It proves neither browser, raster, pixel, GPU, copied-value,
 tooltip, DPI-legibility, platform, manual, nor visual acceptance. It strengthens
@@ -828,7 +850,7 @@ Builder-style configuration should be available for more complex cases:
 
 ```rust
 Button::new("Analyze")
-    .icon(IconId::Analyze)
+    .icon(phosphor::regular::MAGNIFYING_GLASS)
     .variant(ButtonVariant::Primary)
     .enabled(can_analyze)
     .show(ui);
@@ -836,22 +858,21 @@ Button::new("Analyze")
 
 The canonical internal implementation should still use shared behavior primitives.
 
-### 19.1 Qualified Icon Fallback And Naming Evidence
+### 19.1 Direct Static Icon Evidence
 
-Public headless icon-button evidence holds one stable widget identity, icon
-identity, label, and caller rectangle across missing, registered, missing
-again, and registered-but-unpaintable vector resources. Response, hit, and
-semantic outer bounds remain caller-owned, while registered and fallback
-primitives remain contained in the public medium-icon optical box. Idle,
-hover, press, and disabled presentation do not move those bounds. Explicit
-accessible names and the semantic invoke declaration remain independent of
-vector identity, vector content, missing fallback, and bitmap-backed presentation.
+Public headless icon-button evidence proves that an ordinary generated
+`PhosphorIcon` constant converts through `Into<StaticIcon>` without
+registration. The component emits exactly one `Primitive::Icon` that preserves
+the stable icon ID, the exact borrowed `IconGraphic` pointer, theme tint, and
+the medium-icon destination rectangle. No widget call clones or transforms the
+source paths. Idle, hover, press, and disabled presentation do not move the
+caller-owned response, hit, semantic, or icon bounds. Explicit accessible names
+and the semantic invoke declaration remain independent of static vector or
+general bitmap-backed presentation.
 
-This advances only `STERN-ICON-COMP-002` and `STERN-ICON-COMP-004` to bounded
-Partial automated headless evidence; Candidate remains Candidate and nothing
-becomes Accepted. Stable Stern-name/Phosphor policy, RTL mirroring declarations,
-platform/native behavior, browser, raster, GPU, Vello, manual review, visual
-acceptance, and exact pixel or private recipe equivalence remain unverified.
+This advances only bounded automated headless evidence. Platform/native
+behavior, RTL policy (upstream 2.1.1 declares no RTL metadata), browser, raster,
+GPU pixels, manual review, and visual acceptance remain separate evidence.
 
 ## 20. Lists, Tables, Trees, And Virtualization
 

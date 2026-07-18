@@ -14,10 +14,10 @@ use super::{
     assert_enabled_basic_control_semantics, assert_selection_control_clicks_and_respects_disabled,
     asset_slot_field, button, checkbox_with_label, checked_radio_labels, color_field,
     component_output, default_dark_theme, double_released_at, dragged_at, frame_slider_current,
-    has_semantic_action, icon_button_with_label, interactive_request, label, panel, pointer_input,
-    pressed_at, pressed_key, property_grid_row_affordance_controls,
-    property_grid_row_affordance_rects, radio_button_with_label, radio_group_choices, released_at,
-    select_field, slider_semantic_current, slider_with_label, stage9_rect, toggle_with_label,
+    has_semantic_action, icon_button, interactive_request, label, panel, pointer_input, pressed_at,
+    pressed_key, property_grid_row_affordance_controls, property_grid_row_affordance_rects,
+    radio_button_with_label, radio_group_choices, released_at, select_field,
+    slider_semantic_current, slider_with_label, stage9_rect, toggle_with_label,
 };
 
 #[test]
@@ -38,22 +38,20 @@ fn stage9_basic_components_emit_stable_primitive_categories() {
         [Primitive::Rect(_), Primitive::Text(_)]
     ));
 
-    let icon = icon_button_with_label(
+    let icon = icon_button(
         id,
         rect,
-        IconId::from_raw(7),
+        stern_icons_phosphor::regular::CHECK,
         "Save",
         &input,
         &mut memory,
         &theme,
         false,
     );
-    assert!(matches!(icon.primitives.first(), Some(Primitive::Rect(_))));
-    assert!(
-        icon.primitives[1..]
-            .iter()
-            .any(|primitive| { matches!(primitive, Primitive::Path(_) | Primitive::Line(_)) })
-    );
+    assert!(matches!(
+        icon.primitives.as_slice(),
+        [Primitive::Rect(_), Primitive::Icon(_)]
+    ));
 
     let checkbox = checkbox_with_label(id, rect, "Snap", true, &input, &mut memory, &theme, false);
     assert!(matches!(
@@ -432,7 +430,7 @@ fn asset_slot_field_reports_empty_filled_disabled_read_only_and_drop_states() {
     let rect = Rect::new(0.0, 0.0, 220.0, 24.0);
     let asset = AssetSlotAsset::new("asset://night_sky", "night_sky")
         .with_kind("texture")
-        .with_icon(IconId::from_raw(3));
+        .with_icon(stern_icons_phosphor::regular::FILE);
 
     let empty = asset_slot_field(
         WidgetId::from_key("empty-asset"),

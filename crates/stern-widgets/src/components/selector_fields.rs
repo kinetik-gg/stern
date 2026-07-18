@@ -1,7 +1,7 @@
 use super::{
     ComponentState, CursorShape, DropTargetResponse, DropdownModel, DropdownTriggerPresentation,
-    IconId, Primitive, Rect, RectPrimitive, Response, SemanticAction, SemanticActionKind,
-    SemanticNode, SemanticRole, SemanticValue, TextEditState, TextFieldAccess, TextFieldOutput,
+    Primitive, Rect, RectPrimitive, Response, SemanticAction, SemanticActionKind, SemanticNode,
+    SemanticRole, SemanticValue, StaticIcon, TextEditState, TextFieldAccess, TextFieldOutput,
     TextLayoutKey, TextLayoutStore, TextOverflow, TextStyle, Theme, UiInput, UiMemory, WidgetId,
     WidgetOutput, drop_target, field_text_primitive, finite_widget_extent, pressable,
     suppress_disabled_interaction_reporting, text_field_with_access_runtime_metadata_and_fence,
@@ -86,8 +86,8 @@ pub struct AssetSlotAsset {
     pub label: String,
     /// Optional application-owned asset kind label.
     pub kind: Option<String>,
-    /// Optional icon metadata for renderers or host applications.
-    pub icon: Option<IconId>,
+    /// Optional static icon metadata for renderers or host applications.
+    pub icon: Option<StaticIcon>,
 }
 
 impl AssetSlotAsset {
@@ -109,10 +109,10 @@ impl AssetSlotAsset {
         self
     }
 
-    /// Returns this metadata with an icon identifier.
+    /// Returns this metadata with a static icon.
     #[must_use]
-    pub const fn with_icon(mut self, icon: IconId) -> Self {
-        self.icon = Some(icon);
+    pub fn with_icon(mut self, icon: impl Into<StaticIcon>) -> Self {
+        self.icon = Some(icon.into());
         self
     }
 }

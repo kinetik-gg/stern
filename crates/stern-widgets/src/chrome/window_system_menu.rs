@@ -1,27 +1,29 @@
-use stern_core::{IconId, Point, PointerOrder, PointerTarget, PointerTargetPlan, Rect, WidgetId};
+use stern_core::{
+    Point, PointerOrder, PointerTarget, PointerTargetPlan, Rect, StaticIcon, WidgetId,
+};
 
 /// Retained titlebar trigger for the platform-owned window system menu.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WindowSystemMenuTrigger {
     id: WidgetId,
     titlebar_rect: Rect,
-    icon: IconId,
+    icon: StaticIcon,
     request_position: Point,
 }
 
 impl WindowSystemMenuTrigger {
     /// Creates a trigger from exact window-local logical geometry.
     #[must_use]
-    pub const fn new(
+    pub fn new(
         id: WidgetId,
         titlebar_rect: Rect,
-        icon: IconId,
+        icon: impl Into<StaticIcon>,
         request_position: Point,
     ) -> Self {
         Self {
             id,
             titlebar_rect,
-            icon,
+            icon: icon.into(),
             request_position,
         }
     }
@@ -38,9 +40,9 @@ impl WindowSystemMenuTrigger {
         self.titlebar_rect
     }
 
-    /// Returns the symbolic icon presented by the trigger.
+    /// Returns the static icon presented by the trigger.
     #[must_use]
-    pub const fn icon(&self) -> IconId {
+    pub const fn icon(&self) -> StaticIcon {
         self.icon
     }
 

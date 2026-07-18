@@ -1,9 +1,9 @@
 mod system_feedback;
 
 use stern_core::{
-    Brush, ClipId, ComponentState, Point, Primitive, Rect, RectPrimitive, RepaintRequest,
-    SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, Stroke, TextPrimitive,
-    TextRole,
+    Brush, ClipId, ComponentState, IconPrimitive, Point, Primitive, Rect, RectPrimitive,
+    RepaintRequest, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, Size,
+    SpacingRole, Stroke, TextPrimitive, TextRole, fit_box,
 };
 use stern_text::{TextLayoutKey, TextOverflow, TextStyle};
 
@@ -15,10 +15,7 @@ use crate::chrome::{
 use crate::components::{
     ButtonFocusPlacement, TabFocusPlacement, button_surface_primitives, tab_surface_primitives,
 };
-use crate::{
-    icon_button_with_label as fallback_icon_button_with_label,
-    icon_button_with_library as icon_button_with_library_widget,
-};
+use crate::icon_button;
 
 impl Ui<'_> {
     /// Paints and evaluates one platform-owned window system-menu trigger.
@@ -35,32 +32,17 @@ impl Ui<'_> {
 
         self.register_id(trigger.widget_id());
         let theme = self.theme;
-        let icons = self.icons;
         let (input, memory) = self.runtime.input_and_memory_mut();
-        let output = if let Some(icons) = icons {
-            icon_button_with_library_widget(
-                trigger.widget_id(),
-                trigger.titlebar_rect(),
-                trigger.icon(),
-                "Open window system menu",
-                icons,
-                input,
-                memory,
-                theme,
-                false,
-            )
-        } else {
-            fallback_icon_button_with_label(
-                trigger.widget_id(),
-                trigger.titlebar_rect(),
-                trigger.icon(),
-                "Open window system menu",
-                input,
-                memory,
-                theme,
-                false,
-            )
-        };
+        let output = icon_button(
+            trigger.widget_id(),
+            trigger.titlebar_rect(),
+            trigger.icon(),
+            "Open window system menu",
+            input,
+            memory,
+            theme,
+            false,
+        );
         let response = self.push_interactive(output);
         if response_activated(&response) {
             let requested = self
@@ -194,12 +176,11 @@ impl Ui<'_> {
             | ChromeSceneRowKind::Tab { .. }
             | ChromeSceneRowKind::Status => &row.label,
         };
+        let padding_x = self.theme.controls.padding_x;
+        let text_x = self.paint_chrome_toolbar_icon(row, foreground, padding_x);
         let mut primitive = Primitive::Text(TextPrimitive {
             layout: None,
-            origin: Point::new(
-                row.rect.x + self.theme.controls.padding_x,
-                row.rect.y + extra + font.size,
-            ),
+            origin: Point::new(text_x, row.rect.y + extra + font.size),
             text: text.to_owned(),
             family: font.family.to_owned(),
             size: font.size,
@@ -210,8 +191,7 @@ impl Ui<'_> {
             && let Some(text_layouts) = self.text_layouts.as_deref_mut()
             && let Primitive::Text(text) = &mut primitive
         {
-            let padding_x = self.theme.controls.padding_x;
-            let raw_span = row.rect.width - padding_x * 2.0_f32;
+            let raw_span = row.rect.max_x() - padding_x - text_x;
             let label_width = raw_span.max(0.0_f32);
             text.layout = text_layouts.try_layout_id(
                 TextLayoutKey::new(
@@ -224,6 +204,42 @@ impl Ui<'_> {
             );
         }
         self.primitive(primitive);
+    }
+
+    fn paint_chrome_toolbar_icon(
+        &mut self,
+        row: &ChromeSceneRow,
+        foreground: stern_core::Color,
+        padding_x: f32,
+    ) -> f32 {
+        let Some(icon) = (row.kind == ChromeSceneRowKind::Toolbar)
+            .then_some(row.icon)
+            .flatten()
+        else {
+            return row.rect.x + padding_x;
+        };
+        let icon_size = self
+            .theme
+            .sizes
+            .icon
+            .md
+            .min((row.rect.width - padding_x * 2.0).max(0.0))
+            .min(row.rect.height.max(0.0));
+        let icon_rect = fit_box(
+            Rect::new(
+                row.rect.x + padding_x,
+                row.rect.y,
+                icon_size,
+                row.rect.height,
+            ),
+            Size::new(icon_size, icon_size),
+            stern_core::Alignment::Center,
+            stern_core::Alignment::Center,
+        );
+        self.primitive(Primitive::Icon(IconPrimitive::new(
+            icon, icon_rect, foreground,
+        )));
+        icon_rect.max_x() + self.theme.spacing.resolve(SpacingRole::IconLabelGap)
     }
 }
 

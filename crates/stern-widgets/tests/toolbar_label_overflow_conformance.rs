@@ -3,10 +3,10 @@
 use std::time::Duration;
 
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionSource, FrameContext, FrameOutput,
-    Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PhysicalSize, Point,
-    PointerOrder, Primitive, Rect, ScaleFactor, Shortcut, Size, TextPrimitive, TimeInfo, UiInput,
-    UiMemory, ViewportInfo, WidgetId, default_dark_theme,
+    ActionContext, ActionDescriptor, ActionId, ActionSource, FrameContext, FrameOutput, Key,
+    KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PhysicalSize, Point, PointerOrder,
+    Primitive, Rect, ScaleFactor, Shortcut, Size, TextPrimitive, TimeInfo, UiInput, UiMemory,
+    ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_text::{TextFeatureSet, TextLayoutStore, TextOverflow};
 use stern_widgets::{
@@ -564,7 +564,7 @@ fn interaction_and_descriptor_metadata_preserve_toolbar_label_identity() {
         .expect("idle toolbar identity");
     let row_id = idle.row_ids[0];
     let row_rect = idle.output.responses[0].rect;
-    let accounting = (
+    let plain_accounting = (
         store.len(),
         store.retained_payload_bytes(),
         store.change_cursor(),
@@ -613,7 +613,7 @@ fn interaction_and_descriptor_metadata_preserve_toolbar_label_identity() {
     );
 
     let mut rich = plain.clone();
-    rich.icon = Some(ActionIcon::new("render"));
+    rich.icon = Some(stern_icons_phosphor::regular::PLAY.into());
     rich.tooltip = Some("Application-owned toolbar tooltip".to_owned());
     rich.keywords = vec!["render".to_owned(), "start".to_owned()];
     rich.shortcut = Some(Shortcut::new(
@@ -630,10 +630,33 @@ fn interaction_and_descriptor_metadata_preserve_toolbar_label_identity() {
         &[80.0],
         UiInput::default(),
     );
-    assert_eq!(toolbar_text(&rich_run.frame, source).layout, Some(id));
+    let rich_icon = rich_run
+        .frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Icon(icon) => Some(icon),
+            _ => None,
+        })
+        .expect("metadata-rich toolbar icon primitive");
+    assert_eq!(rich_icon.icon, stern_icons_phosphor::regular::PLAY.icon());
+    let rich_text = toolbar_text(&rich_run.frame, source);
+    let rich_id = rich_text.layout.expect("metadata-rich toolbar identity");
+    assert_ne!(rich_id, id);
+    let rich_stored = store
+        .stored_layout(rich_id)
+        .expect("resident metadata-rich toolbar label");
+    assert_eq!(rich_stored.key.text, source);
+    assert_eq!(rich_stored.key.overflow, TextOverflow::EndEllipsis);
+    assert!(rich_text.origin.x > toolbar_text(&idle.frame, source).origin.x);
     let rich_semantic = rich_run.frame.semantics.get(row_id).unwrap();
     assert_eq!(rich_semantic.state.checked, Some(true));
     assert!(rich_semantic.state.selected);
+    let rich_accounting = (
+        store.len(),
+        store.retained_payload_bytes(),
+        store.change_cursor(),
+    );
 
     let mut disabled = rich;
     disabled.state.enabled = false;
@@ -647,7 +670,10 @@ fn interaction_and_descriptor_metadata_preserve_toolbar_label_identity() {
         pointer_input(row_rect.center(), Some(true)),
     );
     assert!(disabled_run.output.responses[0].state.disabled);
-    assert_eq!(toolbar_text(&disabled_run.frame, source).layout, Some(id));
+    assert_eq!(
+        toolbar_text(&disabled_run.frame, source).layout,
+        Some(rich_id)
+    );
     assert!(disabled_run.frame.actions.is_empty());
     assert_eq!(
         (
@@ -655,7 +681,15 @@ fn interaction_and_descriptor_metadata_preserve_toolbar_label_identity() {
             store.retained_payload_bytes(),
             store.change_cursor()
         ),
-        accounting
+        rich_accounting
+    );
+    assert_ne!(
+        (
+            store.len(),
+            store.retained_payload_bytes(),
+            store.change_cursor()
+        ),
+        plain_accounting
     );
 }
 

@@ -25,5 +25,8 @@ stern-winit = { version = "=1.0.0-rc.2.dev", path = "../stern-winit", optional =
 stern-vello = { version = "=1.0.0-rc.2.dev", path = "../stern-vello", optional = true }
 stern-vello-winit = { version = "=1.0.0-rc.2.dev", path = "../stern-vello-winit", optional = true }
 
+[dev-dependencies]
+stern-icons-phosphor = { version = "=1.0.0-rc.2.dev", path = "../stern-icons-phosphor" }
+
 [lints]
 workspace = true

@@ -1,13 +1,12 @@
 #[allow(unused_imports)]
 use super::{
     ActionContext, ActionDescriptor, ActionSource, Brush, Color, CursorShape, FrameContext,
-    FrameOutput, FrameWarning, IconId, IconLibrary, ImageId, Insets, Key, Modifiers, PhysicalSize,
+    FrameOutput, FrameWarning, IconId, ImageId, Insets, Key, Modifiers, PhysicalSize,
     PlatformRequest, Point, PointerButtonState, Primitive, Rect, RepaintRequest, ScaleFactor,
     SemanticNode, SemanticRole, Size, TextEditState, TextInputEvent, TextLayoutKey,
     TextLayoutStore, TextPrimitive, TextRange, TextStyle, TimeInfo, Ui, UiInput, UiMemory, Vec2,
-    ViewportInfo, WidgetId, check_icon, committed_text, default_dark_theme, frame_context,
-    frame_context_at, held_at, input_at, pressed_at, pressed_key, released_at, scrolled_at,
-    text_field_has_caret,
+    ViewportInfo, WidgetId, committed_text, default_dark_theme, frame_context, frame_context_at,
+    held_at, input_at, pressed_at, pressed_key, released_at, scrolled_at, text_field_has_caret,
 };
 
 #[test]
@@ -47,10 +46,10 @@ fn ui_labeled_controls_preserve_accessible_names() {
         0.0..=1.0,
         false,
     );
-    ui.icon_button_with_label(
+    ui.icon_button(
         "save",
         Rect::new(0.0, 96.0, 24.0, 24.0),
-        IconId::from_raw(1),
+        stern_icons_phosphor::regular::FLOPPY_DISK,
         "Save project",
         false,
     );
@@ -70,16 +69,14 @@ fn ui_labeled_controls_preserve_accessible_names() {
 }
 
 #[test]
-fn ui_icon_buttons_use_registered_vector_icons() {
+fn ui_icon_buttons_use_direct_static_vector_icons() {
     let theme = default_dark_theme();
     let input = UiInput::default();
     let mut memory = UiMemory::new();
-    let mut icons = IconLibrary::new();
-    let icon = IconId::from_raw(7);
-    icons.register(icon, check_icon());
-    let mut ui = Ui::new(&input, &mut memory, &theme).with_icons(&icons);
+    let icon = stern_icons_phosphor::regular::CHECK;
+    let mut ui = Ui::new(&input, &mut memory, &theme);
 
-    ui.icon_button_with_label(
+    ui.icon_button(
         "check",
         Rect::new(0.0, 0.0, 24.0, 24.0),
         icon,
@@ -89,7 +86,9 @@ fn ui_icon_buttons_use_registered_vector_icons() {
     let output = ui.finish_output();
 
     assert_eq!(output.primitives.len(), 2);
-    assert!(matches!(output.primitives[1], Primitive::Path(_)));
+    assert!(
+        matches!(output.primitives[1], Primitive::Icon(primitive) if primitive.icon == icon.icon())
+    );
     assert!(output.semantics.nodes().iter().any(|node| {
         node.role == SemanticRole::IconButton && node.label.as_deref() == Some("Apply")
     }));

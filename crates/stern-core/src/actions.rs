@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use crate::{Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalKey, WidgetId};
+use crate::{Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalKey, StaticIcon, WidgetId};
 
 /// Stable identity for an application-provided action.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -27,24 +27,6 @@ impl ActionId {
 impl fmt::Debug for ActionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("ActionId").field(&self.0).finish()
-    }
-}
-
-/// Optional symbolic icon name attached to an action.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ActionIcon(String);
-
-impl ActionIcon {
-    /// Creates an action icon name.
-    #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
-        Self(name.into())
-    }
-
-    /// Returns the symbolic icon name.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
     }
 }
 
@@ -102,8 +84,8 @@ pub struct ActionDescriptor {
     pub id: ActionId,
     /// Human-readable label for menus, command palettes, and buttons.
     pub label: String,
-    /// Optional symbolic icon.
-    pub icon: Option<ActionIcon>,
+    /// Optional backend-independent static icon presented by UI surfaces.
+    pub icon: Option<StaticIcon>,
     /// Optional tooltip or longer description.
     pub tooltip: Option<String>,
     /// Search keywords for command palette use.
@@ -136,6 +118,13 @@ impl ActionDescriptor {
     #[must_use]
     pub const fn can_invoke(&self) -> bool {
         self.state.visible && self.state.enabled
+    }
+
+    /// Attaches a static icon definition for UI presentation.
+    #[must_use]
+    pub fn with_icon(mut self, icon: impl Into<StaticIcon>) -> Self {
+        self.icon = Some(icon.into());
+        self
     }
 }
 
@@ -629,11 +618,19 @@ impl Hash for ActionDescriptor {
 #[cfg(test)]
 mod tests {
     use super::{
-        ActionBinding, ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation,
-        ActionPriority, ActionQueue, ActionRouter, ActionRoutingContext, ActionSource, ActionState,
-        Shortcut,
+        ActionBinding, ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionPriority,
+        ActionQueue, ActionRouter, ActionRoutingContext, ActionSource, ActionState, Shortcut,
     };
-    use crate::{Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalKey, WidgetId};
+    use crate::{
+        IconGraphic, IconId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalKey, Rect,
+        StaticIcon, WidgetId,
+    };
+
+    static ACTION_GRAPHIC: IconGraphic = IconGraphic::new(Rect::new(0.0, 0.0, 24.0, 24.0), &[]);
+
+    fn action_icon() -> StaticIcon {
+        StaticIcon::new(IconId::from_raw(7), &ACTION_GRAPHIC)
+    }
 
     fn ctrl_key(character: &str) -> Shortcut {
         Shortcut::new(
@@ -690,13 +687,12 @@ mod tests {
 
     #[test]
     fn descriptor_defaults_to_visible_enabled_not_checkable() {
-        let mut descriptor = ActionDescriptor::new("file.save", "Save");
-        descriptor.icon = Some(ActionIcon::new("save"));
+        let mut descriptor = ActionDescriptor::new("file.save", "Save").with_icon(action_icon());
         descriptor.tooltip = Some("Save current project".to_owned());
         descriptor.keywords = vec!["write".to_owned(), "persist".to_owned()];
 
         assert_eq!(descriptor.id.as_str(), "file.save");
-        assert_eq!(descriptor.icon.as_ref().expect("icon").as_str(), "save");
+        assert_eq!(descriptor.icon, Some(action_icon()));
         assert!(descriptor.can_invoke());
         assert_eq!(descriptor.state, ActionState::default());
     }

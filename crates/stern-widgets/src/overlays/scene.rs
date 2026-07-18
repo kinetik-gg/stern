@@ -1,6 +1,6 @@
 use stern_core::{
     ActionId, ActionInvocation, ActionState, PointerOrder, PointerTarget, PointerTargetPlan, Rect,
-    Response, SemanticRole, Shortcut, WidgetId,
+    Response, SemanticRole, Shortcut, StaticIcon, WidgetId,
 };
 
 use super::{
@@ -262,6 +262,7 @@ impl OverlayScene {
                                 check_state: RowCheckState::from_action(action.state, true),
                                 expanded: has_submenu.then_some(false),
                                 action_id: Some(action.id.clone()),
+                                icon: action.icon,
                                 menu_columns: true,
                                 shortcut: action.shortcut.clone(),
                                 tone: if action.destructive {
@@ -312,6 +313,7 @@ impl OverlayScene {
                         )),
                         expanded: None,
                         action_id: None,
+                        icon: None,
                         menu_columns: false,
                         shortcut: None,
                         tone: OverlaySceneRowTone::Neutral,
@@ -338,6 +340,7 @@ impl OverlayScene {
                         check_state: RowCheckState::from_checked(entry.checked),
                         expanded: None,
                         action_id: Some(entry.action_id.clone()),
+                        icon: entry.icon,
                         menu_columns: false,
                         shortcut: None,
                         tone: OverlaySceneRowTone::Neutral,
@@ -374,6 +377,7 @@ impl OverlayScene {
                         check_state: RowCheckState::from_action(action.action.state, false),
                         expanded: None,
                         action_id: Some(action.action.id.clone()),
+                        icon: action.action.icon,
                         menu_columns: false,
                         shortcut: None,
                         tone: OverlaySceneRowTone::Neutral,
@@ -738,6 +742,7 @@ pub(crate) struct OverlaySceneRow {
     check_state: RowCheckState,
     pub(crate) expanded: Option<bool>,
     pub(crate) action_id: Option<ActionId>,
+    pub(crate) icon: Option<StaticIcon>,
     pub(crate) menu_columns: bool,
     pub(crate) shortcut: Option<Shortcut>,
     pub(crate) tone: OverlaySceneRowTone,
@@ -779,6 +784,7 @@ impl OverlaySceneRow {
             check_state: RowCheckState::NotCheckable,
             expanded: None,
             action_id: None,
+            icon: None,
             menu_columns: false,
             shortcut: None,
             tone: OverlaySceneRowTone::Neutral,
@@ -805,6 +811,7 @@ impl OverlaySceneRow {
             check_state: RowCheckState::NotCheckable,
             expanded: None,
             action_id: None,
+            icon: None,
             menu_columns: false,
             shortcut: None,
             tone: OverlaySceneRowTone::Neutral,

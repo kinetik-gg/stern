@@ -301,7 +301,12 @@ fn chrome_surface_blocks_lower_input_and_menu_click_returns_anchor() {
 #[test]
 fn toolbar_mouse_and_keyboard_queue_the_same_action_exactly_once() {
     let menu = menu_bar();
-    let toolbar = toolbar();
+    let icon = stern_icons_phosphor::regular::FOLDER_OPEN;
+    let toolbar = toolbar_from([
+        action("file.open", "Open").with_icon(icon),
+        action("file.save", "Save"),
+        action("file.export", "Export"),
+    ]);
     let tabs = tab_strip();
     let status = status_bar();
     let scene = ChromeScene::new(config(240.0), &menu, &toolbar, &tabs, &status);
@@ -332,6 +337,15 @@ fn toolbar_mouse_and_keyboard_queue_the_same_action_exactly_once() {
     assert_eq!(mouse.action_id, ActionId::new("file.open"));
     assert_eq!(mouse.source, ActionSource::Button);
     assert_eq!(mouse.context, ActionContext::Editor);
+    assert!(mouse_frame.primitives.iter().any(
+        |primitive| matches!(primitive, Primitive::Icon(painted) if painted.icon == icon.icon())
+    ));
+    assert!(
+        mouse_frame
+            .primitives
+            .iter()
+            .any(|primitive| matches!(primitive, Primitive::Text(text) if text.text == "Open"))
+    );
     assert_eq!(mouse_frame.actions.len(), 1);
     assert_eq!(keyboard_frame.actions.len(), 1);
     assert_eq!(mouse_frame.actions.pop_front(), Some(mouse.clone()));

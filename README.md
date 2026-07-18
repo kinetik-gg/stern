@@ -119,12 +119,22 @@ checkout, depend on the facade with a local path:
 ```toml
 [dependencies]
 stern = { path = "../stern/crates/stern", features = ["vello-winit"] }
+stern-icons-phosphor = { path = "../stern/crates/stern-icons-phosphor" }
 ```
 
 Then start from the prelude:
 
 ```rust
 use stern::prelude::*;
+use stern_icons_phosphor as phosphor;
+
+ui.icon_button(
+    "save",
+    save_rect,
+    phosphor::regular::FLOPPY_DISK,
+    "Save project",
+    false,
+);
 ```
 
 Use checkout-relative paths for lower-level integration boundaries as well:

@@ -1,8 +1,8 @@
 //! Public-facade integration contract for the Stern demo.
 
 use stern::core::{
-    PlatformRequest, Point, PointerButtonState, PointerInput, ScaleFactor, SemanticRole, UiInput,
-    UiInputEvent,
+    PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, ScaleFactor, SemanticRole,
+    UiInput, UiInputEvent,
 };
 use stern::platform_winit::{WinitInputAdapter, WinitPlatformRequests};
 use stern_demo::{DEMO_TITLE, DemoApp, DemoWorkspace, demo_context, has_component_semantics};
@@ -22,6 +22,22 @@ fn public_consumer_contract_emits_components_semantics_focus_and_platform_eviden
             .any(|event| matches!(event, UiInputEvent::WindowFocusChanged(true)))
     );
     let normalized_output = app.frame(demo_context(normalized_input));
+    let painted_icons = normalized_output
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Icon(icon) => Some(icon.icon),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        painted_icons,
+        vec![
+            stern_icons_phosphor::regular::PENCIL_SIMPLE.icon(),
+            stern_icons_phosphor::regular::GRAPH.icon(),
+            stern_icons_phosphor::regular::CHECK_CIRCLE.icon(),
+        ]
+    );
     let translated_requests = WinitPlatformRequests::from_frame_output(&normalized_output);
     assert_eq!(translated_requests.window_title(), Some(DEMO_TITLE));
 

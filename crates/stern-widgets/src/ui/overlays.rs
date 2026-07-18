@@ -1,8 +1,9 @@
 use stern_core::{
-    Brush, ClipId, Color, ComponentState, ElevationLevel, FontToken, Key, KeyState, LinePrimitive,
-    MouseButton, Point, Primitive, Rect, RectPrimitive, RepaintRequest, SemanticAction,
-    SemanticActionKind, SemanticNode, ShortcutLabelLocalizer, ShortcutPlatform, Stroke,
-    TextInputEvent, TextPrimitive, TextRole, UiInput, UiInputEvent, WidgetId, pressable,
+    Brush, ClipId, Color, ComponentState, ElevationLevel, FontToken, IconPrimitive, Key, KeyState,
+    LinePrimitive, MouseButton, Point, Primitive, Rect, RectPrimitive, RepaintRequest,
+    SemanticAction, SemanticActionKind, SemanticNode, ShortcutLabelLocalizer, ShortcutPlatform,
+    Size, SpacingRole, StaticIcon, Stroke, TextInputEvent, TextPrimitive, TextRole, UiInput,
+    UiInputEvent, WidgetId, fit_box, pressable,
 };
 
 use super::Ui;
@@ -332,6 +333,9 @@ impl Ui<'_> {
                     stroke,
                 }));
             }
+            if let Some(icon) = row.icon {
+                self.paint_overlay_icon(icon, columns.icon, foreground);
+            }
             self.paint_clipped_overlay_text(
                 row.id.child("menu-label-clip"),
                 columns.label,
@@ -364,12 +368,42 @@ impl Ui<'_> {
             return;
         }
 
+        let padding_x = self.theme.controls.padding_x;
+        let mut text_x = row.rect.x + padding_x;
+        if let Some(icon) = row.icon {
+            let slot = Rect::new(
+                text_x,
+                row.rect.y,
+                self.theme.sizes.icon.md,
+                row.rect.height,
+            );
+            let icon_rect = self.paint_overlay_icon(icon, slot, foreground);
+            text_x = icon_rect.max_x() + self.theme.spacing.resolve(SpacingRole::IconLabelGap);
+        }
         self.paint_overlay_text(
             row.label.clone(),
-            Point::new(row.rect.x + self.theme.controls.padding_x, baseline),
+            Point::new(text_x, baseline),
             font,
             foreground,
         );
+    }
+
+    fn paint_overlay_icon(&mut self, icon: StaticIcon, slot: Rect, foreground: Color) -> Rect {
+        let icon_size = self
+            .theme
+            .sizes
+            .icon
+            .md
+            .min(slot.width.max(0.0))
+            .min(slot.height.max(0.0));
+        let rect = fit_box(
+            slot,
+            Size::new(icon_size, icon_size),
+            stern_core::Alignment::Center,
+            stern_core::Alignment::Center,
+        );
+        self.primitive(Primitive::Icon(IconPrimitive::new(icon, rect, foreground)));
+        rect
     }
 
     fn paint_clipped_overlay_text(

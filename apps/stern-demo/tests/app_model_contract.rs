@@ -43,6 +43,18 @@ fn single_registry_owns_exact_existing_action_descriptors() {
     let model = include_str!("../src/app_model.rs");
     assert!(!library.contains("ActionDescriptor::new"));
     assert_eq!(model.matches("ActionDescriptor::new").count(), 3);
+    assert_eq!(
+        registry.edit_workspace().icon,
+        Some(stern_icons_phosphor::regular::PENCIL_SIMPLE.icon())
+    );
+    assert_eq!(
+        registry.graph_workspace().icon,
+        Some(stern_icons_phosphor::regular::GRAPH.icon())
+    );
+    assert_eq!(
+        registry.apply_shared_state().icon,
+        Some(stern_icons_phosphor::regular::CHECK_CIRCLE.icon())
+    );
     for forbidden in [
         "Rect",
         "Primitive",

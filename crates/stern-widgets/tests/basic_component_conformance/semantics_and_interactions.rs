@@ -11,10 +11,10 @@ use super::{
     assert_enabled_basic_control_semantics, assert_selection_control_clicks_and_respects_disabled,
     asset_slot_field, button, checkbox_with_label, checked_radio_labels, color_field,
     component_output, default_dark_theme, double_released_at, dragged_at, frame_slider_current,
-    has_semantic_action, icon_button_with_label, interactive_request, label, panel, pointer_input,
-    pressed_at, pressed_key, property_grid_row_affordance_controls,
-    property_grid_row_affordance_rects, radio_button_with_label, radio_group_choices, released_at,
-    select_field, slider_semantic_current, slider_with_label, stage9_rect, toggle_with_label,
+    has_semantic_action, icon_button, interactive_request, label, panel, pointer_input, pressed_at,
+    pressed_key, property_grid_row_affordance_controls, property_grid_row_affordance_rects,
+    radio_button_with_label, radio_group_choices, released_at, select_field,
+    slider_semantic_current, slider_with_label, stage9_rect, toggle_with_label,
 };
 
 #[test]
@@ -27,10 +27,10 @@ fn stage9_basic_components_expose_semantic_roles_states_and_values() {
 
     ui.label(Rect::new(0.0, 0.0, 80.0, 18.0), "Title");
     ui.button("button", Rect::new(0.0, 24.0, 90.0, 28.0), "Run", false);
-    ui.icon_button_with_label(
+    ui.icon_button(
         "icon",
         Rect::new(0.0, 56.0, 28.0, 28.0),
-        IconId::from_raw(7),
+        stern_icons_phosphor::regular::CHECK,
         "Save project",
         false,
     );
@@ -199,10 +199,10 @@ fn stage9_button_and_icon_button_click_and_disabled_paths_are_deterministic() {
 
     let icon_id = WidgetId::from_key("icon-button");
     let mut icon_memory = UiMemory::new();
-    let pressed = icon_button_with_label(
+    let pressed = icon_button(
         icon_id,
         rect,
-        IconId::from_raw(7),
+        stern_icons_phosphor::regular::CHECK,
         "Save",
         &pressed_at(4.0, 4.0),
         &mut icon_memory,
@@ -212,10 +212,10 @@ fn stage9_button_and_icon_button_click_and_disabled_paths_are_deterministic() {
     assert!(pressed.response.unwrap().state.pressed);
     assert!(interactive_request(&pressed, CursorShape::PointingHand));
 
-    let released = icon_button_with_label(
+    let released = icon_button(
         icon_id,
         rect,
-        IconId::from_raw(7),
+        stern_icons_phosphor::regular::CHECK,
         "Save",
         &released_at(4.0, 4.0),
         &mut icon_memory,
@@ -239,10 +239,10 @@ fn stage9_button_and_icon_button_click_and_disabled_paths_are_deterministic() {
         ),
         (
             "icon button",
-            icon_button_with_label(
+            icon_button(
                 WidgetId::from_key("icon-disabled"),
                 rect,
-                IconId::from_raw(7),
+                stern_icons_phosphor::regular::CHECK,
                 "Save",
                 &pressed_at(4.0, 4.0),
                 &mut UiMemory::new(),
@@ -283,10 +283,10 @@ fn stage9_disabled_components_do_not_report_focus_when_already_focused() {
     let id = WidgetId::from_key("focused-disabled-icon");
     let mut memory = UiMemory::new();
     memory.focus(id);
-    let output = icon_button_with_label(
+    let output = icon_button(
         id,
         rect,
-        IconId::from_raw(7),
+        stern_icons_phosphor::regular::CHECK,
         "Save",
         &UiInput::default(),
         &mut memory,

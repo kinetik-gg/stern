@@ -25,18 +25,16 @@ use super::{
 use crate::{
     AssetSlotAsset, AssetSlotConfig, AssetSlotOutput, ColorFieldConfig, ColorFieldOutput,
     CommandPaletteOverlay, DropdownCloseResult, DropdownItemId, DropdownModel, DropdownOverlay,
-    IconId, IconLibrary, MenuOverlay, MultiLineTextFieldOutput, NumericInputOutput,
-    NumericScrubInputConfig, NumericScrubInputOutput, OverlayStack, PanelFrame, PathFieldConfig,
-    PathFieldOutput, PropertyGridAffordanceOutput, PropertyGridAffordanceRects, PropertyGridRow,
-    SearchFieldOutput, SelectFieldConfig, SelectFieldOutput, SliderStep, TextFieldOutput,
-    VectorScrubInputConfig, VectorScrubInputOutput, WidgetOutput,
-    asset_slot_field as asset_slot_field_widget, button as button_widget,
-    checkbox as checkbox_widget, checkbox_with_label as checkbox_with_label_widget,
+    MenuOverlay, MultiLineTextFieldOutput, NumericInputOutput, NumericScrubInputConfig,
+    NumericScrubInputOutput, OverlayStack, PanelFrame, PathFieldConfig, PathFieldOutput,
+    PropertyGridAffordanceOutput, PropertyGridAffordanceRects, PropertyGridRow, SearchFieldOutput,
+    SelectFieldConfig, SelectFieldOutput, SliderStep, TextFieldOutput, VectorScrubInputConfig,
+    VectorScrubInputOutput, WidgetOutput, asset_slot_field as asset_slot_field_widget,
+    button as button_widget, checkbox as checkbox_widget,
+    checkbox_with_label as checkbox_with_label_widget,
     checkbox_with_label_target as checkbox_with_label_target_widget,
     color_field as color_field_widget, icon_button as fallback_icon_button_widget,
-    icon_button_with_label as fallback_icon_button_with_label_widget,
-    icon_button_with_library as icon_button_with_library_widget, image as image_widget,
-    image_icon_button as image_icon_button_widget,
+    image as image_widget, image_icon_button as image_icon_button_widget,
     image_icon_button_sized as image_icon_button_sized_widget,
     image_icon_selectable_button as image_icon_selectable_button_widget,
     image_icon_selectable_button_sized as image_icon_selectable_button_sized_widget,
@@ -89,7 +87,6 @@ impl<'a> Ui<'a> {
             runtime,
             theme,
             text_layouts: None,
-            icons: None,
         }
     }
 
@@ -104,7 +101,6 @@ impl<'a> Ui<'a> {
             runtime,
             theme,
             text_layouts: Some(text_layouts),
-            icons: None,
         }
     }
 
@@ -123,13 +119,6 @@ impl<'a> Ui<'a> {
     pub fn with_text_layouts(mut self, text_layouts: &'a mut TextLayoutStore) -> Self {
         text_layouts.advance_generation();
         self.text_layouts = Some(text_layouts);
-        self
-    }
-
-    /// Enables vector icon resolution for this frame.
-    #[must_use]
-    pub const fn with_icons(mut self, icons: &'a IconLibrary) -> Self {
-        self.icons = Some(icons);
         self
     }
 

@@ -1,6 +1,6 @@
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation, ActionQueue,
-    ActionSource,
+    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionQueue, ActionSource,
+    StaticIcon,
 };
 
 /// Stable identity for a toolbar group.
@@ -71,10 +71,10 @@ impl ToolbarItem {
         &self.action.label
     }
 
-    /// Returns the optional symbolic icon from the backing action.
+    /// Returns the optional static icon from the backing action.
     #[must_use]
-    pub const fn icon(&self) -> Option<&ActionIcon> {
-        self.action.icon.as_ref()
+    pub const fn icon(&self) -> Option<StaticIcon> {
+        self.action.icon
     }
 
     /// Returns true when the item should be presented on visible toolbar surfaces.

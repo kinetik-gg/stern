@@ -1,6 +1,6 @@
 //! Windowless Dock/Frame/Panel model conformance tests.
 
-use stern_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
+use stern_core::{ActionId, Axis, Point, Rect, Size, Vec2};
 use stern_widgets::{
     DiagnosticFieldValue, DiagnosticSource, DiagnosticStrip, DiagnosticStripItemId,
     DiagnosticStripSeverity, Dock, DockChromeStyle, DockDropTarget, DockInteractionPolicy,

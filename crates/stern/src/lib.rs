@@ -59,7 +59,6 @@ pub mod vello_winit {
 pub struct UiState {
     memory: core::UiMemory,
     text_layouts: text::TextLayoutStore,
-    icons: widgets::IconLibrary,
 }
 
 impl UiState {
@@ -69,7 +68,6 @@ impl UiState {
         Self {
             memory: core::UiMemory::new(),
             text_layouts: text::TextLayoutStore::new(),
-            icons: widgets::IconLibrary::new(),
         }
     }
 
@@ -95,17 +93,6 @@ impl UiState {
         &mut self.text_layouts
     }
 
-    /// Returns the vector icon library.
-    #[must_use]
-    pub const fn icons(&self) -> &widgets::IconLibrary {
-        &self.icons
-    }
-
-    /// Returns mutable access to the vector icon library.
-    pub fn icons_mut(&mut self) -> &mut widgets::IconLibrary {
-        &mut self.icons
-    }
-
     /// Clears cached shaped text layouts.
     pub fn clear_text_layouts(&mut self) {
         self.text_layouts.clear();
@@ -121,10 +108,8 @@ impl UiState {
         let Self {
             memory,
             text_layouts,
-            icons,
         } = self;
         widgets::Ui::begin_frame_with_text_layouts(context, memory, theme, text_layouts)
-            .with_icons(icons)
     }
 
     /// Registers cached shaped text layouts into renderer resources.
@@ -171,12 +156,13 @@ pub mod prelude {
     pub use crate::UiState;
     pub use crate::core::{
         AccessibilityAdapter, AccessibilityNode, AccessibilitySnapshot, ActionContext,
-        ActionDescriptor, ActionIcon, ActionId, ActionInvocation, ActionPriority, ActionQueue,
-        ActionRouter, ActionRoutingContext, ActionSource, ActionState, Brush, Color, CursorShape,
-        FrameContext, FrameOutput, FrameWarning, IconId, ImageId, Key, Modifiers, PathElement,
-        PathPrimitive, PhysicalSize, PlatformRequest, Point, Primitive, Rect, RepaintRequest,
-        ScaleFactor, SemanticTreeError, Shortcut, Size, TextureId, Theme, TimeInfo, UiInput,
-        UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+        ActionDescriptor, ActionId, ActionInvocation, ActionPriority, ActionQueue, ActionRouter,
+        ActionRoutingContext, ActionSource, ActionState, Brush, Color, CursorShape, FrameContext,
+        FrameOutput, FrameWarning, IconGraphic, IconId, IconLayer, IconPath, IconStroke, ImageId,
+        Key, Modifiers, PathElement, PathPrimitive, PhysicalSize, PlatformRequest, Point,
+        Primitive, Rect, RepaintRequest, ScaleFactor, SemanticTreeError, Shortcut, Size,
+        StaticIcon, TextureId, Theme, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId,
+        default_dark_theme,
     };
     #[cfg(feature = "platform-winit")]
     pub use crate::platform_winit::{
@@ -191,7 +177,7 @@ pub mod prelude {
     #[cfg(feature = "render-vello")]
     pub use crate::render_vello::{VelloRenderer, translate_primitives};
     pub use crate::text::{TextEditState, TextLayoutStore};
-    pub use crate::widgets::{IconGraphic, IconLibrary, IconPath, Ui, ViewportSurface};
+    pub use crate::widgets::{Ui, ViewportSurface};
 }
 
 #[cfg(test)]
@@ -245,25 +231,14 @@ mod tests {
     }
 
     #[test]
-    fn facade_prelude_exposes_icon_customization_types() {
-        let mut icons = prelude::IconLibrary::new();
-        let icon = prelude::IconId::from_raw(1);
-        icons.register(
-            icon,
-            prelude::IconGraphic::new(
-                prelude::Rect::new(0.0, 0.0, 24.0, 24.0),
-                [prelude::IconPath::stroked(
-                    vec![
-                        prelude::PathElement::MoveTo(prelude::Point::new(5.0, 12.0)),
-                        prelude::PathElement::LineTo(prelude::Point::new(10.0, 17.0)),
-                        prelude::PathElement::LineTo(prelude::Point::new(19.0, 7.0)),
-                    ],
-                    2.0,
-                )],
-            ),
-        );
+    fn facade_prelude_exposes_static_icon_types() {
+        let icon: prelude::StaticIcon = stern_icons_phosphor::regular::CHECK.into();
+        let graphic: &prelude::IconGraphic = icon.graphic();
+        let _: &[prelude::IconLayer] = graphic.layers;
+        let _: Option<&prelude::IconPath> =
+            graphic.layers.first().and_then(|layer| layer.paths.first());
 
-        assert!(icons.has_icon(icon));
+        assert_eq!(icon, stern_icons_phosphor::regular::CHECK.icon());
     }
 
     #[test]
@@ -444,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn ui_state_supplies_registered_icons_to_frames() {
+    fn ui_state_frames_accept_direct_static_icons_without_registry() {
         let theme = prelude::default_dark_theme();
         let viewport = prelude::ViewportInfo::new(
             prelude::Size::new(800.0, 600.0),
@@ -457,32 +432,22 @@ mod tests {
             prelude::TimeInfo::default(),
         );
         let mut state = UiState::new();
-        let icon = prelude::IconId::from_raw(7);
-        state.icons_mut().register(
-            icon,
-            prelude::IconGraphic::new(
-                prelude::Rect::new(0.0, 0.0, 24.0, 24.0),
-                [prelude::IconPath::stroked(
-                    vec![
-                        prelude::PathElement::MoveTo(prelude::Point::new(5.0, 12.0)),
-                        prelude::PathElement::LineTo(prelude::Point::new(10.0, 17.0)),
-                        prelude::PathElement::LineTo(prelude::Point::new(19.0, 7.0)),
-                    ],
-                    2.0,
-                )],
-            ),
-        );
+        let icon = stern_icons_phosphor::regular::CHECK;
         let mut ui = state.begin_frame(context, &theme);
 
         ui.icon_button(
             "apply",
             prelude::Rect::new(0.0, 0.0, 24.0, 24.0),
             icon,
+            "Apply",
             false,
         );
         let output = ui.finish_output();
 
         assert_eq!(output.primitives.len(), 2);
-        assert!(matches!(output.primitives[1], prelude::Primitive::Path(_)));
+        assert!(matches!(
+            output.primitives[1],
+            prelude::Primitive::Icon(primitive) if primitive.icon == icon.icon()
+        ));
     }
 }

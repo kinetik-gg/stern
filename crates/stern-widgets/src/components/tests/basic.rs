@@ -1,4 +1,5 @@
 use super::*;
+use stern_core::ComponentState;
 
 #[test]
 fn label_emits_text() {
@@ -45,29 +46,32 @@ fn button_emits_surface_and_text_and_clicks() {
 }
 
 #[test]
-fn icon_button_emits_vector_fallback_symbol() {
+fn icon_button_emits_borrowed_static_vector_primitive() {
     let output = icon_button(
         WidgetId::from_key("icon"),
         Rect::new(0.0, 0.0, 24.0, 24.0),
-        IconId::from_raw(1),
+        stern_icons_phosphor::regular::CHECK,
+        "Check",
         &UiInput::default(),
         &mut UiMemory::new(),
         &default_dark_theme(),
         false,
     );
 
-    assert_eq!(output.primitives.len(), 3);
+    assert_eq!(output.primitives.len(), 2);
     assert!(matches!(output.primitives[0], Primitive::Rect(_)));
-    assert!(matches!(output.primitives[1], Primitive::Path(_)));
-    assert!(matches!(output.primitives[2], Primitive::Line(_)));
+    let Primitive::Icon(icon) = output.primitives[1] else {
+        panic!("expected static icon primitive");
+    };
+    assert_eq!(icon.icon, stern_icons_phosphor::regular::CHECK.icon());
 }
 
 #[test]
-fn icon_button_with_label_preserves_accessible_name() {
-    let output = icon_button_with_label(
+fn icon_button_preserves_accessible_name() {
+    let output = icon_button(
         WidgetId::from_key("icon"),
         Rect::new(0.0, 0.0, 24.0, 24.0),
-        IconId::from_raw(1),
+        stern_icons_phosphor::regular::FLOPPY_DISK,
         "Save project",
         &UiInput::default(),
         &mut UiMemory::new(),
@@ -150,71 +154,66 @@ fn sized_image_icon_button_uses_requested_common_scale_icon_size() {
 }
 
 #[test]
-fn icon_button_uses_registered_vector_icon() {
-    let mut icons = IconLibrary::new();
-    let icon = IconId::from_raw(7);
-    icons.register(icon, check_icon());
-
-    let output = icon_button_with_library(
+fn icon_button_uses_direct_phosphor_handle_without_registration() {
+    let source = stern_icons_phosphor::duotone::CUBE;
+    let theme = default_dark_theme();
+    let output = icon_button(
         WidgetId::from_key("icon"),
         Rect::new(0.0, 0.0, 24.0, 24.0),
-        icon,
+        source,
         "Check",
-        &icons,
         &UiInput::default(),
         &mut UiMemory::new(),
-        &default_dark_theme(),
+        &theme,
         false,
     );
 
-    assert!(icons.has_icon(icon));
     assert_eq!(output.primitives.len(), 2);
     assert!(matches!(output.primitives[0], Primitive::Rect(_)));
-    assert!(matches!(output.primitives[1], Primitive::Path(_)));
+    let Primitive::Icon(icon) = output.primitives[1] else {
+        panic!("expected static icon primitive");
+    };
+    assert_eq!(icon.icon, source.icon());
+    assert!(core::ptr::eq(icon.icon.graphic(), source.icon().graphic()));
+    assert_eq!(icon.rect, Rect::new(4.0, 4.0, 16.0, 16.0));
+    assert_eq!(
+        icon.tint,
+        theme.button(ComponentState::default()).foreground
+    );
 }
 
 #[test]
 fn medium_icon_token_controls_every_unsized_icon_family() {
     let mut theme = default_dark_theme();
     theme.sizes.icon.md = 24.0;
-    let [bitmap, selectable, vector, missing] = unsized_icon_family_primitives(&theme);
+    let [bitmap, selectable, vector, second_vector] = unsized_icon_family_primitives(&theme);
 
     let bitmap_rect = icon_image_rect_from_primitives(&bitmap);
     assert_eq!(bitmap_rect, Rect::new(8.0, 8.0, 24.0, 24.0));
     assert_eq!(icon_image_rect_from_primitives(&selectable), bitmap_rect);
 
-    let vector_path = vector
+    let vector_icon = vector
         .iter()
         .find_map(|primitive| match primitive {
-            Primitive::Path(path) => Some(path),
+            Primitive::Icon(icon) => Some(icon),
             _ => None,
         })
-        .expect("registered vector icon must emit a path");
+        .expect("static vector icon primitive");
+    assert_eq!(vector_icon.rect, bitmap_rect);
     assert_eq!(
-        vector_path.elements,
-        vec![
-            PathElement::MoveTo(Point::new(13.0, 20.0)),
-            PathElement::LineTo(Point::new(18.0, 25.0)),
-            PathElement::LineTo(Point::new(27.0, 15.0)),
-        ]
+        vector_icon.icon,
+        stern_icons_phosphor::regular::CHECK.icon()
     );
-    assert_approx(vector_path.stroke.expect("vector stroke").width, 2.0);
 
-    let missing_line = missing
+    let second_icon = second_vector
         .iter()
         .find_map(|primitive| match primitive {
-            Primitive::Line(line) => Some(line),
+            Primitive::Icon(icon) => Some(icon),
             _ => None,
         })
-        .expect("missing vector icon must emit a line");
-    for (actual, expected) in [
-        (missing_line.from.x, 12.32),
-        (missing_line.from.y, 12.32),
-        (missing_line.to.x, 27.68),
-        (missing_line.to.y, 27.68),
-    ] {
-        assert_approx(actual, expected);
-    }
+        .expect("second static vector icon primitive");
+    assert_eq!(second_icon.rect, bitmap_rect);
+    assert_eq!(second_icon.icon, stern_icons_phosphor::duotone::CUBE.icon());
 
     for (scale, expected_physical) in [(1.0, 24.0), (1.25, 30.0), (1.5, 36.0), (2.0, 48.0)] {
         assert_approx(bitmap_rect.width * scale, expected_physical);
@@ -301,10 +300,6 @@ fn remaining_control_metrics_cannot_change_icon_geometry() {
 
 fn unsized_icon_family_primitives(theme: &stern_core::Theme) -> [Vec<Primitive>; 4] {
     let rect = Rect::new(0.0, 0.0, 40.0, 40.0);
-    let icon = IconId::from_raw(7);
-    let mut icons = IconLibrary::new();
-    icons.register(icon, check_icon());
-
     [
         image_icon_button(
             WidgetId::from_key("bitmap"),
@@ -329,12 +324,11 @@ fn unsized_icon_family_primitives(theme: &stern_core::Theme) -> [Vec<Primitive>;
             false,
         )
         .primitives,
-        icon_button_with_library(
+        icon_button(
             WidgetId::from_key("vector"),
             rect,
-            icon,
+            stern_icons_phosphor::regular::CHECK,
             "Vector",
-            &icons,
             &UiInput::default(),
             &mut UiMemory::new(),
             theme,
@@ -342,9 +336,10 @@ fn unsized_icon_family_primitives(theme: &stern_core::Theme) -> [Vec<Primitive>;
         )
         .primitives,
         icon_button(
-            WidgetId::from_key("missing-vector"),
+            WidgetId::from_key("second-vector"),
             rect,
-            IconId::from_raw(8),
+            stern_icons_phosphor::duotone::CUBE,
+            "Cube",
             &UiInput::default(),
             &mut UiMemory::new(),
             theme,

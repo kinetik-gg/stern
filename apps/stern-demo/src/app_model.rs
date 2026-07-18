@@ -1,4 +1,5 @@
 use stern::core::{ActionDescriptor, ActionInvocation};
+use stern_icons_phosphor as phosphor;
 
 const EDIT_ACTION: &str = "workspace.edit";
 const GRAPH_ACTION: &str = "workspace.graph";
@@ -85,9 +86,12 @@ impl DemoActionRegistry {
     pub fn new() -> Self {
         Self {
             descriptors: [
-                ActionDescriptor::new(EDIT_ACTION, "Edit Workspace"),
-                ActionDescriptor::new(GRAPH_ACTION, "Graph Workspace"),
-                ActionDescriptor::new(APPLY_ACTION, "Apply Shared State"),
+                ActionDescriptor::new(EDIT_ACTION, "Edit Workspace")
+                    .with_icon(phosphor::regular::PENCIL_SIMPLE),
+                ActionDescriptor::new(GRAPH_ACTION, "Graph Workspace")
+                    .with_icon(phosphor::regular::GRAPH),
+                ActionDescriptor::new(APPLY_ACTION, "Apply Shared State")
+                    .with_icon(phosphor::regular::CHECK_CIRCLE),
             ],
         }
     }

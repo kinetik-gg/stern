@@ -14,5 +14,8 @@ description = "Reusable widgets and editor interaction models for Stern"
 stern-core = { version = "=1.0.0-rc.2.dev", path = "../stern-core" }
 stern-text = { version = "=1.0.0-rc.2.dev", path = "../stern-text" }
 
+[dev-dependencies]
+stern-icons-phosphor = { version = "=1.0.0-rc.2.dev", path = "../stern-icons-phosphor" }
+
 [lints]
 workspace = true

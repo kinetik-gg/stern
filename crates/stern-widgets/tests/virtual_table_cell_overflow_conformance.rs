@@ -1468,7 +1468,7 @@ fn production_call_graph_limits_explicit_adoption_to_virtual_table_body_cells() 
         overflow_adopters,
         vec![
             ("src/components/selector_fields.rs", 1),
-            ("src/ui/basic_controls.rs", 1),
+            ("src/ui/basic_controls.rs", 2),
             ("src/ui/chrome.rs", 1),
             ("src/ui/property_grid.rs", 1),
             ("src/ui/virtual_table.rs", 1),

@@ -5,16 +5,16 @@ mod current_prelude_inventory {
 
     use stern::prelude::{
         AccessibilityAdapter, AccessibilityNode, AccessibilitySnapshot, ActionContext,
-        ActionDescriptor, ActionIcon, ActionId, ActionInvocation, ActionPriority, ActionQueue,
-        ActionRouter, ActionRoutingContext, ActionSource, ActionState, Brush, Color, CursorShape,
-        FrameContext, FrameOutput, FrameWarning, IconGraphic, IconId, IconLibrary, IconPath,
-        ImageId, ImageResource, Key, Modifiers, PathElement, PathPrimitive, PhysicalSize,
-        PlatformRequest, Point, Primitive, Rect, RenderDiagnostic, RenderFrameInput,
-        RenderFrameOutput, RenderImage, RenderImageAlpha, RenderImageFormat, RenderImageSampling,
-        RenderResources, RendererBackend, RepaintRequest, ScaleFactor, SemanticTreeError, Shortcut,
-        Size, TextEditState, TextLayoutResource, TextLayoutStore, TextureId, TextureResource,
-        Theme, TimeInfo, Ui, UiInput, UiMemory, UiState, Vec2, ViewportInfo, ViewportSurface,
-        WidgetId, default_dark_theme,
+        ActionDescriptor, ActionId, ActionInvocation, ActionPriority, ActionQueue, ActionRouter,
+        ActionRoutingContext, ActionSource, ActionState, Brush, Color, CursorShape, FrameContext,
+        FrameOutput, FrameWarning, IconGraphic, IconId, IconLayer, IconPath, IconStroke, ImageId,
+        ImageResource, Key, Modifiers, PathElement, PathPrimitive, PhysicalSize, PlatformRequest,
+        Point, Primitive, Rect, RenderDiagnostic, RenderFrameInput, RenderFrameOutput, RenderImage,
+        RenderImageAlpha, RenderImageFormat, RenderImageSampling, RenderResources, RendererBackend,
+        RepaintRequest, ScaleFactor, SemanticTreeError, Shortcut, Size, StaticIcon, TextEditState,
+        TextLayoutResource, TextLayoutStore, TextureId, TextureResource, Theme, TimeInfo, Ui,
+        UiInput, UiMemory, UiState, Vec2, ViewportInfo, ViewportSurface, WidgetId,
+        default_dark_theme,
     };
 
     #[cfg(feature = "platform-winit")]

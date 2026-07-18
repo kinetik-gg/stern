@@ -22,3 +22,9 @@ or shapes.
 The six source weights are `thin`, `light`, `regular`, `bold`, `fill`, and
 `duotone`. The archive contains 1,512 canonical icons in each weight, for
 9,072 SVG assets total, and 18 deprecated aliases in the catalog.
+
+The pure-Rust `stern-icon-atlas` development tool validates this snapshot and
+generates `stern-icons-phosphor`; its historical crate name does not imply a
+raster atlas. Run `cargo run -p stern-icon-atlas -- check` to verify the
+generated tree. Applications consume typed constants directly as borrowed
+`StaticIcon` handles and do not inspect this archive at build or runtime.

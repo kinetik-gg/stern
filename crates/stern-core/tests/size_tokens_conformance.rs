@@ -337,7 +337,9 @@ fn production_sources_have_no_removed_icon_or_check_size_authority() {
     );
     assert!(
         sources.iter().any(|path| {
-            fs::read_to_string(path).is_ok_and(|source| source.starts_with("// @generated"))
+            fs::read_to_string(path).is_ok_and(|source| {
+                source.starts_with("// @generated") || source.starts_with("//! Generated")
+            })
         }),
         "checked-in generated Rust sources must be audited"
     );

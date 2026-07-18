@@ -2225,6 +2225,7 @@ name = "stern"
 version = "1.0.0-rc.2.dev"
 dependencies = [
  "stern-core",
+ "stern-icons-phosphor",
  "stern-render",
  "stern-text",
  "stern-vello",
@@ -2242,6 +2243,7 @@ name = "stern-demo"
 version = "1.0.0-rc.2.dev"
 dependencies = [
  "stern",
+ "stern-icons-phosphor",
 ]
 
 [[package]]
@@ -2310,6 +2312,7 @@ name = "stern-widgets"
 version = "1.0.0-rc.2.dev"
 dependencies = [
  "stern-core",
+ "stern-icons-phosphor",
  "stern-text",
 ]
 

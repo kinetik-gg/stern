@@ -278,7 +278,7 @@ window, GPU, or platform accessibility daemon.
 
 Resources should be referenced by stable handles.
 
-Core resource IDs:
+Core stable handles and identities:
 
 ```text
 IconId
@@ -300,6 +300,8 @@ Icons:
   fill rules, opacity, and stroke width/cap/join metadata. Catalog-specific
   names, weights, aliases, and source ingestion belong to dedicated icon
   libraries and development tooling rather than `stern-core` or renderers.
+- Widget and action presentation carries `StaticIcon` directly. `IconId` is
+  retained as the handle's identity primitive, not as a registry lookup key.
 
 Images:
 
@@ -341,7 +343,8 @@ at the render-image/upload boundary instead.
 
 Missing resource policy:
 
-- Missing icons should render a fallback symbol in debug-friendly form.
+- Empty or invalid static icon graphics should fail recoverably with a
+  structured renderer diagnostic; there is no missing registry lookup path.
 - Missing images/textures should render a visible placeholder.
 - Missing fonts should fall back to default font resolution.
 - Recoverable resource issues should produce structured warnings.

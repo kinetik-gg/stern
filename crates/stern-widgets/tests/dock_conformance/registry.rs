@@ -32,7 +32,7 @@ fn panel_type_descriptor_defaults_are_deterministic_and_editor_appropriate() {
 #[test]
 fn panel_type_descriptor_represents_workspace_metadata() {
     let descriptor = PanelTypeDescriptor::new(PanelTypeId::from_raw(8), "Timeline")
-        .with_icon(IconId::from_raw(99))
+        .with_icon(stern_icons_phosphor::regular::SIDEBAR)
         .with_category(PanelTypeCategory::Timeline)
         .with_default_size(Size::new(640.0, 180.0))
         .with_allowed_contexts([
@@ -47,7 +47,10 @@ fn panel_type_descriptor_represents_workspace_metadata() {
         .with_float_policy(PanelFloatPolicy::Allowed)
         .with_default_open_action(ActionId::new("workspace.open.timeline"));
 
-    assert_eq!(descriptor.icon, Some(IconId::from_raw(99)));
+    assert_eq!(
+        descriptor.icon,
+        Some(stern_icons_phosphor::regular::SIDEBAR.icon())
+    );
     assert_eq!(descriptor.category, PanelTypeCategory::Timeline);
     assert_eq!(descriptor.default_size, Size::new(640.0, 180.0));
     assert_eq!(
@@ -291,7 +294,7 @@ fn registry_open_decision_returns_none_for_disallowed_or_unknown_panel_context()
 fn registry_open_actions_are_app_owned_metadata_only() {
     let registry = PanelRegistry::from_descriptors([
         PanelTypeDescriptor::new(PanelTypeId::from_raw(20), "Viewport")
-            .with_icon(IconId::from_raw(99))
+            .with_icon(stern_icons_phosphor::regular::SIDEBAR)
             .with_category(PanelTypeCategory::Viewport)
             .with_default_open_action(ActionId::new("workspace.open.viewport")),
         PanelTypeDescriptor::new(PanelTypeId::from_raw(30), "Inspector")
@@ -305,7 +308,7 @@ fn registry_open_actions_are_app_owned_metadata_only() {
             PanelOpenActionMetadata {
                 panel_type: PanelTypeId::from_raw(20),
                 title: "Viewport".to_owned(),
-                icon: Some(IconId::from_raw(99)),
+                icon: Some(stern_icons_phosphor::regular::SIDEBAR.icon()),
                 category: PanelTypeCategory::Viewport,
                 default_open_action: Some(ActionId::new("workspace.open.viewport")),
             },

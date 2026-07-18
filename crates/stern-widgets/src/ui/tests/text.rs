@@ -1,13 +1,12 @@
 #[allow(unused_imports)]
 use super::{
     ActionContext, ActionDescriptor, ActionSource, Brush, Color, CursorShape, Duration,
-    FrameContext, FrameOutput, FrameWarning, IconId, IconLibrary, ImageId, Insets, Key, Modifiers,
-    PhysicalSize, PlatformRequest, Point, PointerButtonState, Primitive, Rect, RepaintRequest,
-    ScaleFactor, SemanticNode, SemanticRole, Size, TextEditState, TextInputEvent, TextLayoutKey,
+    FrameContext, FrameOutput, FrameWarning, IconId, ImageId, Insets, Key, Modifiers, PhysicalSize,
+    PlatformRequest, Point, PointerButtonState, Primitive, Rect, RepaintRequest, ScaleFactor,
+    SemanticNode, SemanticRole, Size, TextEditState, TextInputEvent, TextLayoutKey,
     TextLayoutStore, TextPrimitive, TextRange, TextStyle, TimeInfo, Ui, UiInput, UiMemory, Vec2,
-    ViewportInfo, WidgetId, check_icon, committed_text, default_dark_theme, frame_context,
-    frame_context_at, held_at, input_at, pressed_at, pressed_key, released_at, scrolled_at,
-    text_field_has_caret,
+    ViewportInfo, WidgetId, committed_text, default_dark_theme, frame_context, frame_context_at,
+    held_at, input_at, pressed_at, pressed_key, released_at, scrolled_at, text_field_has_caret,
 };
 
 #[test]

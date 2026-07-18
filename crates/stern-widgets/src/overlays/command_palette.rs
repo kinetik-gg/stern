@@ -1,6 +1,6 @@
 use stern_core::{
     ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionQueue, ActionSource, Rect,
-    Size,
+    Size, StaticIcon,
 };
 
 use super::{
@@ -14,6 +14,8 @@ pub struct CommandPaletteEntry {
     pub action_id: ActionId,
     /// Display label.
     pub label: String,
+    /// Optional static icon presented with the action label.
+    pub icon: Option<StaticIcon>,
     /// Search keywords.
     pub keywords: Vec<String>,
     /// Whether the action can currently be invoked.
@@ -27,6 +29,7 @@ impl From<&ActionDescriptor> for CommandPaletteEntry {
         Self {
             action_id: action.id.clone(),
             label: action.label.clone(),
+            icon: action.icon,
             keywords: action.keywords.clone(),
             enabled: action.can_invoke(),
             checked: action.state.checked,
