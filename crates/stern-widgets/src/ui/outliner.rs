@@ -88,6 +88,32 @@ impl Ui<'_> {
             responses: Vec::with_capacity(scene.rows().len()),
         };
 
+        let invalid_context_focus = state
+            .context
+            .as_ref()
+            .filter(|_| config.disabled || !scene.has_prepared_context())
+            .map(|context| {
+                let focused = self.memory().focused().filter(|focused| {
+                    *focused == context.trigger
+                        || context.scene.surfaces().iter().any(|surface| {
+                            stern_core::WidgetId::from_raw(surface.entry().id.raw())
+                                .child("overlay-scene")
+                                == *focused
+                        })
+                        || (0..context.scene.surfaces().len()).any(|index| {
+                            context
+                                .scene
+                                .rows(index)
+                                .iter()
+                                .any(|row| row.id == *focused)
+                        })
+                });
+                (context.trigger, focused)
+            });
+        if invalid_context_focus.is_some() {
+            state.context = None;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
         self.reconcile_outliner_retained_state(scene, state, &mut output);
         let prepared_rename = state.rename_target();
         let context_was_prepared = scene.has_prepared_context() && state.context.is_some();
@@ -371,6 +397,16 @@ impl Ui<'_> {
                     outliner_context_anchor(self.input().pointer.position, config.bounds),
                 )
             });
+        }
+
+        if let Some((trigger, Some(owner))) = invalid_context_focus
+            && self.memory().focused() == Some(owner)
+        {
+            if let Some(focus) = invalid_outliner_context_focus(scene, state, trigger) {
+                self.runtime.memory_mut().focus(focus);
+            } else {
+                self.runtime.memory_mut().clear_focus();
+            }
         }
 
         if let Some((target, trigger, anchor)) = pending_context {
@@ -1174,4 +1210,34 @@ fn outliner_context_viewport(ui: &Ui<'_>, fallback: Rect) -> Rect {
     } else {
         fallback
     }
+}
+
+fn invalid_outliner_context_focus(
+    scene: &OutlinerScene<'_>,
+    state: &mut OutlinerState,
+    trigger: stern_core::WidgetId,
+) -> Option<stern_core::WidgetId> {
+    if scene.config().disabled {
+        return None;
+    }
+    if trigger == background_widget_id(scene.widget_id())
+        || scene.rows().iter().any(|row| {
+            scene.row_widget_id(row.row.id) == trigger && row.row.flags.can_request_selection()
+        })
+    {
+        return Some(trigger);
+    }
+    let item = state
+        .cursor
+        .active()
+        .filter(|item| scene.row(*item).is_some() && outliner_item_selectable(scene, *item))
+        .or_else(|| {
+            scene
+                .rows()
+                .iter()
+                .find(|row| row.row.flags.can_request_selection())
+                .map(|row| row.row.id)
+        })?;
+    state.cursor.activate(scene.projection(), item)?;
+    Some(scene.row_widget_id(item))
 }

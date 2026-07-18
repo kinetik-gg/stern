@@ -312,7 +312,18 @@ impl<'a> OutlinerScene<'a> {
             config.overscan,
         );
         let content_height = config.layout.tree.content_height(projection.len());
-        let context_scene = state.context.as_ref().map(|context| context.scene.clone());
+        let context_scene = state
+            .context
+            .as_ref()
+            .filter(|context| {
+                context.target.target_ids().into_iter().all(|item| {
+                    projection.projected_index(item).is_some()
+                        && model
+                            .item_by_id(item)
+                            .is_some_and(|item| item.flags.can_request_selection())
+                })
+            })
+            .map(|context| context.scene.clone());
 
         Some(Self {
             root,

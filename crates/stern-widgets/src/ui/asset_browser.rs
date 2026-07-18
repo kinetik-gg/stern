@@ -19,8 +19,9 @@ use crate::asset_browser::{
 use crate::{
     CollectionContextActionRequest, CollectionContextTarget, CollectionCursorTarget,
     InlineEditCancelReason, InlineEditCommitReason, InlineEditFocusLossPolicy, InlineEditRequest,
-    ItemId, Menu, MenuOverlay, OverlayDismissal, OverlayKind, OverlayScene, OverlaySceneIntent,
-    OverlaySceneSurface, PopoverPlacement, Selection, TextFieldAccess, collection_context_actions,
+    ItemId, Menu, MenuItem, MenuOverlay, OverlayDismissal, OverlayKind, OverlayScene,
+    OverlaySceneIntent, OverlaySceneSurface, PopoverPlacement, Selection, TextFieldAccess,
+    collection_context_actions,
     components::{RowFocusPlacement, row_surface_primitives},
 };
 
@@ -90,6 +91,19 @@ impl Ui<'_> {
             responses: Vec::with_capacity(scene.layout().items.len()),
         };
 
+        let invalid_context_focus = state.context.as_ref().and_then(|context| {
+            (scene.config().disabled || !scene.context_target_valid(&context.target)).then(|| {
+                let focused = self.memory().focused().filter(|focused| {
+                    *focused == context.trigger
+                        || context_scene_owns_widget(&context.scene, *focused)
+                });
+                (context.trigger, focused)
+            })
+        });
+        if invalid_context_focus.is_some() {
+            state.context = None;
+            self.request_repaint(RepaintRequest::NextFrame);
+        }
         self.reconcile_asset_browser_retained_state(
             scene,
             state,
@@ -359,6 +373,44 @@ impl Ui<'_> {
             });
         }
 
+        if let Some((trigger, Some(focused_owner))) = invalid_context_focus
+            && self.memory().focused() == Some(focused_owner)
+        {
+            let trigger_focusable = !config.disabled
+                && (trigger == background_id
+                    || scene.layout().items.iter().any(|item| {
+                        scene.item_widget_id(item.item.id) == trigger && !item.item.state.disabled
+                    }));
+            let fallback = (!config.disabled)
+                .then(|| {
+                    state
+                        .cursor
+                        .active()
+                        .filter(|item| {
+                            scene
+                                .item(*item)
+                                .is_some_and(|item| !item.item.state.disabled)
+                        })
+                        .or_else(|| {
+                            scene
+                                .layout()
+                                .items
+                                .iter()
+                                .find(|item| !item.item.state.disabled)
+                                .map(|item| item.item.id)
+                        })
+                })
+                .flatten();
+            if trigger_focusable {
+                self.runtime.memory_mut().focus(trigger);
+            } else if let Some(item) = fallback {
+                state.cursor.activate(scene.projection(), item);
+                self.runtime.memory_mut().focus(scene.item_widget_id(item));
+            } else {
+                self.runtime.memory_mut().clear_focus();
+            }
+        }
+
         if let Some((target, trigger, anchor)) = pending_context {
             let descriptors = collection_context_actions(&target, context_actions(&target))
                 .into_iter()
@@ -481,13 +533,6 @@ impl Ui<'_> {
         rename_conflict: &mut impl FnMut(ItemId, &str) -> Option<String>,
     ) {
         let config = scene.config();
-        let context_valid = state
-            .context
-            .as_ref()
-            .is_none_or(|context| scene.context_target_valid(&context.target));
-        if (config.disabled || !context_valid) && state.context.take().is_some() {
-            self.request_repaint(RepaintRequest::NextFrame);
-        }
 
         if let Some(drag) = state.drag.as_ref() {
             let owner_retained = self.memory().drag_source() == Some(drag.widget)
@@ -1116,4 +1161,16 @@ fn asset_browser_context_viewport(ui: &Ui<'_>, fallback: Rect) -> Rect {
     } else {
         fallback
     }
+}
+
+fn context_scene_owns_widget(scene: &OverlayScene, focused: stern_core::WidgetId) -> bool {
+    scene.surfaces().iter().filter_map(|surface| {
+        let root = stern_core::WidgetId::from_raw(surface.entry().id.raw()).child("overlay-scene");
+        match surface {
+            OverlaySceneSurface::Menu { overlay, .. } => Some((root, overlay)),
+            _ => None,
+        }
+    }).any(|(root, overlay)| overlay.visible_items_iter().any(|item| {
+        matches!(item, MenuItem::Action(action) if focused == root.child(("overlay-action", action.id.as_str())))
+    }))
 }

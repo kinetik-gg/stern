@@ -1537,6 +1537,199 @@ fn context_escape_dismissal_restores_asset_trigger_focus_without_mutating_select
 
 #[test]
 #[allow(clippy::too_many_lines)]
+fn invalid_asset_context_reconciles_focus_without_selection_or_action() {
+    fn open_focused_context(
+        model: &AssetBrowserModel,
+        cfg: AssetBrowserConfig,
+        state: &mut AssetBrowserState,
+        memory: &mut UiMemory,
+        trigger: ItemId,
+        extra_selection: Option<ItemId>,
+    ) -> (WidgetId, stern_widgets::Selection, Point) {
+        let idle = run_frame(model, cfg.clone(), state, memory, UiInput::default());
+        let point = item_rect(&idle, trigger).rect.center();
+        let selected = click(point, model, cfg.clone(), state, memory);
+        if let Some(extra) = extra_selection {
+            state.selection.toggle(extra);
+        }
+        let opened = context_click(point, model, cfg.clone(), state, memory);
+        assert!(matches!(
+            opened.output.context_opened,
+            Some(CollectionContextTarget::Selection(_))
+        ));
+        let menu =
+            run_frame_with_options(model, cfg, state, memory, UiInput::default(), false, true);
+        let command = menu
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .find(|node| node.label.as_deref() == Some("Delete"))
+            .expect("real asset context command");
+        memory.focus(command.id);
+        assert_eq!(memory.focused(), Some(command.id));
+        (
+            selected.root.child(("asset-browser-item", trigger.raw())),
+            state.selection.clone(),
+            command.bounds.center(),
+        )
+    }
+
+    let initial = AssetBrowserModel::new(vec![
+        asset(1, "One", "mesh"),
+        asset(2, "Two", "mesh"),
+        asset(3, "Three", "mesh"),
+    ]);
+    let cfg = config(AssetBrowserViewMode::List);
+
+    let mut state = AssetBrowserState::new();
+    let mut memory = UiMemory::new();
+    let (trigger, selection, stale_command) = open_focused_context(
+        &initial,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        id(1),
+        Some(id(2)),
+    );
+    let without_non_trigger =
+        AssetBrowserModel::new(vec![asset(1, "One", "mesh"), asset(3, "Three", "mesh")]);
+    let invalidated = run_frame_with_options(
+        &without_non_trigger,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput {
+            pointer: PointerInput {
+                position: Some(stale_command),
+                ..PointerInput::default()
+            },
+            ..UiInput::default()
+        },
+        false,
+        true,
+    );
+    assert_eq!(state.context_target(), None);
+    assert_eq!(memory.focused(), Some(trigger));
+    assert_eq!(state.selection, selection);
+    assert!(invalidated.output.requests.is_empty());
+    assert!(invalidated.frame.actions.is_empty());
+    assert_eq!(invalidated.frame.repaint, RepaintRequest::NextFrame);
+    assert!(
+        invalidated
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .all(|node| node.label.as_deref() != Some("Delete"))
+    );
+    let settled = run_frame_with_options(
+        &without_non_trigger,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+        true,
+    );
+    assert_eq!(memory.focused(), Some(trigger));
+    assert_eq!(state.selection, selection);
+    assert!(settled.output.requests.is_empty() && settled.frame.actions.is_empty());
+
+    let mut state = AssetBrowserState::new();
+    let mut memory = UiMemory::new();
+    let (_, selection, _) = open_focused_context(
+        &initial,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        id(2),
+        Some(id(1)),
+    );
+    let removed_trigger = run_frame_with_options(
+        &without_non_trigger,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+        true,
+    );
+    let fallback = removed_trigger.root.child(("asset-browser-item", 3_u64));
+    assert_eq!(state.cursor.active(), Some(id(3)));
+    assert_eq!(memory.focused(), Some(fallback));
+    assert_eq!(state.selection, selection);
+    assert!(removed_trigger.output.requests.is_empty() && removed_trigger.frame.actions.is_empty());
+    let _ = run_frame(
+        &without_non_trigger,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+    );
+    assert_eq!(memory.focused(), Some(fallback));
+
+    let single = AssetBrowserModel::new(vec![asset(1, "One", "mesh")]);
+    for (owner, disabled) in [
+        (AssetBrowserModel::new(Vec::new()), false),
+        (single.clone(), true),
+    ] {
+        let mut state = AssetBrowserState::new();
+        let mut memory = UiMemory::new();
+        let (_, selection, _) =
+            open_focused_context(&single, cfg.clone(), &mut state, &mut memory, id(1), None);
+        let closed = run_frame_with_options(
+            &owner,
+            cfg.clone().disabled(disabled),
+            &mut state,
+            &mut memory,
+            UiInput::default(),
+            false,
+            true,
+        );
+        assert_eq!(state.context_target(), None);
+        assert_eq!(memory.focused(), None);
+        assert_eq!(state.selection, selection);
+        assert!(closed.output.requests.is_empty() && closed.frame.actions.is_empty());
+        assert_eq!(closed.frame.repaint, RepaintRequest::NextFrame);
+        let _ = run_frame(
+            &owner,
+            cfg.clone().disabled(disabled),
+            &mut state,
+            &mut memory,
+            UiInput::default(),
+        );
+        assert_eq!(memory.focused(), None);
+    }
+
+    let mut state = AssetBrowserState::new();
+    let mut memory = UiMemory::new();
+    let _ = open_focused_context(&single, cfg.clone(), &mut state, &mut memory, id(1), None);
+    let external = run_frame(
+        &single,
+        cfg.clone(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+    )
+    .outside;
+    memory.focus(external);
+    let unrelated = run_frame_with_options(
+        &AssetBrowserModel::new(Vec::new()),
+        cfg,
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+        true,
+    );
+    assert_eq!(state.context_target(), None);
+    assert_eq!(memory.focused(), Some(external));
+    assert!(unrelated.output.requests.is_empty() && unrelated.frame.actions.is_empty());
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
 fn context_outside_release_and_focused_command_restore_asset_trigger_without_click_through() {
     let model = AssetBrowserModel::new(vec![
         asset(1, "One", "mesh"),

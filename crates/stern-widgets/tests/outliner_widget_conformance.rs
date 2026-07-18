@@ -176,6 +176,9 @@ fn run_frame_with_theme(
     let root = scene.widget_id();
     let rows = scene.rows().to_vec();
     let lower_id = ui.make_id("lower");
+    if lower {
+        ui.register_id(lower_id);
+    }
     ui.resolve_pointer_targets(|plan| {
         if lower {
             plan.target(PointerTarget::new(lower_id, LOWER, PointerOrder::new(10)));
@@ -973,6 +976,185 @@ fn outliner_menu_keeps_open_snapshot_when_live_selection_changes_before_display(
     assert!(provider_calls.iter().all(|target| target == &captured));
     assert_eq!(state.selection.selected(), vec![id(3)]);
     assert_eq!(state.context_target(), None);
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn invalid_outliner_context_reconciles_focus_without_selection_or_action() {
+    fn open_focused_context(
+        model: &OutlinerModel,
+        state: &mut OutlinerState,
+        memory: &mut UiMemory,
+        trigger: ItemId,
+        extra_selection: Option<ItemId>,
+    ) -> (WidgetId, stern_widgets::Selection) {
+        let idle = run_frame(model, config(), state, memory, UiInput::default(), false);
+        let point = idle
+            .rows
+            .iter()
+            .find(|row| row.row.id == trigger)
+            .expect("materialized context trigger")
+            .label_rect
+            .center();
+        let selected = click(point, 1, model, state, memory);
+        if let Some(extra) = extra_selection {
+            state.selection.toggle(extra);
+        }
+        let opened = context_click(point, model, state, memory);
+        assert!(matches!(
+            opened.output.context_opened,
+            Some(CollectionContextTarget::Selection(_))
+        ));
+        let menu = run_frame(model, config(), state, memory, UiInput::default(), false);
+        let command = menu
+            .frame
+            .semantics
+            .nodes()
+            .iter()
+            .find(|node| node.label.as_deref() == Some("Delete"))
+            .expect("real outliner context command")
+            .id;
+        memory.focus(command);
+        assert_eq!(memory.focused(), Some(command));
+        (
+            selected.root.child(("outliner-row", trigger.raw())),
+            state.selection.clone(),
+        )
+    }
+
+    fn assert_closed(
+        run: &Run,
+        state: &OutlinerState,
+        memory: &UiMemory,
+        focus: Option<WidgetId>,
+        selection: &stern_widgets::Selection,
+    ) {
+        assert_eq!(state.context_target(), None);
+        assert_eq!(memory.focused(), focus);
+        assert_eq!(&state.selection, selection);
+        assert!(run.output.requests.is_empty());
+        assert!(run.frame.actions.is_empty());
+        assert_eq!(run.frame.repaint, RepaintRequest::NextFrame);
+        assert!(
+            run.frame
+                .semantics
+                .nodes()
+                .iter()
+                .all(|node| node.label.as_deref() != Some("Delete"))
+        );
+    }
+
+    let initial = roots([1, 2, 3]);
+    let without_two = roots([1, 3]);
+
+    let mut state = OutlinerState::new();
+    let mut memory = UiMemory::new();
+    let (trigger, selection) =
+        open_focused_context(&initial, &mut state, &mut memory, id(1), Some(id(2)));
+    let invalidated = run_frame(
+        &without_two,
+        config(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+    );
+    assert_closed(&invalidated, &state, &memory, Some(trigger), &selection);
+    let settled = run_frame(
+        &without_two,
+        config(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+    );
+    assert_eq!(memory.focused(), Some(trigger));
+    assert_eq!(state.selection, selection);
+    assert!(settled.output.requests.is_empty() && settled.frame.actions.is_empty());
+
+    let mut state = OutlinerState::new();
+    let mut memory = UiMemory::new();
+    let (_, selection) =
+        open_focused_context(&initial, &mut state, &mut memory, id(2), Some(id(1)));
+    let removed = run_frame(
+        &without_two,
+        config(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+    );
+    let fallback = removed.root.child(("outliner-row", 3_u64));
+    assert_eq!(state.cursor.active(), Some(id(3)));
+    assert_closed(&removed, &state, &memory, Some(fallback), &selection);
+    let _ = run_frame(
+        &without_two,
+        config(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        false,
+    );
+    assert_eq!(memory.focused(), Some(fallback));
+
+    let single = roots([1]);
+    for (owner, disabled) in [(roots([]), false), (single.clone(), true)] {
+        let mut state = OutlinerState::new();
+        let mut memory = UiMemory::new();
+        let (_, selection) = open_focused_context(&single, &mut state, &mut memory, id(1), None);
+        let closed = run_frame(
+            &owner,
+            config().disabled(disabled),
+            &mut state,
+            &mut memory,
+            UiInput::default(),
+            false,
+        );
+        assert_closed(&closed, &state, &memory, None, &selection);
+        let _ = run_frame(
+            &owner,
+            config().disabled(disabled),
+            &mut state,
+            &mut memory,
+            UiInput::default(),
+            false,
+        );
+        assert_eq!(memory.focused(), None);
+    }
+
+    let mut state = OutlinerState::new();
+    let mut memory = UiMemory::new();
+    let (_, selection) = open_focused_context(&single, &mut state, &mut memory, id(1), None);
+    let external = run_frame(
+        &single,
+        config(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        true,
+    )
+    .lower
+    .expect("registered external focus target")
+    .id;
+    memory.focus(external);
+    let unrelated = run_frame(
+        &roots([]),
+        config(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        true,
+    );
+    assert_closed(&unrelated, &state, &memory, Some(external), &selection);
+    let _ = run_frame(
+        &roots([]),
+        config(),
+        &mut state,
+        &mut memory,
+        UiInput::default(),
+        true,
+    );
+    assert_eq!(memory.focused(), Some(external));
 }
 
 #[test]
