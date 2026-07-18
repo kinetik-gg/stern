@@ -88,7 +88,7 @@ impl Ui<'_> {
         let mut output = OverlaySceneOutput::default();
         let keyboard_events = self.input().keyboard.events.clone();
         let text_events = self.input().text_events.clone();
-        let outside_activation = primary_activation(self.input());
+        let outside_press = primary_press(self.input());
         let escape_pressed = keyboard_events
             .iter()
             .any(|event| event.state == KeyState::Pressed && matches!(event.key, Key::Escape));
@@ -160,7 +160,7 @@ impl Ui<'_> {
         }
 
         if let Some(request) =
-            scene.dismissal_request(outside_activation, escape_pressed && !escape_consumed)
+            scene.dismissal_request(outside_press, escape_pressed && !escape_consumed)
         {
             self.record_overlay_intent(&mut output, OverlaySceneIntent::Dismiss(request));
         }
@@ -501,19 +501,19 @@ fn navigation_input(key: &Key) -> Option<OverlayNavigationInput> {
     }
 }
 
-fn primary_activation(input: &UiInput) -> Option<Point> {
+fn primary_press(input: &UiInput) -> Option<Point> {
     if input.events.is_empty() {
         return input
             .pointer
             .primary
-            .released
+            .pressed
             .then_some(input.pointer.position)
             .flatten();
     }
     input.events.iter().rev().find_map(|event| match event {
         UiInputEvent::PointerButton {
             button: MouseButton::Primary,
-            down: false,
+            down: true,
             position,
             ..
         } => (*position).or(input.pointer.position),
