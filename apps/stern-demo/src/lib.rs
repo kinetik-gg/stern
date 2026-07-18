@@ -6,9 +6,9 @@ mod graph_workspace;
 
 use stern::UiState;
 use stern::core::{
-    ActionContext, ActionInvocation, FrameContext, FrameOutput, PhysicalSize, PlatformRequest,
-    Rect, ScaleFactor, SemanticRole, Size, TimeInfo, UiInput, ViewportInfo, WidgetId,
-    default_dark_theme,
+    ActionContext, ActionInvocation, ActionRoutingContext, FrameContext, FrameOutput, PhysicalSize,
+    PlatformRequest, Rect, ScaleFactor, SemanticRole, Size, TimeInfo, UiInput, ViewportInfo,
+    WidgetId, default_dark_theme,
 };
 use stern::render::RenderResources;
 
@@ -54,6 +54,11 @@ impl DemoApp {
         self.model.applied_revision()
     }
 
+    /// Enables or disables the shared action across every public projection.
+    pub const fn set_apply_enabled(&mut self, enabled: bool) {
+        self.actions.set_apply_shared_state_enabled(enabled);
+    }
+
     /// Returns the application-owned Graph workspace state.
     #[must_use]
     pub const fn graph_workspace(&self) -> &GraphWorkspaceState {
@@ -62,6 +67,7 @@ impl DemoApp {
 
     /// Builds and dispatches one frame through public toolkit APIs.
     pub fn frame(&mut self, context: FrameContext) -> FrameOutput {
+        let keyboard = context.input.keyboard.clone();
         let logical_size = context.viewport.logical_size;
         let edit = self.actions.edit_workspace().clone();
         let graph = self.actions.graph_workspace().clone();
@@ -70,7 +76,9 @@ impl DemoApp {
         let revision = self.model.applied_revision();
         let bounds = context.viewport.logical_size;
         let theme = default_dark_theme();
-        let output = {
+        let shortcut_enabled =
+            workspace == DemoWorkspace::Edit && !self.edit_workspace.has_overlay();
+        let mut output = {
             let mut ui = self.ui_state.begin_frame(context, &theme);
             let edit_rect = Rect::new(24.0, 56.0, 112.0, 30.0);
             let graph_rect = Rect::new(148.0, 56.0, 120.0, 30.0);
@@ -119,6 +127,16 @@ impl DemoApp {
             }
             ui.finish_output()
         };
+        if shortcut_enabled {
+            let routing = ActionRoutingContext::new().with_editor();
+            let mut shortcuts = self
+                .actions
+                .shortcut_router()
+                .resolve_shortcuts_in_context(&keyboard, routing);
+            for invocation in shortcuts.drain() {
+                output.actions.push(invocation);
+            }
+        }
         let mut actions = output.actions.clone();
         for invocation in actions.drain() {
             self.dispatch(&invocation);

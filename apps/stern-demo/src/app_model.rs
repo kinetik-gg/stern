@@ -1,4 +1,7 @@
-use stern::core::{ActionDescriptor, ActionInvocation};
+use stern::core::{
+    ActionBinding, ActionContext, ActionDescriptor, ActionInvocation, ActionPriority, ActionRouter,
+    Key, Modifiers, Shortcut,
+};
 use stern_icons_phosphor as phosphor;
 
 const EDIT_ACTION: &str = "workspace.edit";
@@ -90,8 +93,7 @@ impl DemoActionRegistry {
                     .with_icon(phosphor::regular::PENCIL_SIMPLE),
                 ActionDescriptor::new(GRAPH_ACTION, "Graph Workspace")
                     .with_icon(phosphor::regular::GRAPH),
-                ActionDescriptor::new(APPLY_ACTION, "Apply Shared State")
-                    .with_icon(phosphor::regular::CHECK_CIRCLE),
+                apply_descriptor(),
             ],
         }
     }
@@ -114,6 +116,23 @@ impl DemoActionRegistry {
         &self.descriptors[2]
     }
 
+    /// Enables or disables the shared action for every projected surface.
+    pub const fn set_apply_shared_state_enabled(&mut self, enabled: bool) {
+        self.descriptors[2].state.enabled = enabled;
+    }
+
+    /// Builds the application-owned shortcut router from the shared descriptors.
+    #[must_use]
+    pub fn shortcut_router(&self) -> ActionRouter {
+        let mut router = ActionRouter::new();
+        router.bind(ActionBinding::new(
+            self.apply_shared_state().clone(),
+            ActionContext::Editor,
+            ActionPriority::Editor,
+        ));
+        router
+    }
+
     /// Iterates over descriptors in stable registry order.
     #[must_use]
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &ActionDescriptor> {
@@ -125,4 +144,15 @@ impl Default for DemoActionRegistry {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn apply_descriptor() -> ActionDescriptor {
+    let mut descriptor = ActionDescriptor::new(APPLY_ACTION, "Apply Shared State")
+        .with_icon(phosphor::regular::CHECK_CIRCLE);
+    descriptor.shortcut = Some(Shortcut::new(
+        Modifiers::new(false, true, false, false),
+        Key::Enter,
+    ));
+    descriptor.keywords = vec!["apply".to_owned(), "shared state".to_owned()];
+    descriptor
 }

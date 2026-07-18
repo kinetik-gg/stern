@@ -3,9 +3,9 @@
 use std::{collections::BTreeSet, fs, path::PathBuf};
 
 use stern::core::{
-    FrameContext, FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize,
-    Point, PointerButtonState, PointerInput, ScaleFactor, SemanticNode, SemanticRole, Size,
-    TimeInfo, UiInput, ViewportInfo, WidgetId,
+    ActionSource, FrameContext, FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
+    PhysicalSize, Point, PointerButtonState, PointerInput, ScaleFactor, SemanticNode, SemanticRole,
+    Size, TimeInfo, UiInput, ViewportInfo, WidgetId,
 };
 use stern::render::RenderDiagnostic;
 use stern_demo::{DemoApp, demo_context};
@@ -93,7 +93,32 @@ fn dock_ids_remain_stable_across_resize_and_focus() {
 }
 
 #[test]
-fn edit_workspace_reports_exact_ten_public_component_ids() {
+fn shared_menu_escape_and_outside_press_preserve_focus_owner() {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let focused = click(&mut app, &initial, &SemanticRole::ListItem, "Backdrop");
+    let owner = app.focused().expect("declared focus owner");
+
+    let _ = click(&mut app, &focused, &SemanticRole::MenuItem, "Workspace");
+    let shown = app.frame(demo_context(UiInput::default()));
+    assert!(has_label(&shown, "Workspace commands"));
+    let _ = app.frame(demo_context(key(Key::Escape)));
+    let closed = app.frame(demo_context(UiInput::default()));
+    assert!(!has_label(&closed, "Workspace commands"));
+    assert_eq!(app.focused(), Some(owner));
+
+    let _ = click(&mut app, &closed, &SemanticRole::MenuItem, "Workspace");
+    let shown = app.frame(demo_context(UiInput::default()));
+    assert!(has_label(&shown, "Workspace commands"));
+    let outside = Point::new(8.0, 440.0);
+    let _ = app.frame(demo_context(pointer(outside, true, true, false)));
+    let closed = app.frame(demo_context(pointer(outside, false, false, true)));
+    assert!(!has_label(&closed, "Workspace commands"));
+    assert_eq!(app.focused(), Some(owner));
+}
+
+#[test]
+fn edit_workspace_reports_exact_fifteen_public_component_ids() {
     let trace = edit_workspace_trace();
     let observed = observed_component_ids(&trace);
     let expected = EXPECTED_COMPONENT_IDS.split_ascii_whitespace().collect();
@@ -103,18 +128,14 @@ fn edit_workspace_reports_exact_ten_public_component_ids() {
         .collect::<BTreeSet<_>>();
     assert_eq!(required.len(), 34);
     assert!(observed.is_subset(&required));
-    assert_eq!(required.difference(&observed).count(), 24);
+    assert_eq!(required.difference(&observed).count(), 19);
 
     let evidence = runtime_journey_evidence(&trace);
     assert_eq!(
         evidence,
         [
             [RuntimeStepEvidence::Passed; 3],
-            [
-                RuntimeStepEvidence::NotExecuted,
-                RuntimeStepEvidence::Passed,
-                RuntimeStepEvidence::NotExecuted,
-            ],
+            [RuntimeStepEvidence::Passed; 3],
             [
                 RuntimeStepEvidence::NotExecuted,
                 RuntimeStepEvidence::Passed,
@@ -153,17 +174,15 @@ fn edit_workspace_reports_exact_ten_public_component_ids() {
         if missing.is_empty() && unproven.is_empty() {
             completed.push(id);
         }
-        assert!(
-            !missing.is_empty() || !unproven.is_empty(),
-            "{id} has no runtime-derived gap: missing={missing:?}, unproven assertions={unproven:?}",
-        );
     }
-    assert!(completed.is_empty(), "completed journeys: {completed:?}");
+    assert_eq!(completed, ["shared-action-projection"]);
 }
 
 const EXPECTED_COMPONENT_IDS: &str = concat!(
     "button virtual-list workspace-chrome dock content-structure-components toolbar-components ",
-    "navigation-surface-components collection-components inspector-components editor-chrome-components",
+    "icon-shortcut-components menu-components command-palette-components overlay-system ",
+    "overlay-components navigation-surface-components collection-components inspector-components ",
+    "editor-chrome-components",
 );
 const JOURNEY_COMPONENTS: &str = "\
 workspace-boot-and-traversal|editor-frame workspace-chrome dock editor-chrome-components navigation-surface-components content-structure-components
@@ -184,10 +203,14 @@ struct ExecutedEditEvidence {
     collection_traversed: RuntimeStepEvidence,
     identity_preserved: RuntimeStepEvidence,
     shared_action_invoked: RuntimeStepEvidence,
+    shared_descriptor_projected: RuntimeStepEvidence,
+    shared_activation_exact: RuntimeStepEvidence,
+    shared_disabled_consistent: RuntimeStepEvidence,
     inspector_projected: RuntimeStepEvidence,
 }
 
 fn edit_workspace_trace() -> EditWorkspaceTrace {
+    let shared = shared_action_evidence();
     let mut app = DemoApp::new();
     let initial = app.frame(demo_context(UiInput::default()));
     let translation =
@@ -222,12 +245,163 @@ fn edit_workspace_trace() -> EditWorkspaceTrace {
                 ids == dock_ids(&resized) && focus == app.focused(),
             ),
             shared_action_invoked: RuntimeStepEvidence::executed(shared_action_invoked),
+            shared_descriptor_projected: RuntimeStepEvidence::executed(shared.descriptor_projected),
+            shared_activation_exact: RuntimeStepEvidence::executed(shared.activation_exact),
+            shared_disabled_consistent: RuntimeStepEvidence::executed(shared.disabled_consistent),
             inspector_projected: RuntimeStepEvidence::executed(inspector_projected),
         },
     }
 }
+
+struct SharedActionEvidence {
+    descriptor_projected: bool,
+    activation_exact: bool,
+    disabled_consistent: bool,
+}
+
+fn shared_action_evidence() -> SharedActionEvidence {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let toolbar_projected = !node(&initial, &SemanticRole::IconButton, "Apply Shared State")
+        .state
+        .disabled;
+    let toolbar = click(
+        &mut app,
+        &initial,
+        &SemanticRole::IconButton,
+        "Apply Shared State",
+    );
+    let toolbar_exact = exact_action(&toolbar, ActionSource::Button) && app.applied_revision() == 1;
+
+    let base = app.frame(demo_context(UiInput::default()));
+    let _ = click(&mut app, &base, &SemanticRole::MenuItem, "Workspace");
+    let menu = app.frame(demo_context(UiInput::default()));
+    let menu_projected = !node(&menu, &SemanticRole::MenuItem, "Apply Shared State")
+        .state
+        .disabled;
+    let menu_action = click(
+        &mut app,
+        &menu,
+        &SemanticRole::MenuItem,
+        "Apply Shared State",
+    );
+    let menu_exact = exact_action(&menu_action, ActionSource::Menu) && app.applied_revision() == 2;
+
+    let context_base = app.frame(demo_context(UiInput::default()));
+    let context_point = node(&context_base, &SemanticRole::Viewport, "Viewport")
+        .bounds
+        .center();
+    let _ = app.frame(demo_context(secondary(context_point, true, true, false)));
+    let _ = app.frame(demo_context(secondary(context_point, false, false, true)));
+    let context = app.frame(demo_context(UiInput::default()));
+    let context_projected = !node(&context, &SemanticRole::MenuItem, "Apply Shared State")
+        .state
+        .disabled;
+    let context_action = click(
+        &mut app,
+        &context,
+        &SemanticRole::MenuItem,
+        "Apply Shared State",
+    );
+    let context_exact =
+        exact_action(&context_action, ActionSource::Menu) && app.applied_revision() == 3;
+
+    let shortcut = app.frame(demo_context(key_with_modifiers(
+        Key::Enter,
+        Modifiers::new(false, true, false, false),
+    )));
+    let shortcut_exact =
+        exact_action(&shortcut, ActionSource::Shortcut) && app.applied_revision() == 4;
+
+    let palette = app.frame(demo_context(key_with_modifiers(
+        Key::Character("p".to_owned()),
+        Modifiers::new(true, true, false, false),
+    )));
+    let palette_projected = has_role(&palette, &SemanticRole::SearchField)
+        && !node(&palette, &SemanticRole::MenuItem, "Apply Shared State")
+            .state
+            .disabled;
+    let palette_action = app.frame(demo_context(key(Key::Enter)));
+    let palette_exact =
+        exact_action(&palette_action, ActionSource::CommandPalette) && app.applied_revision() == 5;
+
+    SharedActionEvidence {
+        descriptor_projected: toolbar_projected
+            && menu_projected
+            && context_projected
+            && shortcut_exact
+            && palette_projected,
+        activation_exact: toolbar_exact
+            && menu_exact
+            && context_exact
+            && shortcut_exact
+            && palette_exact,
+        disabled_consistent: disabled_projection_evidence(),
+    }
+}
+
+fn disabled_projection_evidence() -> bool {
+    let mut app = DemoApp::new();
+    app.set_apply_enabled(false);
+    let initial = app.frame(demo_context(UiInput::default()));
+    let toolbar = node(&initial, &SemanticRole::IconButton, "Apply Shared State")
+        .state
+        .disabled;
+
+    let _ = click(&mut app, &initial, &SemanticRole::MenuItem, "Workspace");
+    let menu = app.frame(demo_context(UiInput::default()));
+    let menu_disabled = node(&menu, &SemanticRole::MenuItem, "Apply Shared State")
+        .state
+        .disabled;
+    let _ = app.frame(demo_context(key(Key::Escape)));
+
+    let context_base = app.frame(demo_context(UiInput::default()));
+    let context_point = node(&context_base, &SemanticRole::Viewport, "Viewport")
+        .bounds
+        .center();
+    let _ = app.frame(demo_context(secondary(context_point, true, true, false)));
+    let _ = app.frame(demo_context(secondary(context_point, false, false, true)));
+    let context = app.frame(demo_context(UiInput::default()));
+    let context_disabled = node(&context, &SemanticRole::MenuItem, "Apply Shared State")
+        .state
+        .disabled;
+    let _ = app.frame(demo_context(key(Key::Escape)));
+
+    let palette = app.frame(demo_context(key_with_modifiers(
+        Key::Character("p".to_owned()),
+        Modifiers::new(true, true, false, false),
+    )));
+    let palette_disabled = node(&palette, &SemanticRole::MenuItem, "Apply Shared State")
+        .state
+        .disabled;
+    let palette_action = app.frame(demo_context(key(Key::Enter)));
+    let _ = app.frame(demo_context(key(Key::Escape)));
+    let shortcut = app.frame(demo_context(key_with_modifiers(
+        Key::Enter,
+        Modifiers::new(false, true, false, false),
+    )));
+
+    toolbar
+        && menu_disabled
+        && context_disabled
+        && palette_disabled
+        && action_count(&palette_action, "shared.apply") == 0
+        && action_count(&shortcut, "shared.apply") == 0
+        && app.applied_revision() == 0
+}
+
+fn exact_action(output: &FrameOutput, source: ActionSource) -> bool {
+    let mut actions = output.actions.clone();
+    let actions = actions.drain().collect::<Vec<_>>();
+    matches!(actions.as_slice(), [action]
+        if action.action_id.as_str() == "shared.apply"
+            && action.source == source
+            && action.context == stern::core::ActionContext::Editor)
+}
+
 fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> {
     let action = trace.evidence.shared_action_invoked.passed();
+    let shared_surfaces = trace.evidence.shared_descriptor_projected.passed();
     let list = has_role(&trace.initial, &SemanticRole::List) && has_label(&trace.initial, "Assets");
     let selected = node(&trace.selected, &SemanticRole::ListItem, "Character")
         .state
@@ -254,6 +428,11 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
             dock,
             structure,
             toolbar,
+            shared_surfaces,
+            shared_surfaces,
+            shared_surfaces,
+            shared_surfaces,
+            shared_surfaces,
             navigation,
             list && selected,
             inspector,
@@ -288,7 +467,11 @@ fn runtime_journey_evidence(trace: &EditWorkspaceTrace) -> [[RuntimeStepEvidence
             trace.evidence.collection_traversed,
             trace.evidence.identity_preserved,
         ],
-        [unexecuted, trace.evidence.shared_action_invoked, unexecuted],
+        [
+            trace.evidence.shared_descriptor_projected,
+            trace.evidence.shared_activation_exact,
+            trace.evidence.shared_disabled_consistent,
+        ],
         [unexecuted, trace.evidence.inspector_projected, unexecuted],
         [unexecuted; 3],
         [unexecuted; 3],
@@ -401,11 +584,26 @@ fn pointer(point: Point, down: bool, pressed: bool, released: bool) -> UiInput {
     }
 }
 
+fn secondary(point: Point, down: bool, pressed: bool, released: bool) -> UiInput {
+    UiInput {
+        pointer: PointerInput {
+            position: Some(point),
+            secondary: PointerButtonState::new(down, pressed, released),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    }
+}
+
 fn key(key: Key) -> UiInput {
-    let event = KeyEvent::new(key, KeyState::Pressed, Modifiers::default(), false);
+    key_with_modifiers(key, Modifiers::default())
+}
+
+fn key_with_modifiers(key: Key, modifiers: Modifiers) -> UiInput {
+    let event = KeyEvent::new(key, KeyState::Pressed, modifiers, false);
     UiInput {
         keyboard: KeyboardInput {
-            modifiers: Modifiers::default(),
+            modifiers,
             events: vec![event],
         },
         ..UiInput::default()
