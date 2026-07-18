@@ -1,9 +1,9 @@
 use core::fmt;
 
-use stern_core::{ClipboardText, RepaintRequest, WidgetId};
+use stern_core::{ClipboardText, Point, RepaintRequest, WidgetId};
 
 /// One ordered application-shell operation.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq)]
 pub enum WinitShellRequest {
     /// Write text, including an empty string, to the clipboard.
     CopyToClipboard(String),
@@ -11,6 +11,11 @@ pub enum WinitShellRequest {
     RequestClipboardText {
         /// Widget that owns the pending paste request.
         target: WidgetId,
+    },
+    /// Show the host window's platform-owned system menu.
+    ShowWindowSystemMenu {
+        /// Logical window position at which the platform menu should open.
+        position: Point,
     },
     /// Open a validated HTTP or HTTPS URL.
     OpenUrl(String),
@@ -27,6 +32,10 @@ impl fmt::Debug for WinitShellRequest {
                 .debug_struct("RequestClipboardText")
                 .field("target", target)
                 .finish(),
+            Self::ShowWindowSystemMenu { position } => formatter
+                .debug_struct("ShowWindowSystemMenu")
+                .field("position", position)
+                .finish(),
             Self::OpenUrl(url) => formatter
                 .debug_struct("OpenUrl")
                 .field("scheme", &redacted_url_scheme(url))
@@ -38,7 +47,7 @@ impl fmt::Debug for WinitShellRequest {
 /// Owned ordered shell work returned by window request application.
 ///
 /// The batch is intentionally non-cloneable and is consumed by [`Self::execute`].
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct WinitShellRequests {
     /// Operations in original frame order.
     operations: Vec<WinitShellRequest>,
@@ -102,6 +111,17 @@ impl WinitShellRequests {
                         }
                     }
                 }
+                WinitShellRequest::ShowWindowSystemMenu { position } => {
+                    if let Err(error) = services.show_window_system_menu(position) {
+                        outcome
+                            .results
+                            .push(WinitShellResult::Failure(WinitShellFailure::new(
+                                WinitShellOperation::ShowWindowSystemMenu,
+                                None,
+                                error.into(),
+                            )));
+                    }
+                }
                 WinitShellRequest::OpenUrl(url) => {
                     if !is_supported_web_url(&url) {
                         outcome
@@ -143,6 +163,15 @@ pub trait WinitShellServices {
     /// Returns a safe structured service error when the clipboard is unavailable.
     fn read_clipboard_text(&mut self) -> Result<String, WinitShellServiceError>;
 
+    /// Shows the platform-owned system menu for the host window.
+    ///
+    /// # Errors
+    ///
+    /// The default fails closed so existing service implementations remain compatible.
+    fn show_window_system_menu(&mut self, _position: Point) -> Result<(), WinitShellServiceError> {
+        Err(WinitShellServiceError::Unavailable)
+    }
+
     /// Opens a prevalidated HTTP or HTTPS URL.
     ///
     /// # Errors
@@ -178,6 +207,8 @@ pub enum WinitShellOperation {
     ClipboardWrite,
     /// Clipboard read.
     ClipboardRead,
+    /// Platform-owned window system menu.
+    ShowWindowSystemMenu,
     /// Browser URL open.
     OpenUrl,
 }

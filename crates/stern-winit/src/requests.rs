@@ -191,6 +191,11 @@ impl WinitPlatformRequests {
                     .push(WinitTextInputRequest::UpdateRect { rect: *rect });
             }
             PlatformRequest::StopTextInput => self.text_input.push(WinitTextInputRequest::Stop),
+            PlatformRequest::ShowWindowSystemMenu { position } => {
+                self.shell.push(WinitShellRequest::ShowWindowSystemMenu {
+                    position: *position,
+                });
+            }
             PlatformRequest::SetWindowTitle(title) => self.window_title = Some(title.clone()),
             PlatformRequest::OpenUrl(url) => {
                 self.shell.push(WinitShellRequest::OpenUrl(url.clone()));

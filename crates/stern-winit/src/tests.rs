@@ -4,9 +4,11 @@ use std::time::Instant;
 
 use crate::{
     WinitAccessibilityUpdate, WinitFrameClock, WinitInputAdapter, WinitPlatformRequests,
-    WinitShellRequest, WinitTextInputRequest, WinitWindowOps, cursor_to_winit,
-    frame_context_from_winit, key_from_winit, modifiers_from_winit, physical_key_from_winit,
-    scale_factor_from_winit, viewport_from_winit,
+    WinitShellFailure, WinitShellFailureReason, WinitShellOperation, WinitShellRequest,
+    WinitShellRequests, WinitShellResult, WinitShellServiceError, WinitShellServices,
+    WinitTextInputRequest, WinitWindowOps, cursor_to_winit, frame_context_from_winit,
+    key_from_winit, modifiers_from_winit, physical_key_from_winit, scale_factor_from_winit,
+    viewport_from_winit,
 };
 use stern_core::{
     ClipboardText, CursorShape, FrameOutput, InputWheelDelta, Key, KeyState, Modifiers,
@@ -983,6 +985,98 @@ fn frame_output_platform_requests_translate_to_winit_request_data() {
             WinitShellRequest::OpenUrl("https://example.com".to_owned()),
         ]
     );
+}
+
+#[test]
+fn system_menu_requests_translate_execute_fail_closed_and_discard_stale_work() {
+    #[derive(Debug, PartialEq)]
+    enum ShellCall {
+        Clipboard(String),
+        SystemMenu(Point),
+        Url(String),
+    }
+    #[derive(Default)]
+    struct FakeServices {
+        calls: Vec<ShellCall>,
+    }
+    impl WinitShellServices for FakeServices {
+        fn write_clipboard_text(&mut self, text: &str) -> Result<(), WinitShellServiceError> {
+            self.calls.push(ShellCall::Clipboard(text.to_owned()));
+            Ok(())
+        }
+        fn read_clipboard_text(&mut self) -> Result<String, WinitShellServiceError> {
+            Ok(String::new())
+        }
+        fn show_window_system_menu(
+            &mut self,
+            position: Point,
+        ) -> Result<(), WinitShellServiceError> {
+            self.calls.push(ShellCall::SystemMenu(position));
+            Ok(())
+        }
+        fn open_http_url(&mut self, url: &str) -> Result<(), WinitShellServiceError> {
+            self.calls.push(ShellCall::Url(url.to_owned()));
+            Ok(())
+        }
+    }
+    struct DefaultServices;
+    impl WinitShellServices for DefaultServices {
+        fn write_clipboard_text(&mut self, _: &str) -> Result<(), WinitShellServiceError> {
+            Err(WinitShellServiceError::Unavailable)
+        }
+        fn read_clipboard_text(&mut self) -> Result<String, WinitShellServiceError> {
+            Err(WinitShellServiceError::Unavailable)
+        }
+        fn open_http_url(&mut self, _: &str) -> Result<(), WinitShellServiceError> {
+            Err(WinitShellServiceError::Unavailable)
+        }
+    }
+
+    let position = Point::new(44.0, 28.0);
+    let mut output = FrameOutput::new();
+    output.push_platform_request(PlatformRequest::CopyToClipboard("before".to_owned()));
+    output.push_platform_request(PlatformRequest::ShowWindowSystemMenu { position });
+    output.push_platform_request(PlatformRequest::OpenUrl("https://example.com".to_owned()));
+    let requests = WinitPlatformRequests::from_frame_output(&output);
+    assert_eq!(
+        requests.shell().operations(),
+        &[
+            WinitShellRequest::CopyToClipboard("before".to_owned()),
+            WinitShellRequest::ShowWindowSystemMenu { position },
+            WinitShellRequest::OpenUrl("https://example.com".to_owned()),
+        ]
+    );
+
+    let mut window = FakeWindow::default();
+    let (shell, _) = requests.apply_to_window_ops(&mut window).into_parts();
+    let mut services = FakeServices::default();
+    let outcome = shell.execute(&mut services);
+    assert_eq!(
+        services.calls,
+        vec![
+            ShellCall::Clipboard("before".to_owned()),
+            ShellCall::SystemMenu(position),
+            ShellCall::Url("https://example.com".to_owned()),
+        ]
+    );
+    assert!(outcome.results().is_empty());
+
+    let mut default_services = DefaultServices;
+    let unavailable =
+        WinitShellRequests::from_operations([WinitShellRequest::ShowWindowSystemMenu { position }])
+            .execute(&mut default_services);
+    assert_eq!(
+        unavailable.results(),
+        &[WinitShellResult::Failure(WinitShellFailure {
+            operation: WinitShellOperation::ShowWindowSystemMenu,
+            target: None,
+            reason: WinitShellFailureReason::ServiceUnavailable,
+        })]
+    );
+
+    let mut stale = WinitPlatformRequests::from_frame_output(&output);
+    stale.replace_frame_output(&FrameOutput::new());
+    assert!(stale.shell().is_empty());
 }
 
 #[test]

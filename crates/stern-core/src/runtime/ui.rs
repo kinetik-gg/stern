@@ -9,8 +9,8 @@ use crate::render::Primitive;
 use crate::{
     ActionContext, ActionId, ActionInvocation, ActionSource, CapturedDomainDragGesture,
     CapturedSelectionGesture, IdStack, LivenessRemovalStatus, LivenessTargetId, LivenessToken,
-    LivenessUpdateStatus, Modifiers, MouseButton, OrderedTextInputEvent, Rect, SemanticActionKind,
-    SemanticNode, WidgetId,
+    LivenessUpdateStatus, Modifiers, MouseButton, OrderedTextInputEvent, Point, Rect,
+    SemanticActionKind, SemanticNode, WidgetId,
 };
 
 use super::focus::{
@@ -656,6 +656,18 @@ impl<'a> Ui<'a> {
             }
             request => self.output.push_platform_request(request),
         }
+    }
+
+    /// Requests the platform-owned window system menu at a logical position.
+    ///
+    /// Returns false without emitting a request when either coordinate is non-finite.
+    pub fn request_window_system_menu(&mut self, position: Point) -> bool {
+        if !position.x.is_finite() || !position.y.is_finite() {
+            return false;
+        }
+        self.output
+            .push_platform_request(PlatformRequest::ShowWindowSystemMenu { position });
+        true
     }
 
     /// Requests a cursor shape for a hovered or captured widget.

@@ -3,7 +3,7 @@ use std::{fmt, time::Duration};
 use crate::debug::{DiagnosticCategory, DiagnosticLocation, DiagnosticSeverity, FrameDiagnostic};
 use crate::input::{InputStreamConflict, UiInput};
 use crate::render::{ClipId, LayerId};
-use crate::{PhysicalSize, Rect, ScaleFactor, SemanticTreeError, Size, WidgetId};
+use crate::{PhysicalSize, Point, Rect, ScaleFactor, SemanticTreeError, Size, WidgetId};
 
 /// Information about the current rendering viewport.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -168,6 +168,11 @@ pub enum PlatformRequest {
     },
     /// Stop platform text input or IME.
     StopTextInput,
+    /// Ask the platform shell to show the host window's system menu.
+    ShowWindowSystemMenu {
+        /// Logical window position at which the platform menu should open.
+        position: Point,
+    },
     /// Set the host window title.
     SetWindowTitle(String),
     /// Ask the application/platform shell to open a URL.
@@ -195,6 +200,10 @@ impl fmt::Debug for PlatformRequest {
                 .field("rect", rect)
                 .finish(),
             Self::StopTextInput => formatter.write_str("StopTextInput"),
+            Self::ShowWindowSystemMenu { position } => formatter
+                .debug_struct("ShowWindowSystemMenu")
+                .field("position", position)
+                .finish(),
             Self::SetWindowTitle(title) => formatter
                 .debug_struct("SetWindowTitle")
                 .field("bytes", &title.len())
