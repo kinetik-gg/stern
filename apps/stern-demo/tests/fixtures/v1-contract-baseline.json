@@ -1,0 +1,25 @@
+{
+  "formatVersion": 1,
+  "sternVersion": "1.0.0-rc.2.dev",
+  "specificationSha256": "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed",
+  "status": "incomplete",
+  "coverageSource": "none",
+  "requiredComponentIds": ["button", "text-field", "dropdown", "selection-controls", "value-controls", "progress-feedback", "overlay-system", "virtual-list", "editor-frame", "workspace-chrome", "dock", "inspector-collections", "node-graph", "timeline", "viewport", "color-picker", "gradient-editor", "content-structure-components", "icon-shortcut-components", "toolbar-components", "menu-components", "command-palette-components", "advanced-editor-fields", "choice-value-components", "feedback-status-components", "overlay-components", "navigation-surface-components", "collection-components", "inspector-components", "editor-chrome-components", "color-components", "timeline-components", "node-components", "viewport-components"],
+  "workspaces": [
+    {"id": "edit-workspace", "requiredVisibleComponentIds": ["button", "text-field", "dropdown", "selection-controls", "value-controls", "progress-feedback", "virtual-list", "editor-frame", "workspace-chrome", "dock", "inspector-collections", "timeline", "viewport", "content-structure-components", "icon-shortcut-components", "toolbar-components", "advanced-editor-fields", "choice-value-components", "feedback-status-components", "navigation-surface-components", "collection-components", "inspector-components", "editor-chrome-components", "timeline-components", "viewport-components"], "requiredInvokedComponentIds": ["overlay-system", "menu-components", "command-palette-components", "overlay-components", "color-picker", "gradient-editor", "color-components"]},
+    {"id": "graph-workspace", "requiredVisibleComponentIds": ["editor-frame", "workspace-chrome", "dock", "node-graph", "node-components", "viewport", "viewport-components", "inspector-components", "toolbar-components", "navigation-surface-components"], "requiredInvokedComponentIds": ["menu-components", "command-palette-components", "overlay-system", "overlay-components"]}
+  ],
+  "journeys": [
+    {"id": "workspace-boot-and-traversal", "workspaceId": "edit-workspace", "requiredComponentIds": ["editor-frame", "workspace-chrome", "dock", "editor-chrome-components", "navigation-surface-components", "content-structure-components"]},
+    {"id": "shared-action-projection", "workspaceId": "edit-workspace", "requiredComponentIds": ["button", "toolbar-components", "menu-components", "command-palette-components", "icon-shortcut-components"]},
+    {"id": "collection-to-inspector-edit", "workspaceId": "edit-workspace", "requiredComponentIds": ["virtual-list", "collection-components", "inspector-collections", "inspector-components", "text-field", "advanced-editor-fields", "dropdown", "selection-controls", "value-controls", "choice-value-components"]},
+    {"id": "timeline-and-viewport-edit", "workspaceId": "edit-workspace", "requiredComponentIds": ["timeline", "timeline-components", "viewport", "viewport-components", "progress-feedback", "feedback-status-components"]},
+    {"id": "color-and-gradient-edit", "workspaceId": "edit-workspace", "requiredComponentIds": ["color-picker", "gradient-editor", "color-components", "overlay-system", "overlay-components"]},
+    {"id": "graph-connection-edit", "workspaceId": "graph-workspace", "requiredComponentIds": ["node-graph", "node-components", "dock", "inspector-components", "viewport-components"]},
+    {"id": "overlay-and-failure-recovery", "workspaceId": "edit-workspace", "requiredComponentIds": ["overlay-system", "overlay-components", "menu-components", "command-palette-components", "feedback-status-components"]}
+  ],
+  "gateIds": ["public-consumer-boundary", "canonical-component-composition", "complete-component-coverage", "deterministic-user-journeys", "semantic-structure", "renderer-and-scale-quality", "platform-integration", "honest-evidence"],
+  "acceptedComponentIds": [],
+  "acceptedJourneyIds": [],
+  "passedGateIds": []
+}

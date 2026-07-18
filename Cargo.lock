@@ -2299,6 +2299,7 @@ dependencies = [
  "pollster",
  "stern",
  "stern-icons-phosphor",
+ "syn",
  "winit",
 ]
 
