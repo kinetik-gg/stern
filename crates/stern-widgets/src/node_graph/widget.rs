@@ -1,8 +1,11 @@
 use stern_core::{Response, WidgetId};
 
 use super::{
-    NodeGraphEmissionError, NodeGraphHitTarget, NodeGraphHitTestConfig, NodeGraphSelection,
-    NodeGraphSelectionOperation, NodeGraphStaticOutput, NodeGraphStaticView, NodeGraphViewport,
+    NodeGraphCreateLinkRequest, NodeGraphEmissionError, NodeGraphHitTarget, NodeGraphHitTestConfig,
+    NodeGraphLinkDraft, NodeGraphLinkDraftCancelled, NodeGraphLinkDraftEndpoint,
+    NodeGraphLinkDraftEndpointError, NodeGraphLinkDraftRejected, NodeGraphLinkEditRequestError,
+    NodeGraphSelection, NodeGraphSelectionOperation, NodeGraphStaticOutput, NodeGraphStaticView,
+    NodeGraphViewport, PortEndpoint,
 };
 
 /// Caller-owned configuration for one retained node graph widget.
@@ -10,6 +13,7 @@ use super::{
 pub struct NodeGraphWidgetConfig<'graph> {
     view: NodeGraphStaticView<'graph>,
     disabled: bool,
+    read_only: bool,
     hit_test: NodeGraphHitTestConfig,
 }
 
@@ -20,6 +24,7 @@ impl<'graph> NodeGraphWidgetConfig<'graph> {
         Self {
             view,
             disabled: false,
+            read_only: false,
             hit_test: NodeGraphHitTestConfig::new(),
         }
     }
@@ -28,6 +33,13 @@ impl<'graph> NodeGraphWidgetConfig<'graph> {
     #[must_use]
     pub const fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Sets whether mutation intents are suppressed while selection stays available.
+    #[must_use]
+    pub const fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
         self
     }
 
@@ -45,6 +57,7 @@ pub struct NodeGraphWidget<'graph> {
     view: NodeGraphStaticView<'graph>,
     output: NodeGraphStaticOutput,
     disabled: bool,
+    read_only: bool,
     hit_test: NodeGraphHitTestConfig,
 }
 
@@ -57,6 +70,7 @@ impl<'graph> NodeGraphWidget<'graph> {
             view: config.view,
             output,
             disabled: config.disabled,
+            read_only: config.read_only,
             hit_test: config.hit_test,
         })
     }
@@ -85,6 +99,12 @@ impl<'graph> NodeGraphWidget<'graph> {
         self.disabled
     }
 
+    /// Returns whether graph mutation intents are suppressed.
+    #[must_use]
+    pub const fn read_only(&self) -> bool {
+        self.read_only
+    }
+
     pub(crate) const fn view(&self) -> &NodeGraphStaticView<'graph> {
         &self.view
     }
@@ -105,6 +125,119 @@ pub enum NodeGraphWidgetIntent {
     Selection(NodeGraphSelectionOperation),
 }
 
+/// Typed lifecycle intent for one retained connection edit.
+#[derive(Debug, Clone, PartialEq)]
+pub enum NodeGraphConnectionIntent {
+    /// A port drag crossed the threshold and began a connection preview.
+    Begin(NodeGraphConnectionBegin),
+    /// Candidate geometry changed under the frozen graph transform.
+    Preview(NodeGraphConnectionPreview),
+    /// The candidate passed the canonical typed link policy.
+    Accepted(NodeGraphCreateLinkRequest),
+    /// The candidate failed target resolution or typed link policy.
+    Rejected(NodeGraphConnectionRejection),
+    /// The accepted connection should be committed by the application.
+    Commit(NodeGraphCreateLinkRequest),
+    /// The transaction ended without application mutation.
+    Cancel(NodeGraphConnectionCancel),
+}
+
+/// Stable connection transaction metadata captured when dragging begins.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeGraphConnectionBegin {
+    /// Retained node graph that owns the gesture.
+    pub graph: WidgetId,
+    /// Stable node and port identity that began the draft.
+    pub start: NodeGraphLinkDraftEndpoint,
+    /// Pan/zoom transform frozen for targeting until commit or cancellation.
+    pub viewport: NodeGraphViewport,
+}
+
+/// Candidate connection geometry resolved through the captured transform.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeGraphConnectionPreview {
+    /// Retained node graph that owns the gesture.
+    pub graph: WidgetId,
+    /// Current typed link draft and candidate target.
+    pub draft: NodeGraphLinkDraft,
+    /// Pan/zoom transform frozen when the gesture began.
+    pub viewport: NodeGraphViewport,
+}
+
+/// Deterministic reason a connection candidate was rejected.
+#[derive(Debug, Clone, PartialEq)]
+pub enum NodeGraphConnectionRejection {
+    /// Candidate targeting resolved, but draft completion failed.
+    Draft(NodeGraphLinkDraftRejected),
+    /// Candidate endpoints no longer form a canonical create-link request.
+    Link(NodeGraphLinkEditRequestError),
+    /// Candidate port metadata could not be resolved.
+    Endpoint(NodeGraphLinkDraftEndpointError),
+}
+
+/// Why an active connection transaction was cancelled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeGraphConnectionCancelReason {
+    /// Escape was pressed while the graph owned the gesture.
+    Escape,
+    /// Pointer capture or window focus was lost.
+    CaptureLost,
+    /// The graph became disabled during the transaction.
+    Disabled,
+    /// The graph became read-only during the transaction.
+    ReadOnly,
+}
+
+/// Cancellation metadata for restoring the last committed application state.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeGraphConnectionCancel {
+    /// Retained node graph that owned the gesture.
+    pub graph: WidgetId,
+    /// Deterministic cancellation cause.
+    pub reason: NodeGraphConnectionCancelReason,
+    /// Last typed candidate state before cancellation.
+    pub draft: NodeGraphLinkDraftCancelled,
+    /// Pan/zoom transform frozen when the gesture began.
+    pub viewport: NodeGraphViewport,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct NodeGraphConnectionCapture {
+    pub(crate) owner: WidgetId,
+    pub(crate) viewport: NodeGraphViewport,
+    pub(crate) hit_test: NodeGraphHitTestConfig,
+    pub(crate) draft: NodeGraphLinkDraft,
+    pub(crate) started: bool,
+}
+
+/// Opaque caller-retained state for one node graph connection gesture.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct NodeGraphConnectionController {
+    pub(crate) capture: Option<NodeGraphConnectionCapture>,
+}
+
+impl NodeGraphConnectionController {
+    /// Returns true after a port drag crossed the interaction threshold.
+    #[must_use]
+    pub fn is_connecting(&self) -> bool {
+        self.capture.as_ref().is_some_and(|capture| capture.started)
+    }
+
+    /// Returns the stable start endpoint for the active connection gesture.
+    #[must_use]
+    pub fn start_endpoint(&self) -> Option<PortEndpoint> {
+        self.capture
+            .as_ref()
+            .map(|capture| capture.draft.start.endpoint)
+    }
+
+    /// Returns the transform frozen at pointer press.
+    #[must_use]
+    pub fn frozen_viewport(&self) -> Option<NodeGraphViewport> {
+        self.capture.as_ref().map(|capture| capture.viewport)
+    }
+}
+
 /// Output from one retained node graph widget evaluation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeGraphWidgetOutput {
@@ -114,4 +247,6 @@ pub struct NodeGraphWidgetOutput {
     pub hit: Option<NodeGraphHitTarget>,
     /// Ordered typed application intents.
     pub intents: Vec<NodeGraphWidgetIntent>,
+    /// Ordered typed connection lifecycle intents.
+    pub connection_intents: Vec<NodeGraphConnectionIntent>,
 }
