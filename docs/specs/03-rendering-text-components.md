@@ -907,8 +907,19 @@ requires a `280.0` surface; a `272.0` surface yields a `264.0` row and uses the
 legacy path. Any row below the threshold, including the immediately preceding
 `f32` value, paints only the legacy label and never calls the caller-owned
 localizer. Wide labels and present shortcut strings use separate exact slot
-clips; submenu rows add one decorative `›`. State, icon, and status slots are
+clips; submenu rows add one decorative `›`. Icon and status slots remain
 reserved but unpainted. Separators retain full-row geometry.
+
+Visible wide menu rows whose descriptor has `checked == Some(true)` paint one
+font-independent two-segment vector check inside the existing `16.0` state
+slot, using the resolved row foreground including its disabled variant.
+`Some(false)`, `None`, and hidden rows emit no mark. Full-row geometry,
+routing, descriptor identity, focus, and semantics remain unchanged; a checked
+submenu remains checked and expandable with `Open`, never `Invoke`. This
+advances only `STERN-MENU-COMP-003` to bounded Partial automated headless
+evidence. Candidate remains Candidate and nothing becomes Accepted. Mixed and
+destructive states, radio/icon/status painting, narrow-menu marks, browser,
+raster, GPU, Vello, native, manual, and visual evidence remain unverified.
 
 Section headings and separators remain in deterministic semantic/read order.
 As bounded automated headless implementation evidence for the normative
@@ -935,8 +946,8 @@ source/context, queue order, and action-only semantic label remain authoritative
 This is bounded Partial evidence for `STERN-MENU-COMP-002` and `STERN-MENU-001`;
 the existing bounded Partial shortcut dispositions are preserved. Unverified
 areas are active-platform and locale discovery, non-English translation
-quality, sequential chords, check/radio/icon/status/destructive painting, mixed
-state, right-to-left layout, narrow-menu columns, work-area fitting and
+quality, sequential chords, radio/icon/status/destructive painting, mixed
+state, right-to-left layout, narrow-menu state marks, work-area fitting and
 scrolling, platform-menu entry, context-menu convergence, browser/raster/GPU
 output, manual review, and reference-image equivalence. Maturity does not
 advance beyond bounded Partial.

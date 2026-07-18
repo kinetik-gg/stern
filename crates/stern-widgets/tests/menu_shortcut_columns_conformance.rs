@@ -3,11 +3,11 @@
 use std::{cell::RefCell, time::Duration};
 
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionIcon, ActionSource, FrameContext, Key, KeyEvent,
-    KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput,
-    PointerOrder, Primitive, Rect, SemanticActionKind, Shortcut, ShortcutLabelLocalizer,
-    ShortcutLabelToken, ShortcutModifier, ShortcutPlatform, Size, TextPrimitive, TimeInfo, UiInput,
-    UiMemory, ViewportInfo, WidgetId, default_dark_theme,
+    ActionContext, ActionDescriptor, ActionIcon, ActionSource, Brush, ComponentState, FrameContext,
+    Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState,
+    PointerInput, PointerOrder, Primitive, Rect, SemanticActionKind, Shortcut,
+    ShortcutLabelLocalizer, ShortcutLabelToken, ShortcutModifier, ShortcutPlatform, Size,
+    TextPrimitive, TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::{
     CommandPaletteOverlay, DropdownItem, DropdownItemId, DropdownModel, DropdownOverlay, Menu,
@@ -245,6 +245,7 @@ fn mixed_menu() -> (Menu, Vec<Shortcut>) {
     )));
     let mut icon_action = action_with_shortcut("menu.icon", "Icon action", icon.clone());
     icon_action.icon = Some(ActionIcon::new("symbolic-save-icon"));
+    icon_action.state.checked = Some(false);
     menu.push(MenuItem::Action(icon_action));
     menu.push_submenu(
         action_with_shortcut("menu.submenu", "Submenu", submenu.clone()),
@@ -254,9 +255,11 @@ fn mixed_menu() -> (Menu, Vec<Shortcut>) {
     menu.push(MenuItem::Separator);
     let mut hidden_action = action_with_shortcut("menu.hidden", "Hidden", hidden);
     hidden_action.state.visible = false;
+    hidden_action.state.checked = Some(true);
     menu.push(MenuItem::Action(hidden_action));
     let mut disabled_action = action_with_shortcut("menu.disabled", "Disabled", disabled.clone());
     disabled_action.state.enabled = false;
+    disabled_action.state.checked = Some(true);
     menu.push(MenuItem::Action(disabled_action));
 
     (menu, vec![primary, icon, submenu, disabled])
@@ -356,6 +359,36 @@ fn wide_mixed_menu_emits_stable_clipped_columns_and_decorative_semantics() {
     );
     assert!(texts.iter().all(|text| text.text != "symbolic-save-icon"));
     assert!(texts.iter().all(|text| text.text != "Hidden"));
+    let check_lines = frame
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Line(line) => Some(line),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(check_lines.len(), 2, "only the visible checked row paints");
+    assert_eq!(
+        check_lines
+            .iter()
+            .map(|line| (line.from, line.to))
+            .collect::<Vec<_>>(),
+        [
+            (Point::new(35.0, 186.0), Point::new(38.5, 189.0)),
+            (Point::new(38.5, 189.0), Point::new(45.0, 182.0)),
+        ]
+    );
+    let disabled_foreground = default_dark_theme()
+        .row(ComponentState {
+            disabled: true,
+            ..ComponentState::default()
+        })
+        .foreground;
+    assert!(
+        check_lines
+            .iter()
+            .all(|line| line.stroke.brush == Brush::Solid(disabled_foreground))
+    );
     let begins = frame
         .primitives
         .iter()
@@ -425,6 +458,13 @@ fn wide_mixed_menu_emits_stable_clipped_columns_and_decorative_semantics() {
             .as_deref(),
         Some("Icon action")
     );
+    let disabled_id = WidgetId::from_raw(41)
+        .child("overlay-scene")
+        .child(("overlay-action", "menu.disabled"));
+    let disabled_node = frame.semantics.get(disabled_id).expect("disabled action");
+    assert!(disabled_node.state.disabled);
+    assert_eq!(disabled_node.state.checked, Some(true));
+    assert!(disabled_node.actions.is_empty());
 
     let separator = frame
         .primitives
@@ -782,6 +822,26 @@ fn presentation_preserves_full_row_pointer_keyboard_and_fifo_action_routing() {
         assert_eq!(presented_node.label.as_deref(), Some("Checked submenu"));
         assert!(presented_node.description.is_none());
         assert!(presented_node.state.value.is_none());
+        let check_lines = presented_frame
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                Primitive::Line(line) => Some(line),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(check_lines.len(), 2);
+        assert!(check_lines.iter().all(|line| {
+            [line.from, line.to]
+                .iter()
+                .all(|point| (32.0..=48.0).contains(&point.x) && (24.0..=52.0).contains(&point.y))
+        }));
+        assert!(
+            presented_node
+                .actions
+                .iter()
+                .all(|action| action.kind != SemanticActionKind::Invoke)
+        );
         for node in [legacy_node, presented_node] {
             assert!(
                 !node

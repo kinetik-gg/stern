@@ -1,8 +1,8 @@
 use stern_core::{
-    Brush, ClipId, Color, ComponentState, ElevationLevel, FontToken, Key, KeyState, MouseButton,
-    Point, Primitive, Rect, RectPrimitive, RepaintRequest, SemanticAction, SemanticActionKind,
-    SemanticNode, ShortcutLabelLocalizer, ShortcutPlatform, TextInputEvent, TextPrimitive,
-    TextRole, UiInput, UiInputEvent, WidgetId, pressable,
+    Brush, ClipId, Color, ComponentState, ElevationLevel, FontToken, Key, KeyState, LinePrimitive,
+    MouseButton, Point, Primitive, Rect, RectPrimitive, RepaintRequest, SemanticAction,
+    SemanticActionKind, SemanticNode, ShortcutLabelLocalizer, ShortcutPlatform, Stroke,
+    TextInputEvent, TextPrimitive, TextRole, UiInput, UiInputEvent, WidgetId, pressable,
 };
 
 use super::Ui;
@@ -293,6 +293,20 @@ impl Ui<'_> {
             && let Some(presentation) = menu_presentation
             && let Some(columns) = menu_column_geometry(row.rect)
         {
+            if row.checked == Some(true) {
+                let center = columns.state.center();
+                let stroke = Stroke::new(self.theme.strokes.default, Brush::Solid(foreground));
+                self.primitive(Primitive::Line(LinePrimitive {
+                    from: Point::new(center.x - 5.0, center.y),
+                    to: Point::new(center.x - 1.5, center.y + 3.0),
+                    stroke,
+                }));
+                self.primitive(Primitive::Line(LinePrimitive {
+                    from: Point::new(center.x - 1.5, center.y + 3.0),
+                    to: Point::new(center.x + 5.0, center.y - 4.0),
+                    stroke,
+                }));
+            }
             self.paint_clipped_overlay_text(
                 row.id.child("menu-label-clip"),
                 columns.label,
