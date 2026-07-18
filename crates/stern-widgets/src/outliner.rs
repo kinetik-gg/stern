@@ -15,8 +15,8 @@ use std::collections::BTreeSet;
 use std::ops::Range;
 
 use stern_core::{
-    IconId, Point, Rect, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
-    SemanticValue, WidgetId,
+    Point, Rect, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, SemanticValue,
+    StaticIcon, WidgetId,
 };
 
 use crate::{
@@ -129,8 +129,8 @@ pub struct OutlinerItem {
     pub parent: Option<ItemId>,
     /// Row label.
     pub label: String,
-    /// Optional icon metadata.
-    pub icon: Option<IconId>,
+    /// Optional static icon metadata.
+    pub icon: Option<StaticIcon>,
     /// Optional app-owned resource metadata.
     pub resource: Option<OutlinerResourceMetadata>,
     /// Whether the row should expose expansion before child descriptors are loaded.
@@ -161,10 +161,10 @@ impl OutlinerItem {
         self
     }
 
-    /// Assigns icon metadata.
+    /// Assigns static icon metadata.
     #[must_use]
-    pub const fn with_icon(mut self, icon: IconId) -> Self {
-        self.icon = Some(icon);
+    pub fn with_icon(mut self, icon: impl Into<StaticIcon>) -> Self {
+        self.icon = Some(icon.into());
         self
     }
 
@@ -380,8 +380,8 @@ pub struct OutlinerRow {
     pub expanded: bool,
     /// Row label.
     pub label: String,
-    /// Optional icon metadata.
-    pub icon: Option<IconId>,
+    /// Optional static icon metadata.
+    pub icon: Option<StaticIcon>,
     /// Optional app-owned resource metadata.
     pub resource: Option<OutlinerResourceMetadata>,
     /// Row state and affordance availability.

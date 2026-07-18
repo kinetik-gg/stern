@@ -1,8 +1,8 @@
 //! Windowless action-surface conformance for existing widget helpers.
 
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionId, ActionQueue, ActionSource, MouseButton, Point, Rect,
-    UiInput, UiMemory, WidgetId, default_dark_theme,
+    ActionContext, ActionDescriptor, ActionId, ActionQueue, ActionSource, MouseButton, Point,
+    Primitive, Rect, UiInput, UiMemory, WidgetId, default_dark_theme,
 };
 use stern_widgets::{CommandPalette, Menu, MenuItem, Toolbar, ToolbarGroup, ToolbarGroupId, Ui};
 
@@ -77,7 +77,8 @@ fn action_surface_conformance_action_button_invokes_only_visible_enabled_actions
     let theme = default_dark_theme();
     let rect = Rect::new(0.0, 0.0, 80.0, 28.0);
     let context = ActionContext::Widget(WidgetId::from_key("toolbar"));
-    let action = descriptor("run", "Run");
+    let icon = stern_icons_phosphor::regular::PLAY;
+    let action = descriptor("run", "Run").with_icon(icon);
     let mut memory = UiMemory::new();
 
     let input = pointer_input(Point::new(4.0, 4.0), true);
@@ -97,6 +98,15 @@ fn action_surface_conformance_action_button_invokes_only_visible_enabled_actions
     let invocation = output.actions.pop_front().expect("button invocation");
 
     assert!(released.clicked);
+    assert!(output.primitives.iter().any(
+        |primitive| matches!(primitive, Primitive::Icon(painted) if painted.icon == icon.icon())
+    ));
+    assert!(
+        output
+            .primitives
+            .iter()
+            .any(|primitive| matches!(primitive, Primitive::Text(text) if text.text == "Run"))
+    );
     assert_eq!(invocation.action_id, ActionId::new("run"));
     assert_eq!(invocation.source, ActionSource::Button);
     assert_eq!(invocation.context, context);
@@ -266,7 +276,7 @@ fn action_surface_conformance_command_palette_clamps_selection_and_empty_results
 fn action_surface_conformance_toolbar_reuses_descriptor_metadata_and_button_source() {
     let context = ActionContext::Widget(WidgetId::from_key("toolbar"));
     let mut save = descriptor("file.save", "Save");
-    save.icon = Some(stern_core::ActionIcon::new("save"));
+    save.icon = Some(stern_icons_phosphor::regular::FLOPPY_DISK.into());
     save.state.checked = Some(true);
     let mut hidden = descriptor("hidden", "Hidden");
     hidden.state.visible = false;
@@ -285,8 +295,8 @@ fn action_surface_conformance_toolbar_reuses_descriptor_metadata_and_button_sour
     assert_eq!(toolbar_items.len(), 2);
     assert_eq!(toolbar_items[0].action_id(), &ActionId::new("file.save"));
     assert_eq!(
-        toolbar_items[0].icon().map(stern_core::ActionIcon::as_str),
-        Some("save")
+        toolbar_items[0].icon(),
+        Some(stern_icons_phosphor::regular::FLOPPY_DISK.icon())
     );
     assert_eq!(toolbar_items[0].checked(), Some(true));
     assert_eq!(menu.visible_items().len(), 2);

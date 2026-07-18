@@ -1,9 +1,7 @@
 //! Outliner tree behavior conformance tests.
 
 mod outliner_conformance {
-    use stern_core::{
-        IconId, Point, Rect, SemanticActionKind, SemanticRole, SemanticValue, WidgetId,
-    };
+    use stern_core::{Point, Rect, SemanticActionKind, SemanticRole, SemanticValue, WidgetId};
     use stern_widgets::{
         ItemId, OutlinerLayout, OutlinerModel, OutlinerResourceMetadata, OutlinerRowFlags,
         OutlinerRowZoneKind, OutlinerSelectionOperation, OutlinerVisibilityToggleRequest,
@@ -30,7 +28,7 @@ mod outliner_conformance {
             item(20, Some(10), "Light"),
             item(40, Some(20), "Shadow"),
             item(50, None, "Materials")
-                .with_icon(IconId::from_raw(7))
+                .with_icon(stern_icons_phosphor::regular::CUBE)
                 .with_resource(OutlinerResourceMetadata::new("library", "materials")),
         ])
     }
@@ -81,7 +79,10 @@ mod outliner_conformance {
         assert!(rows[0].has_children);
         assert!(rows[0].expanded);
         assert!(!rows[1].has_children);
-        assert_eq!(rows[3].icon, Some(IconId::from_raw(7)));
+        assert_eq!(
+            rows[3].icon,
+            Some(stern_icons_phosphor::regular::CUBE.icon())
+        );
         assert_eq!(
             rows[3]
                 .resource

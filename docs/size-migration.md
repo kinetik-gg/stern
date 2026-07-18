@@ -59,9 +59,10 @@ legacy scalar compatibility fields are preserved. Conversely,
 ## Medium icon consumer authority
 
 `Theme::sizes.icon.md` is the only production default for icon-button visual
-geometry. It supplies the unsized bitmap and selectable-bitmap paths, registered
-vector icons, and the missing-vector symbol. It is also the fallback when an
-explicit bitmap or selectable-bitmap size is non-finite or not positive.
+geometry. It supplies the unsized bitmap and selectable-bitmap paths plus the
+destination rectangle for direct `StaticIcon` vector primitives. It is also the
+fallback when an explicit bitmap or selectable-bitmap size is non-finite or not
+positive. Static icons require no registry and have no missing-lookup symbol.
 
 Valid explicit sizes passed to `image_icon_button_sized` and
 `image_icon_selectable_button_sized` remain authoritative and are not replaced

@@ -3,8 +3,8 @@
 use std::{cell::RefCell, time::Duration};
 
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionIcon, ActionSource, Brush, ComponentState, FrameContext,
-    Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState,
+    ActionContext, ActionDescriptor, ActionSource, Brush, ComponentState, FrameContext, Key,
+    KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState,
     PointerInput, PointerOrder, Primitive, Rect, SemanticActionKind, Shortcut,
     ShortcutLabelLocalizer, ShortcutLabelToken, ShortcutModifier, ShortcutPlatform, Size,
     TextPrimitive, TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId, default_dark_theme,
@@ -244,7 +244,7 @@ fn mixed_menu() -> (Menu, Vec<Shortcut>) {
         "No shortcut",
     )));
     let mut icon_action = action_with_shortcut("menu.icon", "Icon action", icon.clone());
-    icon_action.icon = Some(ActionIcon::new("symbolic-save-icon"));
+    icon_action.icon = Some(stern_icons_phosphor::regular::FLOPPY_DISK.into());
     icon_action.state.checked = Some(false);
     menu.push(MenuItem::Action(icon_action));
     menu.push_submenu(

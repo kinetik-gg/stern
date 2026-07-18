@@ -1,8 +1,8 @@
 # Third-party showcase assets
 
 - Phosphor Icons, MIT License, https://github.com/phosphor-icons/phosphor-core.
-  The generated atlases, manifest, and Rust metadata in `icons/phosphor/` are
-  built from `@phosphor-icons/core` version 2.1.1 regular SVG assets.
+  The demo uses the pinned, vendored Phosphor 2.1.1 regular SVG snapshot through
+  the generated `stern-icons-phosphor` static-vector crate.
 
 ## Phosphor Icons License
 

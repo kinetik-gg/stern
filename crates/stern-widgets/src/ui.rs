@@ -37,7 +37,7 @@ use stern_text::{
     TextComposition, TextEditState, TextLayoutKey, TextLayoutStore, TextSelection, TextStyle,
 };
 
-use crate::{IconLibrary, WidgetOutput};
+use crate::WidgetOutput;
 
 const TEXT_CARET_BLINK_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -57,7 +57,6 @@ pub struct Ui<'a> {
     runtime: CoreUi<'a>,
     theme: &'a Theme,
     text_layouts: Option<&'a mut TextLayoutStore>,
-    icons: Option<&'a IconLibrary>,
 }
 
 /// Output returned by [`Ui::scroll_area`].

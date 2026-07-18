@@ -1,14 +1,12 @@
 //! Base widget components built from Stern core primitives.
 
-use std::collections::BTreeMap;
-
 use stern_core::{
     Brush, ClipId, Color, ComponentState, CornerRadius, CursorShape, DropTargetResponse,
-    FontFeatureToken, ImageId, ImagePrimitive, Insets, Key, KeyState, LinePrimitive, PathElement,
-    PathPrimitive, PlatformRequest, Point, Primitive, Rect, RectPrimitive, Response,
-    SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, SemanticState, SemanticValue,
-    Stroke, TextFieldRecipe, TextPrimitive, TextRole, Theme, UiInput, UiMemory, WidgetId,
-    draggable, drop_target, fit_box, focusable, pad_rect, pressable, selectable,
+    FontFeatureToken, IconPrimitive, ImageId, ImagePrimitive, Insets, Key, KeyState, LinePrimitive,
+    PlatformRequest, Point, Primitive, Rect, RectPrimitive, Response, SemanticAction,
+    SemanticActionKind, SemanticNode, SemanticRole, SemanticState, SemanticValue, SpacingRole,
+    StaticIcon, Stroke, TextFieldRecipe, TextPrimitive, TextRole, Theme, UiInput, UiMemory,
+    WidgetId, draggable, drop_target, fit_box, focusable, pad_rect, pressable, selectable,
 };
 use stern_text::{
     OrderedTextInputResult, ShapedTextLayout, TextEditMode, TextEditState, TextFeatureSet,
@@ -16,7 +14,6 @@ use stern_text::{
 };
 
 use crate::{
-    IconId,
     inspector::{
         VectorComponentLayout, VectorComponentRect, vector2_component_rects,
         vector3_component_rects, vector4_component_rects,

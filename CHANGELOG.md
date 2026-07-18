@@ -10,6 +10,18 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Replaced symbolic `ActionIcon` strings, `IconId` presentation
+  lookup, widget-owned vector definitions, and `IconLibrary` registration with
+  direct `StaticIcon` handles. Icon buttons now emit one borrowed
+  `Primitive::Icon`; `UiState` frames hold no icon registry. Dock, outliner,
+  selector, chrome, toolbar, facade, and demo icon-bearing APIs accept or carry
+  static handles, including `PhosphorIcon` through `Into<StaticIcon>`. The
+  singular `icon_button` API requires an accessible label, and action buttons,
+  toolbars, menus, command palettes, and modal action rows paint descriptor
+  icons beside their labels while preserving dispatch. Removed
+  the repository-owned Node raster-atlas tools, generated demo DPI atlas
+  payloads/lookup code, and DPI lookup test. General `ImageId` resources and
+  bitmap image widgets remain supported.
 - Added the complete allocation-free Phosphor 2.1.1 catalog with 9,072
   independently linkable static vector definitions, flat six-weight APIs, a
   deterministic pure-Rust generator/checker, and release linkage verification.
@@ -273,7 +285,7 @@ published, or accepted as an alpha release.
   literals must delete `check_size`. See `docs/size-migration.md`.
 - **Breaking:** Removed `ControlMetrics::icon_size` and made
   `Theme::sizes.icon.md` the sole default icon-size authority for unsized
-  bitmap, selectable-bitmap, vector-library, and missing-vector icon buttons.
+  bitmap, selectable-bitmap, and direct static-vector icon buttons.
   Invalid explicit bitmap sizes now use that same themed fallback, while valid
   explicit sizes and the remaining four `ControlMetrics` fields are unchanged.
   See `docs/size-migration.md`.

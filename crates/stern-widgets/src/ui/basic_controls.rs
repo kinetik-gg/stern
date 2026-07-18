@@ -22,21 +22,20 @@ use super::{
     response_requests_followup_repaint, selected_radio_group_index, slider_value_changed,
     text_caret_next_blink_delay, text_caret_visible, update_radio_group_output_selection,
 };
+use crate::components::action_button as action_button_widget;
 #[allow(unused_imports)]
 use crate::{
     AssetSlotAsset, AssetSlotConfig, AssetSlotOutput, ColorFieldConfig, ColorFieldOutput,
     CommandPaletteOverlay, DropdownCloseResult, DropdownItemId, DropdownModel, DropdownOverlay,
-    IconId, IconLibrary, MenuOverlay, MultiLineTextFieldOutput, NumericInputOutput,
-    NumericScrubInputConfig, NumericScrubInputOutput, OverlayStack, PanelFrame, PathFieldConfig,
-    PathFieldOutput, PropertyGridAffordanceOutput, PropertyGridAffordanceRects, PropertyGridRow,
-    SearchFieldOutput, SelectFieldConfig, SelectFieldOutput, SliderStep, TextFieldOutput,
-    VectorScrubInputConfig, VectorScrubInputOutput, WidgetOutput,
-    asset_slot_field as asset_slot_field_widget, button as button_widget,
-    checkbox as checkbox_widget, checkbox_with_label as checkbox_with_label_widget,
+    MenuOverlay, MultiLineTextFieldOutput, NumericInputOutput, NumericScrubInputConfig,
+    NumericScrubInputOutput, OverlayStack, PanelFrame, PathFieldConfig, PathFieldOutput,
+    PropertyGridAffordanceOutput, PropertyGridAffordanceRects, PropertyGridRow, SearchFieldOutput,
+    SelectFieldConfig, SelectFieldOutput, SliderStep, TextFieldOutput, VectorScrubInputConfig,
+    VectorScrubInputOutput, WidgetOutput, asset_slot_field as asset_slot_field_widget,
+    button as button_widget, checkbox as checkbox_widget,
+    checkbox_with_label as checkbox_with_label_widget,
     checkbox_with_label_target as checkbox_with_label_target_widget,
-    color_field as color_field_widget, icon_button as fallback_icon_button_widget,
-    icon_button_with_label as fallback_icon_button_with_label_widget,
-    icon_button_with_library as icon_button_with_library_widget, image as image_widget,
+    color_field as color_field_widget, icon_button as icon_button_widget, image as image_widget,
     image_icon_button as image_icon_button_widget,
     image_icon_button_sized as image_icon_button_sized_widget,
     image_icon_selectable_button as image_icon_selectable_button_widget,
@@ -110,65 +109,58 @@ impl Ui<'_> {
             return None;
         }
 
-        let response = self.button(key, rect, action.label.clone(), !action.state.enabled);
+        let id = self.id(key);
+        let theme = self.theme;
+        let leading_width = action.icon.map_or(0.0, |_| {
+            theme.sizes.icon.md + theme.spacing.resolve(stern_core::SpacingRole::IconLabelGap)
+        });
+        let (input, memory) = self.runtime.input_and_memory_mut();
+        let mut output = action_button_widget(
+            id,
+            rect,
+            action.label.clone(),
+            action.icon,
+            input,
+            memory,
+            theme,
+            !action.state.enabled,
+        );
+        if let (Some(text_layouts), Some(Primitive::Text(text))) = (
+            self.text_layouts.as_deref_mut(),
+            output.primitives.last_mut(),
+        ) {
+            let padding_x = theme.controls.padding_x;
+            let label_width = (rect.width - padding_x * 2.0 - leading_width).max(0.0);
+            text.layout = text_layouts.try_layout_id(
+                TextLayoutKey::new(
+                    text.text.clone(),
+                    TextStyle::new(text.family.clone(), text.size, text.line_height),
+                    label_width,
+                    false,
+                )
+                .with_overflow(TextOverflow::EndEllipsis),
+            );
+        }
+        let response = self.push_interactive(output);
         if response.clicked || response.keyboard_activated {
             self.invoke_action_descriptor(action, ActionSource::Button, context);
         }
         Some(response)
     }
 
-    /// Emits an icon button and returns its interaction response.
+    /// Emits an icon button with a required accessible label.
     pub fn icon_button(
         &mut self,
         key: impl Hash,
         rect: Rect,
-        icon: IconId,
-        disabled: bool,
-    ) -> Response {
-        let id = self.id(key);
-        let theme = self.theme;
-        let icons = self.icons;
-        let (input, memory) = self.runtime.input_and_memory_mut();
-        let output = if let Some(icons) = icons {
-            icon_button_with_library_widget(
-                id,
-                rect,
-                icon,
-                format!("Icon {}", icon.raw()),
-                icons,
-                input,
-                memory,
-                theme,
-                disabled,
-            )
-        } else {
-            fallback_icon_button_widget(id, rect, icon, input, memory, theme, disabled)
-        };
-        self.push_interactive(output)
-    }
-
-    /// Emits an icon button with an accessible label and returns its interaction response.
-    pub fn icon_button_with_label(
-        &mut self,
-        key: impl Hash,
-        rect: Rect,
-        icon: IconId,
+        icon: impl Into<stern_core::StaticIcon>,
         label: impl Into<String>,
         disabled: bool,
     ) -> Response {
         let id = self.id(key);
         let theme = self.theme;
-        let icons = self.icons;
         let (input, memory) = self.runtime.input_and_memory_mut();
-        let output = if let Some(icons) = icons {
-            icon_button_with_library_widget(
-                id, rect, icon, label, icons, input, memory, theme, disabled,
-            )
-        } else {
-            fallback_icon_button_with_label_widget(
-                id, rect, icon, label, input, memory, theme, disabled,
-            )
-        };
+        let output = icon_button_widget(id, rect, icon, label, input, memory, theme, disabled);
         self.push_interactive(output)
     }
 

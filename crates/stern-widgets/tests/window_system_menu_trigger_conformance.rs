@@ -1,7 +1,7 @@
 //! Windowless conformance for the retained window system-menu trigger.
 
 use stern_core::{
-    FrameOutput, IconId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PlatformRequest, Point,
+    FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PlatformRequest, Point,
     PointerButtonState, PointerInput, PointerOrder, PointerRoute, PointerRoutes, PointerTarget,
     Rect, Response, SemanticRole, UiInput, UiMemory, WidgetId, default_dark_theme,
 };
@@ -12,7 +12,12 @@ const TITLEBAR: Rect = Rect::new(8.0, 6.0, 28.0, 24.0);
 const REQUEST_POSITION: Point = Point::new(-12.5, -4.0);
 
 fn make_trigger(rect: Rect, position: Point) -> WindowSystemMenuTrigger {
-    WindowSystemMenuTrigger::new(TRIGGER_ID, rect, IconId::from_raw(7), position)
+    WindowSystemMenuTrigger::new(
+        TRIGGER_ID,
+        rect,
+        stern_icons_phosphor::regular::LIST,
+        position,
+    )
 }
 
 fn pointer_input(down: bool, pressed: bool, released: bool) -> UiInput {

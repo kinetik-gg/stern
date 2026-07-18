@@ -3,18 +3,17 @@
 use std::{fs, path::Path, time::Duration};
 
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionSource, CursorShape, FrameOutput,
-    ImageId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PathElement,
-    PlatformRequest, Point, PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest,
-    Response, SemanticRole, Shortcut, TextPrimitive, UiInput, UiMemory, WidgetId,
-    default_dark_theme,
+    ActionContext, ActionDescriptor, ActionId, ActionSource, CursorShape, FrameOutput, ImageId,
+    Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PathElement, PlatformRequest,
+    Point, PointerButtonState, PointerInput, Primitive, Rect, RepaintRequest, Response,
+    SemanticRole, Shortcut, TextPrimitive, UiInput, UiMemory, WidgetId, default_dark_theme,
 };
 use stern_text::{TextFeatureSet, TextLayoutStore, TextOverflow};
 use stern_widgets::chrome::{SystemFeedbackScene, SystemFeedbackSceneConfig};
 use stern_widgets::{
-    ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, DiagnosticStrip, FeedbackStack, IconId,
-    JobCancel, JobList, JobPhase, JobRow, JobRowId, MenuBar, MenuBarMenu, MenuBarMenuId, StatusBar,
-    TabStrip, Toolbar, ToolbarGroup, ToolbarGroupId, Ui, button,
+    ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, DiagnosticStrip, FeedbackStack, JobCancel,
+    JobList, JobPhase, JobRow, JobRowId, MenuBar, MenuBarMenu, MenuBarMenuId, StatusBar, TabStrip,
+    Toolbar, ToolbarGroup, ToolbarGroupId, Ui, button,
 };
 
 const BUTTON: Rect = Rect::new(7.0, 11.0, 119.3, 28.0);
@@ -963,7 +962,7 @@ fn delegated_action_button_preserves_visibility_metadata_and_exact_activation_ro
     assert_eq!(invocations[1].context, ActionContext::Global);
 
     let mut rich = action.clone();
-    rich.icon = Some(ActionIcon::new("render"));
+    rich.icon = Some(stern_icons_phosphor::regular::PLAY.into());
     rich.tooltip = Some("Longer application-owned tooltip".to_owned());
     rich.keywords = vec!["start".to_owned(), "render".to_owned()];
     rich.shortcut = Some(Shortcut::new(
@@ -979,9 +978,27 @@ fn delegated_action_button_preserves_visibility_metadata_and_exact_activation_ro
         .expect("metadata-rich action button");
     let rich_frame = ui.finish_output();
     assert_eq!(rich_response, plain_response);
-    assert_eq!(rich_frame.primitives, plain_frame.primitives);
+    let rich_icon = rich_frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Icon(icon) => Some(icon),
+            _ => None,
+        })
+        .expect("metadata-rich action icon primitive");
+    assert_eq!(rich_icon.icon, stern_icons_phosphor::regular::PLAY.icon());
+    let rich_label = button_text(&rich_frame, source);
+    let rich_layout = rich_label
+        .layout
+        .expect("retained rich action label identity");
+    let rich_stored = store
+        .stored_layout(rich_layout)
+        .expect("resident rich action label entry");
+    assert_eq!(rich_stored.key.text, source);
+    assert_eq!(rich_stored.key.overflow, TextOverflow::EndEllipsis);
+    assert!(rich_stored.layout.is_elided());
+    assert!(rich_label.origin.x > plain_label.origin.x);
     assert_eq!(rich_frame.semantics, plain_frame.semantics);
-    assert_eq!(button_text(&rich_frame, source).layout, Some(expected_id));
     assert!(rich_frame.actions.is_empty());
 }
 
@@ -1151,7 +1168,13 @@ fn end_ellipsis_adoption_includes_buttons_and_canonical_chrome_toolbar_only() {
 
     let _ = ui.button("standard", BUTTON, standard, false);
     let _ = ui.action_button("action", BUTTON, &action, ActionContext::Global);
-    let _ = ui.icon_button_with_label("icon", BUTTON, IconId::from_raw(11), icon_label, false);
+    let _ = ui.icon_button(
+        "icon",
+        BUTTON,
+        stern_icons_phosphor::regular::CHECK,
+        icon_label,
+        false,
+    );
     let _ = ui.image_icon_button(
         "image-icon",
         BUTTON,
@@ -1271,7 +1294,7 @@ fn production_call_graph_bounds_button_adoption_and_absent_split_busy_consumers(
         overflow_adopters,
         vec![
             ("src/components/selector_fields.rs", 1),
-            ("src/ui/basic_controls.rs", 1),
+            ("src/ui/basic_controls.rs", 2),
             ("src/ui/chrome.rs", 1),
             ("src/ui/property_grid.rs", 1),
             ("src/ui/virtual_table.rs", 1),
@@ -1300,10 +1323,7 @@ fn production_call_graph_bounds_button_adoption_and_absent_split_busy_consumers(
             (count > 0).then_some((path.as_str(), count))
         })
         .collect::<Vec<_>>();
-    assert_eq!(
-        retained_button_delegates,
-        vec![("src/ui/basic_controls.rs", 1)]
-    );
+    assert!(retained_button_delegates.is_empty());
 
     for (path, source) in &sources {
         let normalized = source.to_ascii_lowercase();

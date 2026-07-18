@@ -230,11 +230,12 @@ fn fitted_menu_surfaces_and_outer_clips_preserve_contained_state() {
 
 #[test]
 fn overlay_row_wins_pointer_arbitration_and_mouse_emits_the_action() {
+    let icon = stern_icons_phosphor::regular::FOLDER_OPEN;
     let mut scene = OverlayScene::new();
     scene.push(menu_surface(
         1,
         OverlayKind::Menu,
-        Menu::from_actions([action("file.open", "Open")]),
+        Menu::from_actions([action("file.open", "Open").with_icon(icon)]),
     ));
     let mut memory = UiMemory::new();
 
@@ -251,6 +252,15 @@ fn overlay_row_wins_pointer_arbitration_and_mouse_emits_the_action() {
     };
     assert_eq!(invocation.action_id, ActionId::new("file.open"));
     assert_eq!(invocation.source, ActionSource::Menu);
+    assert!(frame.primitives.iter().any(
+        |primitive| matches!(primitive, Primitive::Icon(painted) if painted.icon == icon.icon())
+    ));
+    assert!(
+        frame
+            .primitives
+            .iter()
+            .any(|primitive| matches!(primitive, Primitive::Text(text) if text.text == "Open"))
+    );
     assert_eq!(frame.actions.pop_front(), Some(invocation.clone()));
 }
 
@@ -729,8 +739,10 @@ fn dropdown_keyboard_selection_and_escape_return_trigger_focus() {
 
 #[test]
 fn command_palette_paints_query_and_invokes_the_selected_match() {
+    let icon = stern_icons_phosphor::regular::FLOPPY_DISK;
     let mut save = action("file.save", "Save");
     save.keywords.push("write".to_owned());
+    save.icon = Some(icon.into());
     let mut palette = CommandPaletteOverlay::from_actions(
         entry(
             7,
@@ -760,6 +772,9 @@ fn command_palette_paints_query_and_invokes_the_selected_match() {
             .iter()
             .any(|primitive| matches!(primitive, Primitive::Text(text) if text.text == "Save"))
     );
+    assert!(frame.primitives.iter().any(
+        |primitive| matches!(primitive, Primitive::Icon(painted) if painted.icon == icon.icon())
+    ));
     let OverlaySceneIntent::Action(invocation) = &result.intents[0] else {
         panic!("palette action");
     };

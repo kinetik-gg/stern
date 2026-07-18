@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use stern_core::{
     ActionContext, ActionId, ActionInvocation, PointerOrder, PointerTarget, PointerTargetPlan,
-    Rect, Response, SemanticRole, WidgetId,
+    Rect, Response, SemanticRole, StaticIcon, WidgetId,
 };
 
 use crate::{Menu, PanelId, TabStripTarget};
@@ -286,6 +286,7 @@ impl<'a> ChromeScene<'a> {
                     enabled: true,
                     selected: self.menu_bar.active_id() == Some(menu.id),
                     checked: None,
+                    icon: None,
                     behavior: Some(ChromeRowBehavior::OpenMenu(menu.id)),
                     row_kind: ChromeSceneRowKind::Menu,
                 }
@@ -316,6 +317,7 @@ impl<'a> ChromeScene<'a> {
                     enabled: item.enabled(),
                     selected: item.selected(),
                     checked: item.checked(),
+                    icon: item.icon(),
                     behavior: item
                         .invocation(self.config.toolbar_context.clone())
                         .map(ChromeRowBehavior::Action),
@@ -344,6 +346,7 @@ impl<'a> ChromeScene<'a> {
                     enabled: true,
                     selected: tab.active,
                     checked: None,
+                    icon: None,
                     behavior: Some(ChromeRowBehavior::ActivateTab(TabStripTarget::new(
                         tab.panel, index,
                     ))),
@@ -374,6 +377,7 @@ impl<'a> ChromeScene<'a> {
                     enabled: false,
                     selected: false,
                     checked: None,
+                    icon: None,
                     behavior: None,
                     row_kind: ChromeSceneRowKind::Status,
                 }
@@ -428,6 +432,7 @@ impl<'a> ChromeScene<'a> {
                     selected: false,
                     checked: None,
                     action_id: None,
+                    icon: None,
                     behavior: Some(ChromeRowBehavior::OpenOverflow(request)),
                     kind: ChromeSceneRowKind::Overflow,
                 });
@@ -468,6 +473,7 @@ impl<'a> ChromeScene<'a> {
                     selected: false,
                     checked: None,
                     action_id: None,
+                    icon: None,
                     behavior: Some(ChromeRowBehavior::CloseTab(target)),
                     kind: ChromeSceneRowKind::TabClose,
                 });
@@ -529,6 +535,7 @@ struct ChromeSourceItem {
     enabled: bool,
     selected: bool,
     checked: Option<bool>,
+    icon: Option<StaticIcon>,
     behavior: Option<ChromeRowBehavior>,
     row_kind: ChromeSceneRowKind,
 }
@@ -550,6 +557,7 @@ impl ChromeSourceItem {
             selected: self.selected,
             checked: self.checked,
             action_id,
+            icon: self.icon,
             behavior: self.behavior.clone(),
             kind: self.row_kind,
         }
@@ -579,6 +587,7 @@ pub(crate) struct ChromeSceneRow {
     pub(crate) selected: bool,
     pub(crate) checked: Option<bool>,
     pub(crate) action_id: Option<ActionId>,
+    pub(crate) icon: Option<StaticIcon>,
     behavior: Option<ChromeRowBehavior>,
     pub(crate) kind: ChromeSceneRowKind,
 }

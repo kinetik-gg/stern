@@ -1,11 +1,12 @@
 use super::{
-    Brush, ButtonFocusPlacement, ComponentState, CursorShape, Point, Primitive, Rect,
-    RowFocusPlacement, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
-    TabFocusPlacement, TextPrimitive, TextRole, Theme, UiInput, UiMemory, WidgetId, WidgetOutput,
-    button_semantics, button_surface_primitives, clicked_select_state, control_text_origin,
-    focusable, label_baseline, response_reported_focus, response_reported_pressed,
-    row_surface_primitives, selectable, suppress_disabled_interaction_reporting,
-    tab_surface_primitives, with_hover_cursor, with_response_state,
+    Brush, ButtonFocusPlacement, ComponentState, CursorShape, IconPrimitive, Point, Primitive,
+    Rect, RowFocusPlacement, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
+    SpacingRole, StaticIcon, TabFocusPlacement, TextPrimitive, TextRole, Theme, UiInput, UiMemory,
+    WidgetId, WidgetOutput, button_semantics, button_surface_primitives, clicked_select_state,
+    control_text_origin, fit_box, focusable, label_baseline, response_reported_focus,
+    response_reported_pressed, row_surface_primitives, selectable,
+    suppress_disabled_interaction_reporting, tab_surface_primitives, with_hover_cursor,
+    with_response_state,
 };
 
 /// Emits a text label.
@@ -58,6 +59,79 @@ pub fn button(
     primitives.push(Primitive::Text(TextPrimitive {
         layout: None,
         origin: control_text_origin(rect, theme),
+        text: text.clone(),
+        family: theme.font(TextRole::Label).family.to_owned(),
+        size: theme.font(TextRole::Label).size,
+        line_height: theme.font(TextRole::Label).line_height,
+        brush: Brush::Solid(recipe.foreground),
+    }));
+
+    with_hover_cursor(
+        WidgetOutput::new(Some(response), primitives).with_semantic(with_response_state(
+            button_semantics(id, rect, text, disabled),
+            &response,
+        )),
+        &response,
+        CursorShape::PointingHand,
+    )
+}
+
+/// Emits an action button that preserves its visible label and optional static icon.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn action_button(
+    id: WidgetId,
+    rect: Rect,
+    text: impl Into<String>,
+    icon: Option<StaticIcon>,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    disabled: bool,
+) -> WidgetOutput {
+    let mut response = focusable(id, rect, input, memory, disabled);
+    suppress_disabled_interaction_reporting(&mut response);
+    let state = ComponentState {
+        hovered: response.state.hovered,
+        pressed: response_reported_pressed(&response),
+        focused: response_reported_focus(&response),
+        disabled,
+        selected: false,
+    };
+    let recipe = theme.button(state);
+    let text = text.into();
+    let mut primitives = button_surface_primitives(
+        theme,
+        &recipe,
+        state,
+        rect,
+        recipe.radius,
+        ButtonFocusPlacement::Inward,
+    );
+    let mut text_origin = control_text_origin(rect, theme);
+    if let Some(icon) = icon {
+        let padding = theme.controls.padding_x;
+        let icon_size = theme
+            .sizes
+            .icon
+            .md
+            .min((rect.width - padding * 2.0).max(0.0))
+            .min(rect.height.max(0.0));
+        let icon_rect = fit_box(
+            Rect::new(rect.x + padding, rect.y, icon_size, rect.height),
+            stern_core::Size::new(icon_size, icon_size),
+            stern_core::Alignment::Center,
+            stern_core::Alignment::Center,
+        );
+        primitives.push(Primitive::Icon(IconPrimitive::new(
+            icon,
+            icon_rect,
+            recipe.foreground,
+        )));
+        text_origin.x = icon_rect.max_x() + theme.spacing.resolve(SpacingRole::IconLabelGap);
+    }
+    primitives.push(Primitive::Text(TextPrimitive {
+        layout: None,
+        origin: text_origin,
         text: text.clone(),
         family: theme.font(TextRole::Label).family.to_owned(),
         size: theme.font(TextRole::Label).size,

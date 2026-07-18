@@ -5,7 +5,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
 };
 
-use stern_core::{ActionId, Axis, IconId, Point, Rect, Size, Vec2};
+use stern_core::{ActionId, Axis, Point, Rect, Size, StaticIcon, Vec2};
 
 const DEFAULT_SPLIT_RATIO: f32 = 0.5;
 const DEFAULT_SPLIT_MINIMUM: f32 = 100.0;

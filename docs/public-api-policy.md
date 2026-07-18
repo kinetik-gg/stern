@@ -454,7 +454,6 @@ entrypoint does not change that maturity.
 - `AccessibilitySnapshot`
 - `ActionContext`
 - `ActionDescriptor`
-- `ActionIcon`
 - `ActionId`
 - `ActionInvocation`
 - `ActionPriority`
@@ -471,6 +470,10 @@ entrypoint does not change that maturity.
 - `FrameOutput`
 - `FrameWarning`
 - `IconId`
+- `IconGraphic`
+- `IconLayer`
+- `IconPath`
+- `IconStroke`
 - `ImageId`
 - `Key`
 - `Modifiers`
@@ -490,6 +493,7 @@ entrypoint does not change that maturity.
 - `SemanticTreeError`
 - `Shortcut`
 - `Size`
+- `StaticIcon`
 - `TextureId`
 - `Theme`
 - `TimeInfo`
@@ -566,9 +570,6 @@ These qualified exports are present at `stern::vello_winit` when the
 
 ### Widgets inventory
 
-- `IconGraphic`
-- `IconLibrary`
-- `IconPath`
 - `Ui`
 - `ViewportSurface`
 

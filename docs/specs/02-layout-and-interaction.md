@@ -424,7 +424,7 @@ Recommended structures:
 struct ActionDescriptor<ActionId> {
     id: ActionId,
     label: String,
-    icon: Option<IconId>,
+    icon: Option<StaticIcon>,
     shortcut: Option<Shortcut>,
     enabled: bool,
     visible: bool,

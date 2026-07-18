@@ -1,7 +1,7 @@
 use super::{
-    ActionId, BTreeMap, Dock, DockPlacement, FrameId, IconId, PanelInstanceId,
-    PanelInstanceSnapshot, PanelOpenDecision, PanelPolicyContext, PanelPolicyResolution,
-    PanelTypeId, Size, resolve_panel_open_decision, resolve_panel_policy_context,
+    ActionId, BTreeMap, Dock, DockPlacement, FrameId, PanelInstanceId, PanelInstanceSnapshot,
+    PanelOpenDecision, PanelPolicyContext, PanelPolicyResolution, PanelTypeId, Size, StaticIcon,
+    resolve_panel_open_decision, resolve_panel_policy_context,
 };
 
 /// Broad grouping used when presenting available panel types.
@@ -91,8 +91,8 @@ pub struct PanelTypeDescriptor {
     pub id: PanelTypeId,
     /// Display title used in menus, palettes, and default tabs.
     pub title: String,
-    /// Optional symbolic icon for panel picker and tab chrome.
-    pub icon: Option<IconId>,
+    /// Optional static icon for panel picker and tab chrome.
+    pub icon: Option<StaticIcon>,
     /// Presentation category for panel pickers and command palettes.
     pub category: PanelTypeCategory,
     /// Singleton or multi-instance workspace policy.
@@ -133,10 +133,10 @@ impl PanelTypeDescriptor {
         }
     }
 
-    /// Sets the optional symbolic icon.
+    /// Sets the optional static icon.
     #[must_use]
-    pub const fn with_icon(mut self, icon: IconId) -> Self {
-        self.icon = Some(icon);
+    pub fn with_icon(mut self, icon: impl Into<StaticIcon>) -> Self {
+        self.icon = Some(icon.into());
         self
     }
 
@@ -217,8 +217,8 @@ pub struct PanelOpenActionMetadata {
     pub panel_type: PanelTypeId,
     /// Display label for menus, palettes, or pickers.
     pub title: String,
-    /// Optional symbolic icon from the descriptor.
-    pub icon: Option<IconId>,
+    /// Optional static icon from the descriptor.
+    pub icon: Option<StaticIcon>,
     /// Presentation category from the descriptor.
     pub category: PanelTypeCategory,
     /// Optional application-owned action from the descriptor.

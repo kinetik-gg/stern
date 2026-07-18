@@ -1,12 +1,11 @@
 //! Exact inward focus conformance for public button-family widget outputs.
 
 use stern_core::{
-    ImageId, PathElement, Point, PointerButtonState, PointerInput, Primitive, Rect, UiInput,
-    UiMemory, WidgetId, default_dark_theme,
+    ImageId, PathElement, PointerButtonState, PointerInput, Primitive, Rect, UiInput, UiMemory,
+    WidgetId, default_dark_theme,
 };
 use stern_widgets::{
-    IconGraphic, IconId, IconLibrary, IconPath, ItemId, PropertyGridAffordanceLayout,
-    PropertyGridRow, WidgetOutput, button, icon_button_with_label, icon_button_with_library,
+    ItemId, PropertyGridAffordanceLayout, PropertyGridRow, WidgetOutput, button, icon_button,
     image_icon_selectable_button_sized, property_grid_row_affordance_controls,
     property_grid_row_affordance_rects,
 };
@@ -144,7 +143,7 @@ fn focused_memory(id: WidgetId) -> UiMemory {
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn labeled_bitmap_and_vector_or_missing_icon_buttons_share_exact_inward_surfaces() {
+fn labeled_bitmap_and_static_vector_icon_buttons_share_exact_inward_surfaces() {
     let theme = default_dark_theme();
     let rect = Rect::new(10.25, 20.5, 38.0, 24.0);
     let input = UiInput::default();
@@ -201,38 +200,22 @@ fn labeled_bitmap_and_vector_or_missing_icon_buttons_share_exact_inward_surfaces
         Some(Primitive::Image(_))
     ));
 
-    let icon = IconId::from_raw(11);
-    let mut library = IconLibrary::new();
-    library.register(
-        icon,
-        IconGraphic::new(
-            Rect::new(0.0, 0.0, 16.0, 16.0),
-            vec![IconPath::filled([
-                PathElement::MoveTo(Point::new(2.0, 2.0)),
-                PathElement::LineTo(Point::new(14.0, 8.0)),
-                PathElement::LineTo(Point::new(2.0, 14.0)),
-                PathElement::Close,
-            ])],
-        ),
-    );
     let valid_id = WidgetId::from_key("focus-vector");
-    let focused_valid = icon_button_with_library(
+    let focused_valid = icon_button(
         valid_id,
         rect,
-        icon,
+        stern_icons_phosphor::regular::CHECK,
         "Vector",
-        &library,
         &input,
         &mut focused_memory(valid_id),
         &theme,
         false,
     );
-    let unfocused_valid = icon_button_with_library(
+    let unfocused_valid = icon_button(
         valid_id,
         rect,
-        icon,
+        stern_icons_phosphor::regular::CHECK,
         "Vector",
-        &library,
         &input,
         &mut UiMemory::new(),
         &theme,
@@ -240,28 +223,28 @@ fn labeled_bitmap_and_vector_or_missing_icon_buttons_share_exact_inward_surfaces
     );
     assert_focus_pair(&focused_valid, &unfocused_valid, rect, theme.radii.sm);
 
-    let missing_id = WidgetId::from_key("focus-missing");
-    let focused_missing = icon_button_with_label(
-        missing_id,
+    let second_id = WidgetId::from_key("focus-second-vector");
+    let focused_second = icon_button(
+        second_id,
         rect,
-        IconId::from_raw(99),
-        "Missing",
+        stern_icons_phosphor::duotone::CUBE,
+        "Duotone vector",
         &input,
-        &mut focused_memory(missing_id),
+        &mut focused_memory(second_id),
         &theme,
         false,
     );
-    let unfocused_missing = icon_button_with_label(
-        missing_id,
+    let unfocused_second = icon_button(
+        second_id,
         rect,
-        IconId::from_raw(99),
-        "Missing",
+        stern_icons_phosphor::duotone::CUBE,
+        "Duotone vector",
         &input,
         &mut UiMemory::new(),
         &theme,
         false,
     );
-    assert_focus_pair(&focused_missing, &unfocused_missing, rect, theme.radii.sm);
+    assert_focus_pair(&focused_second, &unfocused_second, rect, theme.radii.sm);
 }
 
 #[test]

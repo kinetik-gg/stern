@@ -1,8 +1,6 @@
 //! Windowless toolbar conformance for reusable editor chrome contracts.
 
-use stern_core::{
-    ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionQueue, ActionSource, WidgetId,
-};
+use stern_core::{ActionContext, ActionDescriptor, ActionId, ActionQueue, ActionSource, WidgetId};
 use stern_widgets::{Toolbar, ToolbarGroup, ToolbarGroupId, ToolbarItem, ToolbarItemPresentation};
 
 fn group_id(raw: u64) -> ToolbarGroupId {
@@ -74,12 +72,15 @@ fn toolbar_disabled_items_cannot_invoke_and_unknown_indexes_are_ignored() {
 #[test]
 fn toolbar_checked_state_icon_and_presentation_metadata_are_preserved() {
     let mut move_tool = action("tool.move", "Move");
-    move_tool.icon = Some(ActionIcon::new("cursor-move"));
+    move_tool.icon = Some(stern_icons_phosphor::regular::CURSOR_CLICK.into());
     move_tool.state.checked = Some(true);
     let item = ToolbarItem::new(move_tool).with_presentation(ToolbarItemPresentation::IconAndText);
 
     assert_eq!(item.label(), "Move");
-    assert_eq!(item.icon().map(ActionIcon::as_str), Some("cursor-move"));
+    assert_eq!(
+        item.icon(),
+        Some(stern_icons_phosphor::regular::CURSOR_CLICK.icon())
+    );
     assert_eq!(item.checked(), Some(true));
     assert!(item.selected());
     assert_eq!(item.presentation, ToolbarItemPresentation::IconAndText);

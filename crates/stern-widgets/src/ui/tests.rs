@@ -1,12 +1,11 @@
 use std::time::Duration;
 
 use super::Ui;
-use crate::{IconGraphic, IconLibrary, IconPath};
 use stern_core::{
     ActionContext, ActionDescriptor, ActionSource, Brush, Color, CursorShape, FrameContext,
     FrameOutput, FrameWarning, IconId, ImageId, Insets, Key, KeyEvent, KeyState, KeyboardInput,
-    Modifiers, PathElement, PhysicalSize, PlatformRequest, Point, PointerButtonState, PointerInput,
-    Primitive, Rect, RepaintRequest, ScaleFactor, SemanticNode, SemanticRole, Size, TextInputEvent,
+    Modifiers, PhysicalSize, PlatformRequest, Point, PointerButtonState, PointerInput, Primitive,
+    Rect, RepaintRequest, ScaleFactor, SemanticNode, SemanticRole, Size, TextInputEvent,
     TextPrimitive, TextRange, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId,
     default_dark_theme,
 };
@@ -40,20 +39,6 @@ fn held_at(x: f32, y: f32) -> UiInput {
         },
         ..UiInput::default()
     }
-}
-
-fn check_icon() -> IconGraphic {
-    IconGraphic::new(
-        Rect::new(0.0, 0.0, 24.0, 24.0),
-        [IconPath::stroked(
-            vec![
-                PathElement::MoveTo(Point::new(5.0, 12.0)),
-                PathElement::LineTo(Point::new(10.0, 17.0)),
-                PathElement::LineTo(Point::new(19.0, 7.0)),
-            ],
-            2.0,
-        )],
-    )
 }
 
 fn released_at(x: f32, y: f32) -> UiInput {

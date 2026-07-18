@@ -1,11 +1,17 @@
 //! Windowless action descriptor, queue, invocation, and routing conformance.
 
 use stern_core::{
-    ActionBinding, ActionContext, ActionDescriptor, ActionIcon, ActionId, ActionInvocation,
-    ActionPriority, ActionQueue, ActionRouter, ActionRoutingContext, ActionSource, ActionState,
-    FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalKey, RepaintRequest,
-    ScriptedInput, Shortcut, UiTestHarness, WidgetId,
+    ActionBinding, ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionPriority,
+    ActionQueue, ActionRouter, ActionRoutingContext, ActionSource, ActionState, FrameOutput,
+    IconGraphic, IconId, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalKey, Rect,
+    RepaintRequest, ScriptedInput, Shortcut, StaticIcon, UiTestHarness, WidgetId,
 };
+
+static ACTION_GRAPHIC: IconGraphic = IconGraphic::new(Rect::new(0.0, 0.0, 24.0, 24.0), &[]);
+
+fn action_icon() -> StaticIcon {
+    StaticIcon::new(IconId::from_raw(11), &ACTION_GRAPHIC)
+}
 
 fn ctrl() -> Modifiers {
     Modifiers::new(false, true, false, false)
@@ -92,7 +98,7 @@ fn frame_action_ids(output: &FrameOutput) -> Vec<ActionId> {
 fn action_conformance_descriptors_expose_presentation_state() {
     let shortcut = ctrl_shortcut("g");
     let mut descriptor = ActionDescriptor::new("view.grid", "Show Grid");
-    descriptor.icon = Some(ActionIcon::new("grid"));
+    descriptor.icon = Some(action_icon());
     descriptor.tooltip = Some("Toggle viewport grid".to_owned());
     descriptor.keywords = vec!["guide".to_owned(), "overlay".to_owned()];
     descriptor.shortcut = Some(shortcut.clone());
@@ -105,10 +111,7 @@ fn action_conformance_descriptors_expose_presentation_state() {
 
     assert_eq!(descriptor.id, ActionId::new("view.grid"));
     assert_eq!(descriptor.label, "Show Grid");
-    assert_eq!(
-        descriptor.icon.as_ref().map(ActionIcon::as_str),
-        Some("grid")
-    );
+    assert_eq!(descriptor.icon, Some(action_icon()));
     assert_eq!(descriptor.tooltip.as_deref(), Some("Toggle viewport grid"));
     assert_eq!(descriptor.keywords, ["guide", "overlay"]);
     assert_eq!(descriptor.shortcut.as_ref(), Some(&shortcut));

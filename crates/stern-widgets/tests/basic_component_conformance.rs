@@ -11,7 +11,7 @@ use stern_widgets::{
     AssetSlotAsset, AssetSlotConfig, ColorFieldConfig, DropdownItem, DropdownItemId, DropdownModel,
     NumericScrubInputConfig, PropertyGridAffordanceLayout, PropertyGridRow, RadioGroupChoice,
     SelectFieldConfig, SliderStep, Ui, WidgetOutput, asset_slot_field, button, checkbox_with_label,
-    color_field, icon_button_with_label, label, panel, property_grid_row_affordance_controls,
+    color_field, icon_button, label, panel, property_grid_row_affordance_controls,
     property_grid_row_affordance_rects, radio_button_with_label, select_field, slider_with_label,
     toggle_with_label,
 };
@@ -151,10 +151,10 @@ fn component_output(
 ) -> WidgetOutput {
     match case {
         BasicComponentCase::Button => button(id, rect, "Run", input, memory, theme, disabled),
-        BasicComponentCase::IconButton => icon_button_with_label(
+        BasicComponentCase::IconButton => icon_button(
             id,
             rect,
-            IconId::from_raw(7),
+            stern_icons_phosphor::regular::CHECK,
             "Save",
             input,
             memory,
