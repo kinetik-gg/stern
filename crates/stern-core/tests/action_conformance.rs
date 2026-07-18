@@ -100,6 +100,7 @@ fn action_conformance_descriptors_expose_presentation_state() {
         visible: true,
         enabled: true,
         checked: Some(false),
+        mixed: false,
     };
 
     assert_eq!(descriptor.id, ActionId::new("view.grid"));
@@ -117,6 +118,29 @@ fn action_conformance_descriptors_expose_presentation_state() {
     assert!(descriptor.state.is_checkable());
     assert!(!descriptor.state.is_checked());
     assert!(descriptor.can_invoke());
+}
+
+#[test]
+fn action_conformance_mixed_state_requires_checkability() {
+    let default_state = ActionState::default();
+    assert!(!default_state.mixed);
+    assert!(!default_state.is_mixed());
+
+    let mut non_checkable = ActionDescriptor::new("view.selection", "Selection");
+    non_checkable.state.mixed = true;
+    assert!(non_checkable.state.mixed);
+    assert!(!non_checkable.state.is_mixed());
+    assert_eq!(non_checkable.id, ActionId::new("view.selection"));
+    assert!(non_checkable.can_invoke());
+
+    let mut mixed = ActionDescriptor::new("view.layers", "Layers");
+    mixed.state.checked = Some(false);
+    mixed.state.mixed = true;
+    assert!(mixed.state.is_checkable());
+    assert!(mixed.state.is_mixed());
+    assert!(!mixed.state.is_checked());
+    assert_eq!(mixed.id, ActionId::new("view.layers"));
+    assert!(mixed.can_invoke());
 }
 
 #[test]

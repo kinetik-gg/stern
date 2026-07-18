@@ -60,6 +60,8 @@ pub struct ActionState {
     /// `None` means the action is not checkable. `Some(false)` means it is
     /// checkable but currently off. `Some(true)` means it is checkable and on.
     pub checked: Option<bool>,
+    /// Whether a checkable action represents a mixed or indeterminate value.
+    pub mixed: bool,
 }
 
 impl Default for ActionState {
@@ -68,6 +70,7 @@ impl Default for ActionState {
             visible: true,
             enabled: true,
             checked: None,
+            mixed: false,
         }
     }
 }
@@ -83,6 +86,12 @@ impl ActionState {
     #[must_use]
     pub const fn is_checked(self) -> bool {
         matches!(self.checked, Some(true))
+    }
+
+    /// Returns true when this action is checkable and currently mixed.
+    #[must_use]
+    pub const fn is_mixed(self) -> bool {
+        self.is_checkable() && self.mixed
     }
 }
 

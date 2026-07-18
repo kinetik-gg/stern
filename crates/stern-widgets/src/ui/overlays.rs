@@ -258,6 +258,7 @@ impl Ui<'_> {
         }));
     }
 
+    #[allow(clippy::too_many_lines)]
     fn paint_overlay_row(
         &mut self,
         row: &OverlaySceneRow,
@@ -310,9 +311,16 @@ impl Ui<'_> {
             && let Some(presentation) = menu_presentation
             && let Some(columns) = menu_column_geometry(row.rect)
         {
-            if row.checked == Some(true) {
+            let stroke = Stroke::new(self.theme.strokes.default, Brush::Solid(foreground));
+            if row.is_mixed() {
                 let center = columns.state.center();
-                let stroke = Stroke::new(self.theme.strokes.default, Brush::Solid(foreground));
+                self.primitive(Primitive::Line(LinePrimitive {
+                    from: Point::new(center.x - 5.0, center.y),
+                    to: Point::new(center.x + 5.0, center.y),
+                    stroke,
+                }));
+            } else if row.is_checked() {
+                let center = columns.state.center();
                 self.primitive(Primitive::Line(LinePrimitive {
                     from: Point::new(center.x - 5.0, center.y),
                     to: Point::new(center.x - 1.5, center.y + 3.0),
@@ -423,7 +431,8 @@ fn overlay_row_semantics(
     let mut node = SemanticNode::new(row.id, row.role.clone(), row.rect).with_label(&row.label);
     node.state.disabled = row.kind == OverlaySceneRowKind::Action && !row.enabled;
     node.state.selected = row.selected;
-    node.state.checked = row.checked;
+    node.state.checked = row.semantic_checked();
+    node.state.mixed = row.is_mixed();
     node.state.expanded = row.expanded;
     node.state.focused = response.is_some_and(|response| response.state.focused);
     node.state.pressed = response.is_some_and(|response| response.state.pressed);
