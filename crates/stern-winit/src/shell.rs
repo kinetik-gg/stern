@@ -1,6 +1,7 @@
 use core::fmt;
 
 use stern_core::{ClipboardText, Point, RepaintRequest, WidgetId};
+use winit::{dpi::LogicalPosition, window::Window};
 
 /// One ordered application-shell operation.
 #[derive(PartialEq)]
@@ -144,6 +145,64 @@ impl WinitShellRequests {
             }
         }
         outcome
+    }
+
+    /// Executes the batch once with system-menu work bound to the host window.
+    #[must_use]
+    pub fn execute_for_window(
+        self,
+        window: &Window,
+        services: &mut dyn WinitShellServices,
+    ) -> WinitShellOutcome {
+        self.execute(&mut WindowBoundShellServices {
+            target: window,
+            services,
+        })
+    }
+}
+
+trait WindowSystemMenuTarget {
+    fn show_window_menu(&self, position: LogicalPosition<f64>);
+}
+
+impl WindowSystemMenuTarget for Window {
+    fn show_window_menu(&self, position: LogicalPosition<f64>) {
+        Window::show_window_menu(self, position);
+    }
+}
+
+struct WindowBoundShellServices<'a> {
+    target: &'a dyn WindowSystemMenuTarget,
+    services: &'a mut dyn WinitShellServices,
+}
+
+impl WinitShellServices for WindowBoundShellServices<'_> {
+    fn write_clipboard_text(&mut self, text: &str) -> Result<(), WinitShellServiceError> {
+        self.services.write_clipboard_text(text)
+    }
+
+    fn read_clipboard_text(&mut self) -> Result<String, WinitShellServiceError> {
+        self.services.read_clipboard_text()
+    }
+
+    fn show_window_system_menu(&mut self, position: Point) -> Result<(), WinitShellServiceError> {
+        #[cfg(target_os = "windows")]
+        {
+            self.target.show_window_menu(LogicalPosition::new(
+                f64::from(position.x),
+                f64::from(position.y),
+            ));
+            Ok(())
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = (self.target, position);
+            Err(WinitShellServiceError::Unavailable)
+        }
+    }
+
+    fn open_http_url(&mut self, url: &str) -> Result<(), WinitShellServiceError> {
+        self.services.open_http_url(url)
     }
 }
 
