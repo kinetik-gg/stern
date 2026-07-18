@@ -4,6 +4,7 @@ members = [
     "crates/stern",
     "crates/stern-core",
     "crates/stern-icon-atlas",
+    "crates/stern-identity-scan",
     "crates/stern-icons-phosphor",
     "crates/stern-render",
     "crates/stern-text",

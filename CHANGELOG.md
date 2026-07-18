@@ -10,6 +10,10 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- Replaced the repository identity scanner's JavaScript/Node implementation
+  with the development-only, pure-Rust `stern-identity-scan` crate. The Cargo
+  CLI preserves the scanner's non-disclosing JSON records, scopes, filtering,
+  deterministic first-failure behavior, and exit statuses.
 - **Breaking:** Replaced symbolic `ActionIcon` strings, `IconId` presentation
   lookup, widget-owned vector definitions, and `IconLibrary` registration with
   direct `StaticIcon` handles. Icon buttons now emit one borrowed
