@@ -34,10 +34,14 @@ pub struct PopoverRequest {
 #[must_use]
 pub fn place_popover(request: PopoverRequest, viewport: Rect) -> Rect {
     let viewport = sanitize_rect(viewport).max_zero();
-    let size = Size::new(
+    let mut size = Size::new(
         sanitize_extent(request.size.width),
         sanitize_extent(request.size.height),
     );
+    if request.fit_viewport {
+        size.width = size.width.min(viewport.width);
+        size.height = size.height.min(viewport.height);
+    }
     let anchor = sanitize_rect(request.anchor);
     let offset = sanitize_extent(request.offset);
     let preferred = popover_rect(anchor, size, request.placement, offset);
