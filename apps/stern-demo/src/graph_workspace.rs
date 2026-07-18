@@ -1,7 +1,14 @@
-use stern::core::{Axis, Rect, WidgetId};
+use stern::core::{
+    ActionContext, ActionDescriptor, ActionInvocation, Axis, PointerOrder, PointerTarget, Rect,
+    WidgetId,
+};
 use stern::text::TextEditState;
+use stern::widgets::chrome::{
+    ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, MenuBar, StatusBar, StatusItem,
+    StatusItemId, StatusItemKind, TabStrip, Toolbar, ToolbarGroup, ToolbarGroupId,
+};
 use stern::widgets::dock::{
-    Dock, DockNode, DockScene, DockSceneConfig, Frame, FrameId, Panel, PanelId,
+    Dock, DockNode, DockScene, DockSceneConfig, Frame, FrameId, FrameTab, Panel, PanelId,
 };
 use stern::widgets::inspector::{PropertyGridConfig, PropertyGridRow};
 use stern::widgets::node_graph::{
@@ -13,6 +20,10 @@ use stern::widgets::node_graph::{
 use stern::widgets::{ItemId, TextFieldAccess, Ui};
 
 const GRAPH_ROOT: WidgetId = WidgetId::from_raw(0x0047_5241_5048);
+const CHROME_ROOT: WidgetId = WidgetId::from_raw(0x4348_524f_4d45);
+const CLEAR_SELECTION_ACTION: &str = "graph.clear-selection";
+const TOOLBAR_GROUP: ToolbarGroupId = ToolbarGroupId::from_raw(1);
+const SELECTION_STATUS: StatusItemId = StatusItemId::from_raw(1);
 const SOURCE_NODE: NodeId = NodeId::from_raw(1);
 const OUTPUT_NODE: NodeId = NodeId::from_raw(2);
 const IMAGE_OUTPUT: PortId = PortId::from_raw(1);
@@ -35,6 +46,10 @@ pub struct GraphWorkspaceState {
     dock: Dock,
     graph: NodeGraphDescriptor,
     selection: NodeGraphSelection,
+    menu_bar: MenuBar,
+    toolbar: Toolbar,
+    tab_strip: TabStrip,
+    status_bar: StatusBar,
 }
 
 impl GraphWorkspaceState {
@@ -79,10 +94,26 @@ impl GraphWorkspaceState {
                 vec![Panel::new(INSPECTOR_PANEL, "Inspector")],
             ))),
         });
+        let mut clear_selection = ActionDescriptor::new(CLEAR_SELECTION_ACTION, "Clear selection");
+        clear_selection.state.enabled = false;
         Self {
             dock,
             graph,
             selection: NodeGraphSelection::new(),
+            menu_bar: MenuBar::new(),
+            toolbar: Toolbar::from_groups([ToolbarGroup::from_actions(
+                TOOLBAR_GROUP,
+                "Graph selection",
+                [clear_selection],
+            )]),
+            tab_strip: TabStrip::from_tabs([FrameTab {
+                panel: GRAPH_PANEL,
+                title: "Graph".to_owned(),
+                active: true,
+                close_visible: false,
+                draggable: false,
+            }]),
+            status_bar: StatusBar::from_items([selection_status(0)]),
         }
     }
 
@@ -98,13 +129,100 @@ impl GraphWorkspaceState {
         GRAPH_ROOT
     }
 
-    pub(crate) fn compose(&mut self, ui: &mut Ui<'_>, bounds: Rect) {
-        let scene = DockScene::new(DockSceneConfig::new(DOCK_ROOT, bounds), &self.dock);
-        let _ = ui.dock_scene(&scene, |ui, panel| match panel.panel {
+    /// Handles the one application-owned action exposed by the Graph workspace.
+    pub fn handle_action(&mut self, invocation: &ActionInvocation) -> bool {
+        if invocation.action_id.as_str() != CLEAR_SELECTION_ACTION || self.selection.is_empty() {
+            return false;
+        }
+        self.selection = NodeGraphSelection::new();
+        true
+    }
+
+    pub(crate) fn compose(
+        &mut self,
+        ui: &mut Ui<'_>,
+        bounds: Rect,
+        app_targets: &[(WidgetId, Rect)],
+    ) {
+        self.sync_chrome_models();
+        let [toolbar_rect, tab_strip_rect, dock_rect, status_bar_rect] = chrome_layout(bounds);
+        let dock = self.dock.clone();
+        let menu_bar = self.menu_bar.clone();
+        let toolbar = self.toolbar.clone();
+        let tab_strip = self.tab_strip.clone();
+        let status_bar = self.status_bar.clone();
+        let dock_scene = DockScene::new(DockSceneConfig::new(DOCK_ROOT, dock_rect), &dock);
+        let chrome_scene = ChromeScene::new(
+            ChromeSceneConfig::new(
+                CHROME_ROOT,
+                Rect::ZERO,
+                toolbar_rect,
+                tab_strip_rect,
+                status_bar_rect,
+                ActionContext::Editor,
+            )
+            .with_widths([
+                (
+                    ChromeSceneItemKey::Toolbar {
+                        group: TOOLBAR_GROUP,
+                        action: stern::core::ActionId::new(CLEAR_SELECTION_ACTION),
+                    },
+                    132.0,
+                ),
+                (ChromeSceneItemKey::Tab(GRAPH_PANEL), 120.0),
+                (ChromeSceneItemKey::Status(SELECTION_STATUS), 160.0),
+            ]),
+            &menu_bar,
+            &toolbar,
+            &tab_strip,
+            &status_bar,
+        );
+        ui.resolve_pointer_targets(|plan| {
+            for (index, &(id, rect)) in app_targets.iter().enumerate() {
+                plan.target(PointerTarget::new(
+                    id,
+                    rect,
+                    PointerOrder::new(index as u64 + 1),
+                ));
+            }
+            let next = dock_scene.declare_pointer_targets_with_content(
+                plan,
+                PointerOrder::new(10),
+                |plan, order| {
+                    let Some(panel) = dock_scene
+                        .layout()
+                        .frames
+                        .iter()
+                        .filter_map(|frame| frame.panel.as_ref())
+                        .find(|panel| panel.panel == GRAPH_PANEL)
+                    else {
+                        return order;
+                    };
+                    plan.target(PointerTarget::new(GRAPH_ROOT, panel.rect, order));
+                    PointerOrder::new(order.raw() + 1)
+                },
+            );
+            chrome_scene.declare_pointer_targets(plan, next);
+        })
+        .expect("Graph Dock and chrome have unique pointer targets");
+        let _ = ui.dock_scene(&dock_scene, |ui, panel| match panel.panel {
             GRAPH_PANEL => self.compose_graph(ui, panel.rect),
             INSPECTOR_PANEL => self.compose_inspector(ui, panel.rect),
             _ => unreachable!("demo Dock contains only Graph and Inspector panels"),
         });
+        let _ = ui.chrome_scene(&chrome_scene);
+    }
+
+    fn sync_chrome_models(&mut self) {
+        let selected = u32::try_from(self.selection.selected().len()).unwrap_or(u32::MAX);
+        let mut clear_selection = ActionDescriptor::new(CLEAR_SELECTION_ACTION, "Clear selection");
+        clear_selection.state.enabled = selected != 0;
+        self.toolbar.replace_groups([ToolbarGroup::from_actions(
+            TOOLBAR_GROUP,
+            "Graph selection",
+            [clear_selection],
+        )]);
+        self.status_bar.replace_items([selection_status(selected)]);
     }
 
     fn compose_graph(&mut self, ui: &mut Ui<'_>, bounds: Rect) {
@@ -171,6 +289,46 @@ impl GraphWorkspaceState {
         )
         .expect("deterministic inspector rows have unique identities");
     }
+}
+
+fn selection_status(count: u32) -> StatusItem {
+    StatusItem::new(
+        SELECTION_STATUS,
+        "Selection",
+        format!("{count} selected"),
+        StatusItemKind::Message,
+    )
+    .with_count(count)
+}
+
+fn chrome_layout(bounds: Rect) -> [Rect; 4] {
+    let toolbar_height = 28.0_f32.min(bounds.height);
+    let remaining = (bounds.height - toolbar_height).max(0.0);
+    let tab_height = 28.0_f32.min(remaining);
+    let remaining = (remaining - tab_height).max(0.0);
+    let status_height = 28.0_f32.min(remaining);
+    let dock_height = (remaining - status_height).max(0.0);
+    [
+        Rect::new(bounds.x, bounds.y, bounds.width, toolbar_height),
+        Rect::new(
+            bounds.x,
+            bounds.y + toolbar_height,
+            bounds.width,
+            tab_height,
+        ),
+        Rect::new(
+            bounds.x,
+            bounds.y + toolbar_height + tab_height,
+            bounds.width,
+            dock_height,
+        ),
+        Rect::new(
+            bounds.x,
+            bounds.max_y() - status_height,
+            bounds.width,
+            status_height,
+        ),
+    ]
 }
 
 impl Default for GraphWorkspaceState {
