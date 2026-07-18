@@ -302,6 +302,8 @@ pub enum Key {
     ArrowDown,
     /// Space.
     Space,
+    /// Context-menu/Menu key.
+    ContextMenu,
     /// Function key by number.
     Function(u8),
     /// A key that has not been mapped yet.

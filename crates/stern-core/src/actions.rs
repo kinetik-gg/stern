@@ -592,7 +592,7 @@ fn text_input_reserves_event(event: &KeyEvent) -> bool {
         | Key::ArrowUp
         | Key::ArrowDown => true,
         Key::Space => event.modifiers.is_empty(),
-        Key::Escape | Key::Function(_) | Key::Unidentified => false,
+        Key::Escape | Key::ContextMenu | Key::Function(_) | Key::Unidentified => false,
     }
 }
 
