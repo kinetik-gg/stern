@@ -617,16 +617,20 @@ fn select_escape_and_outside_cancel_restore_focus_and_block_lower_ui() {
     assert!(open_select(&mut state, &field, &model, OVERLAY));
     let _ = run_scene(&mut state, &mut memory, UiInput::default(), true);
     let outside_point = Point::new(400.0, 300.0);
-    let outside_press = run_scene(&mut state, &mut memory, pressed_at(outside_point), true);
-    assert!(!outside_press.lower.expect("lower press").state.hovered);
-    let outside = run_scene(&mut state, &mut memory, released_at(outside_point), true);
-    assert!(!outside.lower.expect("lower release").clicked);
+    let outside = run_scene(&mut state, &mut memory, pressed_at(outside_point), true);
+    assert!(!outside.lower.expect("lower press").state.hovered);
     assert_eq!(
         outside.output.cancel,
         Some(InspectorPickerCancelReason::OutsideClick)
     );
     assert_eq!(outside.output.commit, None);
     assert_eq!(outside.output.focus_return, Some(trigger));
+    assert_eq!(app_selection, item(1));
+    let released = run_scene(&mut state, &mut memory, released_at(outside_point), true);
+    assert!(!released.lower.expect("lower release").clicked);
+    assert_eq!(released.output.cancel, None);
+    assert_eq!(released.output.commit, None);
+    assert_eq!(released.output.focus_return, None);
     assert_eq!(app_selection, item(1));
 }
 

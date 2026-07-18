@@ -1012,7 +1012,7 @@ fn context_escape_dismissal_restores_outliner_trigger_focus_without_mutating_sel
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn context_outside_release_and_focused_command_restore_outliner_trigger_without_click_through() {
+fn context_outside_press_and_focused_command_restore_outliner_trigger_without_click_through() {
     let model = OutlinerModel::new(vec![
         OutlinerItem::new(id(1), "One"),
         OutlinerItem::new(id(2), "Two"),
@@ -1097,25 +1097,29 @@ fn context_outside_release_and_focused_command_restore_outliner_trigger_without_
             let outside_point = row_zones(&shown, id(4)).label_rect.center();
             assert!(!menu_bounds.contains_point(outside_point));
             assert!(!row_response(&shown, id(4)).row.state.disabled);
-            let pressed = frame(
+            let dismissed = frame(
                 &mut state,
                 &mut memory,
                 primary_input(outside_point, true, true, false, 1),
             );
-            assert_eq!(state.context_target(), Some(&captured_target));
+            assert_eq!(state.context_target(), None);
             assert_eq!(memory.focused(), Some(trigger));
             assert_eq!(state.cursor.active(), Some(id(1)));
             assert_eq!(state.selection.selected(), vec![id(1)]);
-            assert!(!row_response(&pressed, id(4)).row.clicked);
-            assert!(!row_response(&pressed, id(4)).row.state.pressed);
-            assert!(pressed.output.requests.is_empty() && pressed.frame.actions.is_empty());
-            let dismissed = frame(
+            assert!(!row_response(&dismissed, id(4)).row.clicked);
+            assert!(!row_response(&dismissed, id(4)).row.state.pressed);
+            assert!(dismissed.output.requests.is_empty() && dismissed.frame.actions.is_empty());
+            let released = frame(
                 &mut state,
                 &mut memory,
                 primary_input(outside_point, false, false, true, 1),
             );
-            assert!(!row_response(&dismissed, id(4)).row.clicked);
-            assert!(dismissed.output.requests.is_empty() && dismissed.frame.actions.is_empty());
+            assert_eq!(state.context_target(), None);
+            assert_eq!(memory.focused(), Some(trigger));
+            assert_eq!(state.cursor.active(), Some(id(1)));
+            assert_eq!(state.selection.selected(), vec![id(1)]);
+            assert!(!row_response(&released, id(4)).row.clicked);
+            assert!(released.output.requests.is_empty() && released.frame.actions.is_empty());
             dismissed
         };
 
