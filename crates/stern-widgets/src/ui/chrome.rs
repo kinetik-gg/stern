@@ -7,16 +7,70 @@ use stern_core::{
 };
 use stern_text::{TextLayoutKey, TextOverflow, TextStyle};
 
-use super::Ui;
+use super::{Ui, response_activated};
 use crate::chrome::{
     ChromeScene, ChromeSceneIntent, ChromeSceneOutput, ChromeSceneRow, ChromeSceneRowKind,
-    ChromeSurfaceKind,
+    ChromeSurfaceKind, WindowSystemMenuTrigger,
 };
 use crate::components::{
     ButtonFocusPlacement, TabFocusPlacement, button_surface_primitives, tab_surface_primitives,
 };
+use crate::{
+    icon_button_with_label as fallback_icon_button_with_label,
+    icon_button_with_library as icon_button_with_library_widget,
+};
 
 impl Ui<'_> {
+    /// Paints and evaluates one platform-owned window system-menu trigger.
+    ///
+    /// Call [`WindowSystemMenuTrigger::declare_pointer_target`] before lower
+    /// titlebar targets so explicit paint order can keep this trigger on top.
+    pub fn window_system_menu_trigger(
+        &mut self,
+        trigger: &WindowSystemMenuTrigger,
+    ) -> Option<stern_core::Response> {
+        if !trigger.is_valid() {
+            return None;
+        }
+
+        self.register_id(trigger.widget_id());
+        let theme = self.theme;
+        let icons = self.icons;
+        let (input, memory) = self.runtime.input_and_memory_mut();
+        let output = if let Some(icons) = icons {
+            icon_button_with_library_widget(
+                trigger.widget_id(),
+                trigger.titlebar_rect(),
+                trigger.icon(),
+                "Open window system menu",
+                icons,
+                input,
+                memory,
+                theme,
+                false,
+            )
+        } else {
+            fallback_icon_button_with_label(
+                trigger.widget_id(),
+                trigger.titlebar_rect(),
+                trigger.icon(),
+                "Open window system menu",
+                input,
+                memory,
+                theme,
+                false,
+            )
+        };
+        let response = self.push_interactive(output);
+        if response_activated(&response) {
+            let requested = self
+                .runtime
+                .request_window_system_menu(trigger.request_position());
+            debug_assert!(requested, "validated system-menu position");
+        }
+        Some(response)
+    }
+
     /// Paints and evaluates one public editor-chrome scene.
     ///
     /// Call [`ChromeScene::declare_pointer_targets`] from the closure passed to
