@@ -1,6 +1,9 @@
 use core::fmt;
 
 use stern_core::{ClipboardText, Point, RepaintRequest, WidgetId};
+#[cfg(any(target_os = "windows", test))]
+use winit::dpi::LogicalPosition;
+use winit::window::Window;
 
 /// One ordered application-shell operation.
 #[derive(PartialEq)]
@@ -144,6 +147,66 @@ impl WinitShellRequests {
             }
         }
         outcome
+    }
+
+    /// Executes the batch once with system-menu work bound to the host window.
+    #[must_use]
+    pub fn execute_for_window(
+        self,
+        window: &Window,
+        services: &mut dyn WinitShellServices,
+    ) -> WinitShellOutcome {
+        self.execute(&mut WindowBoundShellServices {
+            target: window,
+            services,
+        })
+    }
+}
+
+trait WindowSystemMenuTarget {
+    #[cfg(any(target_os = "windows", test))]
+    fn show_window_menu(&self, position: LogicalPosition<f64>);
+}
+
+impl WindowSystemMenuTarget for Window {
+    #[cfg(any(target_os = "windows", test))]
+    fn show_window_menu(&self, position: LogicalPosition<f64>) {
+        Window::show_window_menu(self, position);
+    }
+}
+
+struct WindowBoundShellServices<'a> {
+    target: &'a dyn WindowSystemMenuTarget,
+    services: &'a mut dyn WinitShellServices,
+}
+
+impl WinitShellServices for WindowBoundShellServices<'_> {
+    fn write_clipboard_text(&mut self, text: &str) -> Result<(), WinitShellServiceError> {
+        self.services.write_clipboard_text(text)
+    }
+
+    fn read_clipboard_text(&mut self) -> Result<String, WinitShellServiceError> {
+        self.services.read_clipboard_text()
+    }
+
+    fn show_window_system_menu(&mut self, position: Point) -> Result<(), WinitShellServiceError> {
+        #[cfg(target_os = "windows")]
+        {
+            self.target.show_window_menu(LogicalPosition::new(
+                f64::from(position.x),
+                f64::from(position.y),
+            ));
+            Ok(())
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = (self.target, position);
+            Err(WinitShellServiceError::Unavailable)
+        }
+    }
+
+    fn open_http_url(&mut self, url: &str) -> Result<(), WinitShellServiceError> {
+        self.services.open_http_url(url)
     }
 }
 
@@ -423,7 +486,78 @@ fn is_supported_web_url(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_supported_web_url;
+    use std::cell::RefCell;
+
+    use stern_core::Point;
+    use winit::dpi::LogicalPosition;
+
+    use super::{
+        WindowBoundShellServices, WindowSystemMenuTarget, WinitShellRequest, WinitShellRequests,
+        WinitShellServiceError, WinitShellServices, is_supported_web_url,
+    };
+
+    #[derive(Default)]
+    struct Target(RefCell<Vec<LogicalPosition<f64>>>);
+
+    impl WindowSystemMenuTarget for Target {
+        fn show_window_menu(&self, position: LogicalPosition<f64>) {
+            self.0.borrow_mut().push(position);
+        }
+    }
+
+    #[derive(Default)]
+    struct Services(bool);
+
+    impl WinitShellServices for Services {
+        fn write_clipboard_text(&mut self, _: &str) -> Result<(), WinitShellServiceError> {
+            unreachable!()
+        }
+
+        fn read_clipboard_text(&mut self) -> Result<String, WinitShellServiceError> {
+            unreachable!()
+        }
+
+        fn open_http_url(&mut self, _: &str) -> Result<(), WinitShellServiceError> {
+            self.0 = true;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn window_bound_adapter_dispatches_or_fails_closed_then_continues() {
+        let position = Point::new(-8.25, 11.5);
+        let target = Target::default();
+        let mut services = Services::default();
+        let requests = WinitShellRequests::from_operations([
+            WinitShellRequest::ShowWindowSystemMenu { position },
+            WinitShellRequest::OpenUrl("https://example.com".to_owned()),
+        ]);
+        let outcome = requests.execute(&mut WindowBoundShellServices {
+            target: &target,
+            services: &mut services,
+        });
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(*target.0.borrow(), [LogicalPosition::new(-8.25, 11.5)]);
+            assert!(outcome.results().is_empty());
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _: fn(&Target, LogicalPosition<f64>) =
+                <Target as WindowSystemMenuTarget>::show_window_menu;
+            assert!(target.0.borrow().is_empty());
+            assert_eq!(
+                outcome.results(),
+                &[super::WinitShellResult::Failure(super::WinitShellFailure {
+                    operation: super::WinitShellOperation::ShowWindowSystemMenu,
+                    target: None,
+                    reason: super::WinitShellFailureReason::ServiceUnavailable,
+                })]
+            );
+        }
+        assert!(services.0);
+    }
 
     #[test]
     fn web_url_validation_allows_only_http_and_https_with_authority() {
