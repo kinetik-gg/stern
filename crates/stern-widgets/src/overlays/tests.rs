@@ -103,20 +103,25 @@ fn popover_can_be_clamped_inside_viewport() {
 
 #[test]
 fn popover_clamp_handles_overlay_larger_than_viewport() {
+    let viewport = Rect::new(40.0, 30.0, 100.0, 80.0);
     let rect = place_popover(
         PopoverRequest {
-            anchor: Rect::new(80.0, 80.0, 10.0, 10.0),
+            anchor: Rect::new(120.0, 90.0, 10.0, 10.0),
             size: Size::new(180.0, 160.0),
             placement: PopoverPlacement::Below,
             offset: 4.0,
             fit_viewport: true,
         },
-        Rect::new(0.0, 0.0, 100.0, 100.0),
+        viewport,
     );
 
-    assert!((rect.x - 0.0).abs() < f32::EPSILON);
-    assert!((rect.y - 0.0).abs() < f32::EPSILON);
-    assert_eq!(rect.size(), Size::new(180.0, 160.0));
+    assert_eq!(rect, viewport);
+    assert!(viewport.contains_rect(rect));
+    assert!(
+        [rect.x, rect.y, rect.width, rect.height]
+            .into_iter()
+            .all(|value| value.is_finite() && value >= 0.0)
+    );
 }
 
 #[test]

@@ -14,7 +14,8 @@ use stern_widgets::{
     CommandPaletteOverlay, DropdownItem, DropdownItemId, DropdownModel, DropdownOverlay, Menu,
     MenuItem, MenuOverlay, ModalAction, ModalActionRole, ModalDialog, ModalDialogOverlay,
     OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayScene,
-    OverlaySceneDismissReason, OverlaySceneIntent, OverlaySceneOutput, OverlaySceneSurface, Ui,
+    OverlaySceneDismissReason, OverlaySceneIntent, OverlaySceneOutput, OverlaySceneSurface,
+    PopoverPlacement, Ui,
 };
 
 const LOWER_RECT: Rect = Rect::new(0.0, 0.0, 320.0, 240.0);
@@ -150,6 +151,81 @@ fn run_frame_with_theme(
     let scene_output = ui.overlay_scene(scene);
     let frame = ui.finish_output();
     (lower_response, scene_output, frame)
+}
+
+#[test]
+fn fitted_menu_surfaces_and_outer_clips_preserve_contained_state() {
+    let viewport = Rect::new(32.0, 24.0, 180.0, 96.0);
+    let owner = WidgetId::from_key("fitted-menu-owner");
+    let oversized = MenuOverlay::anchored(
+        OverlayId::from_raw(23),
+        OverlayKind::Menu,
+        Menu::from_actions([action("oversized", "Oversized")]),
+        Rect::new(190.0, 100.0, 12.0, 12.0),
+        Size::new(400.0, 300.0),
+        PopoverPlacement::Below,
+        4.0,
+        true,
+        viewport,
+        OverlayDismissal::OutsideClickOrEscape,
+        ActionSource::Menu,
+        ActionContext::Widget(owner),
+    );
+    let fitting_size = Size::new(80.0, 48.0);
+    let fitting = MenuOverlay::anchored(
+        OverlayId::from_raw(24),
+        OverlayKind::ContextMenu,
+        Menu::from_actions([action("fitting", "Fitting")]),
+        Rect::new(204.0, 92.0, 8.0, 8.0),
+        fitting_size,
+        PopoverPlacement::Right,
+        4.0,
+        true,
+        viewport,
+        OverlayDismissal::Manual,
+        ActionSource::Programmatic,
+        ActionContext::Editor,
+    );
+    assert_eq!(oversized.entry.rect, viewport);
+    assert!(viewport.contains_rect(fitting.entry.rect));
+    assert_eq!(fitting.entry.rect.size(), fitting_size);
+
+    let mut scene = OverlayScene::new();
+    scene.push(OverlaySceneSurface::menu("Oversized", oversized.clone()));
+    scene.push(OverlaySceneSurface::menu("Fitting", fitting.clone()));
+    assert_eq!(
+        scene
+            .surfaces()
+            .iter()
+            .map(|surface| surface.entry().id)
+            .collect::<Vec<_>>(),
+        vec![oversized.entry.id, fitting.entry.id]
+    );
+    let mut memory = UiMemory::new();
+    let (_, output, frame) = run_frame(&mut scene, &mut memory, UiInput::default(), false);
+
+    let clip_rects = frame
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::ClipBegin { rect, .. } => Some(*rect),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(clip_rects, vec![oversized.entry.rect, fitting.entry.rect]);
+    let OverlaySceneSurface::Menu { overlay: first, .. } = &scene.surfaces()[0] else {
+        panic!("oversized menu surface");
+    };
+    let OverlaySceneSurface::Menu {
+        overlay: second, ..
+    } = &scene.surfaces()[1]
+    else {
+        panic!("fitting menu surface");
+    };
+    assert_eq!(first, &oversized);
+    assert_eq!(second, &fitting);
+    assert!(output.intents.is_empty());
+    assert!(frame.actions.is_empty());
 }
 
 #[test]

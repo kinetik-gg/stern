@@ -334,7 +334,7 @@ fn overlay_conformance_popover_oversize_outputs_remain_deterministic() {
         Rect::new(100.0, 50.0, 80.0, 70.0),
     );
 
-    assert_eq!(rect, Rect::new(100.0, 50.0, 140.0, 120.0));
+    assert_eq!(rect, Rect::new(100.0, 50.0, 80.0, 70.0));
 }
 
 #[test]
