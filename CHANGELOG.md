@@ -10,6 +10,16 @@ published, or accepted as an alpha release.
 
 ### Changed
 
+- **Breaking:** Added library-neutral `StaticIcon`, borrowed immutable
+  `IconGraphic` layers, and `Primitive::Icon` for allocation-free static vector
+  geometry scaling and tinting. `PathPrimitive::elements` is now `PathData`
+  (`Owned` or `Static`) and paths preserve fill rule and opacity; `Stroke` now
+  also preserves cap and join. Existing constructors retain their prior
+  defaults, but public struct literals and exhaustive primitive/renderer-command
+  matches must add the new fields or variants. Vello now maps these styles
+  directly and retains static slices through translation instead of cloning
+  their elements into per-use vectors. Path fill/stroke opacity and icon-layer
+  opacity are isolated and composited once across their combined paints.
 - Added bounded headless evidence for `STERN-APPMENU-001`: an inactive
   `MenuBar` opens its first visible, non-empty heading only for exact unmodified,
   non-repeat pressed `F10`; invalid entry leaves state unchanged. Existing

@@ -293,6 +293,13 @@ Icons:
 - Prefer vector/path icons where possible.
 - Support theme-aware icon color.
 - Support bitmap icons when needed.
+- A runtime static vector icon is a copyable stable `IconId` plus a borrowed
+  immutable `IconGraphic`; no registration or global catalog is required at
+  this layer.
+- Static graphics retain canonical view boxes, ordered borrowed layers/paths,
+  fill rules, opacity, and stroke width/cap/join metadata. Catalog-specific
+  names, weights, aliases, and source ingestion belong to dedicated icon
+  libraries and development tooling rather than `stern-core` or renderers.
 
 Images:
 

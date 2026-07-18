@@ -1,6 +1,6 @@
 //! Backend-independent render primitives.
 
-use crate::{Point, Rect, Size, Vec2};
+use crate::{IconPrimitive, PathPrimitive, Point, Rect, Size, Stroke, Vec2};
 
 /// Straight (unpremultiplied) sRGB color with straight alpha.
 ///
@@ -207,23 +207,6 @@ impl LinearGradient {
     #[must_use]
     pub const fn stop_count(self) -> usize {
         self.stop_count
-    }
-}
-
-/// Stroke style.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Stroke {
-    /// Stroke width in logical units.
-    pub width: f32,
-    /// Stroke brush.
-    pub brush: Brush,
-}
-
-impl Stroke {
-    /// Creates a stroke.
-    #[must_use]
-    pub const fn new(width: f32, brush: Brush) -> Self {
-        Self { width, brush }
     }
 }
 
@@ -554,60 +537,6 @@ impl ShadowPrimitive {
     }
 }
 
-/// One element in a vector path.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PathElement {
-    /// Move the current point without drawing.
-    MoveTo(Point),
-    /// Draw a straight segment to a point.
-    LineTo(Point),
-    /// Draw a quadratic Bezier segment.
-    QuadTo {
-        /// Control point.
-        ctrl: Point,
-        /// Segment end point.
-        to: Point,
-    },
-    /// Draw a cubic Bezier segment.
-    CubicTo {
-        /// First control point.
-        ctrl1: Point,
-        /// Second control point.
-        ctrl2: Point,
-        /// Segment end point.
-        to: Point,
-    },
-    /// Close the current subpath.
-    Close,
-}
-
-/// Vector path draw command.
-#[derive(Debug, Clone, PartialEq)]
-pub struct PathPrimitive {
-    /// Path elements in drawing order.
-    pub elements: Vec<PathElement>,
-    /// Fill brush.
-    pub fill: Option<Brush>,
-    /// Stroke style.
-    pub stroke: Option<Stroke>,
-}
-
-impl PathPrimitive {
-    /// Creates a path primitive.
-    #[must_use]
-    pub fn new(
-        elements: impl Into<Vec<PathElement>>,
-        fill: Option<Brush>,
-        stroke: Option<Stroke>,
-    ) -> Self {
-        Self {
-            elements: elements.into(),
-            fill,
-            stroke,
-        }
-    }
-}
-
 /// Text draw command.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextPrimitive {
@@ -663,6 +592,8 @@ pub enum Primitive {
     Shadow(ShadowPrimitive),
     /// Vector path.
     Path(PathPrimitive),
+    /// Immutable static vector icon.
+    Icon(IconPrimitive),
     /// Text.
     Text(TextPrimitive),
     /// Static image.
@@ -702,11 +633,11 @@ pub enum Primitive {
 mod tests {
     use super::{
         Brush, ClipId, Color, CornerRadius, GradientBuildError, GradientStop, IconId, ImageId,
-        ImagePrimitive, LayerId, LinePrimitive, LinearGradient, MAX_GRADIENT_STOPS, PathElement,
-        PathPrimitive, Primitive, RectPrimitive, ShadowPrimitive, Stroke, TextLayoutId,
-        TextPrimitive, TextureId, TexturePrimitive, Transform,
+        ImagePrimitive, LayerId, LinePrimitive, LinearGradient, MAX_GRADIENT_STOPS, Primitive,
+        RectPrimitive, ShadowPrimitive, TextLayoutId, TextPrimitive, TextureId, TexturePrimitive,
+        Transform,
     };
-    use crate::{Point, Rect, Size, Vec2};
+    use crate::{PathElement, PathPrimitive, Point, Rect, Size, Stroke, Vec2};
 
     #[test]
     fn constructs_color_and_brush_values() {

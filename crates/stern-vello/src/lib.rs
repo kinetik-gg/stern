@@ -4,6 +4,7 @@ mod command;
 mod encoding;
 mod geometry;
 mod image;
+mod path;
 mod renderer;
 mod sanitize;
 mod snapshot;
@@ -23,10 +24,7 @@ pub use texture::{VelloNativeTextureRegistry, VelloNativeTextureScope};
 pub use translation::translate_primitives;
 
 #[cfg(test)]
-use encoding::{
-    image_region_transform, snap_filled_path_elements_to_device,
-    snap_stroked_path_elements_to_device, snapped_image_region_transform,
-};
+use encoding::{encode_scene, image_region_transform, snapped_image_region_transform};
 #[cfg(test)]
 use geometry::{
     crisp_rect_border_segments, quantize_stroke_width_to_device, root_transform,
@@ -39,6 +37,11 @@ use geometry::{
 use image::{
     ImageDataCache, MAX_CACHED_IMAGE_ENTRIES, MAX_CACHED_TEXTURE_ENTRIES,
     MAX_CACHED_TINTED_IMAGE_BYTES, MAX_TINTED_IMAGE_CACHE_ENTRIES, PackedTint, image_quality,
+};
+#[cfg(test)]
+use path::{
+    snap_filled_path_elements_to_device, snap_stroked_path_elements_to_device, vello_fill,
+    vello_stroke,
 };
 #[cfg(test)]
 use text::{

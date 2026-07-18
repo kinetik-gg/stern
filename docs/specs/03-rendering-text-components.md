@@ -69,6 +69,25 @@ Primitive emission should preserve order unless explicit layers reorder output.
 
 Clipping and layering must be explicit enough for renderers to implement correctly.
 
+Vector paths retain either owned elements or an immutable `&'static
+[PathElement]` without changing paint semantics. `PathPrimitive` carries an
+explicit non-zero/even-odd fill rule and opacity, while `Stroke` carries width,
+brush, cap, and join. Static icon definitions are library-neutral borrowed
+`IconGraphic` data: a canonical view box contains ordered borrowed layers and
+paths, and each path preserves fill presence/rule, opacity, and optional stroke
+width/cap/join. A copyable `StaticIcon` handle pairs that graphic with stable
+`IconId` identity; equality, hashing, and ordering use only the ID.
+
+`Primitive::Icon` supplies a destination rectangle and tint. Renderers expand
+its borrowed layers into ordinary backend-neutral path commands under a
+composed transform. They must not scale or clone the source elements into a
+per-use vector. Path opacity applies once to the combined fill-and-stroke
+result, and layer opacity applies once to the combined ordered result of every
+path in that icon layer. Renderer command streams may express these semantics
+with backend-neutral bounded opacity-group begin/end commands. Empty or invalid
+graphics fail recoverably, and icon catalogs, vendor names, registration,
+parsing, and lookup remain outside the renderer contract.
+
 `Color` stores straight (unpremultiplied) sRGB numeric channels and straight
 alpha. Renderer-bound channels are finite values in `0.0..=1.0`. Public color
 constructors remain unchecked and preserve caller input; translation diagnoses
@@ -129,6 +148,13 @@ Vello should handle:
 - Gradients.
 - Images where suitable.
 - UI surface drawing.
+
+Vello maps path fill rules, opacity, stroke caps, and stroke joins directly to
+backend equivalents. Static and owned path data pass through the same encoder;
+backend path construction may allocate backend-owned encoding storage, but
+translation and scaling retain the original static element slice. Vello uses
+isolated layers for grouped path and icon-layer opacity so overlapping paints
+are not attenuated independently.
 
 wgpu interop should support:
 

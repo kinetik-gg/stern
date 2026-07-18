@@ -1,4 +1,7 @@
-use stern_core::{Brush, Color, CornerRadius, PathElement, Rect, Size, Stroke, Transform};
+use stern_core::{
+    Brush, Color, CornerRadius, FillRule, PathElement, Rect, Size, Stroke, StrokeCap, StrokeJoin,
+    Transform,
+};
 use stern_render::RenderDiagnostic;
 
 use crate::command::{RenderClip, RenderCommandKind, Translation};
@@ -24,8 +27,15 @@ pub fn render_translation_snapshot(translation: &Translation) -> String {
     lines.join("\n")
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn format_command_kind(kind: &RenderCommandKind) -> String {
     match kind {
+        RenderCommandKind::OpacityGroupBegin { bounds, opacity } => format!(
+            "opacity_group_begin bounds={} opacity={}",
+            format_rect(*bounds),
+            format_f32(*opacity)
+        ),
+        RenderCommandKind::OpacityGroupEnd => "opacity_group_end".to_owned(),
         RenderCommandKind::Rect {
             rect,
             fill,
@@ -73,11 +83,14 @@ pub(crate) fn format_command_kind(kind: &RenderCommandKind) -> String {
             elements,
             fill,
             stroke,
-        } => format!(
-            "path elements={} fill={} stroke={}",
-            format_path_elements(elements),
-            format_optional_brush(fill.as_ref()),
-            format_optional_stroke(stroke.as_ref()),
+            fill_rule,
+            opacity,
+        } => format_path_command(
+            elements,
+            fill.as_ref(),
+            stroke.as_ref(),
+            *fill_rule,
+            *opacity,
         ),
         RenderCommandKind::Text {
             layout,
@@ -119,6 +132,31 @@ pub(crate) fn format_command_kind(kind: &RenderCommandKind) -> String {
             )
         }
     }
+}
+
+fn format_path_command(
+    elements: &[PathElement],
+    fill: Option<&Brush>,
+    stroke: Option<&Stroke>,
+    fill_rule: FillRule,
+    opacity: f32,
+) -> String {
+    let style = if fill_rule == FillRule::NonZero && opacity.to_bits() == 1.0_f32.to_bits() {
+        String::new()
+    } else {
+        format!(
+            " rule={} opacity={}",
+            format_fill_rule(fill_rule),
+            format_f32(opacity)
+        )
+    };
+    format!(
+        "path elements={} fill={} stroke={}{}",
+        format_path_elements(elements),
+        format_optional_brush(fill),
+        format_optional_stroke(stroke),
+        style,
+    )
 }
 
 pub(crate) fn format_clips(clips: &[RenderClip]) -> String {
@@ -200,11 +238,23 @@ pub(crate) fn format_optional_stroke(stroke: Option<&Stroke>) -> String {
 }
 
 pub(crate) fn format_stroke(stroke: Stroke) -> String {
-    format!(
+    let base = format!(
         "{} {}",
         format_f32(stroke.width),
         format_brush(stroke.brush)
-    )
+    );
+    if stroke.cap == StrokeCap::Butt && stroke.join == StrokeJoin::Miter {
+        base
+    } else {
+        format!("{base} cap={:?} join={:?}", stroke.cap, stroke.join)
+    }
+}
+
+pub(crate) const fn format_fill_rule(fill_rule: FillRule) -> &'static str {
+    match fill_rule {
+        FillRule::NonZero => "nonzero",
+        FillRule::EvenOdd => "evenodd",
+    }
 }
 
 pub(crate) fn format_rect(rect: Rect) -> String {

@@ -63,6 +63,7 @@ fn translates_paths_in_order() {
         elements,
         fill,
         stroke,
+        ..
     } = &translation.commands[0].kind
     else {
         panic!("expected path command");

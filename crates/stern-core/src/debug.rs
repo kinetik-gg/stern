@@ -64,6 +64,8 @@ pub enum PrimitiveKind {
     Shadow,
     /// Path primitive.
     Path,
+    /// Static icon primitive.
+    Icon,
     /// Text primitive.
     Text,
     /// Image primitive.
@@ -105,6 +107,7 @@ pub const fn primitive_kind(primitive: &Primitive) -> PrimitiveKind {
         Primitive::Line(_) => PrimitiveKind::Line,
         Primitive::Shadow(_) => PrimitiveKind::Shadow,
         Primitive::Path(_) => PrimitiveKind::Path,
+        Primitive::Icon(_) => PrimitiveKind::Icon,
         Primitive::Text(_) => PrimitiveKind::Text,
         Primitive::Image(_) => PrimitiveKind::Image,
         Primitive::Texture(_) => PrimitiveKind::Texture,
@@ -128,6 +131,7 @@ pub fn primitive_bounds(primitive: &Primitive) -> Option<Rect> {
         Primitive::Line(primitive) => Some(line_bounds(primitive.from, primitive.to)),
         Primitive::Shadow(primitive) => Some(shadow_bounds(primitive)),
         Primitive::Path(primitive) => path_bounds(&primitive.elements),
+        Primitive::Icon(primitive) => Some(primitive.rect),
         Primitive::Text(_)
         | Primitive::ClipEnd { .. }
         | Primitive::LayerBegin { .. }
@@ -199,6 +203,7 @@ pub fn inspect_primitives(primitives: &[Primitive]) -> Vec<PrimitiveInspection> 
             | Primitive::Line(_)
             | Primitive::Shadow(_)
             | Primitive::Path(_)
+            | Primitive::Icon(_)
             | Primitive::Text(_)
             | Primitive::Image(_)
             | Primitive::Texture(_) => {
@@ -221,6 +226,7 @@ fn primitive_summary(primitive: &Primitive) -> String {
         Primitive::Line(primitive) => format!("line {:?} -> {:?}", primitive.from, primitive.to),
         Primitive::Shadow(primitive) => format!("shadow {:?}", primitive.rect),
         Primitive::Path(primitive) => format!("path {} elements", primitive.elements.len()),
+        Primitive::Icon(primitive) => format!("icon {}", primitive.icon.id().raw()),
         Primitive::Text(primitive) => format!("text {:?}", primitive.text),
         Primitive::Image(primitive) => format!("image {}", primitive.image.raw()),
         Primitive::Texture(primitive) => format!("texture {}", primitive.texture.raw()),

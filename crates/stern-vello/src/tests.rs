@@ -2,6 +2,7 @@ mod color_alpha;
 mod common;
 mod frame_encoding;
 mod geometry;
+mod icons;
 mod images;
 mod native_textures;
 mod primitives;
