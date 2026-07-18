@@ -7,7 +7,7 @@ use stern_core::{
     Rect, Response, SemanticRole, WidgetId,
 };
 
-use crate::{PanelId, TabStripTarget};
+use crate::{Menu, PanelId, TabStripTarget};
 
 use super::{
     ChromeOverflowItem, MenuBar, MenuBarMenuId, StatusBar, StatusItemId, TabStrip, Toolbar,
@@ -181,6 +181,47 @@ impl<'a> ChromeScene<'a> {
     #[must_use]
     pub fn overflow_widget_id(&self, kind: ChromeSurfaceKind) -> WidgetId {
         overflow_widget_id(self.config.root, kind)
+    }
+
+    /// Projects a current toolbar overflow request into the shared menu model.
+    ///
+    /// Requests that no longer exactly match this scene's toolbar projection,
+    /// or that contain invalid or duplicate keys, fail closed without a partial
+    /// menu.
+    #[must_use]
+    pub fn toolbar_overflow_menu(&self, request: &ChromeOverflowRequest) -> Option<Menu> {
+        if request.surface != ChromeSurfaceKind::Toolbar || request.items.is_empty() {
+            return None;
+        }
+
+        let current = self.toolbar_layout()?.rows.into_iter().find_map(|row| {
+            if let Some(ChromeRowBehavior::OpenOverflow(request)) = row.behavior {
+                Some(request)
+            } else {
+                None
+            }
+        })?;
+        if &current != request {
+            return None;
+        }
+
+        let mut actions = Vec::with_capacity(request.items.len());
+        for (index, key) in request.items.iter().enumerate() {
+            if request.items[..index].contains(key) {
+                return None;
+            }
+            let ChromeSceneItemKey::Toolbar { group, action } = key else {
+                return None;
+            };
+            let item = self
+                .toolbar
+                .group(*group)?
+                .items()
+                .iter()
+                .find(|item| item.visible() && item.action_id() == action)?;
+            actions.push(item.action.clone());
+        }
+        Some(Menu::from_actions(actions))
     }
 
     /// Adds surface blockers and enabled chrome targets to one caller-owned plan.
