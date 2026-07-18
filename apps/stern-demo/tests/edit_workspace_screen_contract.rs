@@ -105,7 +105,27 @@ fn edit_workspace_reports_exact_ten_public_component_ids() {
     assert!(observed.is_subset(&required));
     assert_eq!(required.difference(&observed).count(), 24);
 
-    let assertions = runtime_journey_assertions(&trace);
+    let evidence = runtime_journey_evidence(&trace);
+    assert_eq!(
+        evidence,
+        [
+            [RuntimeStepEvidence::Passed; 3],
+            [
+                RuntimeStepEvidence::NotExecuted,
+                RuntimeStepEvidence::Passed,
+                RuntimeStepEvidence::NotExecuted,
+            ],
+            [
+                RuntimeStepEvidence::NotExecuted,
+                RuntimeStepEvidence::Passed,
+                RuntimeStepEvidence::NotExecuted,
+            ],
+            [RuntimeStepEvidence::NotExecuted; 3],
+            [RuntimeStepEvidence::NotExecuted; 3],
+            [RuntimeStepEvidence::NotExecuted; 3],
+            [RuntimeStepEvidence::NotExecuted; 3],
+        ],
+    );
     let journeys = JOURNEY_COMPONENTS
         .lines()
         .map(|line| line.split_once('|').expect("journey components"))
@@ -118,22 +138,24 @@ fn edit_workspace_reports_exact_ten_public_component_ids() {
         [6, 5, 10, 6, 5, 5, 5]
     );
     let mut completed = Vec::new();
-    for ((id, required), assertions) in journeys.into_iter().zip(assertions) {
+    for ((id, required), evidence) in journeys.into_iter().zip(evidence) {
         let missing = required
             .split_ascii_whitespace()
             .filter(|component| !observed.contains(component))
             .collect::<Vec<_>>();
-        let failed = assertions
+        let unproven = evidence
             .into_iter()
             .enumerate()
-            .filter_map(|(index, passes)| (!passes).then_some(index + 1))
+            .filter_map(|(index, evidence)| {
+                (evidence != RuntimeStepEvidence::Passed).then_some((index + 1, evidence))
+            })
             .collect::<Vec<_>>();
-        if missing.is_empty() && failed.is_empty() {
+        if missing.is_empty() && unproven.is_empty() {
             completed.push(id);
         }
         assert!(
-            !missing.is_empty() || !failed.is_empty(),
-            "{id} has no runtime-derived gap: missing={missing:?}, failed assertions={failed:?}",
+            !missing.is_empty() || !unproven.is_empty(),
+            "{id} has no runtime-derived gap: missing={missing:?}, unproven assertions={unproven:?}",
         );
     }
     assert!(completed.is_empty(), "completed journeys: {completed:?}");
@@ -154,10 +176,17 @@ overlay-and-failure-recovery|overlay-system overlay-components menu-components c
 struct EditWorkspaceTrace {
     initial: FrameOutput,
     selected: FrameOutput,
-    moved: FrameOutput,
-    invoked: FrameOutput,
-    milestones: [bool; 4],
+    evidence: ExecutedEditEvidence,
 }
+
+struct ExecutedEditEvidence {
+    shell_booted: RuntimeStepEvidence,
+    collection_traversed: RuntimeStepEvidence,
+    identity_preserved: RuntimeStepEvidence,
+    shared_action_invoked: RuntimeStepEvidence,
+    inspector_projected: RuntimeStepEvidence,
+}
+
 fn edit_workspace_trace() -> EditWorkspaceTrace {
     let mut app = DemoApp::new();
     let initial = app.frame(demo_context(UiInput::default()));
@@ -167,25 +196,38 @@ fn edit_workspace_trace() -> EditWorkspaceTrace {
     let moved = app.frame(demo_context(key(Key::ArrowDown)));
     let button = SemanticRole::IconButton;
     let invoked = click(&mut app, &moved, &button, "Apply Shared State");
-    let action = has_action(&invoked, "shared.apply") && app.applied_revision() == 1;
+    let shared_action_invoked =
+        action_count(&invoked, "shared.apply") == 1 && app.applied_revision() == 1;
     let focus = app.focused();
     let ids = dock_ids(&invoked);
     let resized = app.frame(resized_context(UiInput::default()));
-    let stable = ids == dock_ids(&resized) && focus == app.focused();
-    let focus = app.focused();
-    let _ = app.frame(demo_context(key(Key::Escape)));
-    let texture = !translation.commands.is_empty() && translation.diagnostics.is_empty();
-    let restored = focus == app.focused();
+    let item = &SemanticRole::ListItem;
+    let character = node(&selected, item, "Character").state.selected;
+    let lighting = node(&moved, item, "Lighting");
+    let collection_traversed = character && lighting.state.selected && lighting.state.focused;
+    let inspector_projected = collection_traversed
+        && has_labels(&selected, "Character|Vector layer")
+        && has_labels(&moved, "Lighting|Adjustment layer");
+    let shell_booted = has_role(&initial, &SemanticRole::Dock)
+        && has_role(&initial, &SemanticRole::Frame)
+        && !translation.commands.is_empty()
+        && translation.diagnostics.is_empty();
     EditWorkspaceTrace {
         initial,
         selected,
-        moved,
-        invoked,
-        milestones: [texture, action, stable, restored],
+        evidence: ExecutedEditEvidence {
+            shell_booted: RuntimeStepEvidence::executed(shell_booted),
+            collection_traversed: RuntimeStepEvidence::executed(collection_traversed),
+            identity_preserved: RuntimeStepEvidence::executed(
+                ids == dock_ids(&resized) && focus == app.focused(),
+            ),
+            shared_action_invoked: RuntimeStepEvidence::executed(shared_action_invoked),
+            inspector_projected: RuntimeStepEvidence::executed(inspector_projected),
+        },
     }
 }
 fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> {
-    let action = trace.milestones[1];
+    let action = trace.evidence.shared_action_invoked.passed();
     let list = has_role(&trace.initial, &SemanticRole::List) && has_label(&trace.initial, "Assets");
     let selected = node(&trace.selected, &SemanticRole::ListItem, "Character")
         .state
@@ -199,7 +241,9 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
     );
     let navigation = has_role(&trace.initial, &SemanticRole::TabList)
         && has_role(&trace.initial, &SemanticRole::Tab);
-    let structure = dock && has_role(&trace.initial, &SemanticRole::Frame) && trace.milestones[0];
+    let structure = dock
+        && has_role(&trace.initial, &SemanticRole::Frame)
+        && trace.evidence.shell_booted.passed();
     let toolbar = has_custom_role(&trace.initial, "toolbar") && action;
     EXPECTED_COMPONENT_IDS
         .split_ascii_whitespace()
@@ -219,70 +263,38 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
         .collect()
 }
 
-fn runtime_journey_assertions(trace: &EditWorkspaceTrace) -> [[bool; 3]; 7] {
-    let item = &SemanticRole::ListItem;
-    let character = node(&trace.selected, item, "Character").state.selected;
-    let lighting = node(&trace.moved, item, "Lighting");
-    let traversal = character && lighting.state.selected && lighting.state.focused;
-    let nodes = trace.initial.semantics.nodes();
-    let projections = nodes
-        .iter()
-        .filter(|node| has_semantic_action(node, "shared.apply"))
-        .map(|node| node.state.disabled)
-        .collect::<Vec<_>>();
-    let consistent =
-        projections.len() == 5 && projections.windows(2).all(|states| states[0] == states[1]);
-    let timeline = has_custom_role(&trace.initial, "timeline");
-    let graph = has_custom_role(&trace.initial, "node-graph");
-    let overlay = has_role(&trace.initial, &SemanticRole::Menu)
-        && has_role(&trace.initial, &SemanticRole::CommandPalette);
-    let text = has_role(&trace.moved, &SemanticRole::TextField);
-    let inspector = traversal
-        && has_labels(&trace.selected, "Character|Vector layer")
-        && has_labels(&trace.moved, "Lighting|Adjustment layer");
-    let feedback = has_custom_role(&trace.invoked, "feedback-status");
-    let color = has_custom_role(&trace.initial, "color-picker");
-    let gradient = has_custom_role(&trace.initial, "gradient-editor");
-    let valued = nodes
-        .iter()
-        .filter(|node| node.state.value.is_some())
-        .count();
-    let actions = !trace.invoked.actions.is_empty();
-    let edit_outcomes = text && feedback && trace.milestones[1];
-    let shell = has_role(&trace.initial, &SemanticRole::Dock)
-        && has_role(&trace.initial, &SemanticRole::Frame);
-    [
-        [shell && trace.milestones[0], traversal, trace.milestones[2]],
-        [projections.len() == 5, trace.milestones[1], consistent],
-        [traversal && text, inspector, edit_outcomes],
-        [
-            timeline && has_role(&trace.initial, &SemanticRole::Viewport) && trace.milestones[0],
-            timeline && actions,
-            timeline && feedback && actions,
-        ],
-        [
-            color && gradient && valued >= 2,
-            gradient && valued > 0 && actions,
-            color && overlay && trace.milestones[3],
-        ],
-        [
-            graph && has_role(&trace.initial, &SemanticRole::Viewport) && trace.milestones[0],
-            graph && overlay && actions,
-            graph && trace.milestones[2],
-        ],
-        [
-            overlay && !projections.is_empty(),
-            overlay && trace.milestones[3],
-            feedback && actions,
-        ],
-    ]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeStepEvidence {
+    Passed,
+    Failed,
+    NotExecuted,
 }
 
-fn has_semantic_action(node: &SemanticNode, id: &str) -> bool {
-    node.actions
-        .iter()
-        .filter_map(|action| action.action_id.as_ref())
-        .any(|action| action.as_str() == id)
+impl RuntimeStepEvidence {
+    fn executed(passed: bool) -> Self {
+        if passed { Self::Passed } else { Self::Failed }
+    }
+
+    fn passed(self) -> bool {
+        self == Self::Passed
+    }
+}
+
+fn runtime_journey_evidence(trace: &EditWorkspaceTrace) -> [[RuntimeStepEvidence; 3]; 7] {
+    let unexecuted = RuntimeStepEvidence::NotExecuted;
+    [
+        [
+            trace.evidence.shell_booted,
+            trace.evidence.collection_traversed,
+            trace.evidence.identity_preserved,
+        ],
+        [unexecuted, trace.evidence.shared_action_invoked, unexecuted],
+        [unexecuted, trace.evidence.inspector_projected, unexecuted],
+        [unexecuted; 3],
+        [unexecuted; 3],
+        [unexecuted; 3],
+        [unexecuted; 3],
+    ]
 }
 
 #[test]
@@ -352,11 +364,12 @@ fn has_custom_role(output: &FrameOutput, role: &str) -> bool {
         .any(|node| matches!(&node.role, SemanticRole::Custom(value) if value == role))
 }
 
-fn has_action(output: &FrameOutput, id: &str) -> bool {
+fn action_count(output: &FrameOutput, id: &str) -> usize {
     let mut actions = output.actions.clone();
     actions
         .drain()
-        .any(|action| action.action_id.as_str() == id)
+        .filter(|action| action.action_id.as_str() == id)
+        .count()
 }
 
 fn dock_ids(output: &FrameOutput) -> Vec<WidgetId> {
