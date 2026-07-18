@@ -3,15 +3,16 @@
 use std::time::Duration;
 
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionId, ActionSource, FrameContext, Key, KeyEvent, KeyState,
-    KeyboardInput, Modifiers, PhysicalSize, Point, PointerButtonState, PointerInput, PointerOrder,
-    PointerTarget, Primitive, Rect, Response, ScaleFactor, SemanticActionKind, SemanticRole, Size,
-    TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId, default_dark_theme,
+    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionQueue, ActionSource,
+    FrameContext, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, PhysicalSize, Point,
+    PointerButtonState, PointerInput, PointerOrder, PointerTarget, Primitive, Rect, Response,
+    ScaleFactor, SemanticActionKind, SemanticRole, Size, TimeInfo, UiInput, UiMemory, ViewportInfo,
+    WidgetId, default_dark_theme,
 };
 use stern_widgets::{
-    ChromeScene, ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey, ChromeSurfaceKind,
-    FrameTab, MenuBar, MenuBarMenu, MenuBarMenuId, PanelId, StatusBar, StatusItem, StatusItemId,
-    StatusItemKind, TabStrip, Toolbar, ToolbarGroup, ToolbarGroupId, Ui,
+    ChromeOverflowRequest, ChromeScene, ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey,
+    ChromeSurfaceKind, FrameTab, MenuBar, MenuBarMenu, MenuBarMenuId, MenuItem, PanelId, StatusBar,
+    StatusItem, StatusItemId, StatusItemKind, TabStrip, Toolbar, ToolbarGroup, ToolbarGroupId, Ui,
 };
 
 const LOWER_RECT: Rect = Rect::new(0.0, 0.0, 320.0, 180.0);
@@ -36,14 +37,18 @@ fn menu_bar() -> MenuBar {
 }
 
 fn toolbar() -> Toolbar {
+    toolbar_from([
+        action("file.open", "Open"),
+        action("file.save", "Save"),
+        action("file.export", "Export"),
+    ])
+}
+
+fn toolbar_from(actions: impl IntoIterator<Item = ActionDescriptor>) -> Toolbar {
     Toolbar::from_groups([ToolbarGroup::from_actions(
         ToolbarGroupId::from_raw(10),
         "File",
-        [
-            action("file.open", "Open"),
-            action("file.save", "Save"),
-            action("file.export", "Export"),
-        ],
+        actions,
     )])
 }
 
@@ -200,6 +205,16 @@ fn run_frame(
     let output = ui.chrome_scene(scene);
     let frame = ui.finish_output();
     (lower_response, output, frame)
+}
+
+fn toolbar_overflow_request(scene: &ChromeScene<'_>) -> ChromeOverflowRequest {
+    let mut memory = UiMemory::new();
+    let _ = run_frame(scene, &mut memory, pressed_at(55.0, 40.0), false);
+    let (_, output, _) = run_frame(scene, &mut memory, released_at(55.0, 40.0), false);
+    let [ChromeSceneIntent::OpenOverflow(request)] = output.intents.as_slice() else {
+        panic!("one toolbar overflow request");
+    };
+    request.clone()
 }
 
 #[test]
@@ -391,6 +406,102 @@ fn compact_surfaces_expose_typed_source_order_overflow_requests() {
         assert_eq!(request.surface, kind);
         assert_eq!(request.items, expected);
         assert!(request.trigger_rect.width > 0.0);
+    }
+}
+
+#[test]
+fn toolbar_overflow_projects_shared_descriptors_and_menu_activation() {
+    let mut save = action("file.save", "Save");
+    save.state.checked = Some(true);
+    let mut export = action("file.export", "Export");
+    export.state.enabled = false;
+    let toolbar = toolbar_from([action("file.open", "Open"), save.clone(), export.clone()]);
+    let menu_bar = menu_bar();
+    let tabs = tab_strip();
+    let status = status_bar();
+    let scene = ChromeScene::new(config(70.0), &menu_bar, &toolbar, &tabs, &status);
+    let request = toolbar_overflow_request(&scene);
+
+    let projected = scene
+        .toolbar_overflow_menu(&request)
+        .expect("current toolbar overflow menu");
+    assert_eq!(
+        projected
+            .visible_items()
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![MenuItem::Action(save), MenuItem::Action(export)]
+    );
+    let mut queue = ActionQueue::new();
+    assert!(projected.invoke_visible(0, &mut queue, ActionContext::Editor));
+    assert!(!projected.invoke_visible(1, &mut queue, ActionContext::Editor));
+    assert_eq!(
+        queue.pop_front(),
+        Some(ActionInvocation::new(
+            ActionId::new("file.save"),
+            ActionSource::Menu,
+            ActionContext::Editor,
+        ))
+    );
+    assert!(queue.is_empty());
+}
+
+#[test]
+fn toolbar_overflow_projection_fails_closed_for_noncurrent_requests() {
+    let menu_bar = menu_bar();
+    let toolbar = toolbar();
+    let tabs = tab_strip();
+    let status = status_bar();
+    let scene = ChromeScene::new(config(70.0), &menu_bar, &toolbar, &tabs, &status);
+    let current = toolbar_overflow_request(&scene);
+
+    let mut invalid = Vec::new();
+    for mutate in [
+        |request: &mut ChromeOverflowRequest| request.surface = ChromeSurfaceKind::MenuBar,
+        |request: &mut ChromeOverflowRequest| request.items.clear(),
+        |request: &mut ChromeOverflowRequest| {
+            request.items[0] = ChromeSceneItemKey::Menu(MenuBarMenuId::from_raw(1));
+        },
+        |request: &mut ChromeOverflowRequest| {
+            request.items[0] = ChromeSceneItemKey::Toolbar {
+                group: ToolbarGroupId::from_raw(99),
+                action: ActionId::new("missing"),
+            };
+        },
+        |request: &mut ChromeOverflowRequest| {
+            let duplicate = request.items[0].clone();
+            request.items[1] = duplicate;
+        },
+        |request: &mut ChromeOverflowRequest| request.items.swap(0, 1),
+    ] {
+        let mut request = current.clone();
+        mutate(&mut request);
+        invalid.push(request);
+    }
+    assert!(
+        invalid
+            .iter()
+            .all(|request| scene.toolbar_overflow_menu(request).is_none())
+    );
+
+    let wide = ChromeScene::new(config(200.0), &menu_bar, &toolbar, &tabs, &status);
+    let reordered_toolbar = toolbar_from([
+        action("file.open", "Open"),
+        action("file.export", "Export"),
+        action("file.save", "Save"),
+    ]);
+    let reordered = ChromeScene::new(config(70.0), &menu_bar, &reordered_toolbar, &tabs, &status);
+    let mut hidden = action("file.export", "Export");
+    hidden.state.visible = false;
+    let hidden_toolbar = toolbar_from([
+        action("file.open", "Open"),
+        action("file.save", "Save"),
+        hidden,
+    ]);
+    let hidden = ChromeScene::new(config(70.0), &menu_bar, &hidden_toolbar, &tabs, &status);
+    for stale_scene in [&wide, &reordered, &hidden] {
+        assert!(stale_scene.toolbar_overflow_menu(&current).is_none());
     }
 }
 
