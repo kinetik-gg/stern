@@ -345,7 +345,7 @@ fn scrollable_ignores_wheel_when_not_hovered_or_disabled() {
 }
 
 #[test]
-fn context_menu_trigger_uses_secondary_click_and_shift_f10() {
+fn context_menu_trigger_uses_secondary_click_menu_key_and_shift_f10() {
     let id = WidgetId::from_key("menu");
     let rect = Rect::new(0.0, 0.0, 10.0, 10.0);
     let mut memory = UiMemory::new();
@@ -357,21 +357,29 @@ fn context_menu_trigger_uses_secondary_click_and_shift_f10() {
     let pointer = context_menu_trigger(id, rect, &input, &mut memory, false);
     assert!(pointer.context_requested);
 
-    memory.focus(id);
-    let input = UiInput {
+    let keyboard_input = |key, state, modifiers| UiInput {
         keyboard: crate::KeyboardInput {
-            modifiers: Modifiers::new(true, false, false, false),
-            events: vec![KeyEvent::new(
-                Key::Function(10),
-                KeyState::Pressed,
-                Modifiers::new(true, false, false, false),
-                false,
-            )],
+            modifiers,
+            events: vec![KeyEvent::new(key, state, modifiers, false)],
         },
         ..UiInput::default()
     };
-    let keyboard = context_menu_trigger(id, rect, &input, &mut memory, false);
-    assert!(keyboard.context_requested);
+
+    memory.focus(id);
+    let none = Modifiers::default();
+    let menu = keyboard_input(Key::ContextMenu, KeyState::Pressed, none);
+    assert!(context_menu_trigger(id, rect, &menu, &mut memory, false).context_requested);
+    let released = keyboard_input(Key::ContextMenu, KeyState::Released, none);
+    assert!(!context_menu_trigger(id, rect, &released, &mut memory, false).context_requested);
+    assert!(!context_menu_trigger(id, rect, &menu, &mut memory, true).context_requested);
+
+    memory.clear_focus();
+    assert!(!context_menu_trigger(id, rect, &menu, &mut memory, false).context_requested);
+
+    memory.focus(id);
+    let shift = Modifiers::new(true, false, false, false);
+    let shift_f10 = keyboard_input(Key::Function(10), KeyState::Pressed, shift);
+    assert!(context_menu_trigger(id, rect, &shift_f10, &mut memory, false).context_requested);
 }
 
 #[test]

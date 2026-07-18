@@ -314,7 +314,7 @@ fn keyboard_context_requested(id: WidgetId, input: &UiInput, memory: &UiMemory) 
     memory.is_focused(id)
         && input.keyboard.events.iter().any(|event| {
             event.state == KeyState::Pressed
-                && event.modifiers.shift
-                && matches!(event.key, Key::Function(10))
+                && (matches!(event.key, Key::ContextMenu)
+                    || (event.modifiers.shift && matches!(event.key, Key::Function(10))))
         })
 }
