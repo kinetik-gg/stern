@@ -31,6 +31,28 @@ fn verifier_rejects_stale_source_and_premature_gate_claims() {
     let _ = fs::remove_file(evidence);
 }
 
+#[test]
+fn verifier_rejects_incomplete_component_claim() {
+    assert_mutation_rejected(
+        "record.runtime.components[0].status = 'notExecuted';",
+        "component",
+    );
+}
+
+#[test]
+fn verifier_rejects_failed_journey_and_traversal_claims() {
+    assert_mutation_rejected("record.runtime.journeys[0].status = 'failed';", "journey");
+    assert_mutation_rejected("record.traversalTraces[0].status = 'failed';", "traversal");
+}
+
+#[test]
+fn verifier_rejects_failed_owner_cleanup_claim() {
+    assert_mutation_rejected(
+        "record.focusRestorationTraces.find(trace => trace.interaction === 'focus-owner removal cleanup').restored = false;",
+        "owner-cleanup",
+    );
+}
+
 fn generate(path: &Path) {
     let status = Command::new(env!("CARGO_BIN_EXE_runtime_semantic_evidence"))
         .args(["--output", path.to_str().unwrap(), "--source-ref", "HEAD"])
@@ -46,8 +68,6 @@ fn verify(path: &Path, expected: bool) {
             "apps/stern-demo/tools/check-runtime-semantic-evidence.mjs",
             "--evidence",
             path.to_str().unwrap(),
-            "--source-ref",
-            "HEAD",
         ])
         .current_dir(repo_root())
         .output()
@@ -58,6 +78,14 @@ fn verify(path: &Path, expected: bool) {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+fn assert_mutation_rejected(mutation: &str, label: &str) {
+    let evidence = temp(label);
+    generate(&evidence);
+    mutate(&evidence, mutation);
+    verify(&evidence, false);
+    let _ = fs::remove_file(evidence);
 }
 
 fn assert_provisional(path: &Path) {

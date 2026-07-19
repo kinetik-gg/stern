@@ -31,9 +31,9 @@ const GATES = [
 
 const options = parseArgs(process.argv.slice(2));
 const evidencePath = resolve(options.evidence ?? fail("--evidence is required"));
-const sourceRef = options.sourceRef ?? "HEAD";
 const root = resolve(new URL("../../..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
 const evidence = JSON.parse(readFileSync(evidencePath, "utf8"));
+const sourceRef = options.sourceRef ?? evidence.source?.sourceRef;
 
 assertExact(Object.keys(evidence).sort(), [
   "focusRestorationTraces", "formatVersion", "gates", "knownGaps", "logs",
@@ -46,6 +46,10 @@ assert(evidence.sternVersion === "1.0.0-rc.2.dev", "unexpected Stern version");
 assert(evidence.specificationSha256 === SPEC_SHA256, "specification hash mismatch");
 assert(["incomplete", "final"].includes(evidence.status), "invalid status");
 
+assert(/^[0-9a-f]{40}$/.test(evidence.source.sourceRef),
+  "sourceRef must be one exact lowercase commit ID");
+assert(sourceRef === evidence.source.sourceRef,
+  "verification source ref must equal the packet's exact sourceRef");
 const wantedCommit = git("rev-parse", `${sourceRef}^{commit}`);
 const wantedTree = git("rev-parse", `${sourceRef}^{tree}`);
 assert(evidence.source.commit === wantedCommit, "source commit is stale or mismatched");
@@ -58,6 +62,7 @@ assert(typeof evidence.source.generatedFromCleanWorktree === "boolean",
 assertExact(evidence.runtime.components.map(({ id }) => id), COMPONENTS, "component IDs");
 for (const component of evidence.runtime.components) {
   assertRecord(component, "component");
+  assert(component.status === "passed", `${component.id} must be passed`);
   assertStringArray(component.workspaceIds, `${component.id}.workspaceIds`);
   assert(component.workspaceIds.every((id) => ["edit-workspace", "graph-workspace"].includes(id)),
     `${component.id} references unknown workspace`);
@@ -66,7 +71,10 @@ assertExact(evidence.runtime.workspaces.map(({ id }) => id),
   ["edit-workspace", "graph-workspace"], "workspace IDs");
 assertExact(evidence.runtime.journeys.map(({ id, workspaceId }) => [id, workspaceId]),
   JOURNEYS, "journey contracts");
-for (const journey of evidence.runtime.journeys) assertRecord(journey, "journey");
+for (const journey of evidence.runtime.journeys) {
+  assertRecord(journey, "journey");
+  assert(journey.status === "passed", `${journey.id} must be passed`);
+}
 
 assert(evidence.semanticSnapshots.length === 2, "expected two semantic snapshots");
 for (const [index, snapshot] of evidence.semanticSnapshots.entries()) {
@@ -82,14 +90,41 @@ for (const [index, snapshot] of evidence.semanticSnapshots.entries()) {
     assert(node.children.every((id) => ids.has(id)), "semantic child missing from node set");
   }
 }
+assert(evidence.traversalTraces.length > 0, "missing traversal traces");
 assert(evidence.traversalTraces.some(({ input }) => input === "Tab"), "missing Tab traversal trace");
+assert(evidence.traversalTraces.every(({ status }) => status === "passed"),
+  "every traversal trace must pass");
 assert(evidence.focusRestorationTraces.length >= 2, "missing focus restoration traces");
+assert(evidence.focusRestorationTraces.every(({ restored }) => restored === true),
+  "every focus restoration trace must restore its owner");
+const ownerCleanup = evidence.focusRestorationTraces.find(
+  ({ interaction }) => interaction === "focus-owner removal cleanup",
+) ?? fail("missing focus-owner removal cleanup trace");
+for (const field of ["focusCleared", "textInputOwnerCleared", "stopTextInputOnce", "repaint"]) {
+  assert(ownerCleanup[field] === true, `focus-owner removal cleanup ${field} must be true`);
+}
 
 const logs = [
   ...evidence.logs.actions,
   ...evidence.logs.stateTransitions,
   ...evidence.logs.failurePaths,
 ];
+assertExact(evidence.logs.actions.map(({ id }) => id), [
+  "pointer-apply", "keyboard-apply",
+], "action log IDs");
+assertExact(evidence.logs.stateTransitions.map(({ id }) => id), [
+  "collection-pointer-selection", "collection-keyboard-traversal",
+  "collection-keyboard-rename", "timeline-pointer-preview-commit",
+  "graph-pointer-connection", "color-picker-cancel-apply",
+  "gradient-stable-id-move-reverse", "color-style-explicit-srgb",
+  "color-style-save-retry",
+], "state-transition log IDs");
+assertExact(evidence.logs.failurePaths.map(({ id }) => id), [
+  "graph-incompatible-target", "graph-escape-cancel", "preview-job-failure",
+  "color-style-save-failure",
+], "failure-path log IDs");
+assert(logs.every(({ status }) => status === "passed"),
+  "every action, state-transition, and failure-path log must pass");
 assert(logs.some(({ input }) => input === "pointer"), "missing pointer log");
 assert(logs.some(({ input }) => input === "keyboard"), "missing keyboard log");
 assert(evidence.logs.failurePaths.length >= 3, "missing failure-path logs");
@@ -111,6 +146,10 @@ for (const entry of evidence.primitiveContentSurfaceAllowlist) {
 
 assertExact(evidence.gates.map(({ id }) => id), GATES, "gate IDs");
 for (const gate of evidence.gates) assertRecord(gate, "gate");
+for (const record of [...evidence.runtime.components, ...evidence.runtime.journeys, ...evidence.gates]) {
+  for (const ref of record.evidenceRefs) assert(resolvePointer(evidence, ref) !== undefined,
+    `${record.id} evidence link does not resolve: ${ref}`);
+}
 for (const gap of evidence.knownGaps) {
   assert(Number.isInteger(gap.issue), "known gap needs issue number");
   assertStringArray(gap.blocksGateIds, `${gap.id}.blocksGateIds`);
@@ -150,6 +189,15 @@ function assertStringArray(value, label) {
   assert(Array.isArray(value) && value.every((item) => typeof item === "string"),
     `${label} must be a string array`);
   assert(new Set(value).size === value.length, `${label} must be unique`);
+}
+
+function resolvePointer(rootValue, pointer) {
+  if (pointer === "#") return rootValue;
+  return pointer.slice(2).split("/").reduce((value, token) => {
+    if (value === undefined || value === null) return undefined;
+    const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
+    return value[key];
+  }, rootValue);
 }
 
 function assertExact(actual, expected, label) {

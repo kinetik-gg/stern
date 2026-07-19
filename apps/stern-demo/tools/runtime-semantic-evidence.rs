@@ -203,9 +203,9 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         .collect::<Vec<_>>();
 
     let source = json!({
-        "commit": commit,
+        "commit": &commit,
         "tree": tree,
-        "sourceRef": source_ref,
+        "sourceRef": commit,
         "generatedFromCleanWorktree": clean,
     });
     let workspaces = vec![
@@ -256,7 +256,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
     ];
     let known_gaps = vec![
         json!({"id": "workspace-vello-captures", "issue": 845, "blocksGateIds": ["renderer-and-scale-quality"], "reason": "eight final reviewed Vello captures are pending"}),
-        json!({"id": "cross-platform-evidence", "issue": 781, "blocksGateIds": ["platform-integration"], "reason": "Windows, macOS, and Linux evidence is not complete"}),
+        json!({"id": "cross-platform-evidence", "issue": 848, "blocksGateIds": ["platform-integration"], "reason": "Windows, macOS, and Linux evidence is not complete"}),
     ];
     Ok(json!({
         "formatVersion": 1,
