@@ -127,6 +127,33 @@ impl AssetRecord {
     }
 }
 
+/// Read-only view over the selected canonical application asset record.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DemoSelectedAssetSnapshot<'a> {
+    /// Stable collection item identity.
+    pub item_id: ItemId,
+    /// Current application-owned asset name.
+    pub name: &'a str,
+    /// Current application-owned kind label.
+    pub kind: &'static str,
+    /// Current application-owned visibility value.
+    pub visible: bool,
+    /// Current application-owned opacity value.
+    pub opacity: f32,
+}
+
+impl<'a> From<&'a AssetRecord> for DemoSelectedAssetSnapshot<'a> {
+    fn from(asset: &'a AssetRecord) -> Self {
+        Self {
+            item_id: asset.id,
+            name: &asset.name,
+            kind: asset.kind.label(),
+            visible: asset.visible,
+            opacity: asset.opacity,
+        }
+    }
+}
+
 /// Retained public Stern state for the deterministic Edit workspace fixture.
 pub(crate) struct EditWorkspace {
     dock: Dock,
@@ -161,6 +188,13 @@ impl EditWorkspace {
             timeline: TimelineWorkspace::new(),
             texture: viewport_texture(),
         }
+    }
+
+    pub(crate) fn selected_asset(&self) -> Option<DemoSelectedAssetSnapshot<'_>> {
+        self.assets
+            .iter()
+            .find(|asset| asset.selected)
+            .map(DemoSelectedAssetSnapshot::from)
     }
 
     #[allow(clippy::too_many_lines)]

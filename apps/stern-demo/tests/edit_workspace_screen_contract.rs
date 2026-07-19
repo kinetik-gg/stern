@@ -192,6 +192,39 @@ fn dock_ids_remain_stable_across_resize_and_focus() {
 }
 
 #[test]
+fn selected_asset_snapshot_reads_the_canonical_record_with_stable_identity() {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let initial_snapshot = app.selected_asset().expect("initial selected asset");
+    assert_eq!(initial_snapshot.item_id.raw(), 1);
+    assert_eq!(initial_snapshot.name, "Backdrop");
+
+    let selected = click(&mut app, &initial, &SemanticRole::ListItem, "Character");
+    let item_semantic_id = node(&selected, &SemanticRole::ListItem, "Character").id;
+    let selected_snapshot = app.selected_asset().expect("selected asset");
+    let selected_item_id = selected_snapshot.item_id;
+    assert_eq!(selected_snapshot.item_id.raw(), 2);
+    assert_eq!(selected_snapshot.name, "Character");
+    assert_eq!(selected_snapshot.kind, "Vector layer");
+    assert!(selected_snapshot.visible);
+    assert_eq!(selected_snapshot.opacity.to_bits(), 0.9_f32.to_bits());
+
+    let _ = app.frame(demo_context(key(Key::Function(2))));
+    let _ = app.frame(demo_context(select_all()));
+    let _ = app.frame(demo_context(typed("Hero")));
+    let _ = app.frame(demo_context(key(Key::Enter)));
+    let renamed = app.frame(demo_context(UiInput::default()));
+    let renamed_snapshot = app.selected_asset().expect("renamed selected asset");
+    assert_eq!(renamed_snapshot.item_id, selected_item_id);
+    assert_eq!(renamed_snapshot.name, "Hero");
+    assert_eq!(
+        node(&renamed, &SemanticRole::ListItem, "Hero").id,
+        item_semantic_id
+    );
+    assert!(has_description(&renamed, "Hero", "Vector layer"));
+}
+
+#[test]
 fn shared_menu_escape_and_outside_press_preserve_focus_owner() {
     let mut app = DemoApp::new();
     let initial = app.frame(demo_context(UiInput::default()));

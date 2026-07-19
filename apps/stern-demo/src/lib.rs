@@ -14,6 +14,7 @@ use stern::core::{
 };
 use stern::render::RenderResources;
 
+pub use edit_workspace::DemoSelectedAssetSnapshot;
 use edit_workspace::EditWorkspace;
 use overlay_workspace::SharedOverlayRoute;
 
@@ -153,6 +154,12 @@ impl DemoApp {
     #[must_use]
     pub const fn graph_workspace(&self) -> &GraphWorkspaceState {
         &self.graph_workspace
+    }
+
+    /// Returns a read-only view over the selected canonical asset record.
+    #[must_use]
+    pub fn selected_asset(&self) -> Option<DemoSelectedAssetSnapshot<'_>> {
+        self.edit_workspace.selected_asset()
     }
 
     /// Builds and dispatches one frame through public toolkit APIs.
