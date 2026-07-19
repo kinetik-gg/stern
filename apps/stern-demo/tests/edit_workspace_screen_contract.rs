@@ -11,7 +11,8 @@ use stern::core::{
 use stern::render::RenderDiagnostic;
 use stern::widgets::node_graph::{EdgeId, NodeId, PortEndpoint, PortId};
 use stern_demo::{
-    DemoApp, DemoJobPhase, DemoViewportTool, DemoWorkspace, GraphConnectionFeedback, demo_context,
+    DemoApp, DemoColorSaveState, DemoJobPhase, DemoViewportTool, DemoWorkspace,
+    GraphConnectionFeedback, demo_context,
 };
 
 const REQUIRED_IDS: &str = concat!(
@@ -216,7 +217,28 @@ fn shared_menu_escape_and_outside_press_preserve_focus_owner() {
 }
 
 #[test]
-fn global_runtime_reports_exact_thirty_one_public_component_ids() {
+fn color_picker_and_gradient_editor_execute_public_commit_lifecycles() {
+    let evidence = color_gradient_evidence();
+    assert_eq!(
+        (
+            evidence.picker_commit_cancel_and_focus,
+            evidence.gradient_stable_id_move_and_reverse,
+            evidence.explicit_srgb_serialization,
+        ),
+        (true, true, true),
+    );
+}
+
+#[test]
+fn overlays_and_failed_color_save_execute_recovery_without_optimistic_mutation() {
+    let evidence = overlay_recovery_evidence();
+    assert!(evidence.overlay_focus_recovered);
+    assert!(evidence.failure_preserved_application_state);
+    assert!(evidence.retry_cleared_stale_failure);
+}
+
+#[test]
+fn global_runtime_reports_exact_thirty_four_public_component_ids() {
     let trace = edit_workspace_trace();
     let observed = observed_component_ids(&trace);
     let expected = EXPECTED_COMPONENT_IDS.split_ascii_whitespace().collect();
@@ -226,7 +248,7 @@ fn global_runtime_reports_exact_thirty_one_public_component_ids() {
         .collect::<BTreeSet<_>>();
     assert_eq!(required.len(), 34);
     assert!(observed.is_subset(&required));
-    assert_eq!(required.difference(&observed).count(), 3);
+    assert_eq!(required, observed);
 
     let evidence = runtime_journey_evidence(&trace);
     assert_eq!(
@@ -236,9 +258,9 @@ fn global_runtime_reports_exact_thirty_one_public_component_ids() {
             [RuntimeStepEvidence::Passed; 3],
             [RuntimeStepEvidence::Passed; 3],
             [RuntimeStepEvidence::Passed; 3],
-            [RuntimeStepEvidence::NotExecuted; 3],
             [RuntimeStepEvidence::Passed; 3],
-            [RuntimeStepEvidence::NotExecuted; 3],
+            [RuntimeStepEvidence::Passed; 3],
+            [RuntimeStepEvidence::Passed; 3],
         ],
     );
     let journeys = JOURNEY_COMPONENTS
@@ -276,7 +298,9 @@ fn global_runtime_reports_exact_thirty_one_public_component_ids() {
             "shared-action-projection",
             "collection-to-inspector-edit",
             "timeline-and-viewport-edit",
+            "color-and-gradient-edit",
             "graph-connection-edit",
+            "overlay-and-failure-recovery",
         ]
     );
 }
@@ -288,7 +312,7 @@ const EXPECTED_COMPONENT_IDS: &str = concat!(
     "choice-value-components overlay-system overlay-components navigation-surface-components ",
     "collection-components inspector-components editor-chrome-components editor-frame timeline ",
     "viewport progress-feedback feedback-status-components timeline-components viewport-components ",
-    "node-graph node-components",
+    "node-graph node-components color-picker gradient-editor color-components",
 );
 const JOURNEY_COMPONENTS: &str = "\
 workspace-boot-and-traversal|editor-frame workspace-chrome dock editor-chrome-components navigation-surface-components content-structure-components
@@ -318,16 +342,24 @@ struct ExecutedEditEvidence {
     timeline_edit_lifecycle: RuntimeStepEvidence,
     viewport_tool_projected: RuntimeStepEvidence,
     feedback_states_projected: RuntimeStepEvidence,
+    color_picker_lifecycle: RuntimeStepEvidence,
+    gradient_edit_lifecycle: RuntimeStepEvidence,
+    explicit_srgb_serialization: RuntimeStepEvidence,
     graph_surface_projected: RuntimeStepEvidence,
     graph_components_projected: RuntimeStepEvidence,
     graph_connection_lifecycle: RuntimeStepEvidence,
+    overlay_focus_recovery: RuntimeStepEvidence,
+    failure_without_optimistic_mutation: RuntimeStepEvidence,
+    retry_recovery: RuntimeStepEvidence,
 }
 
 fn edit_workspace_trace() -> EditWorkspaceTrace {
     let shared = shared_action_evidence();
     let collection = collection_inspector_evidence();
     let timeline_viewport = timeline_viewport_evidence();
+    let color = color_gradient_evidence();
     let graph = graph_connection_evidence();
+    let recovery = overlay_recovery_evidence();
     let mut app = DemoApp::new();
     let initial = app.frame(demo_context(UiInput::default()));
     let translation =
@@ -380,9 +412,23 @@ fn edit_workspace_trace() -> EditWorkspaceTrace {
             feedback_states_projected: RuntimeStepEvidence::executed(
                 timeline_viewport.feedback_states_projected,
             ),
+            color_picker_lifecycle: RuntimeStepEvidence::executed(
+                color.picker_commit_cancel_and_focus,
+            ),
+            gradient_edit_lifecycle: RuntimeStepEvidence::executed(
+                color.gradient_stable_id_move_and_reverse,
+            ),
+            explicit_srgb_serialization: RuntimeStepEvidence::executed(
+                color.explicit_srgb_serialization,
+            ),
             graph_surface_projected: RuntimeStepEvidence::executed(graph.surface_projected),
             graph_components_projected: RuntimeStepEvidence::executed(graph.components_projected),
             graph_connection_lifecycle: RuntimeStepEvidence::executed(graph.connection_lifecycle),
+            overlay_focus_recovery: RuntimeStepEvidence::executed(recovery.overlay_focus_recovered),
+            failure_without_optimistic_mutation: RuntimeStepEvidence::executed(
+                recovery.failure_preserved_application_state,
+            ),
+            retry_recovery: RuntimeStepEvidence::executed(recovery.retry_cleared_stale_failure),
         },
     }
 }
@@ -409,6 +455,18 @@ struct GraphConnectionEvidence {
     surface_projected: bool,
     components_projected: bool,
     connection_lifecycle: bool,
+}
+
+struct ColorGradientEvidence {
+    picker_commit_cancel_and_focus: bool,
+    gradient_stable_id_move_and_reverse: bool,
+    explicit_srgb_serialization: bool,
+}
+
+struct OverlayRecoveryEvidence {
+    overlay_focus_recovered: bool,
+    failure_preserved_application_state: bool,
+    retry_cleared_stale_failure: bool,
 }
 
 fn graph_connection_evidence() -> GraphConnectionEvidence {
@@ -554,6 +612,217 @@ fn timeline_viewport_evidence() -> TimelineViewportEvidence {
         viewport_tool_projected,
         feedback_states_projected: progress_present && success_present && failure_present,
     }
+}
+
+#[allow(clippy::too_many_lines)]
+fn color_gradient_evidence() -> ColorGradientEvidence {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let trigger = node(&initial, &SemanticRole::Button, "Fill color").id;
+    let original = app.tagged_color();
+
+    let _ = click(&mut app, &initial, &SemanticRole::Button, "Fill color");
+    let picker = app.frame(demo_context(UiInput::default()));
+    let picker_projected = has_custom_role(&picker, "color-picker");
+    let adjusted = click(&mut app, &picker, &SemanticRole::Button, "Increase Red");
+    let draft_isolated = app.tagged_color() == original && app.color_revision() == 0;
+    let _ = click(&mut app, &adjusted, &SemanticRole::Button, "Cancel");
+    let cancelled = app.frame(demo_context(UiInput::default()));
+    let cancel_preserved = app.tagged_color() == original
+        && app.color_revision() == 0
+        && app.focused() == Some(trigger)
+        && !has_custom_role(&cancelled, "color-picker");
+
+    let closed = app.frame(demo_context(UiInput::default()));
+    let _ = click(&mut app, &closed, &SemanticRole::Button, "Fill color");
+    let picker = app.frame(demo_context(UiInput::default()));
+    let picker_value = custom_node(&picker, "color-picker", "Color picker")
+        .description
+        .clone();
+    let _ = click(&mut app, &picker, &SemanticRole::Button, "Increase Green");
+    let adjusted = app.frame(demo_context(UiInput::default()));
+    let adjusted_value = custom_node(&adjusted, "color-picker", "Color picker")
+        .description
+        .clone();
+    let draft_adjusted = adjusted_value != picker_value;
+    let _ = click(&mut app, &adjusted, &SemanticRole::Button, "Apply");
+    let applied = app.frame(demo_context(UiInput::default()));
+    let apply_changed = app.tagged_color() != original;
+    let apply_revision = app.color_revision() == 1;
+    let apply_focus = app.focused() == Some(trigger);
+    let apply_closed = !has_custom_role(&applied, "color-picker");
+    let apply_committed_once = apply_changed && apply_revision && apply_focus && apply_closed;
+
+    let gradient = app.frame(demo_context(UiInput::default()));
+    let gradient_root = custom_node(&gradient, "gradient-editor", "Gradient editor").id;
+    let selected = app.selected_gradient_stop();
+    let original_ids = app
+        .gradient_stops()
+        .iter()
+        .map(|stop| stop.id)
+        .collect::<BTreeSet<_>>();
+    let before_move = app
+        .gradient_stops()
+        .iter()
+        .find(|stop| stop.id == selected)
+        .expect("selected gradient stop")
+        .position;
+    let marker = custom_node(
+        &gradient,
+        "gradient-stop",
+        &format!("Gradient stop {}", selected.raw()),
+    )
+    .bounds
+    .center();
+    let moved = Point::new(marker.x + 20.0, marker.y);
+    let _ = app.frame(demo_context(gradient_move(marker, moved)));
+    let gradient_focused = app.focused() == Some(gradient_root);
+    let after_move = app
+        .gradient_stops()
+        .iter()
+        .find(|stop| stop.id == selected)
+        .expect("moved gradient stop")
+        .position;
+    let moved_stably = gradient_focused
+        && after_move.to_bits() != before_move.to_bits()
+        && app.selected_gradient_stop() == selected
+        && app
+            .gradient_stops()
+            .iter()
+            .map(|stop| stop.id)
+            .collect::<BTreeSet<_>>()
+            == original_ids;
+
+    let before_reverse = app.gradient_stops().to_vec();
+    let reverse_frame = app.frame(demo_context(UiInput::default()));
+    let _ = click(
+        &mut app,
+        &reverse_frame,
+        &SemanticRole::Button,
+        "sRGB · Reverse",
+    );
+    let reversed_stably = app.selected_gradient_stop() == selected
+        && app
+            .gradient_stops()
+            .iter()
+            .map(|stop| stop.id)
+            .collect::<BTreeSet<_>>()
+            == original_ids
+        && before_reverse.iter().all(|before| {
+            app.gradient_stops()
+                .iter()
+                .find(|after| after.id == before.id)
+                .is_some_and(|after| {
+                    (after.position - (1.0 - before.position)).abs() < f32::EPSILON
+                })
+        });
+
+    let _ = invoke_workspace_action(&mut app, "Save Color Style");
+    let failed_without_value = app.color_save_state() == DemoColorSaveState::Failed
+        && app.serialized_color_style().is_none();
+    let passive = app.frame(demo_context(UiInput::default()));
+    let _ = app.frame(demo_context(key(Key::Escape)));
+    let _ = app.frame(demo_context(UiInput::default()));
+    assert!(has_label(&passive, "Color recovery hint"));
+    let _ = invoke_workspace_action(&mut app, "Save Color Style");
+    let serialized = app.serialized_color_style().unwrap_or_default();
+    let explicit_srgb = failed_without_value
+        && app.color_save_state() == DemoColorSaveState::Succeeded
+        && serialized.starts_with("color=srgb(")
+        && serialized.contains(";gradient=sRGB")
+        && serialized.matches("=srgb(").count() == app.gradient_stops().len() + 1
+        && app
+            .gradient_stops()
+            .iter()
+            .all(|stop| serialized.contains(&format!(";{}@", stop.id.raw())));
+
+    ColorGradientEvidence {
+        picker_commit_cancel_and_focus: picker_projected
+            && draft_isolated
+            && cancel_preserved
+            && draft_adjusted
+            && apply_committed_once,
+        gradient_stable_id_move_and_reverse: moved_stably && reversed_stably,
+        explicit_srgb_serialization: explicit_srgb,
+    }
+}
+
+fn overlay_recovery_evidence() -> OverlayRecoveryEvidence {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let focused = click(&mut app, &initial, &SemanticRole::ListItem, "Backdrop");
+    let owner = app.focused().expect("recovery focus owner");
+
+    let palette = app.frame(demo_context(key_with_modifiers(
+        Key::Character("p".to_owned()),
+        Modifiers::new(true, true, false, false),
+    )));
+    let palette_opened = has_role(&palette, &SemanticRole::SearchField);
+    let _ = app.frame(demo_context(key(Key::Escape)));
+    let palette_closed = app.frame(demo_context(UiInput::default()));
+    let palette_recovered =
+        !has_role(&palette_closed, &SemanticRole::SearchField) && app.focused() == Some(owner);
+
+    let original_color = app.tagged_color();
+    let original_stops = app.gradient_stops().to_vec();
+    let failed_action = invoke_workspace_action_from(&mut app, &focused, "Save Color Style");
+    let action_owner_recovered =
+        action_count(&failed_action, "color-style.save") == 1 && app.focused() == Some(owner);
+    let failed = app.frame(demo_context(UiInput::default()));
+    let failure_feedback =
+        has_label(&failed, "Color style save failed") && has_label(&failed, "Color recovery hint");
+    let failure_preserved = app.color_save_state() == DemoColorSaveState::Failed
+        && app.serialized_color_style().is_none()
+        && app.tagged_color() == original_color
+        && app.gradient_stops() == original_stops;
+
+    let outside = Point::new(8.0, 440.0);
+    let _ = app.frame(demo_context(pointer(outside, true, true, false)));
+    let _ = app.frame(demo_context(pointer(outside, false, false, true)));
+    let passive_closed = app.frame(demo_context(UiInput::default()));
+    let passive_recovered =
+        !has_label(&passive_closed, "Color recovery hint") && app.focused() == Some(owner);
+
+    let recovered_action = invoke_workspace_action(&mut app, "Save Color Style");
+    let retry_owner_recovered =
+        action_count(&recovered_action, "color-style.save") == 1 && app.focused() == Some(owner);
+    let recovered = app.frame(demo_context(UiInput::default()));
+    let modal_projected = has_label(&recovered, "Color style recovered")
+        && has_label(&recovered, "Color style saved")
+        && !has_label(&recovered, "Color style save failed");
+    let _ = app.frame(demo_context(key(Key::Escape)));
+    let modal_closed = app.frame(demo_context(UiInput::default()));
+    let modal_recovered =
+        !has_label(&modal_closed, "Color style recovered") && app.focused() == Some(owner);
+
+    OverlayRecoveryEvidence {
+        overlay_focus_recovered: palette_opened
+            && palette_recovered
+            && action_owner_recovered
+            && passive_recovered
+            && retry_owner_recovered
+            && modal_projected
+            && modal_recovered,
+        failure_preserved_application_state: failure_feedback && failure_preserved,
+        retry_cleared_stale_failure: app.color_save_state() == DemoColorSaveState::Succeeded
+            && app.serialized_color_style().is_some()
+            && modal_projected,
+    }
+}
+
+fn invoke_workspace_action(app: &mut DemoApp, label: &str) -> FrameOutput {
+    let current = app.frame(demo_context(UiInput::default()));
+    invoke_workspace_action_from(app, &current, label)
+}
+
+fn invoke_workspace_action_from(
+    app: &mut DemoApp,
+    current: &FrameOutput,
+    label: &str,
+) -> FrameOutput {
+    let _ = click(app, current, &SemanticRole::MenuItem, "Workspace");
+    let menu = app.frame(demo_context(UiInput::default()));
+    click(app, &menu, &SemanticRole::MenuItem, label)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -849,6 +1118,10 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
     let viewport_components = viewport && trace.evidence.viewport_tool_projected.passed();
     let node_graph = trace.evidence.graph_surface_projected.passed();
     let node_components = trace.evidence.graph_components_projected.passed();
+    let color_picker = trace.evidence.color_picker_lifecycle.passed();
+    let gradient_editor = trace.evidence.gradient_edit_lifecycle.passed();
+    let color_components =
+        color_picker && gradient_editor && trace.evidence.explicit_srgb_serialization.passed();
     EXPECTED_COMPONENT_IDS
         .split_ascii_whitespace()
         .zip([
@@ -883,6 +1156,9 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
             viewport_components,
             node_graph,
             node_components,
+            color_picker,
+            gradient_editor,
+            color_components,
         ])
         .filter_map(|(id, passes)| passes.then_some(id))
         .collect()
@@ -892,7 +1168,6 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
 enum RuntimeStepEvidence {
     Passed,
     Failed,
-    NotExecuted,
 }
 
 impl RuntimeStepEvidence {
@@ -906,7 +1181,6 @@ impl RuntimeStepEvidence {
 }
 
 fn runtime_journey_evidence(trace: &EditWorkspaceTrace) -> [[RuntimeStepEvidence; 3]; 7] {
-    let unexecuted = RuntimeStepEvidence::NotExecuted;
     [
         [
             trace.evidence.shell_booted,
@@ -928,13 +1202,21 @@ fn runtime_journey_evidence(trace: &EditWorkspaceTrace) -> [[RuntimeStepEvidence
             trace.evidence.viewport_tool_projected,
             trace.evidence.feedback_states_projected,
         ],
-        [unexecuted; 3],
+        [
+            trace.evidence.color_picker_lifecycle,
+            trace.evidence.gradient_edit_lifecycle,
+            trace.evidence.explicit_srgb_serialization,
+        ],
         [
             trace.evidence.graph_surface_projected,
             trace.evidence.graph_components_projected,
             trace.evidence.graph_connection_lifecycle,
         ],
-        [unexecuted; 3],
+        [
+            trace.evidence.overlay_focus_recovery,
+            trace.evidence.failure_without_optimistic_mutation,
+            trace.evidence.retry_recovery,
+        ],
     ]
 }
 
@@ -1183,6 +1465,27 @@ fn graph_connection_release(point: Point) -> UiInput {
         down: false,
         click_count: 1,
         position: Some(point),
+    });
+    input
+}
+
+fn gradient_move(from: Point, to: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 1,
+        position: Some(from),
+    });
+    input.push_event(UiInputEvent::PointerMoved {
+        position: to,
+        delta: Vec2::new(to.x - from.x, to.y - from.y),
+    });
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 1,
+        position: Some(to),
     });
     input
 }

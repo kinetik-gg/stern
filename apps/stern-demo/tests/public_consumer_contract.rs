@@ -26,18 +26,21 @@ fn public_consumer_contract_emits_components_semantics_focus_and_platform_eviden
         .primitives
         .iter()
         .filter_map(|primitive| match primitive {
-            Primitive::Icon(icon) => Some(icon.icon),
+            Primitive::Icon(icon) => Some(icon.icon.id()),
             _ => None,
         })
         .collect::<Vec<_>>();
     assert_eq!(
         painted_icons,
         vec![
-            stern_icons_phosphor::regular::CURSOR.icon(),
-            stern_icons_phosphor::regular::ARROWS_OUT_CARDINAL.icon(),
-            stern_icons_phosphor::regular::PENCIL_SIMPLE.icon(),
-            stern_icons_phosphor::regular::GRAPH.icon(),
-            stern_icons_phosphor::regular::CHECK_CIRCLE.icon(),
+            stern_icons_phosphor::regular::CURSOR.icon().id(),
+            stern_icons_phosphor::regular::ARROWS_OUT_CARDINAL
+                .icon()
+                .id(),
+            stern_icons_phosphor::regular::PENCIL_SIMPLE.icon().id(),
+            stern_icons_phosphor::regular::GRAPH.icon().id(),
+            stern_icons_phosphor::regular::CHECK_CIRCLE.icon().id(),
+            stern_icons_phosphor::regular::FLOPPY_DISK.icon().id(),
         ]
     );
     let translated_requests = WinitPlatformRequests::from_frame_output(&normalized_output);

@@ -14,7 +14,9 @@ use stern::widgets::{
     ViewportToolScene, ViewportToolSceneConfig, ViewportTransformHandleSet, ViewportWidget,
 };
 
-use crate::{DemoActionRegistry, DemoApplicationModel, DemoJobPhase, DemoViewportTool};
+use crate::{
+    DemoActionRegistry, DemoApplicationModel, DemoColorSaveState, DemoJobPhase, DemoViewportTool,
+};
 
 const FRAME_RATE: TimelineFrameRate = TimelineFrameRate::integer(30);
 const TIMELINE_LANE: TimelineLaneId = TimelineLaneId::from_raw(1);
@@ -24,6 +26,7 @@ const SELECT_TOOL: ViewportToolId = ViewportToolId::from_raw(1);
 const TRANSFORM_TOOL: ViewportToolId = ViewportToolId::from_raw(2);
 const JOB_ID: JobRowId = JobRowId::from_raw(1);
 const FEEDBACK_ID: FeedbackId = FeedbackId::from_raw(1);
+const COLOR_FEEDBACK_ID: FeedbackId = FeedbackId::from_raw(2);
 
 /// Retained public Stern state for the timeline, viewport tools, and feedback projection.
 pub(crate) struct TimelineWorkspace {
@@ -77,7 +80,7 @@ impl TimelineWorkspace {
                     100.0,
                 ))
                 .with_detail(job_detail(model))]);
-        self.feedback.replace_items(match model.job_phase() {
+        let mut feedback = match model.job_phase() {
             DemoJobPhase::Running => Vec::new(),
             DemoJobPhase::Succeeded => vec![FeedbackItem::pinned(
                 FEEDBACK_ID,
@@ -91,7 +94,23 @@ impl TimelineWorkspace {
                 "Preview failed",
                 "The committed timeline remains unchanged",
             )],
-        });
+        };
+        match model.color_save_state() {
+            DemoColorSaveState::Idle => {}
+            DemoColorSaveState::Failed => feedback.push(FeedbackItem::pinned(
+                COLOR_FEEDBACK_ID,
+                FeedbackKind::Error,
+                "Color style save failed",
+                "No serialized color or gradient was committed; retry is available",
+            )),
+            DemoColorSaveState::Succeeded => feedback.push(FeedbackItem::pinned(
+                COLOR_FEEDBACK_ID,
+                FeedbackKind::Success,
+                "Color style saved",
+                "Explicit sRGB color and stable gradient stops were committed",
+            )),
+        }
+        self.feedback.replace_items(feedback);
     }
 
     pub(crate) fn viewport_scene(
