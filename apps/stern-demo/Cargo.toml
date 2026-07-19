@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[[bin]]
+name = "runtime_semantic_evidence"
+path = "tools/runtime-semantic-evidence.rs"
+
 [dependencies]
 pollster = "0.4.0"
 stern = { version = "=1.0.0-rc.2.dev", path = "../../crates/stern" }

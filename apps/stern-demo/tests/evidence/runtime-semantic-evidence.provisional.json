@@ -1,0 +1,2782 @@
+{
+  "formatVersion": 1,
+  "sternVersion": "1.0.0-rc.2.dev",
+  "specificationSha256": "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed",
+  "status": "final",
+  "source": {
+    "commit": "6a677f098a463fb89e7fc727f28de50d65500cd0",
+    "tree": "cfd229bfe175e39688b36681396f91cb3e43ab60",
+    "sourceRef": "6a677f098a463fb89e7fc727f28de50d65500cd0",
+    "generatedFromCleanWorktree": true
+  },
+  "runtime": {
+    "components": [
+      {
+        "id": "button",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "text-field",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "dropdown",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "selection-controls",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "value-controls",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "progress-feedback",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "overlay-system",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "virtual-list",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "editor-frame",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "workspace-chrome",
+        "workspaceIds": [
+          "edit-workspace",
+          "graph-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "dock",
+        "workspaceIds": [
+          "edit-workspace",
+          "graph-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "inspector-collections",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "node-graph",
+        "workspaceIds": [
+          "graph-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/1",
+          "#/logs/stateTransitions/4"
+        ]
+      },
+      {
+        "id": "timeline",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "viewport",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "color-picker",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/logs/stateTransitions/5",
+          "#/logs/stateTransitions/6"
+        ]
+      },
+      {
+        "id": "gradient-editor",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/logs/stateTransitions/5",
+          "#/logs/stateTransitions/6"
+        ]
+      },
+      {
+        "id": "content-structure-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "icon-shortcut-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "toolbar-components",
+        "workspaceIds": [
+          "edit-workspace",
+          "graph-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "menu-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "command-palette-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "advanced-editor-fields",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "choice-value-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "feedback-status-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "overlay-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "navigation-surface-components",
+        "workspaceIds": [
+          "edit-workspace",
+          "graph-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "collection-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "inspector-components",
+        "workspaceIds": [
+          "edit-workspace",
+          "graph-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "editor-chrome-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "color-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/logs/stateTransitions/5",
+          "#/logs/stateTransitions/6"
+        ]
+      },
+      {
+        "id": "timeline-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      },
+      {
+        "id": "node-components",
+        "workspaceIds": [
+          "graph-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/1",
+          "#/logs/stateTransitions/4"
+        ]
+      },
+      {
+        "id": "viewport-components",
+        "workspaceIds": [
+          "edit-workspace"
+        ],
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/logs"
+        ]
+      }
+    ],
+    "workspaces": [
+      {
+        "id": "edit-workspace",
+        "semanticSnapshotRef": "#/semanticSnapshots/0",
+        "passedComponentIds": [
+          "advanced-editor-fields",
+          "button",
+          "choice-value-components",
+          "collection-components",
+          "color-components",
+          "color-picker",
+          "command-palette-components",
+          "content-structure-components",
+          "dock",
+          "dropdown",
+          "editor-chrome-components",
+          "editor-frame",
+          "feedback-status-components",
+          "gradient-editor",
+          "icon-shortcut-components",
+          "inspector-collections",
+          "inspector-components",
+          "menu-components",
+          "navigation-surface-components",
+          "overlay-components",
+          "overlay-system",
+          "progress-feedback",
+          "selection-controls",
+          "text-field",
+          "timeline",
+          "timeline-components",
+          "toolbar-components",
+          "value-controls",
+          "viewport",
+          "viewport-components",
+          "virtual-list",
+          "workspace-chrome"
+        ]
+      },
+      {
+        "id": "graph-workspace",
+        "semanticSnapshotRef": "#/semanticSnapshots/1",
+        "passedComponentIds": [
+          "dock",
+          "inspector-components",
+          "navigation-surface-components",
+          "node-components",
+          "node-graph",
+          "toolbar-components",
+          "workspace-chrome"
+        ]
+      }
+    ],
+    "journeys": [
+      {
+        "id": "workspace-boot-and-traversal",
+        "workspaceId": "edit-workspace",
+        "status": "passed",
+        "evidenceRefs": [
+          "#/semanticSnapshots/0",
+          "#/traversalTraces/0"
+        ]
+      },
+      {
+        "id": "shared-action-projection",
+        "workspaceId": "edit-workspace",
+        "status": "passed",
+        "evidenceRefs": [
+          "#/logs/actions",
+          "#/focusRestorationTraces/0"
+        ]
+      },
+      {
+        "id": "collection-to-inspector-edit",
+        "workspaceId": "edit-workspace",
+        "status": "passed",
+        "evidenceRefs": [
+          "#/logs/stateTransitions/0",
+          "#/logs/stateTransitions/1",
+          "#/logs/stateTransitions/2"
+        ]
+      },
+      {
+        "id": "timeline-and-viewport-edit",
+        "workspaceId": "edit-workspace",
+        "status": "passed",
+        "evidenceRefs": [
+          "#/logs/stateTransitions/3",
+          "#/logs/failurePaths/2"
+        ]
+      },
+      {
+        "id": "color-and-gradient-edit",
+        "workspaceId": "edit-workspace",
+        "status": "passed",
+        "evidenceRefs": [
+          "#/logs/stateTransitions/5",
+          "#/logs/stateTransitions/6",
+          "#/logs/stateTransitions/7",
+          "#/focusRestorationTraces/2"
+        ]
+      },
+      {
+        "id": "graph-connection-edit",
+        "workspaceId": "graph-workspace",
+        "status": "passed",
+        "evidenceRefs": [
+          "#/logs/stateTransitions/4",
+          "#/logs/failurePaths/0",
+          "#/logs/failurePaths/1"
+        ]
+      },
+      {
+        "id": "overlay-and-failure-recovery",
+        "workspaceId": "edit-workspace",
+        "status": "passed",
+        "evidenceRefs": [
+          "#/logs/failurePaths/3",
+          "#/logs/stateTransitions/8",
+          "#/focusRestorationTraces/3",
+          "#/focusRestorationTraces/4"
+        ]
+      }
+    ]
+  },
+  "logs": {
+    "actions": [
+      {
+        "id": "pointer-apply",
+        "input": "pointer",
+        "actionId": "shared.apply",
+        "source": "Button",
+        "stateBefore": 0,
+        "stateAfter": 1,
+        "status": "passed"
+      },
+      {
+        "id": "keyboard-apply",
+        "input": "keyboard",
+        "actionId": "shared.apply",
+        "source": "Shortcut",
+        "stateBefore": 1,
+        "stateAfter": 2,
+        "status": "passed"
+      }
+    ],
+    "stateTransitions": [
+      {
+        "id": "collection-pointer-selection",
+        "input": "pointer",
+        "focus": "17e0ee0a6b6b8751",
+        "status": "passed"
+      },
+      {
+        "id": "collection-keyboard-traversal",
+        "input": "keyboard",
+        "selected": "Lighting",
+        "status": "passed"
+      },
+      {
+        "id": "collection-keyboard-rename",
+        "input": "keyboard",
+        "selected": "Hero",
+        "status": "passed"
+      },
+      {
+        "id": "timeline-pointer-preview-commit",
+        "input": "pointer",
+        "stateBefore": 24,
+        "preview": 46,
+        "stateAfter": 46,
+        "status": "passed"
+      },
+      {
+        "id": "graph-pointer-connection",
+        "input": "pointer",
+        "edgesBefore": 1,
+        "edgesAfter": 2,
+        "status": "passed"
+      },
+      {
+        "id": "color-picker-cancel-apply",
+        "input": "pointer",
+        "draftIsolated": true,
+        "cancelPreserved": true,
+        "singleCommit": true,
+        "revision": 1,
+        "status": "passed"
+      },
+      {
+        "id": "gradient-stable-id-move-reverse",
+        "input": "pointer",
+        "selectedStop": 1,
+        "stableIds": true,
+        "moved": true,
+        "reversed": true,
+        "status": "passed"
+      },
+      {
+        "id": "color-style-explicit-srgb",
+        "input": "action-retry",
+        "explicitSrgb": true,
+        "serializedStopCount": 2,
+        "status": "passed"
+      },
+      {
+        "id": "color-style-save-retry",
+        "input": "action",
+        "actionCount": 1,
+        "staleFailureCleared": true,
+        "explicitValue": true,
+        "status": "passed"
+      }
+    ],
+    "failurePaths": [
+      {
+        "id": "graph-incompatible-target",
+        "input": "pointer",
+        "optimisticMutation": false,
+        "edgesStable": true,
+        "status": "passed"
+      },
+      {
+        "id": "graph-escape-cancel",
+        "input": "keyboard",
+        "optimisticMutation": false,
+        "edgesStable": true,
+        "status": "passed"
+      },
+      {
+        "id": "preview-job-failure",
+        "input": "application-state",
+        "optimisticMutation": false,
+        "semanticFeedback": true,
+        "status": "passed",
+        "scope": "feedback projection only; action retry recovery is pending issue #842"
+      },
+      {
+        "id": "color-style-save-failure",
+        "input": "action",
+        "actionCount": 1,
+        "optimisticMutation": false,
+        "applicationStatePreserved": true,
+        "semanticFeedback": true,
+        "status": "passed"
+      }
+    ]
+  },
+  "semanticSnapshots": [
+    {
+      "workspaceId": "edit-workspace",
+      "root": "a2334a7dd442e82a",
+      "focused": null,
+      "focusOrder": [
+        "8bdb288a7462df2f",
+        "d78fb72087cf33fe",
+        "7eb144cbed5e7a16",
+        "89556033053f7089",
+        "b68c34fcccfd575e",
+        "17e0ee0a6b6b8751",
+        "7f4b8a6f321114de",
+        "675bc0e7627c338f",
+        "4b43a8ff11215832",
+        "4f49f22e1962d2eb",
+        "11b2342d2ab6b91f",
+        "c949e9b8993f8675",
+        "30fc6913f79ef0fa",
+        "0b1ae06294276f18",
+        "0de6deaf11d305af",
+        "535c37739854d875",
+        "a6743accc9c759d6",
+        "4d1af1d38a3cc3fb",
+        "37eeb40c42348fb1",
+        "7bb27cbcf6035ec0",
+        "592375ddc422a5a0",
+        "c14475fc26d9f54b",
+        "5d32b741e5f3d781",
+        "740abbbcb890fb8b",
+        "d6b0a7825c11e7e9",
+        "7a4f848efc1bbd99",
+        "ff3152ed59f68aab",
+        "a896d053982e61ea",
+        "e6f1e7f08ed4567b",
+        "864829b74a15b6cc",
+        "421e67c6f771ef22",
+        "85124a9deee1a531",
+        "20a18cf3fa804ae8",
+        "f999dc8978049a26",
+        "a2b82c587299bf30",
+        "d3119baf5efd583f",
+        "0d17c2c0c2ccc961"
+      ],
+      "nodes": [
+        {
+          "id": "a2334a7dd442e82a",
+          "parent": null,
+          "role": "dock",
+          "label": "Editor dock",
+          "bounds": [
+            0,
+            88,
+            720,
+            368
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "12a8a8a5b251e95a",
+            "6db7c4f656b574f1",
+            "c99fe698d04abc12",
+            "40d678d3bf22a58d"
+          ]
+        },
+        {
+          "id": "12a8a8a5b251e95a",
+          "parent": "a2334a7dd442e82a",
+          "role": "frame",
+          "label": "Assets",
+          "bounds": [
+            0,
+            88,
+            158.4,
+            368
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "6a9acaabc596c41d",
+            "b9078c3b3e85297a"
+          ]
+        },
+        {
+          "id": "6a9acaabc596c41d",
+          "parent": "12a8a8a5b251e95a",
+          "role": "tablist",
+          "label": "Frame tabs",
+          "bounds": [
+            0,
+            88,
+            158.4,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "8bdb288a7462df2f"
+          ]
+        },
+        {
+          "id": "8bdb288a7462df2f",
+          "parent": "6a9acaabc596c41d",
+          "role": "tab",
+          "label": "Assets",
+          "bounds": [
+            0,
+            88,
+            158.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "b9078c3b3e85297a",
+          "parent": "12a8a8a5b251e95a",
+          "role": "panel",
+          "label": "Assets",
+          "bounds": [
+            0,
+            116,
+            158.4,
+            340
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "6db7c4f656b574f1",
+          "parent": "a2334a7dd442e82a",
+          "role": "frame",
+          "label": "Viewport",
+          "bounds": [
+            158.4,
+            88,
+            336.96,
+            248
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": [
+            "d40bded5038e248d",
+            "6076699896685c37"
+          ]
+        },
+        {
+          "id": "d40bded5038e248d",
+          "parent": "6db7c4f656b574f1",
+          "role": "tablist",
+          "label": "Frame tabs",
+          "bounds": [
+            158.4,
+            88,
+            336.96,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "d78fb72087cf33fe"
+          ]
+        },
+        {
+          "id": "d78fb72087cf33fe",
+          "parent": "d40bded5038e248d",
+          "role": "tab",
+          "label": "Viewport",
+          "bounds": [
+            158.4,
+            88,
+            160,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "6076699896685c37",
+          "parent": "6db7c4f656b574f1",
+          "role": "panel",
+          "label": "Viewport",
+          "bounds": [
+            158.4,
+            116,
+            336.96,
+            220
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "c99fe698d04abc12",
+          "parent": "a2334a7dd442e82a",
+          "role": "frame",
+          "label": "Inspector",
+          "bounds": [
+            495.36,
+            88,
+            224.64001,
+            248
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "da31c6cab662f8c6",
+            "290622c2cf072c7b"
+          ]
+        },
+        {
+          "id": "da31c6cab662f8c6",
+          "parent": "c99fe698d04abc12",
+          "role": "tablist",
+          "label": "Frame tabs",
+          "bounds": [
+            495.36,
+            88,
+            224.64001,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "7eb144cbed5e7a16"
+          ]
+        },
+        {
+          "id": "7eb144cbed5e7a16",
+          "parent": "da31c6cab662f8c6",
+          "role": "tab",
+          "label": "Inspector",
+          "bounds": [
+            495.36,
+            88,
+            160,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "290622c2cf072c7b",
+          "parent": "c99fe698d04abc12",
+          "role": "panel",
+          "label": "Inspector",
+          "bounds": [
+            495.36,
+            116,
+            224.64001,
+            220
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "40d678d3bf22a58d",
+          "parent": "a2334a7dd442e82a",
+          "role": "frame",
+          "label": "Timeline",
+          "bounds": [
+            158.4,
+            336,
+            561.6,
+            120
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "a388fc8c0538f4b9",
+            "fdc61b1f8699ee0f"
+          ]
+        },
+        {
+          "id": "a388fc8c0538f4b9",
+          "parent": "40d678d3bf22a58d",
+          "role": "tablist",
+          "label": "Frame tabs",
+          "bounds": [
+            158.4,
+            336,
+            561.6,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "89556033053f7089"
+          ]
+        },
+        {
+          "id": "89556033053f7089",
+          "parent": "a388fc8c0538f4b9",
+          "role": "tab",
+          "label": "Timeline",
+          "bounds": [
+            158.4,
+            336,
+            160,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "fdc61b1f8699ee0f",
+          "parent": "40d678d3bf22a58d",
+          "role": "panel",
+          "label": "Timeline",
+          "bounds": [
+            158.4,
+            364,
+            561.6,
+            92
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "64c85d0ce637542d",
+          "parent": null,
+          "role": "list",
+          "label": "Assets",
+          "bounds": [
+            8,
+            124,
+            142.4,
+            324
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "b68c34fcccfd575e",
+            "17e0ee0a6b6b8751",
+            "7f4b8a6f321114de",
+            "675bc0e7627c338f",
+            "4b43a8ff11215832",
+            "4f49f22e1962d2eb",
+            "11b2342d2ab6b91f",
+            "c949e9b8993f8675",
+            "30fc6913f79ef0fa",
+            "0b1ae06294276f18",
+            "0de6deaf11d305af",
+            "535c37739854d875"
+          ]
+        },
+        {
+          "id": "b68c34fcccfd575e",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Backdrop",
+          "bounds": [
+            8,
+            124,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "17e0ee0a6b6b8751",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Character",
+          "bounds": [
+            8,
+            152,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "7f4b8a6f321114de",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Lighting",
+          "bounds": [
+            8,
+            180,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "675bc0e7627c338f",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Title",
+          "bounds": [
+            8,
+            208,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "4b43a8ff11215832",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Clouds",
+          "bounds": [
+            8,
+            236,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "4f49f22e1962d2eb",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Foreground",
+          "bounds": [
+            8,
+            264,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "11b2342d2ab6b91f",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Grade",
+          "bounds": [
+            8,
+            292,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "c949e9b8993f8675",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Subtitle",
+          "bounds": [
+            8,
+            320,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "30fc6913f79ef0fa",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Mountains",
+          "bounds": [
+            8,
+            348,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "0b1ae06294276f18",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Effects",
+          "bounds": [
+            8,
+            376,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "0de6deaf11d305af",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Bloom",
+          "bounds": [
+            8,
+            404,
+            142.4,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "535c37739854d875",
+          "parent": "64c85d0ce637542d",
+          "role": "listitem",
+          "label": "Credits",
+          "bounds": [
+            8,
+            432,
+            142.4,
+            16
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "a6743accc9c759d6",
+          "parent": null,
+          "role": "button",
+          "label": "Select Tool",
+          "bounds": [
+            166.4,
+            124,
+            92,
+            26
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "4d1af1d38a3cc3fb",
+          "parent": null,
+          "role": "button",
+          "label": "Transform Tool",
+          "bounds": [
+            262.4,
+            124,
+            112,
+            26
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "37eeb40c42348fb1",
+          "parent": null,
+          "role": "viewport",
+          "label": "Viewport",
+          "bounds": [
+            166.4,
+            154,
+            320.96,
+            174
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "7bb27cbcf6035ec0",
+            "592375ddc422a5a0"
+          ]
+        },
+        {
+          "id": "7bb27cbcf6035ec0",
+          "parent": "37eeb40c42348fb1",
+          "role": "toggle",
+          "label": "Select Tool",
+          "bounds": [
+            166.4,
+            154,
+            320.96,
+            174
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "592375ddc422a5a0",
+          "parent": "37eeb40c42348fb1",
+          "role": "toggle",
+          "label": "Transform Tool",
+          "bounds": [
+            166.4,
+            154,
+            320.96,
+            174
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "3829480b2bc30daa",
+          "parent": null,
+          "role": "grid",
+          "label": "Property grid",
+          "bounds": [
+            503.36,
+            124,
+            208.64001,
+            146
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "75fcf37c56fdd817",
+          "parent": null,
+          "role": "label",
+          "label": "Selection",
+          "bounds": [
+            503.36,
+            124,
+            208.64001,
+            26
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "1129899c5d338ccf",
+          "parent": null,
+          "role": "row",
+          "label": "Name",
+          "bounds": [
+            503.36,
+            150,
+            208.64001,
+            24
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "c14475fc26d9f54b",
+          "parent": null,
+          "role": "textfield",
+          "label": "Text field",
+          "bounds": [
+            631.36,
+            152,
+            56.640015,
+            20
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "534501bef62741ef",
+          "parent": null,
+          "role": "iconbutton",
+          "label": "Reset Name to default",
+          "bounds": [
+            692,
+            153,
+            18,
+            18
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": true,
+          "children": []
+        },
+        {
+          "id": "2f70f2850e548b86",
+          "parent": null,
+          "role": "row",
+          "label": "Kind",
+          "bounds": [
+            503.36,
+            174,
+            208.64001,
+            24
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "5d32b741e5f3d781",
+          "parent": null,
+          "role": "button",
+          "label": "Raster layer",
+          "bounds": [
+            631.36,
+            176,
+            56.640015,
+            20
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "ac1bc9f187a6fd95",
+          "parent": null,
+          "role": "iconbutton",
+          "label": "Reset Kind to default",
+          "bounds": [
+            692,
+            177,
+            18,
+            18
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": true,
+          "children": []
+        },
+        {
+          "id": "ac61d0ace1f6553e",
+          "parent": null,
+          "role": "row",
+          "label": "Visible",
+          "bounds": [
+            503.36,
+            198,
+            208.64001,
+            24
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "740abbbcb890fb8b",
+          "parent": null,
+          "role": "checkbox",
+          "label": "Visible",
+          "bounds": [
+            631.36,
+            200,
+            56.640015,
+            20
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "ea383c045d0cd936",
+          "parent": null,
+          "role": "iconbutton",
+          "label": "Reset Visible to default",
+          "bounds": [
+            692,
+            201,
+            18,
+            18
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": true,
+          "children": []
+        },
+        {
+          "id": "6870d217d126fc55",
+          "parent": null,
+          "role": "row",
+          "label": "Opacity",
+          "bounds": [
+            503.36,
+            222,
+            208.64001,
+            24
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "d6b0a7825c11e7e9",
+          "parent": null,
+          "role": "textfield",
+          "label": "Text field",
+          "bounds": [
+            631.36,
+            224,
+            56.640015,
+            20
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "50115d049bf140ad",
+          "parent": null,
+          "role": "iconbutton",
+          "label": "Reset Opacity to default",
+          "bounds": [
+            692,
+            225,
+            18,
+            18
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": true,
+          "children": []
+        },
+        {
+          "id": "ddce266898d4368a",
+          "parent": null,
+          "role": "row",
+          "label": "Color",
+          "bounds": [
+            503.36,
+            246,
+            208.64001,
+            24
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "7a4f848efc1bbd99",
+          "parent": null,
+          "role": "button",
+          "label": "Fill color",
+          "bounds": [
+            631.36,
+            248,
+            78.640015,
+            20
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "a457b7824679b2c1",
+          "parent": null,
+          "role": "custom:timeline",
+          "label": "Timeline",
+          "bounds": [
+            164.4,
+            370,
+            365.6,
+            80
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "ff3152ed59f68aab"
+          ]
+        },
+        {
+          "id": "ff3152ed59f68aab",
+          "parent": "a457b7824679b2c1",
+          "role": "custom:timeline-lane",
+          "label": "Video",
+          "bounds": [
+            236.4,
+            392,
+            293.6,
+            24
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "a896d053982e61ea"
+          ]
+        },
+        {
+          "id": "a896d053982e61ea",
+          "parent": "ff3152ed59f68aab",
+          "role": "custom:timeline-item",
+          "label": "Hero clip",
+          "bounds": [
+            284.4,
+            392,
+            96,
+            24
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "cf8cd092f0bdc54e",
+          "parent": null,
+          "role": "list",
+          "label": "Background jobs",
+          "bounds": [
+            534,
+            370,
+            180,
+            40
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "625a5f8dd0bd011c"
+          ]
+        },
+        {
+          "id": "625a5f8dd0bd011c",
+          "parent": "cf8cd092f0bdc54e",
+          "role": "custom:job",
+          "label": "Preview render",
+          "bounds": [
+            534,
+            370,
+            179.99994,
+            40
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "f306288ae38ed4f6",
+          "parent": null,
+          "role": "list",
+          "label": "Notifications",
+          "bounds": [
+            534,
+            410,
+            180,
+            40
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "e6f1e7f08ed4567b",
+          "parent": null,
+          "role": "button",
+          "label": "sRGB · Reverse",
+          "bounds": [
+            592,
+            278,
+            112,
+            20
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "864829b74a15b6cc",
+          "parent": null,
+          "role": "custom:gradient-editor",
+          "label": "Gradient editor",
+          "bounds": [
+            503.36,
+            274,
+            208.64001,
+            54
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "8d811953287b1303",
+          "parent": null,
+          "role": "custom:gradient-stop",
+          "label": "Gradient stop 1",
+          "bounds": [
+            543.888,
+            308,
+            12,
+            16
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "626e4690719191bc",
+          "parent": null,
+          "role": "custom:gradient-stop",
+          "label": "Gradient stop 2",
+          "bounds": [
+            659.472,
+            308,
+            12,
+            16
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "84674354a61c0cc2",
+          "parent": null,
+          "role": "custom:menu-bar",
+          "label": "Application menu",
+          "bounds": [
+            0,
+            0,
+            720,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "421e67c6f771ef22"
+          ]
+        },
+        {
+          "id": "421e67c6f771ef22",
+          "parent": "84674354a61c0cc2",
+          "role": "menuitem",
+          "label": "Workspace",
+          "bounds": [
+            0,
+            0,
+            96,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "a0ad7cc8a5ef774c",
+          "parent": null,
+          "role": "custom:toolbar",
+          "label": "Application toolbar",
+          "bounds": [
+            0,
+            28,
+            720,
+            32
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "85124a9deee1a531",
+            "20a18cf3fa804ae8",
+            "f999dc8978049a26",
+            "a2b82c587299bf30"
+          ]
+        },
+        {
+          "id": "85124a9deee1a531",
+          "parent": "a0ad7cc8a5ef774c",
+          "role": "iconbutton",
+          "label": "Edit Workspace",
+          "bounds": [
+            0,
+            28,
+            144,
+            32
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "20a18cf3fa804ae8",
+          "parent": "a0ad7cc8a5ef774c",
+          "role": "iconbutton",
+          "label": "Graph Workspace",
+          "bounds": [
+            144,
+            28,
+            144,
+            32
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "f999dc8978049a26",
+          "parent": "a0ad7cc8a5ef774c",
+          "role": "iconbutton",
+          "label": "Apply Shared State",
+          "bounds": [
+            288,
+            28,
+            144,
+            32
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "a2b82c587299bf30",
+          "parent": "a0ad7cc8a5ef774c",
+          "role": "iconbutton",
+          "label": "Save Color Style",
+          "bounds": [
+            432,
+            28,
+            144,
+            32
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "c82b6a363a9df4a0",
+          "parent": null,
+          "role": "tablist",
+          "label": "Document tabs",
+          "bounds": [
+            0,
+            60,
+            720,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "d3119baf5efd583f",
+            "0d17c2c0c2ccc961"
+          ]
+        },
+        {
+          "id": "d3119baf5efd583f",
+          "parent": "c82b6a363a9df4a0",
+          "role": "tab",
+          "label": "Edit Workspace",
+          "bounds": [
+            0,
+            60,
+            132,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "0d17c2c0c2ccc961",
+          "parent": "c82b6a363a9df4a0",
+          "role": "tab",
+          "label": "Graph Workspace",
+          "bounds": [
+            132,
+            60,
+            140,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "2b79e0a4ad9ae4d0",
+          "parent": null,
+          "role": "custom:status-bar",
+          "label": "Application status",
+          "bounds": [
+            0,
+            456,
+            720,
+            24
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "71311eb2e0a6c923",
+            "3cf4491ae572f1d3"
+          ]
+        },
+        {
+          "id": "71311eb2e0a6c923",
+          "parent": "2b79e0a4ad9ae4d0",
+          "role": "label",
+          "label": "Applied revision 0",
+          "bounds": [
+            0,
+            456,
+            152,
+            24
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "3cf4491ae572f1d3",
+          "parent": "2b79e0a4ad9ae4d0",
+          "role": "label",
+          "label": "Preview 40%",
+          "bounds": [
+            152,
+            456,
+            168,
+            24
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        }
+      ]
+    },
+    {
+      "workspaceId": "graph-workspace",
+      "root": "96560a0c952ec642",
+      "focused": "ff9f83e6ba0e27a0",
+      "focusOrder": [
+        "c480978a70fbffa3",
+        "9c492fae9c016c14",
+        "0000004752415048",
+        "e7bb8e4a1e818520",
+        "4457e40442a8e08b",
+        "ff9f83e6ba0e27a0",
+        "de2bc3df07961a4a"
+      ],
+      "nodes": [
+        {
+          "id": "96560a0c952ec642",
+          "parent": null,
+          "role": "label",
+          "label": "Stern Integration Demo",
+          "bounds": [
+            24,
+            20,
+            320,
+            24
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "000000444f434b00",
+          "parent": null,
+          "role": "dock",
+          "label": "Editor dock",
+          "bounds": [
+            24,
+            286,
+            672,
+            142
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "1d11e4fff55abc7d",
+            "60947f424174088b"
+          ]
+        },
+        {
+          "id": "1d11e4fff55abc7d",
+          "parent": "000000444f434b00",
+          "role": "frame",
+          "label": "Graph",
+          "bounds": [
+            24,
+            286,
+            448,
+            142
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": [
+            "7a6f8b3ecb491c90",
+            "13612d3bc4eb8f1c"
+          ]
+        },
+        {
+          "id": "7a6f8b3ecb491c90",
+          "parent": "1d11e4fff55abc7d",
+          "role": "tablist",
+          "label": "Frame tabs",
+          "bounds": [
+            24,
+            286,
+            448,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "c480978a70fbffa3"
+          ]
+        },
+        {
+          "id": "c480978a70fbffa3",
+          "parent": "7a6f8b3ecb491c90",
+          "role": "tab",
+          "label": "Graph",
+          "bounds": [
+            24,
+            286,
+            160,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "13612d3bc4eb8f1c",
+          "parent": "1d11e4fff55abc7d",
+          "role": "panel",
+          "label": "Graph",
+          "bounds": [
+            24,
+            314,
+            448,
+            114
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "60947f424174088b",
+          "parent": "000000444f434b00",
+          "role": "frame",
+          "label": "Inspector",
+          "bounds": [
+            472,
+            286,
+            224,
+            142
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "2f909061696d0b06",
+            "4bd1503db195582a"
+          ]
+        },
+        {
+          "id": "2f909061696d0b06",
+          "parent": "60947f424174088b",
+          "role": "tablist",
+          "label": "Frame tabs",
+          "bounds": [
+            472,
+            286,
+            224,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "9c492fae9c016c14"
+          ]
+        },
+        {
+          "id": "9c492fae9c016c14",
+          "parent": "2f909061696d0b06",
+          "role": "tab",
+          "label": "Inspector",
+          "bounds": [
+            472,
+            286,
+            160,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "4bd1503db195582a",
+          "parent": "60947f424174088b",
+          "role": "panel",
+          "label": "Inspector",
+          "bounds": [
+            472,
+            314,
+            224,
+            114
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "0000004752415048",
+          "parent": null,
+          "role": "custom:node-graph",
+          "label": "Node graph",
+          "bounds": [
+            24,
+            314,
+            448,
+            114
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "7c798b3371b84887",
+            "4bfb7371b6a5005e",
+            "812c64b38a162845"
+          ]
+        },
+        {
+          "id": "7c798b3371b84887",
+          "parent": "0000004752415048",
+          "role": "custom:edge",
+          "label": "Edge 1: Image Source Image to Viewer Image",
+          "bounds": [
+            215,
+            365,
+            170,
+            26
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "4bfb7371b6a5005e",
+          "parent": "0000004752415048",
+          "role": "custom:node",
+          "label": "Image Source",
+          "bounds": [
+            60,
+            342,
+            156,
+            86
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "e3de8f8793006d21"
+          ]
+        },
+        {
+          "id": "e3de8f8793006d21",
+          "parent": "4bfb7371b6a5005e",
+          "role": "custom:port",
+          "label": "Output Image",
+          "bounds": [
+            212,
+            386,
+            8,
+            8
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "812c64b38a162845",
+          "parent": "0000004752415048",
+          "role": "custom:node",
+          "label": "Viewer",
+          "bounds": [
+            384,
+            342,
+            88,
+            86
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "48b00cdc7de8c161",
+            "66a52dcfd1df2ecd",
+            "d7a273f40697e39e"
+          ]
+        },
+        {
+          "id": "48b00cdc7de8c161",
+          "parent": "812c64b38a162845",
+          "role": "custom:port",
+          "label": "Input Image",
+          "bounds": [
+            380,
+            362,
+            8,
+            8
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "66a52dcfd1df2ecd",
+          "parent": "812c64b38a162845",
+          "role": "custom:port",
+          "label": "Input Preview Image",
+          "bounds": [
+            380,
+            386,
+            8,
+            8
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "d7a273f40697e39e",
+          "parent": "812c64b38a162845",
+          "role": "custom:port",
+          "label": "Input Vector Mask",
+          "bounds": [
+            380,
+            410,
+            8,
+            8
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "e3147ea85f61dac8",
+          "parent": null,
+          "role": "grid",
+          "label": "Property grid",
+          "bounds": [
+            472,
+            314,
+            224,
+            114
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "77a879eb5a04d1a3",
+          "parent": null,
+          "role": "custom:toolbar",
+          "label": "Application toolbar",
+          "bounds": [
+            24,
+            230,
+            672,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "6cf967724911ed43"
+          ]
+        },
+        {
+          "id": "6cf967724911ed43",
+          "parent": "77a879eb5a04d1a3",
+          "role": "button",
+          "label": "Clear selection",
+          "bounds": [
+            24,
+            230,
+            132,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": true,
+          "children": []
+        },
+        {
+          "id": "e9fc644975e2c356",
+          "parent": null,
+          "role": "tablist",
+          "label": "Document tabs",
+          "bounds": [
+            24,
+            258,
+            672,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "e7bb8e4a1e818520"
+          ]
+        },
+        {
+          "id": "e7bb8e4a1e818520",
+          "parent": "e9fc644975e2c356",
+          "role": "tab",
+          "label": "Graph",
+          "bounds": [
+            24,
+            258,
+            120,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "54a8a14e4457a13d",
+          "parent": null,
+          "role": "custom:status-bar",
+          "label": "Application status",
+          "bounds": [
+            24,
+            428,
+            672,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "753fa227a984bdd9"
+          ]
+        },
+        {
+          "id": "753fa227a984bdd9",
+          "parent": "54a8a14e4457a13d",
+          "role": "label",
+          "label": "0 selected",
+          "bounds": [
+            24,
+            428,
+            160,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "4457e40442a8e08b",
+          "parent": null,
+          "role": "button",
+          "label": "Edit Workspace",
+          "bounds": [
+            24,
+            56,
+            112,
+            30
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "ff9f83e6ba0e27a0",
+          "parent": null,
+          "role": "button",
+          "label": "Graph Workspace",
+          "bounds": [
+            148,
+            56,
+            120,
+            30
+          ],
+          "focusable": true,
+          "focused": true,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "de2bc3df07961a4a",
+          "parent": null,
+          "role": "button",
+          "label": "Apply Shared State",
+          "bounds": [
+            24,
+            188,
+            160,
+            30
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        }
+      ]
+    }
+  ],
+  "traversalTraces": [
+    {
+      "workspaceId": "edit-workspace",
+      "input": "Tab",
+      "focusBefore": null,
+      "focusAfter": "8bdb288a7462df2f",
+      "status": "passed"
+    }
+  ],
+  "focusRestorationTraces": [
+    {
+      "workspaceId": "edit-workspace",
+      "overlay": "Workspace commands",
+      "dismissal": "Escape",
+      "focusOwner": "7f4b8a6f321114de",
+      "restored": true
+    },
+    {
+      "workspaceId": "graph-workspace",
+      "interaction": "connection-edit",
+      "dismissal": "Escape",
+      "focusOwner": "0000004752415048",
+      "restored": true
+    },
+    {
+      "workspaceId": "edit-workspace",
+      "overlay": "Color picker",
+      "dismissal": "Cancel and Apply",
+      "focusOwner": "7a4f848efc1bbd99",
+      "restored": true
+    },
+    {
+      "workspaceId": "edit-workspace",
+      "overlay": "Palette and recovery overlays",
+      "dismissal": "Escape and outside pointer",
+      "focusOwner": "b68c34fcccfd575e",
+      "restored": true
+    },
+    {
+      "workspaceId": "public-runtime",
+      "interaction": "focus-owner removal cleanup",
+      "scope": "public Stern core runtime reconciliation; not a demo-specific overlay-removal claim",
+      "focusOwner": "5359ce81a7672170",
+      "focusCleared": true,
+      "textInputOwnerCleared": true,
+      "stopTextInputOnce": true,
+      "repaint": true,
+      "restored": true
+    }
+  ],
+  "rendererEvidence": {
+    "issue": 845,
+    "manifestPath": "evidence/stern-demo-vello-845/manifest.json",
+    "captureStatus": "final",
+    "reviewStatus": "approved",
+    "artifactCount": 8,
+    "sourceCompatibility": "capture-sensitive paths unchanged"
+  },
+  "platformEvidence": {
+    "issue": 848,
+    "runId": 29672838723,
+    "runUrl": "https://github.com/kinetik-gg/stern/actions/runs/29672838723",
+    "artifactName": "demo-platform-smoke-verified",
+    "commit": "50edc219ae5d013c242129adf2ec7a25942f5c28",
+    "status": "pass",
+    "records": [
+      {
+        "formatVersion": 1,
+        "platform": "windows",
+        "commit": "50edc219ae5d013c242129adf2ec7a25942f5c28",
+        "runnerOs": "Windows",
+        "runnerArch": "X64",
+        "expectedBackend": "dx12",
+        "exitCode": 0,
+        "timedOut": false,
+        "presentationEvidence": "native-shell-smoke=pass status=Presented"
+      },
+      {
+        "formatVersion": 1,
+        "platform": "macos",
+        "commit": "50edc219ae5d013c242129adf2ec7a25942f5c28",
+        "runnerOs": "macOS",
+        "runnerArch": "ARM64",
+        "expectedBackend": "metal",
+        "exitCode": 0,
+        "timedOut": false,
+        "presentationEvidence": "native-shell-smoke=pass status=Presented"
+      },
+      {
+        "formatVersion": 1,
+        "platform": "linux",
+        "commit": "50edc219ae5d013c242129adf2ec7a25942f5c28",
+        "runnerOs": "Linux",
+        "runnerArch": "X64",
+        "expectedBackend": "vulkan",
+        "exitCode": 0,
+        "timedOut": false,
+        "presentationEvidence": "native-shell-smoke=pass status=Presented"
+      }
+    ]
+  },
+  "publicConsumerAudit": {
+    "passed": true,
+    "manifestPath": "apps/stern-demo/Cargo.toml",
+    "publicFacadeDependency": true,
+    "privateSternDependencies": [],
+    "publicFacadeImports": [
+      "use stern::core::{",
+      "use stern::widgets::gradient_editor::{",
+      "use stern::platform_winit::{",
+      "use stern::render::RenderFrameInput;",
+      "use stern::vello_winit::{",
+      "use stern::core::{Point, PointerButtonState, PointerInput, SemanticRole, UiInput};",
+      "use stern::core::{",
+      "use stern::render::{RenderImage, RenderImageSampling, RenderResources, TextureResource};",
+      "use stern::text::TextEditState;",
+      "use stern::widgets::asset_browser::{",
+      "use stern::widgets::dock::{DockScene, DockSceneConfig};",
+      "use stern::widgets::gradient_editor::{GradientEditorConfig, GradientInterpolationSpace};",
+      "use stern::widgets::inspector::{",
+      "use stern::widgets::{",
+      "use stern::core::{",
+      "use stern::text::TextEditState;",
+      "use stern::widgets::chrome::{",
+      "use stern::widgets::dock::{",
+      "use stern::widgets::inspector::{PropertyGridConfig, PropertyGridRow};",
+      "use stern::widgets::node_graph::{",
+      "use stern::widgets::{ItemId, TextFieldAccess, Ui};",
+      "use stern::UiState;",
+      "use stern::core::{",
+      "use stern::render::RenderResources;",
+      "use stern::core::ScaleFactor;",
+      "use stern::platform_winit::{WinitInputAdapter, WinitPlatformRequests};",
+      "use stern::core::{ActionContext, PointerOrder, PointerTarget, PointerTargetPlan, Rect, WidgetId};",
+      "use stern::widgets::chrome::{SystemFeedbackScene, SystemFeedbackSceneConfig};",
+      "use stern::widgets::{"
+    ],
+    "forbiddenSourceMatches": [],
+    "auditedSourcePaths": [
+      "apps/stern-demo/src/app_model.rs",
+      "apps/stern-demo/src/bin/native_shell.rs",
+      "apps/stern-demo/src/edit_workspace.rs",
+      "apps/stern-demo/src/graph_workspace.rs",
+      "apps/stern-demo/src/lib.rs",
+      "apps/stern-demo/src/main.rs",
+      "apps/stern-demo/src/timeline_workspace.rs"
+    ]
+  },
+  "primitiveContentSurfaceAllowlist": [
+    {
+      "id": "frame-output-consumption",
+      "allowedPatterns": [
+        ".primitives",
+        "translate_primitives"
+      ],
+      "matchedSourcePaths": [
+        "apps/stern-demo/src/bin/native_shell.rs",
+        "apps/stern-demo/src/main.rs"
+      ],
+      "reason": "public output translation or declared content-surface integration; no control painting"
+    },
+    {
+      "id": "viewport-content-surface",
+      "allowedPatterns": [
+        "ViewportSurface",
+        "TextureResource",
+        "RenderImage"
+      ],
+      "matchedSourcePaths": [
+        "apps/stern-demo/src/edit_workspace.rs"
+      ],
+      "reason": "public output translation or declared content-surface integration; no control painting"
+    },
+    {
+      "id": "native-render-attachment",
+      "allowedPatterns": [
+        "RenderFrameInput",
+        "render_resources"
+      ],
+      "matchedSourcePaths": [
+        "apps/stern-demo/src/bin/native_shell.rs",
+        "apps/stern-demo/src/lib.rs",
+        "apps/stern-demo/src/main.rs"
+      ],
+      "reason": "public output translation or declared content-surface integration; no control painting"
+    }
+  ],
+  "gates": [
+    {
+      "id": "public-consumer-boundary",
+      "status": "passed",
+      "evidenceRefs": [
+        "#/publicConsumerAudit",
+        "#/primitiveContentSurfaceAllowlist"
+      ]
+    },
+    {
+      "id": "canonical-component-composition",
+      "status": "passed",
+      "evidenceRefs": [
+        "#/runtime/components",
+        "#/semanticSnapshots"
+      ]
+    },
+    {
+      "id": "complete-component-coverage",
+      "status": "passed",
+      "evidenceRefs": [
+        "#/runtime/components"
+      ]
+    },
+    {
+      "id": "deterministic-user-journeys",
+      "status": "passed",
+      "evidenceRefs": [
+        "#/runtime/journeys",
+        "#/logs"
+      ]
+    },
+    {
+      "id": "semantic-structure",
+      "status": "passed",
+      "evidenceRefs": [
+        "#/semanticSnapshots",
+        "#/traversalTraces",
+        "#/focusRestorationTraces"
+      ]
+    },
+    {
+      "id": "renderer-and-scale-quality",
+      "status": "passed",
+      "evidenceRefs": [
+        "#/rendererEvidence"
+      ]
+    },
+    {
+      "id": "platform-integration",
+      "status": "passed",
+      "evidenceRefs": [
+        "#/platformEvidence"
+      ]
+    },
+    {
+      "id": "honest-evidence",
+      "status": "passed",
+      "evidenceRefs": [
+        "#/source",
+        "#/knownGaps",
+        "#/gates"
+      ]
+    }
+  ],
+  "knownGaps": []
+}
