@@ -7,7 +7,7 @@ import { verifyEvidence as verifyRendererEvidence } from "../../../tools/capture
 import { verifyRecords as verifyPlatformRecords } from "./platform-smoke-record.mjs";
 
 const SPEC_SHA256 = "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed";
-const EXPECTED_PACKET_SHA256 = "cb468e3280a011d16181368cd4f0485b29376b09860fbee7db907ca48e80d9b6";
+const EXPECTED_PACKET_SHA256 = "b12b61acc4df78b568b4e2f1e0d23f9a7133f7c9a25a93b4722cc84b8f4a9d28";
 const COMPONENTS = [
   "button", "text-field", "dropdown", "selection-controls", "value-controls",
   "progress-feedback", "overlay-system", "virtual-list", "editor-frame",
@@ -42,10 +42,13 @@ const RENDERER_COMPATIBLE_DRIFT = [
 const CANDIDATE_EVIDENCE_DRIFT = [
   ".github/workflows/ci.yml",
   "apps/stern-demo/Cargo.toml",
+  "apps/stern-demo/src/app_model.rs",
   "apps/stern-demo/src/edit_workspace.rs",
   "apps/stern-demo/src/graph_workspace.rs",
   "apps/stern-demo/src/lib.rs",
   "apps/stern-demo/src/overlay_workspace.rs",
+  "apps/stern-demo/tests/app_model_contract.rs",
+  "apps/stern-demo/tests/edit_workspace_screen_contract.rs",
   "apps/stern-demo/tests/evidence/runtime-semantic-evidence.provisional.json",
   "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
   "apps/stern-demo/tests/public_consumer_contract.rs",
@@ -67,6 +70,15 @@ const PROVISIONAL_GRAPH_SOURCE_DRIFT = [
 const PROVISIONAL_GRAPH_CONTRACT_DRIFT = [
   "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
   "apps/stern-demo/tests/public_consumer_contract.rs",
+];
+const PROVISIONAL_MODEL_COLOR_SOURCE_DRIFT = [
+  "apps/stern-demo/src/app_model.rs",
+  "apps/stern-demo/src/edit_workspace.rs",
+  "apps/stern-demo/src/lib.rs",
+];
+const PROVISIONAL_MODEL_COLOR_CONTRACT_DRIFT = [
+  "apps/stern-demo/tests/app_model_contract.rs",
+  "apps/stern-demo/tests/edit_workspace_screen_contract.rs",
 ];
 
 const options = parseArgs(process.argv.slice(2));
@@ -106,6 +118,10 @@ assertExact(evidence.source.provisionalGraphSourceDrift, PROVISIONAL_GRAPH_SOURC
   "provisional Graph production drift");
 assertExact(evidence.source.provisionalGraphContractDrift, PROVISIONAL_GRAPH_CONTRACT_DRIFT,
   "provisional Graph contract drift");
+assertExact(evidence.source.provisionalModelColorSourceDrift, PROVISIONAL_MODEL_COLOR_SOURCE_DRIFT,
+  "provisional model/color production drift");
+assertExact(evidence.source.provisionalModelColorContractDrift, PROVISIONAL_MODEL_COLOR_CONTRACT_DRIFT,
+  "provisional model/color contract drift");
 const candidateDrift = git(
   "diff", "--name-only", evidence.source.commit, git("rev-parse", "HEAD^{commit}"),
 ).split(/\r?\n/u).filter(Boolean);

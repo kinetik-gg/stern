@@ -39,6 +39,15 @@ const PROVISIONAL_GRAPH_CONTRACT_DRIFT: [&str; 2] = [
     "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
     "apps/stern-demo/tests/public_consumer_contract.rs",
 ];
+const PROVISIONAL_MODEL_COLOR_SOURCE_DRIFT: [&str; 3] = [
+    "apps/stern-demo/src/app_model.rs",
+    "apps/stern-demo/src/edit_workspace.rs",
+    "apps/stern-demo/src/lib.rs",
+];
+const PROVISIONAL_MODEL_COLOR_CONTRACT_DRIFT: [&str; 2] = [
+    "apps/stern-demo/tests/app_model_contract.rs",
+    "apps/stern-demo/tests/edit_workspace_screen_contract.rs",
+];
 
 fn main() -> ExitCode {
     match run() {
@@ -227,6 +236,8 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         "generatedFromCleanWorktree": clean,
         "provisionalGraphSourceDrift": PROVISIONAL_GRAPH_SOURCE_DRIFT,
         "provisionalGraphContractDrift": PROVISIONAL_GRAPH_CONTRACT_DRIFT,
+        "provisionalModelColorSourceDrift": PROVISIONAL_MODEL_COLOR_SOURCE_DRIFT,
+        "provisionalModelColorContractDrift": PROVISIONAL_MODEL_COLOR_CONTRACT_DRIFT,
     });
     let workspaces = vec![
         json!({"id": "edit-workspace", "semanticSnapshotRef": "#/semanticSnapshots/0", "passedComponentIds": passed.iter().copied().filter(|id| component_workspaces(id).contains(&"edit-workspace")).collect::<Vec<_>>()}),
@@ -308,7 +319,12 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
             "id": "graph-full-journey-acceptance",
             "issue": 856,
             "blocksGateIds": ["deterministic-user-journeys"],
-            "evidenceRefs": ["#/source/provisionalGraphContractDrift", "#/runtime/journeys/5"],
+            "evidenceRefs": [
+                "#/source/provisionalGraphContractDrift",
+                "#/source/provisionalModelColorSourceDrift",
+                "#/source/provisionalModelColorContractDrift",
+                "#/runtime/journeys/5",
+            ],
         }),
     ];
     Ok(json!({

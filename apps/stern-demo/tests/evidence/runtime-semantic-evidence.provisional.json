@@ -17,6 +17,15 @@
     "provisionalGraphContractDrift": [
       "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
       "apps/stern-demo/tests/public_consumer_contract.rs"
+    ],
+    "provisionalModelColorSourceDrift": [
+      "apps/stern-demo/src/app_model.rs",
+      "apps/stern-demo/src/edit_workspace.rs",
+      "apps/stern-demo/src/lib.rs"
+    ],
+    "provisionalModelColorContractDrift": [
+      "apps/stern-demo/tests/app_model_contract.rs",
+      "apps/stern-demo/tests/edit_workspace_screen_contract.rs"
     ]
   },
   "runtime": {
@@ -2861,7 +2870,7 @@
       "use stern::text::TextEditState;",
       "use stern::widgets::asset_browser::{",
       "use stern::widgets::dock::{DockScene, DockSceneConfig};",
-      "use stern::widgets::gradient_editor::{GradientEditorConfig, GradientInterpolationSpace};",
+      "use stern::widgets::gradient_editor::GradientEditorConfig;",
       "use stern::widgets::inspector::{",
       "use stern::widgets::{",
       "use stern::core::{",
@@ -3019,6 +3028,8 @@
       ],
       "evidenceRefs": [
         "#/source/provisionalGraphContractDrift",
+        "#/source/provisionalModelColorSourceDrift",
+        "#/source/provisionalModelColorContractDrift",
         "#/runtime/journeys/5"
       ]
     }
