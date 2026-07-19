@@ -26,6 +26,15 @@
     "provisionalModelColorContractDrift": [
       "apps/stern-demo/tests/app_model_contract.rs",
       "apps/stern-demo/tests/edit_workspace_screen_contract.rs"
+    ],
+    "provisionalTimelineSourceDrift": [
+      "apps/stern-demo/src/app_model.rs",
+      "apps/stern-demo/src/edit_workspace.rs",
+      "apps/stern-demo/src/lib.rs",
+      "apps/stern-demo/src/timeline_workspace.rs"
+    ],
+    "provisionalTimelineContractDrift": [
+      "apps/stern-demo/tests/timeline_journey_contract.rs"
     ]
   },
   "runtime": {
@@ -3030,6 +3039,8 @@
         "#/source/provisionalGraphContractDrift",
         "#/source/provisionalModelColorSourceDrift",
         "#/source/provisionalModelColorContractDrift",
+        "#/source/provisionalTimelineSourceDrift",
+        "#/source/provisionalTimelineContractDrift",
         "#/runtime/journeys/5"
       ]
     }

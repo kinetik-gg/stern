@@ -7,6 +7,7 @@ use stern::core::{
 use stern::widgets::gradient_editor::{
     GradientEditorIntent, GradientEditorStop, GradientEditorStopId, GradientInterpolationSpace,
 };
+use stern::widgets::{TimelineFrame, TimelineFrameRate, TimelineTime, TransportControlIntent};
 use stern_icons_phosphor as phosphor;
 
 const EDIT_ACTION: &str = "workspace.edit";
@@ -15,9 +16,223 @@ const APPLY_ACTION: &str = "shared.apply";
 const VIEWPORT_SELECT_ACTION: &str = "viewport.tool.select";
 const VIEWPORT_TRANSFORM_ACTION: &str = "viewport.tool.transform";
 const SAVE_COLOR_STYLE_ACTION: &str = "color-style.save";
+const PLAY_PAUSE_ACTION: &str = TransportControlIntent::PlayPause.default_action_id();
+const STOP_ACTION: &str = TransportControlIntent::Stop.default_action_id();
 
 const PRIMARY_STOP: GradientEditorStopId = GradientEditorStopId::from_raw(1);
 const SECONDARY_STOP: GradientEditorStopId = GradientEditorStopId::from_raw(2);
+
+const TIMELINE_FRAME_RATE: TimelineFrameRate = TimelineFrameRate::integer(30);
+const TIMELINE_FRAME_RANGE: (i64, i64) = (0, 240);
+const TIMELINE_CLIP_ID: u64 = 1;
+const TIMELINE_CLIP_LABEL: &str = "Hero clip";
+
+/// Explicit production scenario used to exercise diagnostic application journeys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DemoScenario {
+    /// Maintained integration-demo composition captured by issue #845.
+    #[default]
+    Default,
+    /// Application-owned timeline, transport, and feedback journey.
+    TimelineJourney,
+}
+
+impl DemoScenario {
+    /// Returns whether timeline journey additions should be projected.
+    #[must_use]
+    pub const fn has_timeline_journey(self) -> bool {
+        matches!(self, Self::TimelineJourney)
+    }
+}
+
+/// Application-owned playback state for the timeline transport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DemoTransportState {
+    /// Playback is inactive at the current committed frame.
+    Stopped,
+    /// Playback is active.
+    Playing,
+    /// Playback is suspended and can resume from the same frame.
+    Paused,
+}
+
+impl DemoTransportState {
+    /// Returns the stable presentation label for status projection.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Stopped => "Stopped",
+            Self::Playing => "Playing",
+            Self::Paused => "Paused",
+        }
+    }
+}
+
+/// Stable application-owned keyframe metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DemoTimelineKeyframe {
+    id: u64,
+    frame: i64,
+    label: &'static str,
+}
+
+impl DemoTimelineKeyframe {
+    const fn new(id: u64, frame: i64, label: &'static str) -> Self {
+        Self { id, frame, label }
+    }
+
+    /// Returns the stable keyframe identity.
+    #[must_use]
+    pub const fn id(self) -> u64 {
+        self.id
+    }
+
+    /// Returns the keyframe position in application frames.
+    #[must_use]
+    pub const fn frame(self) -> i64 {
+        self.frame
+    }
+
+    /// Returns the application label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        self.label
+    }
+}
+
+/// One application-owned frame/time projection shared by timeline, viewport, and status surfaces.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DemoTimelinePosition {
+    frame: i64,
+    time: TimelineTime,
+}
+
+impl DemoTimelinePosition {
+    /// Returns the projected frame.
+    #[must_use]
+    pub const fn frame(self) -> i64 {
+        self.frame
+    }
+
+    /// Returns the exact time derived from the application frame rate.
+    #[must_use]
+    pub const fn time(self) -> TimelineTime {
+        self.time
+    }
+
+    /// Formats the shared projection for public metadata surfaces.
+    #[must_use]
+    pub fn label(self) -> String {
+        format!("Frame {} · {:.3} s", self.frame, self.time.seconds())
+    }
+}
+
+/// Read-only application-owned timeline scenario state.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DemoTimelineState {
+    frame_rate: TimelineFrameRate,
+    frame_range: (i64, i64),
+    committed_playhead_frame: i64,
+    preview_playhead_frame: Option<i64>,
+    clip_id: u64,
+    clip_label: &'static str,
+    committed_clip_frames: (i64, i64),
+    preview_clip_frames: Option<(i64, i64)>,
+    keyframes: Vec<DemoTimelineKeyframe>,
+    transport: DemoTransportState,
+}
+
+impl DemoTimelineState {
+    fn for_scenario(scenario: DemoScenario) -> Self {
+        let keyframes = if scenario.has_timeline_journey() {
+            vec![
+                DemoTimelineKeyframe::new(101, 36, "Position A"),
+                DemoTimelineKeyframe::new(102, 60, "Position B"),
+                DemoTimelineKeyframe::new(103, 84, "Position C"),
+            ]
+        } else {
+            Vec::new()
+        };
+        Self {
+            frame_rate: TIMELINE_FRAME_RATE,
+            frame_range: TIMELINE_FRAME_RANGE,
+            committed_playhead_frame: 24,
+            preview_playhead_frame: None,
+            clip_id: TIMELINE_CLIP_ID,
+            clip_label: TIMELINE_CLIP_LABEL,
+            committed_clip_frames: (30, 90),
+            preview_clip_frames: None,
+            keyframes,
+            transport: DemoTransportState::Stopped,
+        }
+    }
+
+    /// Returns the application frame rate.
+    #[must_use]
+    pub const fn frame_rate(&self) -> TimelineFrameRate {
+        self.frame_rate
+    }
+
+    /// Returns the inclusive application frame range.
+    #[must_use]
+    pub const fn frame_range(&self) -> (i64, i64) {
+        self.frame_range
+    }
+
+    /// Returns the stable application clip identity.
+    #[must_use]
+    pub const fn clip_id(&self) -> u64 {
+        self.clip_id
+    }
+
+    /// Returns the application clip label.
+    #[must_use]
+    pub const fn clip_label(&self) -> &'static str {
+        self.clip_label
+    }
+
+    /// Returns the projected clip range, including an active preview.
+    #[must_use]
+    pub const fn clip_frames(&self) -> (i64, i64) {
+        match self.preview_clip_frames {
+            Some(range) => range,
+            None => self.committed_clip_frames,
+        }
+    }
+
+    /// Returns the committed clip range.
+    #[must_use]
+    pub const fn committed_clip_frames(&self) -> (i64, i64) {
+        self.committed_clip_frames
+    }
+
+    /// Returns stable keyframes in application presentation order.
+    #[must_use]
+    pub fn keyframes(&self) -> &[DemoTimelineKeyframe] {
+        &self.keyframes
+    }
+
+    /// Returns the current application-owned transport state.
+    #[must_use]
+    pub const fn transport(&self) -> DemoTransportState {
+        self.transport
+    }
+
+    /// Returns one exact frame/time projection from the current preview or commit.
+    #[must_use]
+    pub fn position(&self) -> DemoTimelinePosition {
+        let frame = match self.preview_playhead_frame {
+            Some(frame) => frame,
+            None => self.committed_playhead_frame,
+        };
+        DemoTimelinePosition {
+            frame,
+            time: self
+                .frame_rate
+                .frame_to_time(TimelineFrame::from_raw(frame)),
+        }
+    }
+}
 
 /// Color value paired with the color space required for serialization.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -143,13 +358,11 @@ impl DemoWorkspace {
 /// Shared deterministic application model used by every demo workspace.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoApplicationModel {
+    scenario: DemoScenario,
     workspace: DemoWorkspace,
     applied_revision: u32,
     apply_availability: DemoActionAvailability,
-    committed_playhead_frame: i64,
-    preview_playhead_frame: Option<i64>,
-    committed_clip_frames: (i64, i64),
-    preview_clip_frames: Option<(i64, i64)>,
+    timeline: DemoTimelineState,
     viewport_tool: DemoViewportTool,
     job_phase: DemoJobPhase,
     job_progress_percent: u8,
@@ -165,14 +378,18 @@ impl DemoApplicationModel {
     /// Creates the deterministic initial application state.
     #[must_use]
     pub fn new() -> Self {
+        Self::for_scenario(DemoScenario::Default)
+    }
+
+    /// Creates deterministic state for an explicit production journey scenario.
+    #[must_use]
+    pub fn for_scenario(scenario: DemoScenario) -> Self {
         Self {
+            scenario,
             workspace: DemoWorkspace::Edit,
             applied_revision: 0,
             apply_availability: DemoActionAvailability::Available,
-            committed_playhead_frame: 24,
-            preview_playhead_frame: None,
-            committed_clip_frames: (30, 90),
-            preview_clip_frames: None,
+            timeline: DemoTimelineState::for_scenario(scenario),
             viewport_tool: DemoViewportTool::Select,
             job_phase: DemoJobPhase::Running,
             job_progress_percent: 40,
@@ -191,6 +408,18 @@ impl DemoApplicationModel {
             serialized_color_style: None,
             color_overlay_notice: None,
         }
+    }
+
+    /// Returns the explicit application scenario.
+    #[must_use]
+    pub const fn scenario(&self) -> DemoScenario {
+        self.scenario
+    }
+
+    /// Returns read-only application-owned timeline state.
+    #[must_use]
+    pub const fn timeline(&self) -> &DemoTimelineState {
+        &self.timeline
     }
 
     /// Returns the active workspace.
@@ -219,63 +448,66 @@ impl DemoApplicationModel {
     /// Returns the playhead frame currently projected to the timeline.
     #[must_use]
     pub const fn playhead_frame(&self) -> i64 {
-        match self.preview_playhead_frame {
+        match self.timeline.preview_playhead_frame {
             Some(frame) => frame,
-            None => self.committed_playhead_frame,
+            None => self.timeline.committed_playhead_frame,
         }
     }
 
     /// Returns the committed playhead frame.
     #[must_use]
     pub const fn committed_playhead_frame(&self) -> i64 {
-        self.committed_playhead_frame
+        self.timeline.committed_playhead_frame
     }
 
     /// Stages a playhead preview without committing application state.
     pub const fn preview_playhead(&mut self, frame: i64) {
-        self.preview_playhead_frame = Some(frame);
+        self.timeline.preview_playhead_frame = Some(frame);
     }
 
     /// Commits a playhead frame and closes its preview transaction.
     pub const fn commit_playhead(&mut self, frame: i64) {
-        self.committed_playhead_frame = frame;
-        self.preview_playhead_frame = None;
+        self.timeline.committed_playhead_frame = frame;
+        self.timeline.preview_playhead_frame = None;
     }
 
     /// Cancels the current playhead preview.
     pub const fn cancel_playhead_preview(&mut self) {
-        self.preview_playhead_frame = None;
+        self.timeline.preview_playhead_frame = None;
     }
 
     /// Returns the clip range currently projected to the timeline.
     #[must_use]
     pub const fn clip_frames(&self) -> (i64, i64) {
-        match self.preview_clip_frames {
-            Some(range) => range,
-            None => self.committed_clip_frames,
-        }
+        self.timeline.clip_frames()
     }
 
     /// Returns the committed clip range.
     #[must_use]
     pub const fn committed_clip_frames(&self) -> (i64, i64) {
-        self.committed_clip_frames
+        self.timeline.committed_clip_frames()
     }
 
     /// Stages a validated clip preview without committing application state.
     pub const fn preview_clip(&mut self, start: i64, end: i64) {
-        self.preview_clip_frames = Some((start, end));
+        self.timeline.preview_clip_frames = Some((start, end));
     }
 
     /// Commits a validated clip range and closes its preview transaction.
     pub const fn commit_clip(&mut self, start: i64, end: i64) {
-        self.committed_clip_frames = (start, end);
-        self.preview_clip_frames = None;
+        self.timeline.committed_clip_frames = (start, end);
+        self.timeline.preview_clip_frames = None;
     }
 
     /// Cancels the current clip preview.
     pub const fn cancel_clip_preview(&mut self) {
-        self.preview_clip_frames = None;
+        self.timeline.preview_clip_frames = None;
+    }
+
+    /// Returns the application-owned transport state.
+    #[must_use]
+    pub const fn transport_state(&self) -> DemoTransportState {
+        self.timeline.transport()
     }
 
     /// Returns the active application-owned viewport tool.
@@ -446,6 +678,17 @@ impl DemoApplicationModel {
             VIEWPORT_SELECT_ACTION => self.viewport_tool = DemoViewportTool::Select,
             VIEWPORT_TRANSFORM_ACTION => self.viewport_tool = DemoViewportTool::Transform,
             SAVE_COLOR_STYLE_ACTION => self.save_color_style(),
+            PLAY_PAUSE_ACTION if self.scenario.has_timeline_journey() => {
+                self.timeline.transport = match self.timeline.transport {
+                    DemoTransportState::Playing => DemoTransportState::Paused,
+                    DemoTransportState::Stopped | DemoTransportState::Paused => {
+                        DemoTransportState::Playing
+                    }
+                };
+            }
+            STOP_ACTION if self.scenario.has_timeline_journey() => {
+                self.timeline.transport = DemoTransportState::Stopped;
+            }
             _ => return false,
         }
         true
@@ -475,12 +718,27 @@ impl Default for DemoApplicationModel {
 pub struct DemoActionRegistry {
     descriptors: [ActionDescriptor; 4],
     viewport_tools: [ActionDescriptor; 2],
+    transport: [ActionDescriptor; 2],
 }
 
 impl DemoActionRegistry {
     /// Creates the exact existing demo action set in stable order.
     #[must_use]
     pub fn new() -> Self {
+        Self::for_scenario(DemoScenario::Default)
+    }
+
+    /// Creates the action set for an explicit application journey scenario.
+    #[must_use]
+    pub fn for_scenario(scenario: DemoScenario) -> Self {
+        let mut play_pause = TransportControlIntent::PlayPause.default_action_descriptor();
+        play_pause.icon = Some(phosphor::regular::PLAY.icon());
+        play_pause.state.visible = scenario.has_timeline_journey();
+        play_pause.state.checked = Some(false);
+        let mut stop = TransportControlIntent::Stop.default_action_descriptor();
+        stop.icon = Some(phosphor::regular::STOP.icon());
+        stop.state.visible = scenario.has_timeline_journey();
+        stop.state.enabled = false;
         Self {
             descriptors: [
                 ActionDescriptor::new(EDIT_ACTION, "Edit Workspace")
@@ -505,6 +763,7 @@ impl DemoActionRegistry {
                     false,
                 ),
             ],
+            transport: [play_pause, stop],
         }
     }
 
@@ -551,10 +810,33 @@ impl DemoActionRegistry {
         &self.viewport_tools[1]
     }
 
+    /// Returns the canonical public play/pause transport action.
+    #[must_use]
+    pub const fn transport_play_pause(&self) -> &ActionDescriptor {
+        &self.transport[0]
+    }
+
+    /// Returns the canonical public stop transport action.
+    #[must_use]
+    pub const fn transport_stop(&self) -> &ActionDescriptor {
+        &self.transport[1]
+    }
+
     /// Synchronizes checked tool presentation from application state.
     pub const fn project_viewport_tool(&mut self, active: DemoViewportTool) {
         self.viewport_tools[0].state.checked = Some(matches!(active, DemoViewportTool::Select));
         self.viewport_tools[1].state.checked = Some(matches!(active, DemoViewportTool::Transform));
+    }
+
+    /// Synchronizes public transport action state from application playback state.
+    pub fn project_transport_state(&mut self, state: DemoTransportState) {
+        self.transport[0].state.checked = Some(matches!(state, DemoTransportState::Playing));
+        self.transport[0].label = if matches!(state, DemoTransportState::Playing) {
+            "Pause".to_owned()
+        } else {
+            "Play".to_owned()
+        };
+        self.transport[1].state.enabled = !matches!(state, DemoTransportState::Stopped);
     }
 
     /// Builds the application-owned shortcut router from the shared descriptors.

@@ -20,7 +20,8 @@ use overlay_workspace::SharedOverlayRoute;
 
 pub use app_model::{
     DemoActionAvailability, DemoActionRegistry, DemoApplicationModel, DemoColorSaveState,
-    DemoJobPhase, DemoTaggedColor, DemoTaggedColorStyle, DemoViewportTool, DemoWorkspace,
+    DemoJobPhase, DemoScenario, DemoTaggedColor, DemoTaggedColorStyle, DemoTimelineKeyframe,
+    DemoTimelinePosition, DemoTimelineState, DemoTransportState, DemoViewportTool, DemoWorkspace,
 };
 pub use graph_workspace::{GraphConnectionFeedback, GraphWorkspaceState};
 
@@ -41,14 +42,46 @@ impl DemoApp {
     /// Creates the deterministic baseline fixture.
     #[must_use]
     pub fn new() -> Self {
+        Self::for_scenario(DemoScenario::Default)
+    }
+
+    /// Creates the demo with explicit production journey diagnostics enabled.
+    #[must_use]
+    pub fn for_scenario(scenario: DemoScenario) -> Self {
+        let model = DemoApplicationModel::for_scenario(scenario);
+        let edit_workspace = EditWorkspace::new(&model);
         Self {
             ui_state: UiState::new(),
-            model: DemoApplicationModel::new(),
-            actions: DemoActionRegistry::new(),
-            edit_workspace: EditWorkspace::new(),
+            model,
+            actions: DemoActionRegistry::for_scenario(scenario),
+            edit_workspace,
             graph_workspace: GraphWorkspaceState::new(),
             overlays: SharedOverlayRoute::new(),
         }
+    }
+
+    /// Returns the explicit application scenario.
+    #[must_use]
+    pub const fn scenario(&self) -> DemoScenario {
+        self.model.scenario()
+    }
+
+    /// Returns read-only application-owned timeline state.
+    #[must_use]
+    pub const fn timeline(&self) -> &DemoTimelineState {
+        self.model.timeline()
+    }
+
+    /// Returns the exact shared frame/time projection.
+    #[must_use]
+    pub fn timeline_position(&self) -> DemoTimelinePosition {
+        self.model.timeline().position()
+    }
+
+    /// Returns the application-owned playback state.
+    #[must_use]
+    pub const fn transport_state(&self) -> DemoTransportState {
+        self.model.transport_state()
     }
 
     /// Returns the active application workspace.
@@ -190,6 +223,8 @@ impl DemoApp {
         let workspace = self.model.workspace();
         let bounds = context.viewport.logical_size;
         let theme = default_dark_theme();
+        self.actions
+            .project_transport_state(self.model.transport_state());
         let shortcut_enabled = !self.overlays.is_open();
         let focus_return;
         let mut output = {

@@ -29,9 +29,10 @@ use stern::widgets::{
 
 use crate::overlay_workspace::SharedOverlayRoute;
 use crate::timeline_workspace::{
-    TimelineWorkspace, apply_timeline_output, compose_tool_actions, declare_tool_actions,
-    prepare_feedback, prepare_timeline, timeline_feedback_rects, viewport_actions,
-    viewport_content_rect, viewport_tool_rects,
+    TimelineWorkspace, apply_timeline_output, compose_tool_actions, compose_transport_actions,
+    declare_tool_actions, declare_transport_actions, prepare_feedback, prepare_timeline,
+    timeline_feedback_rects, timeline_transport_layout, viewport_actions, viewport_content_rect,
+    viewport_tool_rects,
 };
 use crate::{DemoActionRegistry, DemoApplicationModel, DemoWorkspace};
 
@@ -166,7 +167,7 @@ pub(crate) struct EditWorkspace {
 }
 
 impl EditWorkspace {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(application: &DemoApplicationModel) -> Self {
         let assets = asset_records();
         let model = asset_browser_model(&assets);
         let mut asset_browser = AssetBrowserState::new();
@@ -185,7 +186,7 @@ impl EditWorkspace {
             asset_browser,
             opacity_drafts,
             inspector_picker: InspectorPickerState::new(),
-            timeline: TimelineWorkspace::new(),
+            timeline: TimelineWorkspace::new(application),
             texture: viewport_texture(),
         }
     }
@@ -259,6 +260,8 @@ impl EditWorkspace {
         });
         let tool_root = panel_widget_id(&dock_scene, VIEWPORT_PANEL)
             .map(|panel| ui.make_id(("dock-panel-content", panel.raw())));
+        let timeline_root = panel_widget_id(&dock_scene, TIMELINE_PANEL)
+            .map(|panel| ui.make_id(("dock-panel-content", panel.raw())));
         let inspector_rows = self
             .assets
             .iter()
@@ -271,29 +274,42 @@ impl EditWorkspace {
         let tool_rects = viewport_bounds.map(viewport_tool_rects);
         let viewport = viewport_bounds.map(|rect| {
             let id = WidgetId::from_key("edit-workspace.viewport");
-            ui.prepare_viewport_widget(
-                ViewportWidgetConfig::new(
-                    id,
-                    ViewportSurface {
-                        texture: VIEWPORT_TEXTURE,
-                        source_size: Size::new(1280.0, 720.0),
-                        bounds: viewport_content_rect(rect),
-                        pan_zoom: self.timeline.pan_zoom,
-                    },
-                )
-                .with_actions(viewport_actions(actions, id)),
+            let config = ViewportWidgetConfig::new(
+                id,
+                ViewportSurface {
+                    texture: VIEWPORT_TEXTURE,
+                    source_size: Size::new(1280.0, 720.0),
+                    bounds: viewport_content_rect(rect),
+                    pan_zoom: self.timeline.pan_zoom,
+                },
             )
+            .with_actions(viewport_actions(actions, id));
+            let config = if model.scenario().has_timeline_journey() {
+                config.with_label(format!(
+                    "Viewport · {}",
+                    model.timeline().position().label()
+                ))
+            } else {
+                config
+            };
+            ui.prepare_viewport_widget(config)
         });
         let viewport_scene = viewport
             .as_ref()
-            .map(|viewport| TimelineWorkspace::viewport_scene(ui, viewport, model.viewport_tool()));
-        let timeline_rects = timeline_bounds.map(timeline_feedback_rects);
+            .map(|viewport| TimelineWorkspace::viewport_scene(ui, viewport, model));
+        let timeline_transport = timeline_bounds
+            .filter(|_| model.scenario().has_timeline_journey())
+            .map(timeline_transport_layout);
+        let timeline_content_bounds =
+            timeline_transport.map_or(timeline_bounds, |(_, content)| Some(content));
+        let timeline_rects = timeline_content_bounds.map(timeline_feedback_rects);
         let timeline = timeline_rects.map(|(bounds, _)| {
             prepare_timeline(
                 ui,
                 bounds,
                 &self.timeline.descriptor,
                 &self.timeline.viewport_state,
+                model.timeline().frame_rate(),
             )
         });
         let feedback = timeline_rects.map(|(_, bounds)| {
@@ -319,6 +335,8 @@ impl EditWorkspace {
             tool_rects,
             tool_root,
             actions,
+            timeline_transport.map(|(rects, _)| rects),
+            timeline_root,
             timeline.as_ref(),
             feedback.as_ref(),
             inspector_grid_bounds,
@@ -341,6 +359,7 @@ impl EditWorkspace {
             viewport_scene.as_ref(),
             tool_rects,
             actions,
+            timeline_transport.map(|(rects, _)| rects),
             timeline.as_ref(),
             feedback.as_ref(),
             inspector_grid_bounds,
@@ -430,6 +449,8 @@ fn declare_workspace_targets(
     tool_rects: Option<[Rect; 2]>,
     tool_root: Option<WidgetId>,
     actions: &DemoActionRegistry,
+    transport_rects: Option<[Rect; 2]>,
+    timeline_root: Option<WidgetId>,
     timeline: Option<&stern::widgets::TimelineWidget<'_>>,
     feedback: Option<&stern::widgets::chrome::SystemFeedbackScene<'_>>,
     inspector_bounds: Option<Rect>,
@@ -459,6 +480,9 @@ fn declare_workspace_targets(
                 }
                 if let (Some(rects), Some(root)) = (tool_rects, tool_root) {
                     next = declare_tool_actions(plan, next, root, actions, rects);
+                }
+                if let (Some(rects), Some(root)) = (transport_rects, timeline_root) {
+                    next = declare_transport_actions(plan, next, root, actions, rects);
                 }
                 if let Some(timeline) = timeline {
                     next = timeline.declare_pointer_targets(plan, next);
@@ -506,6 +530,7 @@ fn compose_workspace_panels(
     viewport_scene: Option<&stern::widgets::ViewportToolScene>,
     tool_rects: Option<[Rect; 2]>,
     actions: &DemoActionRegistry,
+    transport_rects: Option<[Rect; 2]>,
     timeline: Option<&stern::widgets::TimelineWidget<'_>>,
     feedback: Option<&stern::widgets::chrome::SystemFeedbackScene<'_>>,
     inspector_bounds: Option<Rect>,
@@ -562,6 +587,9 @@ fn compose_workspace_panels(
             }
         }
         TIMELINE_PANEL => {
+            if let Some(rects) = transport_rects {
+                compose_transport_actions(ui, actions, rects);
+            }
             if let Some(timeline) = timeline {
                 let output = ui.timeline_widget_with_controllers(timeline, scrub, clip_edit);
                 apply_timeline_output(
@@ -753,6 +781,7 @@ fn chrome_config(layout: WorkspaceLayout, actions: &DemoActionRegistry) -> Chrom
         (ChromeSceneItemKey::Tab(PanelId::from_raw(102)), 140.0),
         (ChromeSceneItemKey::Status(StatusItemId::from_raw(1)), 152.0),
         (ChromeSceneItemKey::Status(StatusItemId::from_raw(2)), 168.0),
+        (ChromeSceneItemKey::Status(StatusItemId::from_raw(3)), 204.0),
     ];
     widths.extend(actions.iter().map(|action| {
         (

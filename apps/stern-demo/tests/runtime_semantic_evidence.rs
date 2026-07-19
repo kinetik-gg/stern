@@ -171,6 +171,10 @@ fn verifier_rejects_missing_gaps_or_unexpected_provisional_drift() {
         "record.source.provisionalModelColorContractDrift.push('README.md');",
         "unexpected-model-color-drift",
     );
+    assert_mutation_rejected(
+        "record.source.provisionalTimelineSourceDrift.push('README.md');",
+        "unexpected-timeline-drift",
+    );
 }
 
 fn generate(path: &Path) {
@@ -270,7 +274,9 @@ fn assert_provisional(path: &Path) {
         "r.source.provisionalGraphSourceDrift.length!==4||",
         "r.source.provisionalGraphContractDrift.length!==2||",
         "r.source.provisionalModelColorSourceDrift.length!==3||",
-        "r.source.provisionalModelColorContractDrift.length!==2)process.exit(1);",
+        "r.source.provisionalModelColorContractDrift.length!==2||",
+        "r.source.provisionalTimelineSourceDrift.length!==4||",
+        "r.source.provisionalTimelineContractDrift.length!==1)process.exit(1);",
     );
     let status = Command::new("node")
         .args(["-e", script, path.to_str().unwrap()])

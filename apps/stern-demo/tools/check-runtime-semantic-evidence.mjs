@@ -7,7 +7,7 @@ import { verifyEvidence as verifyRendererEvidence } from "../../../tools/capture
 import { verifyRecords as verifyPlatformRecords } from "./platform-smoke-record.mjs";
 
 const SPEC_SHA256 = "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed";
-const EXPECTED_PACKET_SHA256 = "b12b61acc4df78b568b4e2f1e0d23f9a7133f7c9a25a93b4722cc84b8f4a9d28";
+const EXPECTED_PACKET_SHA256 = "f144dac361674aa5cbedff473fd79d7a8aa30400c35d785232f6784441718d7e";
 const COMPONENTS = [
   "button", "text-field", "dropdown", "selection-controls", "value-controls",
   "progress-feedback", "overlay-system", "virtual-list", "editor-frame",
@@ -47,12 +47,14 @@ const CANDIDATE_EVIDENCE_DRIFT = [
   "apps/stern-demo/src/graph_workspace.rs",
   "apps/stern-demo/src/lib.rs",
   "apps/stern-demo/src/overlay_workspace.rs",
+  "apps/stern-demo/src/timeline_workspace.rs",
   "apps/stern-demo/tests/app_model_contract.rs",
   "apps/stern-demo/tests/edit_workspace_screen_contract.rs",
   "apps/stern-demo/tests/evidence/runtime-semantic-evidence.provisional.json",
   "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
   "apps/stern-demo/tests/public_consumer_contract.rs",
   "apps/stern-demo/tests/runtime_semantic_evidence.rs",
+  "apps/stern-demo/tests/timeline_journey_contract.rs",
   "apps/stern-demo/tools/audit.rs",
   "apps/stern-demo/tools/check-runtime-semantic-evidence.mjs",
   "apps/stern-demo/tools/color-evidence.rs",
@@ -79,6 +81,15 @@ const PROVISIONAL_MODEL_COLOR_SOURCE_DRIFT = [
 const PROVISIONAL_MODEL_COLOR_CONTRACT_DRIFT = [
   "apps/stern-demo/tests/app_model_contract.rs",
   "apps/stern-demo/tests/edit_workspace_screen_contract.rs",
+];
+const PROVISIONAL_TIMELINE_SOURCE_DRIFT = [
+  "apps/stern-demo/src/app_model.rs",
+  "apps/stern-demo/src/edit_workspace.rs",
+  "apps/stern-demo/src/lib.rs",
+  "apps/stern-demo/src/timeline_workspace.rs",
+];
+const PROVISIONAL_TIMELINE_CONTRACT_DRIFT = [
+  "apps/stern-demo/tests/timeline_journey_contract.rs",
 ];
 
 const options = parseArgs(process.argv.slice(2));
@@ -122,6 +133,10 @@ assertExact(evidence.source.provisionalModelColorSourceDrift, PROVISIONAL_MODEL_
   "provisional model/color production drift");
 assertExact(evidence.source.provisionalModelColorContractDrift, PROVISIONAL_MODEL_COLOR_CONTRACT_DRIFT,
   "provisional model/color contract drift");
+assertExact(evidence.source.provisionalTimelineSourceDrift, PROVISIONAL_TIMELINE_SOURCE_DRIFT,
+  "provisional timeline production drift");
+assertExact(evidence.source.provisionalTimelineContractDrift, PROVISIONAL_TIMELINE_CONTRACT_DRIFT,
+  "provisional timeline contract drift");
 const candidateDrift = git(
   "diff", "--name-only", evidence.source.commit, git("rev-parse", "HEAD^{commit}"),
 ).split(/\r?\n/u).filter(Boolean);
