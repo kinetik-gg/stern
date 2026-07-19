@@ -14,12 +14,13 @@ use stern::core::{
 };
 use stern::render::RenderResources;
 
+pub use edit_workspace::DemoSelectedAssetSnapshot;
 use edit_workspace::EditWorkspace;
 use overlay_workspace::SharedOverlayRoute;
 
 pub use app_model::{
-    DemoActionRegistry, DemoApplicationModel, DemoColorSaveState, DemoJobPhase, DemoTaggedColor,
-    DemoViewportTool, DemoWorkspace,
+    DemoActionAvailability, DemoActionRegistry, DemoApplicationModel, DemoColorSaveState,
+    DemoJobPhase, DemoTaggedColor, DemoTaggedColorStyle, DemoViewportTool, DemoWorkspace,
 };
 pub use graph_workspace::{GraphConnectionFeedback, GraphWorkspaceState};
 
@@ -68,6 +69,12 @@ impl DemoApp {
         self.model.tagged_color()
     }
 
+    /// Returns the unified application-owned tagged color style.
+    #[must_use]
+    pub const fn color_style(&self) -> &DemoTaggedColorStyle {
+        self.model.color_style()
+    }
+
     /// Returns the number of committed color-picker changes.
     #[must_use]
     pub const fn color_revision(&self) -> u32 {
@@ -86,6 +93,14 @@ impl DemoApp {
         &self,
     ) -> stern::widgets::gradient_editor::GradientEditorStopId {
         self.model.selected_gradient_stop()
+    }
+
+    /// Returns the explicit application-owned gradient interpolation space.
+    #[must_use]
+    pub const fn gradient_interpolation(
+        &self,
+    ) -> stern::widgets::gradient_editor::GradientInterpolationSpace {
+        self.model.gradient_interpolation()
     }
 
     /// Returns the latest application-owned color-style save outcome.
@@ -137,7 +152,16 @@ impl DemoApp {
 
     /// Enables or disables the shared action across every public projection.
     pub const fn set_apply_enabled(&mut self, enabled: bool) {
-        self.actions.set_apply_shared_state_enabled(enabled);
+        self.model.set_apply_availability(if enabled {
+            DemoActionAvailability::Available
+        } else {
+            DemoActionAvailability::Unavailable
+        });
+    }
+
+    /// Replaces the shared action availability across every public projection.
+    pub const fn set_apply_availability(&mut self, availability: DemoActionAvailability) {
+        self.model.set_apply_availability(availability);
     }
 
     /// Returns the application-owned Graph workspace state.
@@ -146,18 +170,26 @@ impl DemoApp {
         &self.graph_workspace
     }
 
+    /// Returns a read-only view over the selected canonical asset record.
+    #[must_use]
+    pub fn selected_asset(&self) -> Option<DemoSelectedAssetSnapshot<'_>> {
+        self.edit_workspace.selected_asset()
+    }
+
     /// Builds and dispatches one frame through public toolkit APIs.
     pub fn frame(&mut self, context: FrameContext) -> FrameOutput {
         let keyboard = context.input.keyboard.clone();
         let logical_size = context.viewport.logical_size;
+        self.actions
+            .project_apply_shared_state(self.model.apply_availability());
+        self.actions
+            .project_viewport_tool(self.model.viewport_tool());
         let edit = self.actions.edit_workspace().clone();
         let graph = self.actions.graph_workspace().clone();
         let apply = self.actions.apply_shared_state().clone();
         let workspace = self.model.workspace();
         let bounds = context.viewport.logical_size;
         let theme = default_dark_theme();
-        self.actions
-            .project_viewport_tool(self.model.viewport_tool());
         let shortcut_enabled = !self.overlays.is_open();
         let focus_return;
         let mut output = {

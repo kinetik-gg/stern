@@ -11,8 +11,8 @@ use stern::core::{
 use stern::render::RenderDiagnostic;
 use stern::widgets::node_graph::{EdgeId, NodeId, PortEndpoint, PortId};
 use stern_demo::{
-    DemoApp, DemoColorSaveState, DemoJobPhase, DemoViewportTool, DemoWorkspace,
-    GraphConnectionFeedback, demo_context,
+    DemoActionAvailability, DemoApp, DemoColorSaveState, DemoJobPhase, DemoViewportTool,
+    DemoWorkspace, GraphConnectionFeedback, demo_context,
 };
 
 const REQUIRED_IDS: &str = concat!(
@@ -192,6 +192,39 @@ fn dock_ids_remain_stable_across_resize_and_focus() {
 }
 
 #[test]
+fn selected_asset_snapshot_reads_the_canonical_record_with_stable_identity() {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let initial_snapshot = app.selected_asset().expect("initial selected asset");
+    assert_eq!(initial_snapshot.item_id.raw(), 1);
+    assert_eq!(initial_snapshot.name, "Backdrop");
+
+    let selected = click(&mut app, &initial, &SemanticRole::ListItem, "Character");
+    let item_semantic_id = node(&selected, &SemanticRole::ListItem, "Character").id;
+    let selected_snapshot = app.selected_asset().expect("selected asset");
+    let selected_item_id = selected_snapshot.item_id;
+    assert_eq!(selected_snapshot.item_id.raw(), 2);
+    assert_eq!(selected_snapshot.name, "Character");
+    assert_eq!(selected_snapshot.kind, "Vector layer");
+    assert!(selected_snapshot.visible);
+    assert_eq!(selected_snapshot.opacity.to_bits(), 0.9_f32.to_bits());
+
+    let _ = app.frame(demo_context(key(Key::Function(2))));
+    let _ = app.frame(demo_context(select_all()));
+    let _ = app.frame(demo_context(typed("Hero")));
+    let _ = app.frame(demo_context(key(Key::Enter)));
+    let renamed = app.frame(demo_context(UiInput::default()));
+    let renamed_snapshot = app.selected_asset().expect("renamed selected asset");
+    assert_eq!(renamed_snapshot.item_id, selected_item_id);
+    assert_eq!(renamed_snapshot.name, "Hero");
+    assert_eq!(
+        node(&renamed, &SemanticRole::ListItem, "Hero").id,
+        item_semantic_id
+    );
+    assert!(has_description(&renamed, "Hero", "Vector layer"));
+}
+
+#[test]
 fn shared_menu_escape_and_outside_press_preserve_focus_owner() {
     let mut app = DemoApp::new();
     let initial = app.frame(demo_context(UiInput::default()));
@@ -217,6 +250,12 @@ fn shared_menu_escape_and_outside_press_preserve_focus_owner() {
 }
 
 #[test]
+fn shared_action_unavailable_and_hidden_states_are_inert_on_every_surface() {
+    assert!(unavailable_projection_evidence());
+    assert!(hidden_projection_evidence());
+}
+
+#[test]
 fn color_picker_and_gradient_editor_execute_public_commit_lifecycles() {
     let evidence = color_gradient_evidence();
     assert_eq!(
@@ -227,6 +266,40 @@ fn color_picker_and_gradient_editor_execute_public_commit_lifecycles() {
         ),
         (true, true, true),
     );
+}
+
+#[test]
+fn color_picker_escape_and_outside_cancel_restore_exact_style_and_focus() {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let trigger = node(&initial, &SemanticRole::Button, "Fill color").id;
+    let original = app.color_style().clone();
+
+    let _ = click(&mut app, &initial, &SemanticRole::Button, "Fill color");
+    let picker = app.frame(demo_context(UiInput::default()));
+    let _ = click(&mut app, &picker, &SemanticRole::Button, "Increase Red");
+    let _ = app.frame(demo_context(key(Key::Escape)));
+    let escaped = app.frame(demo_context(UiInput::default()));
+    assert_eq!(app.color_style(), &original);
+    assert_eq!(app.color_revision(), 0);
+    assert_eq!(app.focused(), Some(trigger));
+    assert!(!has_custom_role(&escaped, "color-picker"));
+
+    let _ = click(&mut app, &escaped, &SemanticRole::Button, "Fill color");
+    let picker = app.frame(demo_context(UiInput::default()));
+    let _ = click(&mut app, &picker, &SemanticRole::Button, "Increase Green");
+    let outside = Point::new(350.0, 10.0);
+    assert!(
+        !custom_node(&picker, "color-picker", "Color picker")
+            .bounds
+            .contains_point(outside)
+    );
+    let _ = app.frame(demo_context(primary_release(outside)));
+    let cancelled = app.frame(demo_context(UiInput::default()));
+    assert_eq!(app.color_style(), &original);
+    assert_eq!(app.color_revision(), 0);
+    assert_eq!(app.focused(), Some(trigger));
+    assert!(!has_custom_role(&cancelled, "color-picker"));
 }
 
 #[test]
@@ -1010,23 +1083,36 @@ fn shared_action_evidence() -> SharedActionEvidence {
             && context_exact
             && shortcut_exact
             && palette_exact,
-        disabled_consistent: disabled_projection_evidence(),
+        disabled_consistent: unavailable_projection_evidence() && hidden_projection_evidence(),
     }
 }
 
-fn disabled_projection_evidence() -> bool {
+fn unavailable_projection_evidence() -> bool {
     let mut app = DemoApp::new();
-    app.set_apply_enabled(false);
+    app.set_apply_availability(DemoActionAvailability::Unavailable);
     let initial = app.frame(demo_context(UiInput::default()));
     let toolbar = node(&initial, &SemanticRole::IconButton, "Apply Shared State")
         .state
         .disabled;
+    let toolbar_action = click(
+        &mut app,
+        &initial,
+        &SemanticRole::IconButton,
+        "Apply Shared State",
+    );
 
-    let _ = click(&mut app, &initial, &SemanticRole::MenuItem, "Workspace");
+    let base = app.frame(demo_context(UiInput::default()));
+    let _ = click(&mut app, &base, &SemanticRole::MenuItem, "Workspace");
     let menu = app.frame(demo_context(UiInput::default()));
     let menu_disabled = node(&menu, &SemanticRole::MenuItem, "Apply Shared State")
         .state
         .disabled;
+    let menu_action = click(
+        &mut app,
+        &menu,
+        &SemanticRole::MenuItem,
+        "Apply Shared State",
+    );
     let _ = app.frame(demo_context(key(Key::Escape)));
 
     let context_base = app.frame(demo_context(UiInput::default()));
@@ -1039,6 +1125,12 @@ fn disabled_projection_evidence() -> bool {
     let context_disabled = node(&context, &SemanticRole::MenuItem, "Apply Shared State")
         .state
         .disabled;
+    let context_action = click(
+        &mut app,
+        &context,
+        &SemanticRole::MenuItem,
+        "Apply Shared State",
+    );
     let _ = app.frame(demo_context(key(Key::Escape)));
 
     let palette = app.frame(demo_context(key_with_modifiers(
@@ -1059,6 +1151,52 @@ fn disabled_projection_evidence() -> bool {
         && menu_disabled
         && context_disabled
         && palette_disabled
+        && action_count(&toolbar_action, "shared.apply") == 0
+        && action_count(&menu_action, "shared.apply") == 0
+        && action_count(&context_action, "shared.apply") == 0
+        && action_count(&palette_action, "shared.apply") == 0
+        && action_count(&shortcut, "shared.apply") == 0
+        && app.applied_revision() == 0
+}
+
+fn hidden_projection_evidence() -> bool {
+    let mut app = DemoApp::new();
+    app.set_apply_availability(DemoActionAvailability::Hidden);
+    let initial = app.frame(demo_context(UiInput::default()));
+    let toolbar_hidden = !has_node(&initial, &SemanticRole::IconButton, "Apply Shared State");
+
+    let _ = click(&mut app, &initial, &SemanticRole::MenuItem, "Workspace");
+    let menu = app.frame(demo_context(UiInput::default()));
+    let menu_hidden = !has_node(&menu, &SemanticRole::MenuItem, "Apply Shared State");
+    let _ = app.frame(demo_context(key(Key::Escape)));
+
+    let context_base = app.frame(demo_context(UiInput::default()));
+    let context_point = node(&context_base, &SemanticRole::Viewport, "Viewport")
+        .bounds
+        .center();
+    let _ = app.frame(demo_context(secondary(context_point, true, true, false)));
+    let _ = app.frame(demo_context(secondary(context_point, false, false, true)));
+    let context = app.frame(demo_context(UiInput::default()));
+    let context_hidden = !has_node(&context, &SemanticRole::MenuItem, "Apply Shared State");
+    let _ = app.frame(demo_context(key(Key::Escape)));
+
+    let palette = app.frame(demo_context(key_with_modifiers(
+        Key::Character("p".to_owned()),
+        Modifiers::new(true, true, false, false),
+    )));
+    let palette_hidden = has_role(&palette, &SemanticRole::SearchField)
+        && !has_node(&palette, &SemanticRole::MenuItem, "Apply Shared State");
+    let palette_action = app.frame(demo_context(key(Key::Enter)));
+    let _ = app.frame(demo_context(key(Key::Escape)));
+    let shortcut = app.frame(demo_context(key_with_modifiers(
+        Key::Enter,
+        Modifiers::new(false, true, false, false),
+    )));
+
+    toolbar_hidden
+        && menu_hidden
+        && context_hidden
+        && palette_hidden
         && action_count(&palette_action, "shared.apply") == 0
         && action_count(&shortcut, "shared.apply") == 0
         && app.applied_revision() == 0
@@ -1275,6 +1413,14 @@ fn has_label(output: &FrameOutput, label: &str) -> bool {
         .any(|node| node.label.as_deref() == Some(label))
 }
 
+fn has_node(output: &FrameOutput, role: &SemanticRole, label: &str) -> bool {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .any(|node| &node.role == role && node.label.as_deref() == Some(label))
+}
+
 fn has_labels(output: &FrameOutput, labels: &str) -> bool {
     labels.split('|').all(|label| has_label(output, label))
 }
@@ -1459,6 +1605,10 @@ fn graph_connection_move(from: Point, to: Point) -> UiInput {
 }
 
 fn graph_connection_release(point: Point) -> UiInput {
+    primary_release(point)
+}
+
+fn primary_release(point: Point) -> UiInput {
     let mut input = UiInput::default();
     input.push_event(UiInputEvent::PointerButton {
         button: MouseButton::Primary,

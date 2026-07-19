@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use stern::core::{
-    ActionContext, ActionInvocation, ActionSource, Axis, PointerOrder, PointerTarget,
-    PointerTargetPlan, Rect, Size, TextureId, UiInput, WidgetId,
+    ActionContext, ActionInvocation, ActionSource, Axis, MouseButton, PointerOrder, PointerTarget,
+    PointerTargetPlan, Rect, Size, TextureId, UiInput, UiInputEvent, WidgetId,
 };
 use stern::render::{RenderImage, RenderImageSampling, RenderResources, TextureResource};
 use stern::text::TextEditState;
@@ -11,7 +11,7 @@ use stern::widgets::asset_browser::{
     AssetBrowserRequest, AssetBrowserState, AssetBrowserViewMode,
 };
 use stern::widgets::dock::{DockScene, DockSceneConfig};
-use stern::widgets::gradient_editor::{GradientEditorConfig, GradientInterpolationSpace};
+use stern::widgets::gradient_editor::GradientEditorConfig;
 use stern::widgets::inspector::{
     InspectorPickerCommit, InspectorPickerState, PropertyGridConfig, PropertyGridIntent,
     property_grid_row_affordance_rects, property_grid_row_widget_id, property_grid_value_widget_id,
@@ -127,6 +127,33 @@ impl AssetRecord {
     }
 }
 
+/// Read-only view over the selected canonical application asset record.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DemoSelectedAssetSnapshot<'a> {
+    /// Stable collection item identity.
+    pub item_id: ItemId,
+    /// Current application-owned asset name.
+    pub name: &'a str,
+    /// Current application-owned kind label.
+    pub kind: &'static str,
+    /// Current application-owned visibility value.
+    pub visible: bool,
+    /// Current application-owned opacity value.
+    pub opacity: f32,
+}
+
+impl<'a> From<&'a AssetRecord> for DemoSelectedAssetSnapshot<'a> {
+    fn from(asset: &'a AssetRecord) -> Self {
+        Self {
+            item_id: asset.id,
+            name: &asset.name,
+            kind: asset.kind.label(),
+            visible: asset.visible,
+            opacity: asset.opacity,
+        }
+    }
+}
+
 /// Retained public Stern state for the deterministic Edit workspace fixture.
 pub(crate) struct EditWorkspace {
     dock: Dock,
@@ -161,6 +188,13 @@ impl EditWorkspace {
             timeline: TimelineWorkspace::new(),
             texture: viewport_texture(),
         }
+    }
+
+    pub(crate) fn selected_asset(&self) -> Option<DemoSelectedAssetSnapshot<'_>> {
+        self.assets
+            .iter()
+            .find(|asset| asset.selected)
+            .map(DemoSelectedAssetSnapshot::from)
     }
 
     #[allow(clippy::too_many_lines)]
@@ -297,6 +331,7 @@ impl EditWorkspace {
             overlays.scene(),
             picker_scene.as_ref(),
         );
+        resolve_picker_outside_before_lower_ui(ui, &mut self.inspector_picker);
 
         compose_workspace_panels(
             ui,
@@ -338,6 +373,37 @@ impl EditWorkspace {
 
     pub(crate) fn register_resources(&self, resources: &mut RenderResources) {
         resources.register_texture(self.texture.clone());
+    }
+}
+
+fn resolve_picker_outside_before_lower_ui(ui: &mut Ui<'_>, picker: &mut InspectorPickerState) {
+    let Some(bounds) = picker
+        .scene()
+        .map(stern::widgets::inspector::InspectorPickerScene::bounds)
+    else {
+        return;
+    };
+    let input = ui.input();
+    let release = if input.events.is_empty() {
+        input
+            .pointer
+            .primary
+            .released
+            .then_some(input.pointer.position)
+            .flatten()
+    } else {
+        input.events.iter().rev().find_map(|event| match event {
+            UiInputEvent::PointerButton {
+                button: MouseButton::Primary,
+                down: false,
+                position,
+                ..
+            } => (*position).or(input.pointer.position),
+            _ => None,
+        })
+    };
+    if release.is_some_and(|point| !bounds.contains_point(point)) {
+        let _ = ui.inspector_picker_scene(picker);
     }
 }
 
@@ -984,7 +1050,7 @@ fn compose_gradient_editor(
     model: &mut DemoApplicationModel,
 ) {
     let stops = model.gradient_stops().to_vec();
-    let config = GradientEditorConfig::new(id, bounds, GradientInterpolationSpace::Srgb, &stops)
+    let config = GradientEditorConfig::new(id, bounds, model.gradient_interpolation(), &stops)
         .selected_stop(model.selected_gradient_stop());
     let widget = ui
         .prepare_gradient_editor(config)

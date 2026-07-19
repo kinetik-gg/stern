@@ -161,11 +161,15 @@ fn verifier_rejects_provisional_packet_claiming_final_or_passed() {
 }
 
 #[test]
-fn verifier_rejects_missing_gaps_or_unexpected_graph_drift() {
+fn verifier_rejects_missing_gaps_or_unexpected_provisional_drift() {
     assert_mutation_rejected("record.knownGaps = [];", "provisional-gaps-omitted");
     assert_mutation_rejected(
         "record.source.provisionalGraphSourceDrift.push('README.md');",
         "unexpected-graph-drift",
+    );
+    assert_mutation_rejected(
+        "record.source.provisionalModelColorContractDrift.push('README.md');",
+        "unexpected-model-color-drift",
     );
 }
 
@@ -264,7 +268,9 @@ fn assert_provisional(path: &Path) {
         "r.rendererEvidence.provenance!=='prior-baseline'||",
         "r.rendererEvidence.currentGraphLayoutStatus!=='pending'||",
         "r.source.provisionalGraphSourceDrift.length!==4||",
-        "r.source.provisionalGraphContractDrift.length!==2)process.exit(1);",
+        "r.source.provisionalGraphContractDrift.length!==2||",
+        "r.source.provisionalModelColorSourceDrift.length!==3||",
+        "r.source.provisionalModelColorContractDrift.length!==2)process.exit(1);",
     );
     let status = Command::new("node")
         .args(["-e", script, path.to_str().unwrap()])

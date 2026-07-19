@@ -1,10 +1,10 @@
 //! Shared application model and action identity contract.
 
 use stern::core::{ActionContext, ActionDescriptor, ActionInvocation, ActionSource, Color};
-use stern::widgets::gradient_editor::GradientEditorIntent;
+use stern::widgets::gradient_editor::{GradientEditorIntent, GradientInterpolationSpace};
 use stern_demo::{
-    DemoActionRegistry, DemoApplicationModel, DemoColorSaveState, DemoJobPhase, DemoTaggedColor,
-    DemoViewportTool, DemoWorkspace,
+    DemoActionAvailability, DemoActionRegistry, DemoApplicationModel, DemoColorSaveState,
+    DemoJobPhase, DemoTaggedColor, DemoViewportTool, DemoWorkspace,
 };
 
 #[test]
@@ -30,6 +30,33 @@ fn shared_model_preserves_pinned_workspace_identity_and_revision() {
     assert!(model.execute(&invocation(registry.edit_workspace())));
     assert_eq!(model.workspace(), DemoWorkspace::Edit);
     assert_eq!(model.applied_revision(), 1);
+}
+
+#[test]
+fn shared_action_availability_is_application_owned_and_fail_closed() {
+    let mut registry = DemoActionRegistry::new();
+    let mut model = DemoApplicationModel::new();
+
+    for (availability, visible, enabled) in [
+        (DemoActionAvailability::Available, true, true),
+        (DemoActionAvailability::Unavailable, true, false),
+        (DemoActionAvailability::Hidden, false, false),
+    ] {
+        model.set_apply_availability(availability);
+        registry.project_apply_shared_state(model.apply_availability());
+        assert_eq!(registry.apply_shared_state().state.visible, visible);
+        assert_eq!(registry.apply_shared_state().state.enabled, enabled);
+
+        let revision = model.applied_revision();
+        assert_eq!(
+            model.execute(&invocation(registry.apply_shared_state())),
+            availability == DemoActionAvailability::Available
+        );
+        assert_eq!(
+            model.applied_revision(),
+            revision + u32::from(availability == DemoActionAvailability::Available)
+        );
+    }
 }
 
 #[test]
@@ -134,6 +161,7 @@ fn color_gradient_and_failed_save_remain_application_owned() {
     let registry = DemoActionRegistry::new();
     let mut model = DemoApplicationModel::new();
     let original_color = model.tagged_color();
+    let original_style = model.color_style().clone();
     let original_stops = model.gradient_stops().to_vec();
     let selected = model.selected_gradient_stop();
 
@@ -143,7 +171,21 @@ fn color_gradient_and_failed_save_remain_application_owned() {
         DemoTaggedColor::Srgb(Color::rgb8(12, 34, 56))
     );
     assert_ne!(model.tagged_color(), original_color);
+    assert_ne!(model.color_style(), &original_style);
     assert_eq!(model.color_revision(), 1);
+    assert_eq!(
+        model
+            .gradient_stops()
+            .iter()
+            .find(|stop| stop.id == selected)
+            .expect("selected stop")
+            .color,
+        model.tagged_color().color()
+    );
+    assert_eq!(
+        model.gradient_interpolation(),
+        GradientInterpolationSpace::Srgb
+    );
 
     model.apply_gradient_intents(&[GradientEditorIntent::MoveStop {
         id: selected,
@@ -159,6 +201,7 @@ fn color_gradient_and_failed_save_remain_application_owned() {
             .to_bits(),
         0.35_f32.to_bits()
     );
+
     model.apply_gradient_intents(&[GradientEditorIntent::Reverse]);
     assert_eq!(model.selected_gradient_stop(), selected);
     assert_eq!(
@@ -173,6 +216,22 @@ fn color_gradient_and_failed_save_remain_application_owned() {
             .map(|stop| stop.id)
             .collect::<Vec<_>>()
     );
+
+    let alternate = model
+        .gradient_stops()
+        .iter()
+        .find(|stop| stop.id != selected)
+        .expect("alternate stop")
+        .id;
+    model.apply_gradient_intents(&[GradientEditorIntent::SelectStop(alternate)]);
+    let alternate_color = model
+        .gradient_stops()
+        .iter()
+        .find(|stop| stop.id == alternate)
+        .expect("selected alternate stop")
+        .color;
+    assert_eq!(model.selected_gradient_stop(), alternate);
+    assert_eq!(model.tagged_color(), DemoTaggedColor::Srgb(alternate_color));
 
     assert!(model.execute(&invocation(registry.save_color_style())));
     assert_eq!(model.color_save_state(), DemoColorSaveState::Failed);
