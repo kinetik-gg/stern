@@ -1,0 +1,267 @@
+{
+  "schema_version": "1.0",
+  "issue": 845,
+  "capture_status": "final",
+  "source": {
+    "commit": "8aaa685e541d6b21edcee50d58e98dffefa62737",
+    "tree": "7a790e88cc63cdad92183ab135b99f79293a5cb1",
+    "guarded_paths": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "apps/stern-demo",
+      "crates/stern",
+      "crates/stern-core",
+      "crates/stern-render",
+      "crates/stern-text",
+      "crates/stern-vello",
+      "crates/stern-vello-winit",
+      "crates/stern-widgets",
+      "crates/stern-winit",
+      "tools/capture-demo-vello.mjs"
+    ]
+  },
+  "viewport": {
+    "logical_dimensions": [
+      960,
+      640
+    ]
+  },
+  "renderer": {
+    "name": "Vello",
+    "backend": "Dx12",
+    "adapter": "NVIDIA GeForce RTX 5080",
+    "vendor": 4318,
+    "device": 11266,
+    "driver": "32.0.15.9174",
+    "driver_info": "",
+    "device_type": "DiscreteGpu",
+    "texture_format": "Rgba8Unorm",
+    "antialiasing": "Area"
+  },
+  "artifacts": [
+    {
+      "workspace": "edit",
+      "scale": 1,
+      "scale_label": "1.00x",
+      "logical_dimensions": [
+        960,
+        640
+      ],
+      "physical_dimensions": [
+        960,
+        640
+      ],
+      "path": "edit/1.00x.png",
+      "renderer": "Vello",
+      "backend": "Dx12",
+      "byte_length": 342342,
+      "sha256": "808ad9f0e8c1176b0e4c4dc61125e3c60f3c1ac49088423e446af941a9881654"
+    },
+    {
+      "workspace": "edit",
+      "scale": 1.25,
+      "scale_label": "1.25x",
+      "logical_dimensions": [
+        960,
+        640
+      ],
+      "physical_dimensions": [
+        1200,
+        800
+      ],
+      "path": "edit/1.25x.png",
+      "renderer": "Vello",
+      "backend": "Dx12",
+      "byte_length": 516966,
+      "sha256": "21895f34dbcb0eeaf0dd60829ef9f85ecfb5191f25e418651e96809af03c8d79"
+    },
+    {
+      "workspace": "edit",
+      "scale": 1.5,
+      "scale_label": "1.50x",
+      "logical_dimensions": [
+        960,
+        640
+      ],
+      "physical_dimensions": [
+        1440,
+        960
+      ],
+      "path": "edit/1.50x.png",
+      "renderer": "Vello",
+      "backend": "Dx12",
+      "byte_length": 725396,
+      "sha256": "157371f68568eacc0c41c65990c12ac475b40913673bdbaaa105976d225fe762"
+    },
+    {
+      "workspace": "edit",
+      "scale": 2,
+      "scale_label": "2.00x",
+      "logical_dimensions": [
+        960,
+        640
+      ],
+      "physical_dimensions": [
+        1920,
+        1280
+      ],
+      "path": "edit/2.00x.png",
+      "renderer": "Vello",
+      "backend": "Dx12",
+      "byte_length": 1221321,
+      "sha256": "73ce4a0ec36a026d7b392147f723c4aa01db3399363c5ac2fdd953287055467f"
+    },
+    {
+      "workspace": "graph",
+      "scale": 1,
+      "scale_label": "1.00x",
+      "logical_dimensions": [
+        960,
+        640
+      ],
+      "physical_dimensions": [
+        960,
+        640
+      ],
+      "path": "graph/1.00x.png",
+      "renderer": "Vello",
+      "backend": "Dx12",
+      "byte_length": 18377,
+      "sha256": "f2b87edc4a0c0382a987efa9e731a707f491ea955afc770f5603acf9ddc3c27f"
+    },
+    {
+      "workspace": "graph",
+      "scale": 1.25,
+      "scale_label": "1.25x",
+      "logical_dimensions": [
+        960,
+        640
+      ],
+      "physical_dimensions": [
+        1200,
+        800
+      ],
+      "path": "graph/1.25x.png",
+      "renderer": "Vello",
+      "backend": "Dx12",
+      "byte_length": 24722,
+      "sha256": "5b2b84ba074b263d9cd070a5e1e50e95e4cd50ae5b14b8363135b7ff4ec20835"
+    },
+    {
+      "workspace": "graph",
+      "scale": 1.5,
+      "scale_label": "1.50x",
+      "logical_dimensions": [
+        960,
+        640
+      ],
+      "physical_dimensions": [
+        1440,
+        960
+      ],
+      "path": "graph/1.50x.png",
+      "renderer": "Vello",
+      "backend": "Dx12",
+      "byte_length": 32125,
+      "sha256": "d9aeedcabca97ac35de1048e82a3abc1088df53954d626143153b359e6ed6615"
+    },
+    {
+      "workspace": "graph",
+      "scale": 2,
+      "scale_label": "2.00x",
+      "logical_dimensions": [
+        960,
+        640
+      ],
+      "physical_dimensions": [
+        1920,
+        1280
+      ],
+      "path": "graph/2.00x.png",
+      "renderer": "Vello",
+      "backend": "Dx12",
+      "byte_length": 46301,
+      "sha256": "32dfdd14067d41919cd969c71d6bf7999fba0d86b60a27b6c0a8ce1c1e0243ae"
+    }
+  ],
+  "claims": {
+    "public_demo_app": true,
+    "private_stern_crates": false,
+    "alternate_scene": false,
+    "browser_capture": false,
+    "cross_scale_pixel_equality": false
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "Runway root control-plane",
+    "reviewed_utc": "2026-07-19T02:33:23.080Z",
+    "approval_reference": "User approval: 'vello did good. approved'; Runway root original-resolution audit of all eight final artifacts.",
+    "artifact_verdicts": [
+      {
+        "path": "edit/1.00x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "edit/1.25x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "edit/1.50x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "edit/2.00x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "graph/1.00x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "graph/1.25x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "graph/1.50x.png",
+        "verdict": "PASS"
+      },
+      {
+        "path": "graph/2.00x.png",
+        "verdict": "PASS"
+      }
+    ],
+    "criteria": [
+      {
+        "criterion": "clipping",
+        "result": "PASS",
+        "notes": "No unintended clipping or overflow at any reviewed workspace or scale."
+      },
+      {
+        "criterion": "overlay_placement",
+        "result": "PASS",
+        "notes": "Edit overlays and Graph panel chrome remain aligned within their public layout bounds."
+      },
+      {
+        "criterion": "hairlines",
+        "result": "PASS",
+        "notes": "Hairlines remain crisp and stable across all four physical scales."
+      },
+      {
+        "criterion": "text_baselines",
+        "result": "PASS",
+        "notes": "Text baselines remain consistent and legible across Edit and Graph captures."
+      },
+      {
+        "criterion": "focus_selection",
+        "result": "PASS",
+        "notes": "Expected Edit selection and Graph workspace focus remain visibly represented."
+      },
+      {
+        "criterion": "private_override_absence",
+        "result": "PASS",
+        "notes": "Source audit confirms public DemoApp output with no alternate scene or private Stern crate override."
+      }
+    ],
+    "overall": "PASS"
+  }
+}

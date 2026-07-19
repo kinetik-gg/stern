@@ -27,7 +27,10 @@ pub use result::{
     VelloPresenterStatus, VelloRecoveryKind, VelloRecoveryOutcome, VelloRedrawGuidance,
     VelloResizeOutcome, VelloSuspendOutcome,
 };
-pub use vello::{AaConfig, wgpu};
+pub use vello::util::RenderContext;
+pub use vello::{
+    AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene, peniko, wgpu,
+};
 
 #[cfg(test)]
 mod tests;
