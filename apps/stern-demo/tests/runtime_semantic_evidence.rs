@@ -76,10 +76,18 @@ fn verifier_rejects_failed_journey_and_traversal_claims() {
 }
 
 #[test]
-fn verifier_rejects_failed_owner_cleanup_claim() {
+fn verifier_rejects_failed_real_owner_cleanup_claim() {
     assert_mutation_rejected(
-        "record.focusRestorationTraces.find(trace => trace.interaction === 'focus-owner removal cleanup').restored = false;",
+        "const trace=record.focusRestorationTraces.find(trace => trace.interaction === 'focus-owner removal cleanup');trace.oldOwnerLive=true;trace.restored=false;",
         "owner-cleanup",
+    );
+}
+
+#[test]
+fn verifier_rejects_overlay_route_exclusivity_overclaim() {
+    assert_mutation_rejected(
+        "record.logs.stateTransitions.find(log => log.id === 'overlay-route-exclusivity').exclusive = false;",
+        "overlay-route-exclusive",
     );
 }
 
@@ -174,6 +182,10 @@ fn verifier_rejects_missing_gaps_or_unexpected_provisional_drift() {
     assert_mutation_rejected(
         "record.source.provisionalTimelineSourceDrift.push('README.md');",
         "unexpected-timeline-drift",
+    );
+    assert_mutation_rejected(
+        "record.source.provisionalOverlayRecoveryContractDrift.push('README.md');",
+        "unexpected-overlay-recovery-drift",
     );
 }
 
@@ -276,7 +288,9 @@ fn assert_provisional(path: &Path) {
         "r.source.provisionalModelColorSourceDrift.length!==3||",
         "r.source.provisionalModelColorContractDrift.length!==2||",
         "r.source.provisionalTimelineSourceDrift.length!==4||",
-        "r.source.provisionalTimelineContractDrift.length!==1)process.exit(1);",
+        "r.source.provisionalTimelineContractDrift.length!==1||",
+        "r.source.provisionalOverlayRecoverySourceDrift.length!==4||",
+        "r.source.provisionalOverlayRecoveryContractDrift.length!==1)process.exit(1);",
     );
     let status = Command::new("node")
         .args(["-e", script, path.to_str().unwrap()])

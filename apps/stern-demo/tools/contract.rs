@@ -132,6 +132,7 @@ pub(super) fn journey_refs(id: &str) -> Vec<&'static str> {
         "overlay-and-failure-recovery" => vec![
             "#/logs/failurePaths/3",
             "#/logs/stateTransitions/8",
+            "#/logs/stateTransitions/9",
             "#/focusRestorationTraces/3",
             "#/focusRestorationTraces/4",
         ],

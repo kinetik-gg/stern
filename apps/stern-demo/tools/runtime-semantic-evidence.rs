@@ -22,7 +22,7 @@ mod contract;
 mod json;
 
 use audit::{git, primitive_allowlist, public_consumer_audit, repo_root};
-use color_evidence::{color_gradient_journey, focus_owner_removal_cleanup, recovery_journey};
+use color_evidence::{color_gradient_journey, overlay_recovery_journey, recovery_journey};
 use contract::{
     COMPONENTS, GATES, JOURNEYS, SPEC_SHA256, VERSION, component_refs, component_workspaces,
     gate_refs, journey_refs,
@@ -56,6 +56,14 @@ const PROVISIONAL_TIMELINE_SOURCE_DRIFT: [&str; 4] = [
 ];
 const PROVISIONAL_TIMELINE_CONTRACT_DRIFT: [&str; 1] =
     ["apps/stern-demo/tests/timeline_journey_contract.rs"];
+const PROVISIONAL_OVERLAY_RECOVERY_SOURCE_DRIFT: [&str; 4] = [
+    "apps/stern-demo/src/app_model.rs",
+    "apps/stern-demo/src/edit_workspace.rs",
+    "apps/stern-demo/src/lib.rs",
+    "apps/stern-demo/src/overlay_workspace.rs",
+];
+const PROVISIONAL_OVERLAY_RECOVERY_CONTRACT_DRIFT: [&str; 1] =
+    ["apps/stern-demo/tests/overlay_recovery_journey_contract.rs"];
 
 fn main() -> ExitCode {
     match run() {
@@ -151,7 +159,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
     let feedback = feedback_journey(&mut app);
     let color = color_gradient_journey()?;
     let recovery = recovery_journey()?;
-    let owner_removal = focus_owner_removal_cleanup();
+    let overlay_recovery = overlay_recovery_journey()?;
 
     let edit_button = app.frame(demo_context(UiInput::default()));
     let graph_point = semantic_center(&edit_button, &SemanticRole::IconButton, "Graph Workspace")?;
@@ -176,7 +184,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         feedback.passed,
         graph.passed,
         color.passed,
-        recovery.passed,
+        recovery.passed && overlay_recovery.passed,
         &mut passed,
     );
     let component_records = COMPONENTS
@@ -198,7 +206,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         timeline.passed && feedback.passed,
         color.passed,
         graph.passed,
-        recovery.passed,
+        recovery.passed && overlay_recovery.passed,
     ];
     let journeys = JOURNEYS
         .iter()
@@ -248,6 +256,8 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         "provisionalModelColorContractDrift": PROVISIONAL_MODEL_COLOR_CONTRACT_DRIFT,
         "provisionalTimelineSourceDrift": PROVISIONAL_TIMELINE_SOURCE_DRIFT,
         "provisionalTimelineContractDrift": PROVISIONAL_TIMELINE_CONTRACT_DRIFT,
+        "provisionalOverlayRecoverySourceDrift": PROVISIONAL_OVERLAY_RECOVERY_SOURCE_DRIFT,
+        "provisionalOverlayRecoveryContractDrift": PROVISIONAL_OVERLAY_RECOVERY_CONTRACT_DRIFT,
     });
     let workspaces = vec![
         json!({"id": "edit-workspace", "semanticSnapshotRef": "#/semanticSnapshots/0", "passedComponentIds": passed.iter().copied().filter(|id| component_workspaces(id).contains(&"edit-workspace")).collect::<Vec<_>>()}),
@@ -295,6 +305,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         color.gradient_log,
         color.serialization_log,
         recovery.retry_log,
+        overlay_recovery.route_log,
     ];
     let failures = vec![
         graph.reject_log,
@@ -316,7 +327,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         graph.focus_log,
         color.focus_log,
         recovery.focus_log,
-        owner_removal,
+        overlay_recovery.owner_removal_log,
     ];
     let known_gaps = vec![
         json!({
@@ -335,6 +346,8 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
                 "#/source/provisionalModelColorContractDrift",
                 "#/source/provisionalTimelineSourceDrift",
                 "#/source/provisionalTimelineContractDrift",
+                "#/source/provisionalOverlayRecoverySourceDrift",
+                "#/source/provisionalOverlayRecoveryContractDrift",
                 "#/runtime/journeys/5",
             ],
         }),

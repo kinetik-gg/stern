@@ -7,7 +7,7 @@ import { verifyEvidence as verifyRendererEvidence } from "../../../tools/capture
 import { verifyRecords as verifyPlatformRecords } from "./platform-smoke-record.mjs";
 
 const SPEC_SHA256 = "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed";
-const EXPECTED_PACKET_SHA256 = "f144dac361674aa5cbedff473fd79d7a8aa30400c35d785232f6784441718d7e";
+const EXPECTED_PACKET_SHA256 = "47c76fe8db4dbc69e2ef1f6b3f989cd0550dbf13634683add3e541e64de8eecf";
 const COMPONENTS = [
   "button", "text-field", "dropdown", "selection-controls", "value-controls",
   "progress-feedback", "overlay-system", "virtual-list", "editor-frame",
@@ -52,6 +52,7 @@ const CANDIDATE_EVIDENCE_DRIFT = [
   "apps/stern-demo/tests/edit_workspace_screen_contract.rs",
   "apps/stern-demo/tests/evidence/runtime-semantic-evidence.provisional.json",
   "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
+  "apps/stern-demo/tests/overlay_recovery_journey_contract.rs",
   "apps/stern-demo/tests/public_consumer_contract.rs",
   "apps/stern-demo/tests/runtime_semantic_evidence.rs",
   "apps/stern-demo/tests/timeline_journey_contract.rs",
@@ -90,6 +91,15 @@ const PROVISIONAL_TIMELINE_SOURCE_DRIFT = [
 ];
 const PROVISIONAL_TIMELINE_CONTRACT_DRIFT = [
   "apps/stern-demo/tests/timeline_journey_contract.rs",
+];
+const PROVISIONAL_OVERLAY_RECOVERY_SOURCE_DRIFT = [
+  "apps/stern-demo/src/app_model.rs",
+  "apps/stern-demo/src/edit_workspace.rs",
+  "apps/stern-demo/src/lib.rs",
+  "apps/stern-demo/src/overlay_workspace.rs",
+];
+const PROVISIONAL_OVERLAY_RECOVERY_CONTRACT_DRIFT = [
+  "apps/stern-demo/tests/overlay_recovery_journey_contract.rs",
 ];
 
 const options = parseArgs(process.argv.slice(2));
@@ -137,6 +147,10 @@ assertExact(evidence.source.provisionalTimelineSourceDrift, PROVISIONAL_TIMELINE
   "provisional timeline production drift");
 assertExact(evidence.source.provisionalTimelineContractDrift, PROVISIONAL_TIMELINE_CONTRACT_DRIFT,
   "provisional timeline contract drift");
+assertExact(evidence.source.provisionalOverlayRecoverySourceDrift,
+  PROVISIONAL_OVERLAY_RECOVERY_SOURCE_DRIFT, "provisional overlay-recovery production drift");
+assertExact(evidence.source.provisionalOverlayRecoveryContractDrift,
+  PROVISIONAL_OVERLAY_RECOVERY_CONTRACT_DRIFT, "provisional overlay-recovery contract drift");
 const candidateDrift = git(
   "diff", "--name-only", evidence.source.commit, git("rev-parse", "HEAD^{commit}"),
 ).split(/\r?\n/u).filter(Boolean);
@@ -185,9 +199,18 @@ assert(evidence.focusRestorationTraces.every(({ restored }) => restored === true
 const ownerCleanup = evidence.focusRestorationTraces.find(
   ({ interaction }) => interaction === "focus-owner removal cleanup",
 ) ?? fail("missing focus-owner removal cleanup trace");
-for (const field of ["focusCleared", "textInputOwnerCleared", "stopTextInputOnce", "repaint"]) {
+assert(ownerCleanup.workspaceId === "edit-to-graph", "owner cleanup must use DemoApp workspaces");
+assert(ownerCleanup.scope === "real DemoApp Edit-to-Graph shared-overlay transition",
+  "owner cleanup must not use a runtime proxy");
+assert(ownerCleanup.actionId === "workspace.graph" && ownerCleanup.actionSource === "Menu",
+  "owner cleanup must invoke the shared Graph menu action");
+assert(ownerCleanup.actionCount === 1, "owner cleanup must invoke Graph exactly once");
+for (const field of ["workspaceChanged", "overlayClosed", "restoredFocusLive", "restored"]) {
   assert(ownerCleanup[field] === true, `focus-owner removal cleanup ${field} must be true`);
 }
+assert(ownerCleanup.oldOwnerLive === false, "removed Edit focus owner must not remain live");
+assert(ownerCleanup.focusOwner !== ownerCleanup.restoredFocus,
+  "owner cleanup must recover to a different live Graph focus owner");
 
 const logs = [
   ...evidence.logs.actions,
@@ -202,7 +225,7 @@ assertExact(evidence.logs.stateTransitions.map(({ id }) => id), [
   "collection-keyboard-rename", "timeline-pointer-preview-commit",
   "graph-pointer-connection", "color-picker-cancel-apply",
   "gradient-stable-id-move-reverse", "color-style-explicit-srgb",
-  "color-style-save-retry",
+  "color-style-save-retry", "overlay-route-exclusivity",
 ], "state-transition log IDs");
 assertExact(evidence.logs.failurePaths.map(({ id }) => id), [
   "graph-incompatible-target", "graph-escape-cancel", "preview-job-failure",
@@ -215,6 +238,13 @@ assert(logs.some(({ input }) => input === "keyboard"), "missing keyboard log");
 assert(evidence.logs.failurePaths.length >= 3, "missing failure-path logs");
 assert(evidence.logs.failurePaths.every(({ optimisticMutation }) => optimisticMutation === false),
   "failure paths must reject optimistic mutation explicitly");
+const overlayRoute = evidence.logs.stateTransitions.find(
+  ({ id }) => id === "overlay-route-exclusivity",
+) ?? fail("missing overlay route exclusivity trace");
+assertExact(overlayRoute.sequence, ["tooltip", "menu", "palette", "popover", "modal"],
+  "shared overlay route sequence");
+assert(overlayRoute.exclusive === true && overlayRoute.sharedRoute === true,
+  "overlay surfaces must execute exclusively through the shared route");
 
 assert(evidence.publicConsumerAudit.passed === true, "public-consumer audit failed");
 assert(evidence.publicConsumerAudit.publicFacadeDependency === true, "public facade missing");
@@ -304,6 +334,14 @@ for (const gap of evidence.knownGaps) {
     assert(GATES.includes(gateId), `${gap.id} blocks unknown gate`);
     assert(gate(gateId).status !== "passed", `${gateId} passed while ${gap.id} remains open`);
   }
+}
+const journeyGap = evidence.knownGaps.find(({ issue }) => issue === 856)
+  ?? fail("missing issue #856 journey gap");
+for (const ref of [
+  "#/source/provisionalOverlayRecoverySourceDrift",
+  "#/source/provisionalOverlayRecoveryContractDrift",
+]) {
+  assert(journeyGap.evidenceRefs.includes(ref), `journey gap missing overlay evidence ref: ${ref}`);
 }
 
 const allComponents = evidence.runtime.components.every(({ status }) => status === "passed");

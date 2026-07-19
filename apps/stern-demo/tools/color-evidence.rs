@@ -1,11 +1,10 @@
 use std::collections::BTreeSet;
 
 use stern::core::{
-    FrameOutput, Key, KeyEvent, KeyState, Modifiers, MouseButton, PlatformRequest, Point,
-    PointerButtonState, PointerInput, RepaintRequest, SemanticRole, UiInput, UiInputEvent,
-    UiTestHarness, Vec2, WidgetId,
+    ActionSource, FrameOutput, Key, KeyEvent, KeyState, Modifiers, MouseButton, Point,
+    PointerButtonState, PointerInput, SemanticRole, UiInput, UiInputEvent, Vec2, WidgetId,
 };
-use stern_demo::{DemoApp, DemoColorSaveState, demo_context};
+use stern_demo::{DemoApp, DemoColorSaveState, DemoScenario, DemoWorkspace, demo_context};
 
 use crate::json::{Json as Value, json};
 
@@ -22,6 +21,12 @@ pub(super) struct RecoveryLog {
     pub(super) failure_log: Value,
     pub(super) retry_log: Value,
     pub(super) focus_log: Value,
+}
+
+pub(super) struct OverlayRecoveryLog {
+    pub(super) passed: bool,
+    pub(super) route_log: Value,
+    pub(super) owner_removal_log: Value,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -220,23 +225,106 @@ pub(super) fn recovery_journey() -> Result<RecoveryLog, String> {
     })
 }
 
-pub(super) fn focus_owner_removal_cleanup() -> Value {
-    let owner = WidgetId::from_key("evidence-removed-focus-owner");
-    let mut harness = UiTestHarness::new();
-    harness.memory_mut().focus(owner);
-    harness.memory_mut().set_text_input_owner(owner);
-    let _ = harness.run_frame(|ui| ui.register_id(owner));
-    let ((), output) = harness.run_frame(|_| {});
-    let focus_cleared = harness.memory().focused().is_none();
-    let text_owner_cleared = harness.memory().text_input_owner().is_none();
-    let stop_text_once = output.platform_requests == vec![PlatformRequest::StopTextInput];
-    let repaint = output.repaint == RepaintRequest::NextFrame;
-    json!({
-        "workspaceId": "public-runtime", "interaction": "focus-owner removal cleanup",
-        "scope": "public Stern core runtime reconciliation; not a demo-specific overlay-removal claim",
-        "focusOwner": widget(Some(owner)), "focusCleared": focus_cleared,
-        "textInputOwnerCleared": text_owner_cleared, "stopTextInputOnce": stop_text_once,
-        "repaint": repaint, "restored": focus_cleared && text_owner_cleared && stop_text_once && repaint,
+#[allow(clippy::too_many_lines)]
+pub(super) fn overlay_recovery_journey() -> Result<OverlayRecoveryLog, String> {
+    let mut app = DemoApp::for_scenario(DemoScenario::OverlayRecoveryJourney);
+    let initial = app.frame(demo_context(UiInput::default()));
+    let focused = click(&mut app, &initial, &SemanticRole::ListItem, "Backdrop")?;
+    let owner = app
+        .focused()
+        .ok_or("overlay recovery focus owner was not established")?;
+    let help = semantic_node(&focused, &SemanticRole::Button, "Overlay help")?
+        .bounds
+        .center();
+
+    let tooltip = app.frame(demo_context(hover(help)));
+    let tooltip_exclusive = overlay_state(&tooltip) == [true, false, false, false, false];
+    let clear = app.frame(demo_context(hover(Point::new(8.0, 440.0))));
+    let tooltip_closed = overlay_state(&clear) == [false; 5];
+
+    let menu = open_workspace_menu(&mut app, &clear)?;
+    let menu_exclusive = overlay_state(&menu) == [false, true, false, false, false];
+    let _ = app.frame(demo_context(key(Key::Escape, Modifiers::default())));
+    let clear = app.frame(demo_context(UiInput::default()));
+    let menu_closed = overlay_state(&clear) == [false; 5];
+
+    let palette = app.frame(demo_context(key(
+        Key::Character("p".to_owned()),
+        Modifiers::new(true, true, false, false),
+    )));
+    let palette_exclusive = overlay_state(&palette) == [false, false, true, false, false];
+    let _ = app.frame(demo_context(key(Key::Escape, Modifiers::default())));
+    let clear = app.frame(demo_context(UiInput::default()));
+
+    let failed_action = invoke_workspace_action_from(&mut app, &clear, "Save Color Style")?;
+    let failed_once = action_count(&failed_action, "color-style.save") == 1;
+    let popover = app.frame(demo_context(UiInput::default()));
+    let popover_exclusive = overlay_state(&popover) == [false, false, false, true, false];
+    let outside = Point::new(8.0, 440.0);
+    let _ = app.frame(demo_context(pointer(outside, true, true, false)));
+    let _ = app.frame(demo_context(pointer(outside, false, false, true)));
+    let clear = app.frame(demo_context(UiInput::default()));
+
+    let recovered_action = invoke_workspace_action_from(&mut app, &clear, "Save Color Style")?;
+    let recovered_once = action_count(&recovered_action, "color-style.save") == 1;
+    let modal = app.frame(demo_context(UiInput::default()));
+    let modal_exclusive = overlay_state(&modal) == [false, false, false, false, true];
+    let _ = app.frame(demo_context(key(Key::Escape, Modifiers::default())));
+    let clear = app.frame(demo_context(UiInput::default()));
+    let modal_closed = overlay_state(&clear) == [false; 5];
+
+    let menu = open_workspace_menu(&mut app, &clear)?;
+    let transition = click(&mut app, &menu, &SemanticRole::MenuItem, "Graph Workspace")?;
+    let action_count = action_count(&transition, "workspace.graph");
+    let menu_action = transition.actions.clone().drain().any(|invocation| {
+        invocation.action_id.as_str() == "workspace.graph"
+            && invocation.source == ActionSource::Menu
+    });
+    let workspace_changed = app.workspace() == DemoWorkspace::Graph;
+    let graph_focus = WidgetId::from_key("root").child("workspace.graph");
+    let focus_selected = app.focused() == Some(graph_focus);
+    let settled = app.frame(demo_context(UiInput::default()));
+    let overlay_closed = overlay_state(&settled) == [false; 5];
+    let old_owner_live = settled.semantics.get(owner).is_some();
+    let restored_focus_live = settled
+        .semantics
+        .get(graph_focus)
+        .is_some_and(|node| node.focusable && node.state.focused);
+    let owner_removal_passed = action_count == 1
+        && menu_action
+        && workspace_changed
+        && focus_selected
+        && overlay_closed
+        && !old_owner_live
+        && restored_focus_live
+        && app.focused() == Some(graph_focus);
+    let route_passed = tooltip_exclusive
+        && tooltip_closed
+        && menu_exclusive
+        && menu_closed
+        && palette_exclusive
+        && failed_once
+        && popover_exclusive
+        && recovered_once
+        && modal_exclusive
+        && modal_closed;
+
+    Ok(OverlayRecoveryLog {
+        passed: route_passed && owner_removal_passed,
+        route_log: json!({
+            "id": "overlay-route-exclusivity", "input": "pointer-keyboard-action",
+            "sequence": ["tooltip", "menu", "palette", "popover", "modal"],
+            "exclusive": route_passed, "sharedRoute": true, "status": status(route_passed),
+        }),
+        owner_removal_log: json!({
+            "workspaceId": "edit-to-graph", "interaction": "focus-owner removal cleanup",
+            "scope": "real DemoApp Edit-to-Graph shared-overlay transition",
+            "focusOwner": widget(Some(owner)), "actionId": "workspace.graph",
+            "actionSource": "Menu", "actionCount": action_count,
+            "workspaceChanged": workspace_changed, "overlayClosed": overlay_closed,
+            "oldOwnerLive": old_owner_live, "restoredFocus": widget(Some(graph_focus)),
+            "restoredFocusLive": restored_focus_live, "restored": owner_removal_passed,
+        }),
     })
 }
 
@@ -250,9 +338,13 @@ fn invoke_workspace_action_from(
     current: &FrameOutput,
     label: &str,
 ) -> Result<FrameOutput, String> {
-    let _ = click(app, current, &SemanticRole::MenuItem, "Workspace")?;
-    let menu = app.frame(demo_context(UiInput::default()));
+    let menu = open_workspace_menu(app, current)?;
     click(app, &menu, &SemanticRole::MenuItem, label)
+}
+
+fn open_workspace_menu(app: &mut DemoApp, current: &FrameOutput) -> Result<FrameOutput, String> {
+    let _ = click(app, current, &SemanticRole::MenuItem, "Workspace")?;
+    Ok(app.frame(demo_context(UiInput::default())))
 }
 
 fn click(
@@ -311,6 +403,16 @@ fn has_custom_role(output: &FrameOutput, role: &str) -> bool {
         .any(|node| matches!(&node.role, SemanticRole::Custom(value) if value == role))
 }
 
+fn overlay_state(output: &FrameOutput) -> [bool; 5] {
+    [
+        has_label(output, "Overlay help tooltip"),
+        has_label(output, "Workspace commands"),
+        has_role(output, &SemanticRole::SearchField),
+        has_label(output, "Color recovery hint"),
+        has_label(output, "Color style recovered"),
+    ]
+}
+
 fn action_count(output: &FrameOutput, id: &str) -> usize {
     let mut actions = output.actions.clone();
     actions
@@ -360,6 +462,16 @@ fn pointer(point: Point, down: bool, pressed: bool, released: bool) -> UiInput {
         pointer: PointerInput {
             position: Some(point),
             primary: PointerButtonState::new(down, pressed, released),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    }
+}
+
+fn hover(point: Point) -> UiInput {
+    UiInput {
+        pointer: PointerInput {
+            position: Some(point),
             ..PointerInput::default()
         },
         ..UiInput::default()

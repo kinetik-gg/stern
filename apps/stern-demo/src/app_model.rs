@@ -35,6 +35,8 @@ pub enum DemoScenario {
     Default,
     /// Application-owned timeline, transport, and feedback journey.
     TimelineJourney,
+    /// Shared-overlay routing and focus-owner recovery journey.
+    OverlayRecoveryJourney,
 }
 
 impl DemoScenario {
@@ -42,6 +44,12 @@ impl DemoScenario {
     #[must_use]
     pub const fn has_timeline_journey(self) -> bool {
         matches!(self, Self::TimelineJourney)
+    }
+
+    /// Returns whether overlay-recovery additions should be projected.
+    #[must_use]
+    pub const fn has_overlay_recovery_journey(self) -> bool {
+        matches!(self, Self::OverlayRecoveryJourney)
     }
 }
 

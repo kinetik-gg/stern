@@ -1,4 +1,6 @@
-use stern::core::{ActionContext, ActionSource, Key, KeyState, Rect, Size, UiInput, WidgetId};
+use stern::core::{
+    ActionContext, ActionSource, Key, KeyState, Rect, Response, Size, UiInput, WidgetId,
+};
 use stern::widgets::{
     ChromeSceneIntent, CommandPaletteOverlay, Menu, MenuBar, MenuBarOverlayRequest, MenuOverlay,
     ModalDialog, ModalDialogOverlay, ModalFocusContainment, OverlayDismissal, OverlayEntry,
@@ -14,6 +16,7 @@ const CONTEXT_MENU_OVERLAY: OverlayId = OverlayId::from_raw(2);
 const COMMAND_PALETTE_OVERLAY: OverlayId = OverlayId::from_raw(3);
 const COLOR_FAILURE_POPOVER: OverlayId = OverlayId::from_raw(6);
 const COLOR_RECOVERY_MODAL: OverlayId = OverlayId::from_raw(7);
+const OVERLAY_HELP_TOOLTIP: OverlayId = OverlayId::from_raw(8);
 
 /// One DemoApp-owned route for transient UI shared by maintained workspaces.
 pub(crate) struct SharedOverlayRoute {
@@ -64,6 +67,20 @@ impl SharedOverlayRoute {
         let owner = ui.memory().focused();
         self.scene = Some(color_notice_scene(notice, bounds, owner));
         self.focus_return = owner;
+    }
+
+    pub(crate) fn sync_tooltip(&mut self, trigger: Response, bounds: Size) {
+        let tooltip_open = self.scene.as_ref().is_some_and(|scene| {
+            scene.surfaces().len() == 1 && scene.surfaces()[0].entry().kind == OverlayKind::Tooltip
+        });
+        if tooltip_open && !trigger.tooltip_requested {
+            self.scene = None;
+            self.focus_return = None;
+        }
+        if self.scene.is_none() && trigger.tooltip_requested {
+            self.scene = Some(tooltip_scene(trigger.rect, bounds));
+            self.focus_return = None;
+        }
     }
 
     pub(crate) fn reconcile(
@@ -238,5 +255,25 @@ fn color_notice_scene(
             )));
         }
     }
+    scene
+}
+
+fn tooltip_scene(anchor: Rect, bounds: Size) -> OverlayScene {
+    let viewport = viewport_rect(bounds);
+    let width = 248.0_f32.min(viewport.width);
+    let height = 32.0_f32.min(viewport.height);
+    let x = anchor.x.min((viewport.width - width).max(0.0));
+    let y = (anchor.max_y() + 4.0).min((viewport.height - height).max(0.0));
+    let entry = OverlayEntry::new(
+        OVERLAY_HELP_TOOLTIP,
+        OverlayKind::Tooltip,
+        Rect::new(x, y, width, height),
+    );
+    let mut scene = OverlayScene::new();
+    scene.push(OverlaySceneSurface::passive(
+        entry,
+        "Overlay help tooltip",
+        "Menus, palettes, popovers, and modals share one route.",
+    ));
     scene
 }

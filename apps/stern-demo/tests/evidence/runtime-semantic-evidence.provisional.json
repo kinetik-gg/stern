@@ -35,6 +35,15 @@
     ],
     "provisionalTimelineContractDrift": [
       "apps/stern-demo/tests/timeline_journey_contract.rs"
+    ],
+    "provisionalOverlayRecoverySourceDrift": [
+      "apps/stern-demo/src/app_model.rs",
+      "apps/stern-demo/src/edit_workspace.rs",
+      "apps/stern-demo/src/lib.rs",
+      "apps/stern-demo/src/overlay_workspace.rs"
+    ],
+    "provisionalOverlayRecoveryContractDrift": [
+      "apps/stern-demo/tests/overlay_recovery_journey_contract.rs"
     ]
   },
   "runtime": {
@@ -538,6 +547,7 @@
         "evidenceRefs": [
           "#/logs/failurePaths/3",
           "#/logs/stateTransitions/8",
+          "#/logs/stateTransitions/9",
           "#/focusRestorationTraces/3",
           "#/focusRestorationTraces/4"
         ]
@@ -630,6 +640,20 @@
         "actionCount": 1,
         "staleFailureCleared": true,
         "explicitValue": true,
+        "status": "passed"
+      },
+      {
+        "id": "overlay-route-exclusivity",
+        "input": "pointer-keyboard-action",
+        "sequence": [
+          "tooltip",
+          "menu",
+          "palette",
+          "popover",
+          "modal"
+        ],
+        "exclusive": true,
+        "sharedRoute": true,
         "status": "passed"
       }
     ],
@@ -2798,14 +2822,18 @@
       "restored": true
     },
     {
-      "workspaceId": "public-runtime",
+      "workspaceId": "edit-to-graph",
       "interaction": "focus-owner removal cleanup",
-      "scope": "public Stern core runtime reconciliation; not a demo-specific overlay-removal claim",
-      "focusOwner": "5359ce81a7672170",
-      "focusCleared": true,
-      "textInputOwnerCleared": true,
-      "stopTextInputOnce": true,
-      "repaint": true,
+      "scope": "real DemoApp Edit-to-Graph shared-overlay transition",
+      "focusOwner": "b68c34fcccfd575e",
+      "actionId": "workspace.graph",
+      "actionSource": "Menu",
+      "actionCount": 1,
+      "workspaceChanged": true,
+      "overlayClosed": true,
+      "oldOwnerLive": false,
+      "restoredFocus": "ff9f83e6ba0e27a0",
+      "restoredFocusLive": true,
       "restored": true
     }
   ],
@@ -2870,6 +2898,7 @@
     "publicFacadeImports": [
       "use stern::core::{",
       "use stern::widgets::gradient_editor::{",
+      "use stern::widgets::{TimelineFrame, TimelineFrameRate, TimelineTime, TransportControlIntent};",
       "use stern::platform_winit::{",
       "use stern::render::RenderFrameInput;",
       "use stern::vello_winit::{",
@@ -2894,7 +2923,7 @@
       "use stern::render::RenderResources;",
       "use stern::core::ScaleFactor;",
       "use stern::platform_winit::{WinitInputAdapter, WinitPlatformRequests};",
-      "use stern::core::{ActionContext, ActionSource, Key, KeyState, Rect, Size, UiInput, WidgetId};",
+      "use stern::core::{",
       "use stern::widgets::{",
       "use stern::core::{ActionContext, PointerOrder, PointerTarget, PointerTargetPlan, Rect, WidgetId};",
       "use stern::widgets::chrome::{SystemFeedbackScene, SystemFeedbackSceneConfig};",
@@ -3041,6 +3070,8 @@
         "#/source/provisionalModelColorContractDrift",
         "#/source/provisionalTimelineSourceDrift",
         "#/source/provisionalTimelineContractDrift",
+        "#/source/provisionalOverlayRecoverySourceDrift",
+        "#/source/provisionalOverlayRecoveryContractDrift",
         "#/runtime/journeys/5"
       ]
     }

@@ -51,6 +51,7 @@ const KIND_PROPERTY: ItemId = ItemId::from_raw(102);
 const VISIBLE_PROPERTY: ItemId = ItemId::from_raw(103);
 const OPACITY_PROPERTY: ItemId = ItemId::from_raw(104);
 const COLOR_PROPERTY: ItemId = ItemId::from_raw(105);
+const OVERLAY_HELP_KEY: &str = "edit-workspace.overlay-help";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AssetKind {
@@ -324,6 +325,10 @@ impl EditWorkspace {
 
         overlays.open_palette_if_requested(ui, actions, bounds);
         let context_route = workspace_context_route(ui, viewport_bounds);
+        let overlay_help = model
+            .scenario()
+            .has_overlay_recovery_journey()
+            .then(|| (ui.make_id(OVERLAY_HELP_KEY), overlay_help_rect(bounds)));
 
         declare_workspace_targets(
             ui,
@@ -348,6 +353,7 @@ impl EditWorkspace {
             &chrome,
             overlays.scene(),
             picker_scene.as_ref(),
+            overlay_help,
         );
         resolve_picker_outside_before_lower_ui(ui, &mut self.inspector_picker);
 
@@ -376,6 +382,11 @@ impl EditWorkspace {
         );
         if let Some(bounds) = gradient_bounds {
             compose_gradient_editor(ui, bounds, gradient_id, model);
+        }
+        if let Some((_, rect)) = overlay_help {
+            let _ = ui.button(OVERLAY_HELP_KEY, rect, "Overlay help", false);
+            let trigger = ui.tooltip_trigger(OVERLAY_HELP_KEY, rect, false);
+            overlays.sync_tooltip(trigger, bounds);
         }
         let context_requested = shared_context_requested(ui, viewport_bounds);
         let chrome_output = ui.chrome_scene(&chrome);
@@ -462,6 +473,7 @@ fn declare_workspace_targets(
     chrome: &ChromeScene<'_>,
     overlay: Option<&OverlayScene>,
     picker: Option<&stern::widgets::inspector::InspectorPickerScene>,
+    overlay_help: Option<(WidgetId, Rect)>,
 ) {
     let gradient_reverse_id = ui.make_id(("gradient-reverse", gradient_id.raw()));
     ui.resolve_pointer_targets(|plan| {
@@ -511,6 +523,10 @@ fn declare_workspace_targets(
             next = PointerOrder::new(next.raw() + 1);
         }
         next = chrome.declare_pointer_targets(plan, next);
+        if let Some((id, rect)) = overlay_help {
+            plan.target(PointerTarget::new(id, rect, next));
+            next = PointerOrder::new(next.raw() + 1);
+        }
         if let Some(overlay) = overlay {
             next = overlay.declare_pointer_targets(plan, next);
         }
@@ -519,6 +535,10 @@ fn declare_workspace_targets(
         }
     })
     .expect("Edit workspace pointer targets are valid");
+}
+
+fn overlay_help_rect(bounds: Size) -> Rect {
+    Rect::new((bounds.width - 120.0).max(0.0), 4.0, 112.0, 20.0)
 }
 
 #[allow(clippy::too_many_arguments)]
