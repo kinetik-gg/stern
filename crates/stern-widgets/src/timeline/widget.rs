@@ -1,13 +1,15 @@
 //! Retained timeline composition over the public timeline contracts.
 use super::{
-    TimelineDescriptor, TimelineDescriptorError, TimelineDescriptorState, TimelineFrameRate,
-    TimelineHitMetadata, TimelineHitTarget, TimelineHitTestConfig, TimelineId, TimelineLayout,
-    TimelineLayoutResult, TimelinePlayheadSeekRequest, TimelineRulerId, TimelineRulerTickKind,
-    TimelineRulerTickRequest, TimelineScale, TimelineScrubBeginRequest, TimelineScrubEndRequest,
-    TimelineScrubUpdateRequest, TimelineSelectionOperation, TimelineSelectionTarget,
-    TimelineSnapMetadata, TimelineTime, TimelineViewportState, clamp_timeline_time,
-    timeline_item_widget_id, timeline_keyframe_widget_id, timeline_lane_widget_id,
-    timeline_marker_widget_id, timeline_semantics,
+    TimelineClipMoveRequest, TimelineClipTrimRequest, TimelineDescriptor, TimelineDescriptorError,
+    TimelineDescriptorState, TimelineFrameRate, TimelineHitMetadata, TimelineHitTarget,
+    TimelineHitTestConfig, TimelineId, TimelineItemId, TimelineLaneId, TimelineLayout,
+    TimelineLayoutResult, TimelinePlayheadSeekRequest, TimelineRange, TimelineRulerId,
+    TimelineRulerTickKind, TimelineRulerTickRequest, TimelineScale, TimelineScrubBeginRequest,
+    TimelineScrubEndRequest, TimelineScrubUpdateRequest, TimelineSelectionOperation,
+    TimelineSelectionTarget, TimelineSnapMetadata, TimelineTime, TimelineTrimEdge,
+    TimelineViewportState, clamp_timeline_time, timeline_item_widget_id,
+    timeline_keyframe_widget_id, timeline_lane_widget_id, timeline_marker_widget_id,
+    timeline_semantics,
 };
 use crate::{Ui, label, panel, separator};
 use stern_core::{
@@ -15,6 +17,10 @@ use stern_core::{
     Modifiers, Point, PointerOrder, PointerTarget, PointerTargetPlan, Primitive, Rect,
     RectPrimitive, Response, UiInputEvent, WidgetId,
 };
+
+mod clip_edit;
+pub use clip_edit::*;
+
 /// Caller-owned inputs for one immutable timeline frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TimelineWidgetConfig<'a> {
@@ -29,6 +35,7 @@ pub struct TimelineWidgetConfig<'a> {
     lane_header_width: f32,
     disabled: bool,
     read_only: bool,
+    minimum_clip_duration: TimelineTime,
 }
 impl<'a> TimelineWidgetConfig<'a> {
     /// Creates an enabled timeline with compact default geometry.
@@ -52,6 +59,7 @@ impl<'a> TimelineWidgetConfig<'a> {
             lane_header_width: 120.0,
             disabled: false,
             read_only: false,
+            minimum_clip_duration: frame_rate.frame_to_time(super::TimelineFrame::from_raw(1)),
         }
     }
     /// Sets the accessible label.
@@ -88,6 +96,12 @@ impl<'a> TimelineWidgetConfig<'a> {
     #[must_use]
     pub const fn read_only(mut self, value: bool) -> Self {
         self.read_only = value;
+        self
+    }
+    /// Sets the shortest accepted clip range after a trim.
+    #[must_use]
+    pub const fn with_minimum_clip_duration(mut self, value: TimelineTime) -> Self {
+        self.minimum_clip_duration = value;
         self
     }
 }
@@ -296,6 +310,14 @@ pub struct TimelineWidgetOutput {
     /// Ordered scrub lifecycle intents emitted from canonical input events.
     pub scrub_intents: Vec<TimelineScrubIntent>,
 }
+/// Additive output from timeline entry points that enable retained clip editing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimelineClipEditWidgetOutput {
+    /// Legacy timeline response and scrub output.
+    pub timeline: TimelineWidgetOutput,
+    /// Ordered clip move/trim lifecycle intents emitted from canonical input events.
+    pub clip_edit_intents: Vec<TimelineClipEditIntent>,
+}
 impl Ui<'_> {
     /// Prepares one immutable timeline frame.
     ///
@@ -309,7 +331,12 @@ impl Ui<'_> {
     }
     /// Evaluates, paints, and exposes semantics for one prepared timeline.
     pub fn timeline_widget(&mut self, widget: &TimelineWidget<'_>) -> TimelineWidgetOutput {
-        self.timeline_widget_with_scrub(widget, &mut TimelineScrubController::default())
+        self.timeline_widget_with_controllers(
+            widget,
+            &mut TimelineScrubController::default(),
+            &mut TimelineClipEditController::default(),
+        )
+        .timeline
     }
     /// Evaluates a prepared timeline with caller-owned scrub lifecycle state.
     pub fn timeline_widget_with_scrub(
@@ -317,6 +344,32 @@ impl Ui<'_> {
         widget: &TimelineWidget<'_>,
         controller: &mut TimelineScrubController,
     ) -> TimelineWidgetOutput {
+        self.timeline_widget_with_controllers(
+            widget,
+            controller,
+            &mut TimelineClipEditController::default(),
+        )
+        .timeline
+    }
+    /// Evaluates a prepared timeline with caller-owned clip-edit lifecycle state.
+    pub fn timeline_widget_with_clip_edit(
+        &mut self,
+        widget: &TimelineWidget<'_>,
+        controller: &mut TimelineClipEditController,
+    ) -> TimelineClipEditWidgetOutput {
+        self.timeline_widget_with_controllers(
+            widget,
+            &mut TimelineScrubController::default(),
+            controller,
+        )
+    }
+    /// Evaluates a prepared timeline with retained scrub and clip-edit state.
+    pub fn timeline_widget_with_controllers(
+        &mut self,
+        widget: &TimelineWidget<'_>,
+        scrub_controller: &mut TimelineScrubController,
+        clip_edit_controller: &mut TimelineClipEditController,
+    ) -> TimelineClipEditWidgetOutput {
         let disabled = widget.config.disabled || !widget.valid();
         self.register_id(widget.widget_id());
         let gesture =
@@ -333,7 +386,9 @@ impl Ui<'_> {
             .flatten()
             .filter(|hit| !widget.config.read_only && !hit.disabled() && !hit.read_only())
             .and_then(|hit| intent(hit, widget, self.input().keyboard.modifiers));
-        let scrub_intents = self.resolve_timeline_scrub(widget, controller, &gesture.actions);
+        let scrub_intents = self.resolve_timeline_scrub(widget, scrub_controller, &gesture.actions);
+        let clip_edit_intents =
+            self.resolve_timeline_clip_edit(widget, clip_edit_controller, &gesture.actions);
         paint(self, widget);
         let selected = widget.config.state.selection.targets();
         for mut node in timeline_semantics(
@@ -354,11 +409,14 @@ impl Ui<'_> {
             }
             self.push_semantic_node(node);
         }
-        TimelineWidgetOutput {
-            response,
-            hit,
-            intent,
-            scrub_intents,
+        TimelineClipEditWidgetOutput {
+            timeline: TimelineWidgetOutput {
+                response,
+                hit,
+                intent,
+                scrub_intents,
+            },
+            clip_edit_intents,
         }
     }
 
