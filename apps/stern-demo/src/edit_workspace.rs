@@ -11,22 +11,25 @@ use stern::widgets::asset_browser::{
     AssetBrowserRequest, AssetBrowserState, AssetBrowserViewMode,
 };
 use stern::widgets::dock::{DockScene, DockSceneConfig};
+use stern::widgets::gradient_editor::{GradientEditorConfig, GradientInterpolationSpace};
 use stern::widgets::inspector::{
     InspectorPickerCommit, InspectorPickerState, PropertyGridConfig, PropertyGridIntent,
     property_grid_row_affordance_rects, property_grid_row_widget_id, property_grid_value_widget_id,
 };
 use stern::widgets::{
-    ChromeScene, ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey, CommandPaletteOverlay,
-    Dock, DockNode, DropdownItem, DropdownItemId, DropdownModel, Frame, FrameId, FrameTab,
-    GridColumns, GridLayout, InlineEditDraftDisposition, InlineEditDraftPolicy,
+    ChromeScene, ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey, ColorFieldConfig,
+    CommandPaletteOverlay, Dock, DockNode, DropdownItem, DropdownItemId, DropdownModel, Frame,
+    FrameId, FrameTab, GridColumns, GridLayout, InlineEditDraftDisposition, InlineEditDraftPolicy,
     InlineEditFocusLossPolicy, InlineEditRequest, ItemId, ListLayout, Menu, MenuBar, MenuBarMenu,
-    MenuBarMenuId, MenuBarOverlayRequest, MenuOverlay, NumericInputDraft, NumericScrubInputConfig,
-    OverlayDismissal, OverlayId, OverlayKind, OverlayScene, OverlaySceneIntent,
-    OverlaySceneSurface, Panel, PanelId, PopoverPlacement, PropertyGridRow, SelectFieldConfig,
-    StatusBar, StatusItem, StatusItemId, StatusItemKind, TabStrip, TextFieldAccess, Toolbar,
-    ToolbarGroup, ToolbarGroupId, Ui, ViewportSurface, ViewportWidget, ViewportWidgetConfig,
+    MenuBarMenuId, MenuBarOverlayRequest, MenuOverlay, ModalDialog, ModalDialogOverlay,
+    ModalFocusContainment, NumericInputDraft, NumericScrubInputConfig, OverlayDismissal,
+    OverlayEntry, OverlayId, OverlayKind, OverlayScene, OverlaySceneIntent, OverlaySceneSurface,
+    Panel, PanelId, PopoverPlacement, PropertyGridRow, SelectFieldConfig, StatusBar, StatusItem,
+    StatusItemId, StatusItemKind, TabStrip, TextFieldAccess, Toolbar, ToolbarGroup, ToolbarGroupId,
+    Ui, ViewportSurface, ViewportWidget, ViewportWidgetConfig,
 };
 
+use crate::app_model::DemoColorOverlayNotice;
 use crate::timeline_workspace::{
     TimelineWorkspace, apply_timeline_output, compose_tool_actions, declare_tool_actions,
     prepare_feedback, prepare_timeline, timeline_feedback_rects, viewport_actions,
@@ -45,11 +48,15 @@ const APPLICATION_MENU_OVERLAY: OverlayId = OverlayId::from_raw(1);
 const CONTEXT_MENU_OVERLAY: OverlayId = OverlayId::from_raw(2);
 const COMMAND_PALETTE_OVERLAY: OverlayId = OverlayId::from_raw(3);
 const KIND_PICKER_OVERLAY: OverlayId = OverlayId::from_raw(4);
+const COLOR_PICKER_OVERLAY: OverlayId = OverlayId::from_raw(5);
+const COLOR_FAILURE_POPOVER: OverlayId = OverlayId::from_raw(6);
+const COLOR_RECOVERY_MODAL: OverlayId = OverlayId::from_raw(7);
 const INSPECTOR_SECTION: ItemId = ItemId::from_raw(100);
 const NAME_PROPERTY: ItemId = ItemId::from_raw(101);
 const KIND_PROPERTY: ItemId = ItemId::from_raw(102);
 const VISIBLE_PROPERTY: ItemId = ItemId::from_raw(103);
 const OPACITY_PROPERTY: ItemId = ItemId::from_raw(104);
+const COLOR_PROPERTY: ItemId = ItemId::from_raw(105);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AssetKind {
@@ -137,6 +144,7 @@ pub(crate) struct EditWorkspace {
     timeline: TimelineWorkspace,
     texture: TextureResource,
     overlay: Option<OverlayScene>,
+    overlay_focus_return: Option<WidgetId>,
 }
 
 impl EditWorkspace {
@@ -162,6 +170,7 @@ impl EditWorkspace {
             timeline: TimelineWorkspace::new(),
             texture: viewport_texture(),
             overlay: None,
+            overlay_focus_return: None,
         }
     }
 
@@ -177,7 +186,7 @@ impl EditWorkspace {
         workspace: DemoWorkspace,
         model: &mut DemoApplicationModel,
         bounds: Size,
-    ) {
+    ) -> Option<WidgetId> {
         self.timeline.project(model);
         let layout = WorkspaceLayout::new(bounds);
         let mut menu_bar = MenuBar::from_menus([MenuBarMenu::from_actions(
@@ -213,11 +222,16 @@ impl EditWorkspace {
             DockSceneConfig::new(WidgetId::from_key("edit-workspace.dock"), layout.dock),
             &self.dock,
         );
+        self.open_color_notice(ui, model, bounds);
 
         let assets_bounds = panel_bounds(&dock_scene, ASSETS_PANEL).map(|rect| rect.inset(8.0));
         let viewport_bounds = panel_bounds(&dock_scene, VIEWPORT_PANEL).map(|rect| rect.inset(8.0));
         let inspector_bounds =
             panel_bounds(&dock_scene, INSPECTOR_PANEL).map(|rect| rect.inset(8.0));
+        let inspector_components = inspector_bounds.map(inspector_component_bounds);
+        let inspector_grid_bounds = inspector_components.map(|(grid, _)| grid);
+        let gradient_bounds = inspector_components.map(|(_, gradient)| gradient);
+        let gradient_id = ui.make_id("edit-workspace.gradient");
         let timeline_bounds = panel_bounds(&dock_scene, TIMELINE_PANEL).map(|rect| rect.inset(6.0));
         let inspector_root = panel_widget_id(&dock_scene, INSPECTOR_PANEL).map(|panel| {
             ui.make_id(("dock-panel-content", panel.raw()))
@@ -272,7 +286,9 @@ impl EditWorkspace {
             )
         });
 
-        open_palette_if_requested(&mut self.overlay, ui.input(), actions, bounds);
+        if open_palette_if_requested(&mut self.overlay, ui.input(), actions, bounds) {
+            self.overlay_focus_return = ui.memory().focused();
+        }
         let context_route = workspace_context_route(ui, viewport_bounds);
 
         declare_workspace_targets(
@@ -287,9 +303,11 @@ impl EditWorkspace {
             actions,
             timeline.as_ref(),
             feedback.as_ref(),
-            inspector_bounds,
+            inspector_grid_bounds,
             inspector_root,
             &inspector_rows,
+            gradient_bounds,
+            gradient_id,
             context_route,
             &chrome,
             self.overlay.as_ref(),
@@ -306,7 +324,7 @@ impl EditWorkspace {
             actions,
             timeline.as_ref(),
             feedback.as_ref(),
-            inspector_bounds,
+            inspector_grid_bounds,
             &inspector_rows,
             &mut self.asset_browser,
             &mut self.assets,
@@ -318,6 +336,9 @@ impl EditWorkspace {
             &mut self.timeline.clip_edit,
             model,
         );
+        if let Some(bounds) = gradient_bounds {
+            compose_gradient_editor(ui, bounds, gradient_id, model);
+        }
         let context_requested = shared_context_requested(ui, viewport_bounds);
         let chrome_output = ui.chrome_scene(&chrome);
         route_workspace_tabs(ui, actions, &chrome_output.intents);
@@ -328,7 +349,19 @@ impl EditWorkspace {
             &chrome_output.intents,
             context_requested,
             bounds,
-        );
+        )
+    }
+
+    fn open_color_notice(&mut self, ui: &Ui<'_>, model: &mut DemoApplicationModel, bounds: Size) {
+        if self.overlay.is_some() {
+            return;
+        }
+        let Some(notice) = model.take_color_overlay_notice() else {
+            return;
+        };
+        let owner = ui.memory().focused();
+        self.overlay = Some(color_notice_scene(notice, bounds, owner));
+        self.overlay_focus_return = owner;
     }
 
     fn reconcile_overlay(
@@ -339,17 +372,29 @@ impl EditWorkspace {
         chrome_intents: &[ChromeSceneIntent],
         context_requested: bool,
         bounds: Size,
-    ) {
+    ) -> Option<WidgetId> {
+        let mut focus_return = None;
         let close_overlay = self.overlay.as_mut().is_some_and(|overlay| {
-            ui.overlay_scene(overlay).intents.iter().any(|intent| {
-                matches!(
-                    intent,
-                    OverlaySceneIntent::Action(_) | OverlaySceneIntent::Dismiss(_)
-                )
-            })
+            ui.overlay_scene(overlay)
+                .intents
+                .iter()
+                .any(|intent| match intent {
+                    OverlaySceneIntent::Action(_) => {
+                        focus_return = self.overlay_focus_return;
+                        true
+                    }
+                    OverlaySceneIntent::Dismiss(request) => {
+                        focus_return = request.focus_return.or(self.overlay_focus_return);
+                        true
+                    }
+                    OverlaySceneIntent::OpenSubmenu(_) | OverlaySceneIntent::SelectDropdown(_) => {
+                        false
+                    }
+                })
         });
         if close_overlay {
             self.overlay = None;
+            self.overlay_focus_return = None;
         }
         if self.overlay.is_none() {
             if let Some((menu, anchor)) = chrome_intents.iter().find_map(|intent| {
@@ -360,6 +405,7 @@ impl EditWorkspace {
             }) {
                 let _ = menu_bar.open(menu);
                 self.overlay = application_menu_scene(menu_bar, anchor, bounds);
+                self.overlay_focus_return = ui.memory().focused();
             } else if context_requested {
                 let anchor = ui
                     .input()
@@ -369,8 +415,10 @@ impl EditWorkspace {
                         Rect::new(point.x, point.y, 1.0, 1.0)
                     });
                 self.overlay = Some(context_menu_scene(actions, anchor, bounds));
+                self.overlay_focus_return = ui.memory().focused();
             }
         }
+        focus_return
     }
 
     pub(crate) fn register_resources(&self, resources: &mut RenderResources) {
@@ -406,11 +454,14 @@ fn declare_workspace_targets(
     inspector_bounds: Option<Rect>,
     inspector_root: Option<WidgetId>,
     inspector_rows: &[PropertyGridRow],
+    gradient_bounds: Option<Rect>,
+    gradient_id: WidgetId,
     context: Option<(WidgetId, Option<Rect>)>,
     chrome: &ChromeScene<'_>,
     overlay: Option<&OverlayScene>,
     picker: Option<&stern::widgets::inspector::InspectorPickerScene>,
 ) {
+    let gradient_reverse_id = ui.make_id(("gradient-reverse", gradient_id.raw()));
     ui.resolve_pointer_targets(|plan| {
         let mut next = dock_scene.declare_pointer_targets_with_content(
             plan,
@@ -437,6 +488,16 @@ fn declare_workspace_targets(
                 if let (Some(bounds), Some(root)) = (inspector_bounds, inspector_root) {
                     next = declare_inspector_targets(plan, next, root, bounds, inspector_rows);
                 }
+                if let Some(bounds) = gradient_bounds {
+                    plan.target(PointerTarget::new(gradient_id, bounds, next).domain_drag_source());
+                    next = PointerOrder::new(next.raw() + 1);
+                    plan.target(PointerTarget::new(
+                        gradient_reverse_id,
+                        Rect::new(bounds.max_x() - 120.0, bounds.y + 4.0, 112.0, 20.0),
+                        next,
+                    ));
+                    next = PointerOrder::new(next.raw() + 1);
+                }
                 next
             },
         );
@@ -460,10 +521,12 @@ fn open_palette_if_requested(
     input: &UiInput,
     actions: &DemoActionRegistry,
     bounds: Size,
-) {
+) -> bool {
     if overlay.is_none() && command_palette_requested(input) {
         *overlay = Some(command_palette_scene(actions, bounds));
+        return true;
     }
+    false
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -526,6 +589,7 @@ fn compose_workspace_panels(
                     selected,
                     opacity_draft,
                     inspector_picker,
+                    model,
                 );
             }
         }
@@ -708,7 +772,7 @@ fn application_menu_scene(menu_bar: &MenuBar, anchor: Rect, bounds: Size) -> Opt
         overlay_id: APPLICATION_MENU_OVERLAY,
         kind: OverlayKind::Menu,
         anchor,
-        size: Size::new(320.0, 96.0),
+        size: Size::new(320.0, 128.0),
         placement: PopoverPlacement::Below,
         offset: 2.0,
         fit_viewport: true,
@@ -762,6 +826,47 @@ fn command_palette_scene(actions: &DemoActionRegistry, bounds: Size) -> OverlayS
         "Shared command palette",
         overlay,
     ));
+    scene
+}
+
+fn color_notice_scene(
+    notice: DemoColorOverlayNotice,
+    bounds: Size,
+    owner: Option<WidgetId>,
+) -> OverlayScene {
+    let viewport = viewport_rect(bounds);
+    let mut scene = OverlayScene::new();
+    match notice {
+        DemoColorOverlayNotice::SaveFailed => {
+            let rect = Rect::new((viewport.width - 320.0) * 0.5, 96.0, 320.0, 44.0);
+            let entry = OverlayEntry::new(COLOR_FAILURE_POPOVER, OverlayKind::Popover, rect)
+                .dismiss_on(OverlayDismissal::OutsideClickOrEscape);
+            scene.push(OverlaySceneSurface::passive(
+                entry,
+                "Color recovery hint",
+                "Save failed without mutation. Dismiss and retry.",
+            ));
+        }
+        DemoColorOverlayNotice::SaveRecovered => {
+            let focus = owner.map_or_else(ModalFocusContainment::new, |owner| {
+                ModalFocusContainment::new().with_return_focus(owner)
+            });
+            let dialog = ModalDialog::new(
+                WidgetId::from_key("edit-workspace.color-recovery"),
+                "Color style recovered",
+            )
+            .with_body("Explicit sRGB color and gradient serialization succeeded.")
+            .with_focus(focus);
+            let rect = Rect::new((viewport.width - 360.0) * 0.5, 128.0, 360.0, 96.0);
+            scene.push(OverlaySceneSurface::modal(ModalDialogOverlay::placed(
+                COLOR_RECOVERY_MODAL,
+                rect,
+                dialog,
+                OverlayDismissal::OutsideClickOrEscape,
+                ActionContext::Editor,
+            )));
+        }
+    }
     scene
 }
 
@@ -855,7 +960,7 @@ fn edit_dock() -> Dock {
     let inspector = dock_frame(3, INSPECTOR_PANEL, "Inspector");
     let timeline = dock_frame(4, TIMELINE_PANEL, "Timeline");
     let upper = split(Axis::Horizontal, 0.60, viewport, inspector);
-    let right = split(Axis::Vertical, 0.62, upper, timeline);
+    let right = split(Axis::Vertical, 0.68, upper, timeline);
     let mut dock = Dock::new(split(Axis::Horizontal, 0.22, assets, right));
     let _ = dock.set_active_frame(FrameId::from_raw(2));
     dock
@@ -909,7 +1014,22 @@ fn inspector_rows(asset: &AssetRecord) -> Vec<PropertyGridRow> {
             true,
             asset.opacity.to_bits() == asset.defaults.opacity.to_bits(),
         ),
+        PropertyGridRow::property(COLOR_PROPERTY, "Color", 0),
     ]
+}
+
+fn inspector_component_bounds(bounds: Rect) -> (Rect, Rect) {
+    let grid_height = 146.0_f32.min(bounds.height.max(0.0));
+    let gap = 4.0_f32.min((bounds.height - grid_height).max(0.0));
+    (
+        Rect::new(bounds.x, bounds.y, bounds.width, grid_height),
+        Rect::new(
+            bounds.x,
+            bounds.y + grid_height + gap,
+            bounds.width,
+            (bounds.height - grid_height - gap).max(0.0),
+        ),
+    )
 }
 
 fn declare_inspector_targets(
@@ -942,6 +1062,7 @@ fn declare_inspector_targets(
             KIND_PROPERTY => "kind",
             VISIBLE_PROPERTY => "visible",
             OPACITY_PROPERTY => "opacity",
+            COLOR_PROPERTY => "color",
             _ => continue,
         };
         let target = PointerTarget::new(value.child(key), rects.value_rect, next);
@@ -969,13 +1090,15 @@ fn inspector(
     asset: &mut AssetRecord,
     opacity_draft: &mut TextEditState,
     picker: &mut InspectorPickerState,
+    model: &mut DemoApplicationModel,
 ) {
     let kind_model = kind_model(asset.kind);
+    let picker_width = 260.0;
     let picker_bounds = Rect::new(
-        bounds.x + 4.0,
-        bounds.y + 56.0,
-        (bounds.width - 8.0).max(0.0),
-        112.0,
+        (bounds.max_x() - picker_width).max(4.0),
+        bounds.y + 24.0,
+        picker_width,
+        164.0,
     );
     let mut name = TextEditState::new(asset.name.clone());
     let output = ui
@@ -1036,6 +1159,16 @@ fn inspector(
                         *opacity_draft = TextEditState::new(asset.opacity.to_string());
                     }
                 }
+                COLOR_PROPERTY => {
+                    let field = ui.color_field(
+                        "color",
+                        cell.value_rect,
+                        "Fill color",
+                        model.tagged_color().color(),
+                        ColorFieldConfig::default(),
+                    );
+                    let _ = ui.color_picker(picker, &field, COLOR_PICKER_OVERLAY, picker_bounds);
+                }
                 _ => unreachable!("property-grid callback skips section rows"),
             },
         )
@@ -1046,11 +1179,33 @@ fn inspector(
             reset_asset_property(asset, opacity_draft, row);
         }
     }
-    if let Some(InspectorPickerCommit::Select(kind)) = ui.inspector_picker_scene(picker).commit
-        && let Some(kind) = AssetKind::from_dropdown(kind)
-    {
-        asset.kind = kind;
+    if let Some(commit) = ui.inspector_picker_scene(picker).commit {
+        match commit {
+            InspectorPickerCommit::Select(kind) => {
+                if let Some(kind) = AssetKind::from_dropdown(kind) {
+                    asset.kind = kind;
+                }
+            }
+            InspectorPickerCommit::Color(color) => model.commit_color(color),
+            InspectorPickerCommit::Asset(_) | InspectorPickerCommit::Path(_) => {}
+        }
     }
+}
+
+fn compose_gradient_editor(
+    ui: &mut Ui<'_>,
+    bounds: Rect,
+    id: WidgetId,
+    model: &mut DemoApplicationModel,
+) {
+    let stops = model.gradient_stops().to_vec();
+    let config = GradientEditorConfig::new(id, bounds, GradientInterpolationSpace::Srgb, &stops)
+        .selected_stop(model.selected_gradient_stop());
+    let widget = ui
+        .prepare_gradient_editor(config)
+        .expect("demo gradient uses valid sRGB stops");
+    let output = ui.gradient_editor(&widget);
+    model.apply_gradient_intents(&output.intents);
 }
 
 fn kind_model(selected: AssetKind) -> DropdownModel {

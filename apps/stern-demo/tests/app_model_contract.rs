@@ -1,8 +1,10 @@
 //! Shared application model and action identity contract.
 
-use stern::core::{ActionContext, ActionDescriptor, ActionInvocation, ActionSource};
+use stern::core::{ActionContext, ActionDescriptor, ActionInvocation, ActionSource, Color};
+use stern::widgets::gradient_editor::GradientEditorIntent;
 use stern_demo::{
-    DemoActionRegistry, DemoApplicationModel, DemoJobPhase, DemoViewportTool, DemoWorkspace,
+    DemoActionRegistry, DemoApplicationModel, DemoColorSaveState, DemoJobPhase, DemoTaggedColor,
+    DemoViewportTool, DemoWorkspace,
 };
 
 #[test]
@@ -77,13 +79,14 @@ fn single_registry_owns_exact_existing_action_descriptors() {
             ("workspace.edit", "Edit Workspace"),
             ("workspace.graph", "Graph Workspace"),
             ("shared.apply", "Apply Shared State"),
+            ("color-style.save", "Save Color Style"),
         ]
     );
 
     let library = include_str!("../src/lib.rs");
     let model = include_str!("../src/app_model.rs");
     assert!(!library.contains("ActionDescriptor::new"));
-    assert_eq!(model.matches("ActionDescriptor::new").count(), 4);
+    assert_eq!(model.matches("ActionDescriptor::new").count(), 5);
     assert_eq!(
         registry.edit_workspace().icon,
         Some(stern_icons_phosphor::regular::PENCIL_SIMPLE.icon())
@@ -95,6 +98,10 @@ fn single_registry_owns_exact_existing_action_descriptors() {
     assert_eq!(
         registry.apply_shared_state().icon,
         Some(stern_icons_phosphor::regular::CHECK_CIRCLE.icon())
+    );
+    assert_eq!(
+        registry.save_color_style().icon,
+        Some(stern_icons_phosphor::regular::FLOPPY_DISK.icon())
     );
     assert_eq!(
         registry.viewport_select().icon,
@@ -120,6 +127,62 @@ fn single_registry_owns_exact_existing_action_descriptors() {
             "forbidden model API: {forbidden}"
         );
     }
+}
+
+#[test]
+fn color_gradient_and_failed_save_remain_application_owned() {
+    let registry = DemoActionRegistry::new();
+    let mut model = DemoApplicationModel::new();
+    let original_color = model.tagged_color();
+    let original_stops = model.gradient_stops().to_vec();
+    let selected = model.selected_gradient_stop();
+
+    model.commit_color(Color::rgb8(12, 34, 56));
+    assert_eq!(
+        model.tagged_color(),
+        DemoTaggedColor::Srgb(Color::rgb8(12, 34, 56))
+    );
+    assert_ne!(model.tagged_color(), original_color);
+    assert_eq!(model.color_revision(), 1);
+
+    model.apply_gradient_intents(&[GradientEditorIntent::MoveStop {
+        id: selected,
+        position: 0.35,
+    }]);
+    assert_eq!(
+        model
+            .gradient_stops()
+            .iter()
+            .find(|stop| stop.id == selected)
+            .expect("selected stop")
+            .position
+            .to_bits(),
+        0.35_f32.to_bits()
+    );
+    model.apply_gradient_intents(&[GradientEditorIntent::Reverse]);
+    assert_eq!(model.selected_gradient_stop(), selected);
+    assert_eq!(
+        model
+            .gradient_stops()
+            .iter()
+            .map(|stop| stop.id)
+            .collect::<Vec<_>>(),
+        original_stops
+            .iter()
+            .rev()
+            .map(|stop| stop.id)
+            .collect::<Vec<_>>()
+    );
+
+    assert!(model.execute(&invocation(registry.save_color_style())));
+    assert_eq!(model.color_save_state(), DemoColorSaveState::Failed);
+    assert_eq!(model.serialized_color_style(), None);
+    assert!(model.execute(&invocation(registry.save_color_style())));
+    assert_eq!(model.color_save_state(), DemoColorSaveState::Succeeded);
+    let serialized = model.serialized_color_style().expect("serialized style");
+    assert!(serialized.starts_with("color=srgb("));
+    assert!(serialized.contains(";gradient=sRGB"));
+    assert_eq!(serialized.matches("=srgb(").count(), 3);
 }
 
 fn invocation(action: &ActionDescriptor) -> ActionInvocation {
