@@ -50,6 +50,7 @@ const CANDIDATE_EVIDENCE_DRIFT = [
   "apps/stern-demo/tools/contract.rs",
   "apps/stern-demo/tools/json.rs",
   "apps/stern-demo/tools/runtime-semantic-evidence.rs",
+  "evidence/stern-demo-vello-845/manifest.json",
 ];
 
 const options = parseArgs(process.argv.slice(2));
