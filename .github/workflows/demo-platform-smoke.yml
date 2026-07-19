@@ -43,7 +43,7 @@ jobs:
 
       - name: Install Linux display and Mesa Vulkan runtime
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes xvfb mesa-vulkan-drivers
+        run: sudo apt-get update && sudo apt-get install --yes xvfb mesa-vulkan-drivers libxkbcommon-x11-0
 
       - name: Build native shell
         run: cargo build -p stern-demo --bin native_shell
