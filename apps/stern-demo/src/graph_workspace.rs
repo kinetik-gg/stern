@@ -243,6 +243,7 @@ impl GraphWorkspaceState {
         true
     }
 
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(crate) fn compose(
         &mut self,
         ui: &mut Ui<'_>,

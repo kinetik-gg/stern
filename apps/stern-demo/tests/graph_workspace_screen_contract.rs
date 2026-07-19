@@ -100,7 +100,7 @@ fn graph_viewport_projects_tool_action_and_retained_non_default_transform() {
         transform.pan,
         stern::widgets::node_graph::GraphVector::new(2.0, 2.0)
     );
-    assert_eq!(transform.zoom, 1.0);
+    assert_eq!(transform.zoom.to_bits(), 1.0_f32.to_bits());
     semantic_node(&initial, &SemanticRole::Viewport, "Graph preview viewport");
     assert_eq!(app.viewport_tool(), DemoViewportTool::Select);
 
