@@ -16,7 +16,7 @@ fn generator_records_honest_current_runtime_packet() {
 }
 
 #[test]
-fn verifier_rejects_stale_source_and_premature_platform_gate_claims() {
+fn verifier_rejects_stale_source_and_platform_evidence_tampering() {
     let evidence = temp("tampered");
     generate(&evidence);
     mutate(&evidence, "record.source.tree = '0'.repeat(40);");
@@ -25,7 +25,7 @@ fn verifier_rejects_stale_source_and_premature_platform_gate_claims() {
     generate(&evidence);
     mutate(
         &evidence,
-        "record.gates.find(gate => gate.id === 'platform-integration').status = 'passed';",
+        "record.platformEvidence.records.find(record => record.platform === 'linux').exitCode = 1;",
     );
     verify(&evidence, false);
     let _ = fs::remove_file(evidence);
@@ -93,11 +93,11 @@ fn assert_provisional(path: &Path) {
         "const fs=require('fs');const r=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));",
         "const passed=x=>x.filter(v=>v.status==='passed').length;",
         "const gate=id=>r.gates.find(v=>v.id===id).status;",
-        "if(r.status!=='incomplete'||r.runtime.components.length!==34||",
+        "if(r.status!=='final'||r.runtime.components.length!==34||",
         "passed(r.runtime.components)!==34||r.runtime.journeys.length!==7||",
         "passed(r.runtime.journeys)!==7||r.semanticSnapshots.length!==2||",
         "!r.publicConsumerAudit.passed||gate('renderer-and-scale-quality')!=='passed'||",
-        "gate('platform-integration')!=='pending')process.exit(1);",
+        "gate('platform-integration')!=='passed'||r.knownGaps.length!==0)process.exit(1);",
     );
     let status = Command::new("node")
         .args(["-e", script, path.to_str().unwrap()])

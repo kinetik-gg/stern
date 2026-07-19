@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { verifyEvidence as verifyRendererEvidence } from "../../../tools/capture-demo-vello.mjs";
+import { verifyRecords as verifyPlatformRecords } from "./platform-smoke-record.mjs";
 
 const SPEC_SHA256 = "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed";
 const COMPONENTS = [
@@ -54,7 +55,7 @@ const sourceRef = options.sourceRef ?? evidence.source?.sourceRef;
 
 assertExact(Object.keys(evidence).sort(), [
   "focusRestorationTraces", "formatVersion", "gates", "knownGaps", "logs",
-  "primitiveContentSurfaceAllowlist", "publicConsumerAudit", "runtime",
+  "platformEvidence", "primitiveContentSurfaceAllowlist", "publicConsumerAudit", "runtime",
   "rendererEvidence", "semanticSnapshots", "source", "specificationSha256", "status", "sternVersion",
   "traversalTraces",
 ].sort(), "top-level keys");
@@ -179,6 +180,24 @@ const rendererDrift = git(
 ).split(/\r?\n/u).filter(Boolean);
 assertExact(rendererDrift, RENDERER_COMPATIBLE_DRIFT,
   "renderer capture-sensitive source compatibility");
+
+const platformCommit = "50edc219ae5d013c242129adf2ec7a25942f5c28";
+assertExact(evidence.platformEvidence, {
+  issue: 848,
+  runId: 29672838723,
+  runUrl: "https://github.com/kinetik-gg/stern/actions/runs/29672838723",
+  artifactName: "demo-platform-smoke-verified",
+  commit: platformCommit,
+  status: "pass",
+  records: [
+    { formatVersion: 1, platform: "windows", commit: platformCommit, runnerOs: "Windows", runnerArch: "X64", expectedBackend: "dx12", exitCode: 0, timedOut: false, presentationEvidence: "native-shell-smoke=pass status=Presented" },
+    { formatVersion: 1, platform: "macos", commit: platformCommit, runnerOs: "macOS", runnerArch: "ARM64", expectedBackend: "metal", exitCode: 0, timedOut: false, presentationEvidence: "native-shell-smoke=pass status=Presented" },
+    { formatVersion: 1, platform: "linux", commit: platformCommit, runnerOs: "Linux", runnerArch: "X64", expectedBackend: "vulkan", exitCode: 0, timedOut: false, presentationEvidence: "native-shell-smoke=pass status=Presented" },
+  ],
+}, "platform evidence record");
+verifyPlatformRecords(evidence.platformEvidence.records, platformCommit);
+assert(git("merge-base", platformCommit, evidence.source.commit) === platformCommit,
+  "platform evidence commit is not an ancestor of the packet source");
 
 assertExact(evidence.gates.map(({ id }) => id), GATES, "gate IDs");
 for (const gate of evidence.gates) assertRecord(gate, "gate");

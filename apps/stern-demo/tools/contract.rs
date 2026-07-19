@@ -74,7 +74,7 @@ pub(super) fn gate_refs(id: &str) -> Vec<&'static str> {
             "#/focusRestorationTraces",
         ],
         "renderer-and-scale-quality" => vec!["#/rendererEvidence"],
-        "platform-integration" => vec!["#/knownGaps/0"],
+        "platform-integration" => vec!["#/platformEvidence"],
         _ => vec!["#/source", "#/knownGaps", "#/gates"],
     }
 }

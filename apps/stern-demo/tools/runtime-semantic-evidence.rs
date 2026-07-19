@@ -196,6 +196,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
                 | "deterministic-user-journeys"
                 | "semantic-structure"
                 | "renderer-and-scale-quality"
+                | "platform-integration"
                 | "honest-evidence" => "passed",
                 _ => "pending",
             };
@@ -225,6 +226,19 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         "reviewStatus": "approved",
         "artifactCount": 8,
         "sourceCompatibility": "capture-sensitive paths unchanged",
+    });
+    let platform_evidence = json!({
+        "issue": 848,
+        "runId": 29672838723_u64,
+        "runUrl": "https://github.com/kinetik-gg/stern/actions/runs/29672838723",
+        "artifactName": "demo-platform-smoke-verified",
+        "commit": "50edc219ae5d013c242129adf2ec7a25942f5c28",
+        "status": "pass",
+        "records": [
+            json!({"formatVersion": 1, "platform": "windows", "commit": "50edc219ae5d013c242129adf2ec7a25942f5c28", "runnerOs": "Windows", "runnerArch": "X64", "expectedBackend": "dx12", "exitCode": 0, "timedOut": false, "presentationEvidence": "native-shell-smoke=pass status=Presented"}),
+            json!({"formatVersion": 1, "platform": "macos", "commit": "50edc219ae5d013c242129adf2ec7a25942f5c28", "runnerOs": "macOS", "runnerArch": "ARM64", "expectedBackend": "metal", "exitCode": 0, "timedOut": false, "presentationEvidence": "native-shell-smoke=pass status=Presented"}),
+            json!({"formatVersion": 1, "platform": "linux", "commit": "50edc219ae5d013c242129adf2ec7a25942f5c28", "runnerOs": "Linux", "runnerArch": "X64", "expectedBackend": "vulkan", "exitCode": 0, "timedOut": false, "presentationEvidence": "native-shell-smoke=pass status=Presented"}),
+        ],
     });
     let actions = vec![
         json!({"id": "pointer-apply", "input": "pointer", "actionId": "shared.apply", "source": "Button", "stateBefore": revision_before, "stateAfter": revision_before + u32::from(pointer_action), "status": status(pointer_action)}),
@@ -263,14 +277,12 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         recovery.focus_log,
         owner_removal,
     ];
-    let known_gaps = vec![
-        json!({"id": "cross-platform-evidence", "issue": 848, "blocksGateIds": ["platform-integration"], "reason": "Windows, macOS, and Linux evidence is not complete"}),
-    ];
+    let known_gaps: Vec<Value> = Vec::new();
     Ok(json!({
         "formatVersion": 1,
         "sternVersion": VERSION,
         "specificationSha256": SPEC_SHA256,
-        "status": "incomplete",
+        "status": "final",
         "source": source,
         "runtime": runtime,
         "logs": logs,
@@ -278,6 +290,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         "traversalTraces": traversal,
         "focusRestorationTraces": focus_restoration,
         "rendererEvidence": renderer_evidence,
+        "platformEvidence": platform_evidence,
         "publicConsumerAudit": audit,
         "primitiveContentSurfaceAllowlist": primitive_allowlist(root)?,
         "gates": gates,
