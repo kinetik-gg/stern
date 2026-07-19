@@ -6,6 +6,13 @@ use std::{
     process::Command,
 };
 
+const CANONICAL_SOURCE: &str = "50edc219ae5d013c242129adf2ec7a25942f5c28";
+const CANONICAL_TREE: &str = "6c64e4dffe649a1b652cd5b0d15416e254c57b8c";
+const RETIRED_TOPIC_SOURCE: &str = "6a677f098a463fb89e7fc727f28de50d65500cd0";
+const RENDERER_CANONICAL_SOURCE: &str = "e7b46bb145b01c0b6e4ba570a628cb9fa2cc30f0";
+const RENDERER_CANONICAL_TREE: &str = "a29fcf93865b9b797e82683cc395631b8d49e308";
+const RETIRED_RENDERER_SOURCE: &str = "8aaa685e541d6b21edcee50d58e98dffefa62737";
+
 #[test]
 fn generator_records_honest_current_runtime_packet() {
     verify(&tracked_packet(), true);
@@ -13,6 +20,36 @@ fn generator_records_honest_current_runtime_packet() {
     generate(&evidence);
     assert_provisional(&evidence);
     let _ = fs::remove_file(evidence);
+}
+
+#[test]
+fn tracked_packet_binds_resolvable_canonical_source_only() {
+    let packet = fs::read_to_string(tracked_packet()).expect("read tracked evidence packet");
+    assert!(packet.contains(CANONICAL_SOURCE));
+    assert!(packet.contains(CANONICAL_TREE));
+    assert!(!packet.contains(RETIRED_TOPIC_SOURCE));
+    let commit = git(&["rev-parse", &format!("{CANONICAL_SOURCE}^{{commit}}")]);
+    let tree = git(&["rev-parse", &format!("{CANONICAL_SOURCE}^{{tree}}")]);
+    assert_eq!(commit, CANONICAL_SOURCE);
+    assert_eq!(tree, CANONICAL_TREE);
+}
+
+#[test]
+fn renderer_manifest_binds_resolvable_canonical_source_only() {
+    let manifest = fs::read_to_string(renderer_manifest()).expect("read renderer manifest");
+    assert!(manifest.contains(RENDERER_CANONICAL_SOURCE));
+    assert!(manifest.contains(RENDERER_CANONICAL_TREE));
+    assert!(!manifest.contains(RETIRED_RENDERER_SOURCE));
+    let commit = git(&[
+        "rev-parse",
+        &format!("{RENDERER_CANONICAL_SOURCE}^{{commit}}"),
+    ]);
+    let tree = git(&[
+        "rev-parse",
+        &format!("{RENDERER_CANONICAL_SOURCE}^{{tree}}"),
+    ]);
+    assert_eq!(commit, RENDERER_CANONICAL_SOURCE);
+    assert_eq!(tree, RENDERER_CANONICAL_TREE);
 }
 
 #[test]
@@ -172,6 +209,23 @@ fn verifier(path: &Path) -> std::process::Output {
 
 fn tracked_packet() -> PathBuf {
     repo_root().join("apps/stern-demo/tests/evidence/runtime-semantic-evidence.provisional.json")
+}
+
+fn renderer_manifest() -> PathBuf {
+    repo_root().join("evidence/stern-demo-vello-845/manifest.json")
+}
+
+fn git(args: &[&str]) -> String {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo_root())
+        .output()
+        .expect("run git provenance check");
+    assert!(output.status.success(), "git provenance command failed");
+    String::from_utf8(output.stdout)
+        .expect("git output is UTF-8")
+        .trim()
+        .to_owned()
 }
 
 fn assert_provisional(path: &Path) {
