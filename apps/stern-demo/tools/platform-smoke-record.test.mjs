@@ -9,7 +9,7 @@ function record(platform, overrides = {}) {
   const contracts = {
     windows: { backend: "dx12", runnerOs: "Windows" },
     macos: { backend: "metal", runnerOs: "macOS" },
-    linux: { backend: "gl", runnerOs: "Linux" },
+    linux: { backend: "vulkan", runnerOs: "Linux" },
   };
   return {
     formatVersion: 1,
@@ -29,7 +29,7 @@ function validRecords() {
   return [record("windows"), record("macos"), record("linux")];
 }
 
-test("accepts exactly Windows DX12, macOS Metal, and Linux GL for one commit", () => {
+test("accepts exactly Windows DX12, macOS Metal, and Linux Vulkan for one commit", () => {
   assert.deepEqual(verifyRecords(validRecords(), COMMIT).map(({ platform }) => platform), ["windows", "macos", "linux"]);
 });
 
@@ -51,8 +51,8 @@ test("rejects a record from the wrong commit", () => {
 
 test("rejects a backend that does not match its platform", () => {
   const records = validRecords();
-  records[0] = record("windows", { expectedBackend: "gl" });
-  assert.throws(() => verifyRecords(records, COMMIT), /wrong backend for windows/u);
+  records[2] = record("linux", { expectedBackend: "gl" });
+  assert.throws(() => verifyRecords(records, COMMIT), /wrong backend for linux/u);
 });
 
 test("rejects a nonzero native-shell exit", () => {
