@@ -1,16 +1,18 @@
 //! Pure public Graph workspace composition evidence.
 
 use stern::core::{
-    FrameContext, Modifiers, MouseButton, PhysicalSize, Point, PointerButtonState, PointerInput,
-    ScaleFactor, SemanticRole, SemanticValue, Size, TimeInfo, UiInput, UiInputEvent, ViewportInfo,
-    WidgetId,
+    FrameContext, Key, KeyEvent, KeyState, Modifiers, MouseButton, PhysicalSize, Point,
+    PointerButtonState, PointerInput, ScaleFactor, SemanticRole, SemanticValue, Size, TimeInfo,
+    UiInput, UiInputEvent, Vec2, ViewportInfo, WidgetId,
 };
-use stern::widgets::node_graph::{NodeGraphSelectionTarget, NodeId};
-use stern_demo::{DemoApp, DemoWorkspace, demo_context};
+use stern::widgets::node_graph::{
+    EdgeId, NodeGraphConnectionCancelReason, NodeGraphSelectionTarget, NodeId, PortEndpoint, PortId,
+};
+use stern_demo::{DemoApp, DemoWorkspace, GraphConnectionFeedback, demo_context};
 
 const SOURCE_POINT: Point = Point::new(100.0, 370.0);
 const SOURCE_PORT_POINT: Point = Point::new(216.0, 390.0);
-const VIEWER_POINT: Point = Point::new(440.0, 414.0);
+const VIEWER_POINT: Point = Point::new(440.0, 350.0);
 const CANVAS_POINT: Point = Point::new(300.0, 350.0);
 const CLEAR_SELECTION_POINT: Point = Point::new(70.0, 244.0);
 
@@ -132,8 +134,121 @@ fn graph_inspector_values_follow_public_node_selection() {
         VIEWER_POINT,
         Modifiers::default(),
     )));
-    assert_eq!(inspector_text_values(&viewer), ["Viewer", "360", "88", "1"]);
+    assert_eq!(inspector_text_values(&viewer), ["Viewer", "360", "28", "3"]);
     assert!(has_inspector_rows(&viewer));
+}
+
+#[test]
+fn graph_connection_edit_qualifies_components_and_commits_one_app_owned_edge() {
+    let mut app = focused_graph_app();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let mut qualified = Vec::new();
+    if has_role(&initial, "node-graph") {
+        qualified.push("node-graph");
+    }
+    if ["node", "port", "edge"]
+        .into_iter()
+        .all(|role| has_role(&initial, role))
+    {
+        qualified.push("node-components");
+    }
+    assert_eq!(qualified, ["node-graph", "node-components"]);
+
+    let source = graph_port_center(&initial, "Output Image");
+    let target = graph_port_center(&initial, "Input Preview Image");
+    let original_edges = app.graph_workspace().edges().to_vec();
+
+    let _ = app.frame(demo_context(connection_press(source)));
+    let _ = app.frame(demo_context(connection_move(source, target)));
+    assert!(app.graph_workspace().connection_active());
+    assert_eq!(
+        app.graph_workspace().connection_feedback(),
+        GraphConnectionFeedback::Previewing
+    );
+    assert_eq!(app.graph_workspace().edges(), original_edges);
+
+    let _ = app.frame(demo_context(connection_release(target)));
+    assert!(!app.graph_workspace().connection_active());
+    assert_eq!(
+        app.graph_workspace().connection_feedback(),
+        GraphConnectionFeedback::Committed(EdgeId::from_raw(2))
+    );
+    assert_eq!(
+        app.graph_workspace().edges().len(),
+        original_edges.len() + 1
+    );
+    let committed = app
+        .graph_workspace()
+        .edges()
+        .last()
+        .expect("committed edge");
+    assert_eq!(committed.id, EdgeId::from_raw(2));
+    assert_eq!(
+        committed.from,
+        PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1))
+    );
+    assert_eq!(
+        committed.to,
+        PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2))
+    );
+    let feedback = app.frame(demo_context(UiInput::default()));
+    assert_eq!(status_text(&feedback), "Connection committed as edge 2");
+}
+
+#[test]
+fn graph_connection_rejects_incompatible_target_without_mutation() {
+    let mut app = focused_graph_app();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let source = graph_port_center(&initial, "Output Image");
+    let incompatible = graph_port_center(&initial, "Input Vector Mask");
+    let original_edges = app.graph_workspace().edges().to_vec();
+
+    let _ = app.frame(demo_context(connection_press(source)));
+    let _ = app.frame(demo_context(connection_move(source, incompatible)));
+    assert_eq!(
+        app.graph_workspace().connection_feedback(),
+        GraphConnectionFeedback::Rejected
+    );
+    assert_eq!(app.graph_workspace().edges(), original_edges);
+
+    let feedback = app.frame(demo_context(connection_release(incompatible)));
+    assert!(!app.graph_workspace().connection_active());
+    assert_eq!(app.graph_workspace().edges(), original_edges);
+    assert_eq!(status_text(&feedback), "Incompatible connection rejected");
+    assert_eq!(app.focused(), Some(app.graph_workspace().root_id()));
+}
+
+#[test]
+fn graph_connection_escape_and_capture_loss_restore_focus_and_ownership() {
+    for (cancel, reason) in [
+        (
+            connection_escape as fn(Point) -> UiInput,
+            NodeGraphConnectionCancelReason::Escape,
+        ),
+        (
+            connection_capture_loss as fn(Point) -> UiInput,
+            NodeGraphConnectionCancelReason::CaptureLost,
+        ),
+    ] {
+        let mut app = focused_graph_app();
+        let initial = app.frame(demo_context(UiInput::default()));
+        let source = graph_port_center(&initial, "Output Image");
+        let preview = Point::new(source.x + 40.0, source.y + 20.0);
+        let original_edges = app.graph_workspace().edges().to_vec();
+
+        let _ = app.frame(demo_context(connection_press(source)));
+        let _ = app.frame(demo_context(connection_move(source, preview)));
+        assert!(app.graph_workspace().connection_active());
+        let _ = app.frame(demo_context(cancel(preview)));
+
+        assert_eq!(
+            app.graph_workspace().connection_feedback(),
+            GraphConnectionFeedback::Cancelled(reason)
+        );
+        assert!(!app.graph_workspace().connection_active());
+        assert_eq!(app.graph_workspace().edges(), original_edges);
+        assert_eq!(app.focused(), Some(app.graph_workspace().root_id()));
+    }
 }
 
 #[test]
@@ -494,6 +609,83 @@ fn inspector_text_values(output: &stern::core::FrameOutput) -> Vec<&str> {
             _ => None,
         })
         .collect()
+}
+
+fn focused_graph_app() -> DemoApp {
+    let mut app = DemoApp::new();
+    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    select(&mut app, SOURCE_POINT, Modifiers::default());
+    assert_eq!(app.focused(), Some(app.graph_workspace().root_id()));
+    app
+}
+
+fn graph_port_center(output: &stern::core::FrameOutput, label: &str) -> Point {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| {
+            matches!(&node.role, SemanticRole::Custom(role) if role == "port")
+                && node.label.as_deref() == Some(label)
+        })
+        .map_or_else(
+            || panic!("public graph port: {label}"),
+            |node| node.bounds.center(),
+        )
+}
+
+fn connection_press(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.pointer.primary.down = true;
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 1,
+        position: Some(point),
+    });
+    input
+}
+
+fn connection_move(from: Point, to: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.pointer.primary.down = true;
+    input.push_event(UiInputEvent::PointerMoved {
+        position: to,
+        delta: Vec2::new(to.x - from.x, to.y - from.y),
+    });
+    input
+}
+
+fn connection_release(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 1,
+        position: Some(point),
+    });
+    input
+}
+
+fn connection_escape(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.pointer.primary.down = true;
+    input.push_event(UiInputEvent::Key(KeyEvent::new(
+        Key::Escape,
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    )));
+    input.pointer.position = Some(point);
+    input
+}
+
+fn connection_capture_loss(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.pointer.primary.down = true;
+    input.push_event(UiInputEvent::WindowFocusChanged(false));
+    input.pointer.position = Some(point);
+    input
 }
 
 fn activate_workspace(app: &mut DemoApp, point: Point, expected: DemoWorkspace) {
