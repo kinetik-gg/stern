@@ -37,6 +37,8 @@ pub enum DemoScenario {
     TimelineJourney,
     /// Shared-overlay routing and focus-owner recovery journey.
     OverlayRecoveryJourney,
+    /// Graph identity and presentation-order journey.
+    GraphJourney,
 }
 
 impl DemoScenario {
@@ -50,6 +52,12 @@ impl DemoScenario {
     #[must_use]
     pub const fn has_overlay_recovery_journey(self) -> bool {
         matches!(self, Self::OverlayRecoveryJourney)
+    }
+
+    /// Returns whether Graph journey additions should be projected.
+    #[must_use]
+    pub const fn has_graph_journey(self) -> bool {
+        matches!(self, Self::GraphJourney)
     }
 }
 

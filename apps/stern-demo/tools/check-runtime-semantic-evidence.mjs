@@ -7,7 +7,7 @@ import { verifyEvidence as verifyRendererEvidence } from "../../../tools/capture
 import { verifyRecords as verifyPlatformRecords } from "./platform-smoke-record.mjs";
 
 const SPEC_SHA256 = "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed";
-const EXPECTED_PACKET_SHA256 = "47c76fe8db4dbc69e2ef1f6b3f989cd0550dbf13634683add3e541e64de8eecf";
+const EXPECTED_PACKET_SHA256 = "c75b530b3016ed4509c2d290a30a9eabe16cbb1f1922ffcba517ea654127e71a";
 const COMPONENTS = [
   "button", "text-field", "dropdown", "selection-controls", "value-controls",
   "progress-feedback", "overlay-system", "virtual-list", "editor-frame",
@@ -51,6 +51,7 @@ const CANDIDATE_EVIDENCE_DRIFT = [
   "apps/stern-demo/tests/app_model_contract.rs",
   "apps/stern-demo/tests/edit_workspace_screen_contract.rs",
   "apps/stern-demo/tests/evidence/runtime-semantic-evidence.provisional.json",
+  "apps/stern-demo/tests/graph_journey_contract.rs",
   "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
   "apps/stern-demo/tests/overlay_recovery_journey_contract.rs",
   "apps/stern-demo/tests/public_consumer_contract.rs",
@@ -65,12 +66,14 @@ const CANDIDATE_EVIDENCE_DRIFT = [
   "evidence/stern-demo-vello-845/manifest.json",
 ];
 const PROVISIONAL_GRAPH_SOURCE_DRIFT = [
+  "apps/stern-demo/src/app_model.rs",
   "apps/stern-demo/src/edit_workspace.rs",
   "apps/stern-demo/src/graph_workspace.rs",
   "apps/stern-demo/src/lib.rs",
   "apps/stern-demo/src/overlay_workspace.rs",
 ];
 const PROVISIONAL_GRAPH_CONTRACT_DRIFT = [
+  "apps/stern-demo/tests/graph_journey_contract.rs",
   "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
   "apps/stern-demo/tests/public_consumer_contract.rs",
 ];

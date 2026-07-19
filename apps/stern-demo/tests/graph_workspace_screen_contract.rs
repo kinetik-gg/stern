@@ -281,7 +281,10 @@ fn graph_connection_edit_qualifies_components_and_commits_one_app_owned_edge() {
     assert!(app.graph_workspace().connection_active());
     assert_eq!(
         app.graph_workspace().connection_feedback(),
-        GraphConnectionFeedback::Previewing
+        GraphConnectionFeedback::Accepted {
+            from: PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+            to: PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+        }
     );
     assert_eq!(app.graph_workspace().edges(), original_edges);
 
