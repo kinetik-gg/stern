@@ -1,12 +1,7 @@
-//! Public-facade native shell spike for the Stern integration demo.
+//! Public native host for the real Stern integration demo.
 use std::sync::Arc;
 use std::time::Instant;
 
-use stern::UiState;
-use stern::core::{
-    ActionContext, ActionDescriptor, FrameContext, FrameOutput, PlatformRequest, PointerOrder,
-    Rect, WidgetId, default_dark_theme,
-};
 use stern::platform_winit::{
     NativeWinitShellServices, WinitFrameClock, WinitInputAdapter, WinitPlatformRequests,
     WinitRepaintSchedule, WinitRepaintScheduler, frame_context_from_winit, scale_factor_from_winit,
@@ -16,12 +11,7 @@ use stern::vello_winit::{
     VelloPresentStatus, VelloPresenterConfig, VelloPresenterError, VelloRedrawGuidance,
     VelloResizeOutcome, VelloWindowPresenter,
 };
-use stern::widgets::dock::{DockScene, DockSceneConfig};
-use stern::widgets::{
-    ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, Dock, DockNode, Frame, FrameId, FrameTab,
-    MenuBar, MenuBarMenu, MenuBarMenuId, Panel, PanelId, StatusBar, StatusItem, StatusItemId,
-    StatusItemKind, TabStrip, Toolbar, ToolbarGroup, ToolbarGroupId,
-};
+use stern_demo::{DEMO_TITLE, DemoApp};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
@@ -29,101 +19,10 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::ModifiersState;
 use winit::window::{Window, WindowId};
 
-const TITLE: &str = "Stern Public Native Shell";
-fn shell_dock() -> Dock {
-    Dock::new(DockNode::Frame(Frame::new(
-        FrameId::from_raw(2),
-        vec![Panel::new(PanelId::from_raw(21), "Editor")],
-    )))
-}
-
-fn build_shell_frame(
-    state: &mut UiState,
-    dock: &Dock,
-    context: FrameContext,
-) -> Result<FrameOutput, stern::core::PointerPlanError> {
-    let size = context.viewport.logical_size;
-    let width = size.width.max(1.0);
-    let height = size.height.max(1.0);
-    let menu_id = MenuBarMenuId::from_raw(1);
-    let group_id = ToolbarGroupId::from_raw(1);
-    let status_id = StatusItemId::from_raw(1);
-    let action = ActionDescriptor::new("shell.refresh", "Refresh");
-    let menu = MenuBar::from_menus([MenuBarMenu::from_actions(menu_id, "File", [action.clone()])]);
-    let toolbar = Toolbar::from_groups([ToolbarGroup::from_actions(
-        group_id,
-        "Workspace",
-        [action.clone()],
-    )]);
-    let tabs = TabStrip::from_tabs([FrameTab {
-        panel: PanelId::from_raw(21),
-        title: "Workspace".to_owned(),
-        active: true,
-        close_visible: false,
-        draggable: false,
-    }]);
-    let status = StatusBar::from_items([StatusItem::new(
-        status_id,
-        "Renderer",
-        "Ready",
-        StatusItemKind::Ready,
-    )]);
-    let chrome = ChromeScene::new(
-        ChromeSceneConfig::new(
-            WidgetId::from_key("native-shell-chrome"),
-            Rect::new(0.0, 0.0, width, 28.0),
-            Rect::new(0.0, 28.0, width, 28.0),
-            Rect::new(0.0, 56.0, width, 28.0),
-            Rect::new(0.0, (height - 24.0).max(84.0), width, 24.0),
-            ActionContext::Editor,
-        )
-        .with_widths([
-            (ChromeSceneItemKey::Menu(menu_id), 56.0),
-            (
-                ChromeSceneItemKey::Toolbar {
-                    group: group_id,
-                    action: action.id.clone(),
-                },
-                76.0,
-            ),
-            (ChromeSceneItemKey::Tab(PanelId::from_raw(21)), 112.0),
-            (ChromeSceneItemKey::Status(status_id), 96.0),
-        ]),
-        &menu,
-        &toolbar,
-        &tabs,
-        &status,
-    );
-    let dock = DockScene::new(
-        DockSceneConfig::new(
-            WidgetId::from_key("native-shell-dock"),
-            Rect::new(0.0, 84.0, width, (height - 108.0).max(0.0)),
-        ),
-        dock,
-    );
-    let theme = default_dark_theme();
-    let mut ui = state.begin_frame(context, &theme);
-    ui.push_platform_request(PlatformRequest::SetWindowTitle(TITLE.to_owned()));
-    ui.resolve_pointer_targets(|plan| {
-        let next = dock.declare_pointer_targets(plan, PointerOrder::new(1));
-        let _ = chrome.declare_pointer_targets(plan, next);
-    })?;
-    let _ = ui.chrome_scene(&chrome);
-    let _ = ui.dock_scene(&dock, |ui, panel| {
-        ui.label_keyed(
-            ("panel-content", panel.panel.raw()),
-            panel.rect.inset(12.0),
-            format!("{} panel", panel.title),
-        );
-    });
-    Ok(ui.finish_output())
-}
-
 struct NativeShell {
     presenter: VelloWindowPresenter,
     window: Option<Arc<Window>>,
-    state: UiState,
-    dock: Dock,
+    app: DemoApp,
     input: WinitInputAdapter,
     modifiers: ModifiersState,
     clock: WinitFrameClock,
@@ -140,8 +39,7 @@ impl NativeShell {
         Ok(Self {
             presenter: VelloWindowPresenter::new(VelloPresenterConfig::new())?,
             window: None,
-            state: UiState::new(),
-            dock: shell_dock(),
+            app: DemoApp::new(),
             input: WinitInputAdapter::default(),
             modifiers: ModifiersState::default(),
             clock: WinitFrameClock::new(),
@@ -193,13 +91,7 @@ impl NativeShell {
             self.clock.tick(self.started.elapsed()),
         );
         let viewport = context.viewport;
-        let output = match build_shell_frame(&mut self.state, &self.dock, context) {
-            Ok(output) => output,
-            Err(error) => {
-                self.fail(event_loop, format!("pointer plan failed: {error:?}"));
-                return;
-            }
-        };
+        let output = self.app.frame(context);
         self.input.begin_frame();
         let applied = WinitPlatformRequests::from_frame_output(&output).apply_to_window(window);
         let (shell, repaint) = applied.into_parts();
@@ -210,7 +102,7 @@ impl NativeShell {
         }
         self.repaint
             .replace_frame_request(repaint, has_shell_input, Instant::now());
-        let resources = self.state.text_render_resources();
+        let resources = self.app.render_resources();
         let report = match self.presenter.present(RenderFrameInput {
             viewport,
             primitives: &output.primitives,
@@ -258,7 +150,7 @@ impl ApplicationHandler for NativeShell {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = match event_loop.create_window(
             Window::default_attributes()
-                .with_title(TITLE)
+                .with_title(DEMO_TITLE)
                 .with_inner_size(LogicalSize::new(960.0, 640.0)),
         ) {
             Ok(window) => Arc::new(window),
@@ -360,83 +252,67 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-fn test_context() -> FrameContext {
+fn test_context(input: stern::core::UiInput) -> stern::core::FrameContext {
     stern::core::FrameContext::new(
         stern::core::ViewportInfo::new(
             stern::core::Size::new(960.0, 640.0),
             stern::core::PhysicalSize::new(960, 640),
             stern::core::ScaleFactor::ONE,
         ),
-        stern::core::UiInput::default(),
+        input,
         stern::core::TimeInfo::default(),
     )
 }
 
 #[cfg(test)]
 #[test]
-fn native_shell_composes_public_chrome_dock_frame_and_panel() {
-    let output = build_shell_frame(&mut UiState::new(), &shell_dock(), test_context()).unwrap();
-    let roles = output
+fn native_shell_hosts_real_edit_and_graph_workspaces() {
+    use stern::core::{Point, PointerButtonState, PointerInput, SemanticRole, UiInput};
+    use stern_demo::DemoWorkspace;
+
+    fn workspace_input(point: Point, down: bool, pressed: bool, released: bool) -> UiInput {
+        UiInput {
+            pointer: PointerInput {
+                position: Some(point),
+                primary: PointerButtonState::new(down, pressed, released),
+                ..PointerInput::default()
+            },
+            ..UiInput::default()
+        }
+    }
+
+    let mut app = DemoApp::new();
+    let edit = app.frame(test_context(UiInput::default()));
+    assert_eq!(app.workspace(), DemoWorkspace::Edit);
+    assert!(edit.semantics.nodes().iter().any(|node| {
+        node.role == SemanticRole::Dock && node.label.as_deref() == Some("Editor dock")
+    }));
+    let graph = edit
         .semantics
         .nodes()
         .iter()
-        .map(|node| &node.role)
-        .collect::<Vec<_>>();
-
-    for role in [
-        stern::core::SemanticRole::Dock,
-        stern::core::SemanticRole::Frame,
-        stern::core::SemanticRole::Panel,
-        stern::core::SemanticRole::TabList,
-    ] {
-        assert!(roles.contains(&&role), "missing {role:?}");
-    }
-    for role in ["menu-bar", "toolbar", "status-bar"] {
-        assert!(roles.contains(&&stern::core::SemanticRole::Custom(role.to_owned())));
-    }
-    assert!(!output.primitives.is_empty());
-    assert!(output.warnings.is_empty());
-}
-
-#[cfg(test)]
-#[derive(Default)]
-struct FakeWindow {
-    cursor: Option<winit::window::CursorIcon>,
-    title: Option<String>,
-    ime_allowed: bool,
-    ime_rect: Option<Rect>,
-}
-
-#[cfg(test)]
-impl stern::platform_winit::WinitWindowOps for FakeWindow {
-    fn set_cursor(&mut self, cursor: winit::window::CursorIcon) {
-        self.cursor = Some(cursor);
-    }
-    fn set_title(&mut self, title: &str) {
-        self.title = Some(title.to_owned());
-    }
-    fn set_ime_allowed(&mut self, allowed: bool) {
-        self.ime_allowed = allowed;
-    }
-    fn set_ime_cursor_area(&mut self, rect: Rect) {
-        self.ime_rect = Some(rect);
-    }
-}
-
-#[cfg(test)]
-#[test]
-fn native_shell_translates_one_frame_platform_batch() {
-    let output = build_shell_frame(&mut UiState::new(), &shell_dock(), test_context()).unwrap();
-    let mut window = FakeWindow::default();
-    let applied =
-        WinitPlatformRequests::from_frame_output(&output).apply_to_window_ops(&mut window);
-
-    assert_eq!(window.title.as_deref(), Some(TITLE));
-    assert!(window.cursor.is_some());
-    assert!(!window.ime_allowed);
-    assert_eq!(window.ime_rect, None);
-    assert!(applied.shell().is_empty());
-    assert_eq!(applied.repaint(), output.repaint);
+        .find(|node| {
+            node.role == SemanticRole::IconButton
+                && node.label.as_deref() == Some("Graph Workspace")
+        })
+        .expect("Graph workspace action")
+        .bounds
+        .center();
+    let _ = app.frame(test_context(workspace_input(graph, true, true, false)));
+    let switched = app.frame(test_context(workspace_input(graph, false, false, true)));
+    assert_eq!(app.workspace(), DemoWorkspace::Graph);
+    let mut actions = switched.actions.clone();
+    assert!(
+        actions
+            .drain()
+            .any(|invocation| invocation.action_id.as_str() == "workspace.graph")
+    );
+    let graph = app.frame(test_context(UiInput::default()));
+    assert!(
+        graph.semantics.nodes().iter().any(|node| {
+            matches!(&node.role, SemanticRole::Custom(role) if role == "node-graph")
+        })
+    );
 }
 
 #[cfg(test)]

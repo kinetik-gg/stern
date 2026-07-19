@@ -1,4 +1,4 @@
-//! Source boundary for the public native shell spike.
+//! Source boundary for the public native integration-demo host.
 
 use std::fs;
 use std::path::PathBuf;
@@ -35,14 +35,22 @@ fn native_shell_source_uses_only_public_facade_and_winit_bootstrap() {
         "push_semantic_node",
         ".primitive(",
         "fn paint_",
+        "DockScene",
+        "ChromeScene",
+        "build_shell_frame",
+        "shell_dock",
+        "ui.chrome_scene",
+        "ui.dock_scene",
     ] {
         assert!(!source.contains(substitute), "{substitute}");
     }
     assert!(manifest.contains("pollster = \"0.4.0\""));
     assert!(manifest.contains("winit = \"0.30.12\""));
     assert!(source.contains("use stern::"));
+    assert!(source.contains("use stern_demo::{DEMO_TITLE, DemoApp};"));
     assert!(source.contains("use winit::"));
-    assert!(source.contains("ui.chrome_scene(&chrome)"));
-    assert!(source.contains("ui.dock_scene(&dock"));
+    assert!(source.contains("app: DemoApp"));
+    assert!(source.contains("self.app.frame(context)"));
+    assert!(source.contains("self.app.render_resources()"));
     assert!(source.contains("VelloWindowPresenter"));
 }
