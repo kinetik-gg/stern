@@ -4,11 +4,15 @@ use std::{collections::BTreeSet, fs, path::PathBuf};
 
 use stern::core::{
     ActionSource, FrameContext, FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
-    PhysicalSize, Point, PointerButtonState, PointerInput, ScaleFactor, SemanticNode, SemanticRole,
-    SemanticValue, Size, TimeInfo, UiInput, Vec2, ViewportInfo, WidgetId,
+    MouseButton, PhysicalSize, Point, PointerButtonState, PointerInput, ScaleFactor, SemanticNode,
+    SemanticRole, SemanticValue, Size, TimeInfo, UiInput, UiInputEvent, Vec2, ViewportInfo,
+    WidgetId,
 };
 use stern::render::RenderDiagnostic;
-use stern_demo::{DemoApp, demo_context};
+use stern::widgets::node_graph::{EdgeId, NodeId, PortEndpoint, PortId};
+use stern_demo::{
+    DemoApp, DemoJobPhase, DemoViewportTool, DemoWorkspace, GraphConnectionFeedback, demo_context,
+};
 
 const REQUIRED_IDS: &str = concat!(
     "button text-field dropdown selection-controls value-controls progress-feedback ",
@@ -88,6 +92,92 @@ fn viewport_texture_translates_without_missing_resource() {
 }
 
 #[test]
+fn timeline_scrub_and_clip_edits_use_retained_preview_commit_and_cancel_lifecycles() {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let timeline = custom_node(&initial, "timeline", "Timeline");
+    let ruler = Point::new(timeline.bounds.x + 110.0, timeline.bounds.y + 10.0);
+    let committed_playhead = app.committed_playhead_frame();
+    let _ = app.frame(demo_context(pointer(ruler, true, true, false)));
+    let scrubbed = Point::new(ruler.x + 36.0, ruler.y);
+    let _ = app.frame(demo_context(drag(scrubbed, 36.0)));
+    assert_ne!(app.playhead_frame(), committed_playhead);
+    let _ = app.frame(demo_context(pointer(scrubbed, false, false, true)));
+    assert_eq!(app.playhead_frame(), app.committed_playhead_frame());
+    assert_ne!(app.committed_playhead_frame(), committed_playhead);
+
+    let committed_clip = app.committed_clip_frames();
+    let frame = app.frame(demo_context(UiInput::default()));
+    let clip = custom_node(&frame, "timeline-item", "Hero clip");
+    let start = clip.bounds.center();
+    let moved = Point::new(start.x + 24.0, start.y);
+    let _ = app.frame(demo_context(pointer(start, true, true, false)));
+    let _ = app.frame(demo_context(drag(moved, 24.0)));
+    assert_ne!(app.clip_frames(), committed_clip);
+    let _ = app.frame(demo_context(pointer(moved, false, false, true)));
+    assert_eq!(app.clip_frames(), app.committed_clip_frames());
+    assert_ne!(app.committed_clip_frames(), committed_clip);
+
+    let committed_clip = app.committed_clip_frames();
+    let frame = app.frame(demo_context(UiInput::default()));
+    let clip = custom_node(&frame, "timeline-item", "Hero clip");
+    let trim = Point::new(clip.bounds.x + 1.0, clip.bounds.center().y);
+    let preview = Point::new(trim.x + 12.0, trim.y);
+    let _ = app.frame(demo_context(pointer(trim, true, true, false)));
+    let _ = app.frame(demo_context(drag(preview, 12.0)));
+    assert_ne!(app.clip_frames(), committed_clip);
+    let _ = app.frame(demo_context(escape_while_dragging(preview)));
+    assert_eq!(app.clip_frames(), committed_clip);
+    assert_eq!(app.committed_clip_frames(), committed_clip);
+
+    let frame = app.frame(demo_context(UiInput::default()));
+    let clip = custom_node(&frame, "timeline-item", "Hero clip");
+    let start = clip.bounds.center();
+    let preview = Point::new(start.x + 18.0, start.y);
+    let _ = app.frame(demo_context(pointer(start, true, true, false)));
+    let _ = app.frame(demo_context(drag(preview, 18.0)));
+    assert_ne!(app.clip_frames(), committed_clip);
+    let _ = app.frame(demo_context(capture_lost(preview)));
+    assert_eq!(app.clip_frames(), committed_clip);
+    assert_eq!(app.committed_clip_frames(), committed_clip);
+}
+
+#[test]
+fn viewport_tool_and_feedback_surfaces_project_shared_application_state() {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    custom_node(&initial, "timeline", "Timeline");
+    node(&initial, &SemanticRole::Viewport, "Viewport");
+    let job = custom_node(&initial, "job", "Preview render");
+    assert!(matches!(
+        &job.state.value,
+        Some(SemanticValue::Number { current, .. }) if current.to_bits() == 0.4_f32.to_bits()
+    ));
+    assert!(has_label(&initial, "Preview 40%"));
+    assert_eq!(app.viewport_tool(), DemoViewportTool::Select);
+
+    let _ = click(&mut app, &initial, &SemanticRole::Button, "Transform Tool");
+    let transformed = app.frame(demo_context(UiInput::default()));
+    assert_eq!(app.viewport_tool(), DemoViewportTool::Transform);
+    assert_eq!(
+        node(&transformed, &SemanticRole::Toggle, "Transform Tool")
+            .state
+            .checked,
+        Some(true)
+    );
+
+    app.set_job(DemoJobPhase::Succeeded, 100);
+    let succeeded = app.frame(demo_context(UiInput::default()));
+    custom_node(&succeeded, "notification", "Preview complete");
+    assert!(has_label(&succeeded, "Preview complete"));
+
+    app.set_job(DemoJobPhase::Failed, 65);
+    let failed = app.frame(demo_context(UiInput::default()));
+    custom_node(&failed, "notification", "Preview failed");
+    assert!(has_label(&failed, "Preview failed"));
+}
+
+#[test]
 fn dock_ids_remain_stable_across_resize_and_focus() {
     let mut app = DemoApp::new();
     let initial = app.frame(demo_context(UiInput::default()));
@@ -126,7 +216,7 @@ fn shared_menu_escape_and_outside_press_preserve_focus_owner() {
 }
 
 #[test]
-fn edit_workspace_reports_exact_twenty_two_public_component_ids() {
+fn global_runtime_reports_exact_thirty_one_public_component_ids() {
     let trace = edit_workspace_trace();
     let observed = observed_component_ids(&trace);
     let expected = EXPECTED_COMPONENT_IDS.split_ascii_whitespace().collect();
@@ -136,7 +226,7 @@ fn edit_workspace_reports_exact_twenty_two_public_component_ids() {
         .collect::<BTreeSet<_>>();
     assert_eq!(required.len(), 34);
     assert!(observed.is_subset(&required));
-    assert_eq!(required.difference(&observed).count(), 12);
+    assert_eq!(required.difference(&observed).count(), 3);
 
     let evidence = runtime_journey_evidence(&trace);
     assert_eq!(
@@ -145,9 +235,9 @@ fn edit_workspace_reports_exact_twenty_two_public_component_ids() {
             [RuntimeStepEvidence::Passed; 3],
             [RuntimeStepEvidence::Passed; 3],
             [RuntimeStepEvidence::Passed; 3],
+            [RuntimeStepEvidence::Passed; 3],
             [RuntimeStepEvidence::NotExecuted; 3],
-            [RuntimeStepEvidence::NotExecuted; 3],
-            [RuntimeStepEvidence::NotExecuted; 3],
+            [RuntimeStepEvidence::Passed; 3],
             [RuntimeStepEvidence::NotExecuted; 3],
         ],
     );
@@ -181,7 +271,13 @@ fn edit_workspace_reports_exact_twenty_two_public_component_ids() {
     }
     assert_eq!(
         completed,
-        ["shared-action-projection", "collection-to-inspector-edit"]
+        [
+            "workspace-boot-and-traversal",
+            "shared-action-projection",
+            "collection-to-inspector-edit",
+            "timeline-and-viewport-edit",
+            "graph-connection-edit",
+        ]
     );
 }
 
@@ -190,7 +286,9 @@ const EXPECTED_COMPONENT_IDS: &str = concat!(
     "dock inspector-collections content-structure-components toolbar-components ",
     "icon-shortcut-components menu-components command-palette-components advanced-editor-fields ",
     "choice-value-components overlay-system overlay-components navigation-surface-components ",
-    "collection-components inspector-components editor-chrome-components",
+    "collection-components inspector-components editor-chrome-components editor-frame timeline ",
+    "viewport progress-feedback feedback-status-components timeline-components viewport-components ",
+    "node-graph node-components",
 );
 const JOURNEY_COMPONENTS: &str = "\
 workspace-boot-and-traversal|editor-frame workspace-chrome dock editor-chrome-components navigation-surface-components content-structure-components
@@ -217,11 +315,19 @@ struct ExecutedEditEvidence {
     collection_identity_preserved: RuntimeStepEvidence,
     inspector_projected_record: RuntimeStepEvidence,
     edit_lifecycle_observed: RuntimeStepEvidence,
+    timeline_edit_lifecycle: RuntimeStepEvidence,
+    viewport_tool_projected: RuntimeStepEvidence,
+    feedback_states_projected: RuntimeStepEvidence,
+    graph_surface_projected: RuntimeStepEvidence,
+    graph_components_projected: RuntimeStepEvidence,
+    graph_connection_lifecycle: RuntimeStepEvidence,
 }
 
 fn edit_workspace_trace() -> EditWorkspaceTrace {
     let shared = shared_action_evidence();
     let collection = collection_inspector_evidence();
+    let timeline_viewport = timeline_viewport_evidence();
+    let graph = graph_connection_evidence();
     let mut app = DemoApp::new();
     let initial = app.frame(demo_context(UiInput::default()));
     let translation =
@@ -265,6 +371,18 @@ fn edit_workspace_trace() -> EditWorkspaceTrace {
             edit_lifecycle_observed: RuntimeStepEvidence::executed(
                 collection.edit_lifecycle_observed,
             ),
+            timeline_edit_lifecycle: RuntimeStepEvidence::executed(
+                timeline_viewport.timeline_edit_lifecycle,
+            ),
+            viewport_tool_projected: RuntimeStepEvidence::executed(
+                timeline_viewport.viewport_tool_projected,
+            ),
+            feedback_states_projected: RuntimeStepEvidence::executed(
+                timeline_viewport.feedback_states_projected,
+            ),
+            graph_surface_projected: RuntimeStepEvidence::executed(graph.surface_projected),
+            graph_components_projected: RuntimeStepEvidence::executed(graph.components_projected),
+            graph_connection_lifecycle: RuntimeStepEvidence::executed(graph.connection_lifecycle),
         },
     }
 }
@@ -279,6 +397,163 @@ struct CollectionInspectorEvidence {
     identity_survived_scroll_and_rename: bool,
     inspector_projected_selected_record: bool,
     edit_lifecycle_observed: bool,
+}
+
+struct TimelineViewportEvidence {
+    timeline_edit_lifecycle: bool,
+    viewport_tool_projected: bool,
+    feedback_states_projected: bool,
+}
+
+struct GraphConnectionEvidence {
+    surface_projected: bool,
+    components_projected: bool,
+    connection_lifecycle: bool,
+}
+
+fn graph_connection_evidence() -> GraphConnectionEvidence {
+    let mut app = DemoApp::new();
+    let _ = app.frame(demo_context(pointer(
+        Point::new(180.0, 70.0),
+        true,
+        true,
+        false,
+    )));
+    let _ = app.frame(demo_context(pointer(
+        Point::new(180.0, 70.0),
+        false,
+        false,
+        true,
+    )));
+    assert_eq!(app.workspace(), DemoWorkspace::Graph);
+    let _ = app.frame(demo_context(graph_click(Point::new(100.0, 370.0))));
+    let initial = app.frame(demo_context(UiInput::default()));
+    let surface_projected = has_custom_role(&initial, "node-graph");
+    let components_projected = ["node", "port", "edge"]
+        .into_iter()
+        .all(|role| has_custom_role(&initial, role));
+    let source = custom_node(&initial, "port", "Output Image")
+        .bounds
+        .center();
+    let target = custom_node(&initial, "port", "Input Preview Image")
+        .bounds
+        .center();
+    let original_edges = app.graph_workspace().edges().to_vec();
+
+    let _ = app.frame(demo_context(graph_connection_press(source)));
+    let _ = app.frame(demo_context(graph_connection_move(source, target)));
+    let preview_isolated = app.graph_workspace().connection_active()
+        && app.graph_workspace().connection_feedback() == GraphConnectionFeedback::Previewing
+        && app.graph_workspace().edges() == original_edges;
+
+    let _ = app.frame(demo_context(graph_connection_release(target)));
+    let committed = app.graph_workspace().edges().last();
+    let commit_owned = !app.graph_workspace().connection_active()
+        && app.graph_workspace().connection_feedback()
+            == GraphConnectionFeedback::Committed(EdgeId::from_raw(2))
+        && app.graph_workspace().edges().len() == original_edges.len() + 1
+        && committed.is_some_and(|edge| {
+            edge.id == EdgeId::from_raw(2)
+                && edge.from == PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1))
+                && edge.to == PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2))
+        });
+
+    GraphConnectionEvidence {
+        surface_projected,
+        components_projected,
+        connection_lifecycle: preview_isolated && commit_owned,
+    }
+}
+
+fn timeline_viewport_evidence() -> TimelineViewportEvidence {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let timeline = custom_node(&initial, "timeline", "Timeline");
+    let viewport_present = has_role(&initial, &SemanticRole::Viewport);
+    let progress_present = matches!(
+        &custom_node(&initial, "job", "Preview render").state.value,
+        Some(SemanticValue::Number { current, .. }) if current.to_bits() == 0.4_f32.to_bits()
+    );
+
+    let ruler = Point::new(timeline.bounds.x + 110.0, timeline.bounds.y + 10.0);
+    let previous_playhead = app.committed_playhead_frame();
+    let _ = app.frame(demo_context(pointer(ruler, true, true, false)));
+    let scrubbed = Point::new(ruler.x + 36.0, ruler.y);
+    let _ = app.frame(demo_context(drag(scrubbed, 36.0)));
+    let scrub_previewed = app.playhead_frame() != previous_playhead;
+    let _ = app.frame(demo_context(pointer(scrubbed, false, false, true)));
+    let scrub_committed = app.playhead_frame() == app.committed_playhead_frame()
+        && app.committed_playhead_frame() != previous_playhead;
+
+    let previous_clip = app.committed_clip_frames();
+    let frame = app.frame(demo_context(UiInput::default()));
+    let clip = custom_node(&frame, "timeline-item", "Hero clip");
+    let start = clip.bounds.center();
+    let moved = Point::new(start.x + 24.0, start.y);
+    let _ = app.frame(demo_context(pointer(start, true, true, false)));
+    let _ = app.frame(demo_context(drag(moved, 24.0)));
+    let move_previewed = app.clip_frames() != previous_clip;
+    let _ = app.frame(demo_context(pointer(moved, false, false, true)));
+    let move_committed = app.clip_frames() == app.committed_clip_frames()
+        && app.committed_clip_frames() != previous_clip;
+
+    let committed_clip = app.committed_clip_frames();
+    let frame = app.frame(demo_context(UiInput::default()));
+    let clip = custom_node(&frame, "timeline-item", "Hero clip");
+    let trim = Point::new(clip.bounds.x + 1.0, clip.bounds.center().y);
+    let preview = Point::new(trim.x + 12.0, trim.y);
+    let _ = app.frame(demo_context(pointer(trim, true, true, false)));
+    let _ = app.frame(demo_context(drag(preview, 12.0)));
+    let trim_previewed = app.clip_frames() != committed_clip;
+    let _ = app.frame(demo_context(escape_while_dragging(preview)));
+    let escape_cancelled =
+        app.clip_frames() == committed_clip && app.committed_clip_frames() == committed_clip;
+
+    let frame = app.frame(demo_context(UiInput::default()));
+    let clip = custom_node(&frame, "timeline-item", "Hero clip");
+    let start = clip.bounds.center();
+    let preview = Point::new(start.x + 18.0, start.y);
+    let _ = app.frame(demo_context(pointer(start, true, true, false)));
+    let _ = app.frame(demo_context(drag(preview, 18.0)));
+    let capture_previewed = app.clip_frames() != committed_clip;
+    let _ = app.frame(demo_context(capture_lost(preview)));
+    let capture_cancelled =
+        app.clip_frames() == committed_clip && app.committed_clip_frames() == committed_clip;
+
+    let tool_frame = app.frame(demo_context(UiInput::default()));
+    let _ = click(
+        &mut app,
+        &tool_frame,
+        &SemanticRole::Button,
+        "Transform Tool",
+    );
+    let transformed = app.frame(demo_context(UiInput::default()));
+    let viewport_tool_projected = viewport_present
+        && app.viewport_tool() == DemoViewportTool::Transform
+        && node(&transformed, &SemanticRole::Toggle, "Transform Tool")
+            .state
+            .checked
+            == Some(true);
+
+    app.set_job(DemoJobPhase::Succeeded, 100);
+    let succeeded = app.frame(demo_context(UiInput::default()));
+    let success_present = has_label(&succeeded, "Preview complete");
+    app.set_job(DemoJobPhase::Failed, 65);
+    let failed = app.frame(demo_context(UiInput::default()));
+    let failure_present = has_label(&failed, "Preview failed");
+
+    TimelineViewportEvidence {
+        timeline_edit_lifecycle: scrub_previewed
+            && scrub_committed
+            && move_previewed
+            && move_committed
+            && trim_previewed
+            && escape_cancelled
+            && capture_previewed
+            && capture_cancelled,
+        viewport_tool_projected,
+        feedback_states_projected: progress_present && success_present && failure_present,
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -546,7 +821,10 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
     let inspector_collection = list && inspector;
     let advanced_fields = text_field && value_control;
     let choice_values = dropdown && selection_control && value_control;
-    let dock = has_labels(&trace.initial, "Editor dock|Assets|Viewport|Inspector");
+    let dock = has_labels(
+        &trace.initial,
+        "Editor dock|Assets|Viewport|Inspector|Timeline",
+    );
     let chrome = has_labels(
         &trace.initial,
         "Application menu|Application toolbar|Document tabs|Application status",
@@ -557,6 +835,20 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
         && has_role(&trace.initial, &SemanticRole::Frame)
         && trace.evidence.shell_booted.passed();
     let toolbar = has_custom_role(&trace.initial, "toolbar") && action;
+    let timeline =
+        has_custom_role(&trace.initial, "timeline") && has_label(&trace.initial, "Hero clip");
+    let viewport = has_role(&trace.initial, &SemanticRole::Viewport);
+    let progress = matches!(
+        &custom_node(&trace.initial, "job", "Preview render")
+            .state
+            .value,
+        Some(SemanticValue::Number { current, .. }) if current.to_bits() == 0.4_f32.to_bits()
+    );
+    let feedback = progress && trace.evidence.feedback_states_projected.passed();
+    let timeline_components = timeline && trace.evidence.timeline_edit_lifecycle.passed();
+    let viewport_components = viewport && trace.evidence.viewport_tool_projected.passed();
+    let node_graph = trace.evidence.graph_surface_projected.passed();
+    let node_components = trace.evidence.graph_components_projected.passed();
     EXPECTED_COMPONENT_IDS
         .split_ascii_whitespace()
         .zip([
@@ -582,6 +874,15 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
             list && selected,
             inspector,
             chrome && action,
+            structure,
+            timeline,
+            viewport,
+            progress,
+            feedback,
+            timeline_components,
+            viewport_components,
+            node_graph,
+            node_components,
         ])
         .filter_map(|(id, passes)| passes.then_some(id))
         .collect()
@@ -622,9 +923,17 @@ fn runtime_journey_evidence(trace: &EditWorkspaceTrace) -> [[RuntimeStepEvidence
             trace.evidence.inspector_projected_record,
             trace.evidence.edit_lifecycle_observed,
         ],
+        [
+            trace.evidence.timeline_edit_lifecycle,
+            trace.evidence.viewport_tool_projected,
+            trace.evidence.feedback_states_projected,
+        ],
         [unexecuted; 3],
-        [unexecuted; 3],
-        [unexecuted; 3],
+        [
+            trace.evidence.graph_surface_projected,
+            trace.evidence.graph_components_projected,
+            trace.evidence.graph_connection_lifecycle,
+        ],
         [unexecuted; 3],
     ]
 }
@@ -633,9 +942,13 @@ fn runtime_journey_evidence(trace: &EditWorkspaceTrace) -> [[RuntimeStepEvidence
 fn edit_workspace_source_uses_only_public_stern_surface() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let manifest = fs::read_to_string(root.join("Cargo.toml")).expect("manifest");
-    let source = ["src/lib.rs", "src/edit_workspace.rs"]
-        .map(|path| fs::read_to_string(root.join(path)).expect("demo source"))
-        .join("");
+    let source = [
+        "src/lib.rs",
+        "src/edit_workspace.rs",
+        "src/timeline_workspace.rs",
+    ]
+    .map(|path| fs::read_to_string(root.join(path)).expect("demo source"))
+    .join("");
     assert!(manifest.contains("stern = {"));
     for private in
         "stern-core stern-render stern-text stern-vello stern-widgets".split_ascii_whitespace()
@@ -662,6 +975,10 @@ fn node<'a>(output: &'a FrameOutput, role: &SemanticRole, label: &str) -> &'a Se
         .iter()
         .find(|node| &node.role == role && node.label.as_deref() == Some(label))
         .expect("semantic node")
+}
+
+fn custom_node<'a>(output: &'a FrameOutput, role: &str, label: &str) -> &'a SemanticNode {
+    node(output, &SemanticRole::Custom(role.to_owned()), label)
 }
 
 fn center(output: &FrameOutput, role: &SemanticRole, label: &str) -> Point {
@@ -778,6 +1095,96 @@ fn pointer(point: Point, down: bool, pressed: bool, released: bool) -> UiInput {
         },
         ..UiInput::default()
     }
+}
+
+fn drag(point: Point, delta_x: f32) -> UiInput {
+    UiInput {
+        pointer: PointerInput {
+            position: Some(point),
+            delta: Vec2::new(delta_x, 0.0),
+            primary: PointerButtonState::new(true, false, false),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    }
+}
+
+fn escape_while_dragging(point: Point) -> UiInput {
+    let mut input = key(Key::Escape);
+    input.pointer.position = Some(point);
+    input.pointer.primary = PointerButtonState::new(true, false, false);
+    input
+        .events
+        .push(stern::core::UiInputEvent::Key(KeyEvent::new(
+            Key::Escape,
+            KeyState::Pressed,
+            Modifiers::default(),
+            false,
+        )));
+    input
+}
+
+fn capture_lost(point: Point) -> UiInput {
+    let mut input = UiInput {
+        pointer: PointerInput {
+            position: Some(point),
+            primary: PointerButtonState::new(true, false, false),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    };
+    input.push_event(stern::core::UiInputEvent::WindowFocusChanged(false));
+    input
+}
+
+fn graph_click(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 1,
+        position: Some(point),
+    });
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 1,
+        position: Some(point),
+    });
+    input
+}
+
+fn graph_connection_press(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.pointer.primary.down = true;
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 1,
+        position: Some(point),
+    });
+    input
+}
+
+fn graph_connection_move(from: Point, to: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.pointer.primary.down = true;
+    input.push_event(UiInputEvent::PointerMoved {
+        position: to,
+        delta: Vec2::new(to.x - from.x, to.y - from.y),
+    });
+    input
+}
+
+fn graph_connection_release(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 1,
+        position: Some(point),
+    });
+    input
 }
 
 fn secondary(point: Point, down: bool, pressed: bool, released: bool) -> UiInput {

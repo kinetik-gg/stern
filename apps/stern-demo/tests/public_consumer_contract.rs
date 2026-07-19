@@ -33,6 +33,8 @@ fn public_consumer_contract_emits_components_semantics_focus_and_platform_eviden
     assert_eq!(
         painted_icons,
         vec![
+            stern_icons_phosphor::regular::CURSOR.icon(),
+            stern_icons_phosphor::regular::ARROWS_OUT_CARDINAL.icon(),
             stern_icons_phosphor::regular::PENCIL_SIMPLE.icon(),
             stern_icons_phosphor::regular::GRAPH.icon(),
             stern_icons_phosphor::regular::CHECK_CIRCLE.icon(),

@@ -22,17 +22,22 @@ use stern::widgets::{
     InlineEditFocusLossPolicy, InlineEditRequest, ItemId, ListLayout, Menu, MenuBar, MenuBarMenu,
     MenuBarMenuId, MenuBarOverlayRequest, MenuOverlay, NumericInputDraft, NumericScrubInputConfig,
     OverlayDismissal, OverlayId, OverlayKind, OverlayScene, OverlaySceneIntent,
-    OverlaySceneSurface, PanZoom, Panel, PanelId, PopoverPlacement, PropertyGridRow,
-    SelectFieldConfig, StatusBar, StatusItem, StatusItemId, StatusItemKind, TabStrip,
-    TextFieldAccess, Toolbar, ToolbarGroup, ToolbarGroupId, Ui, ViewportSurface, ViewportWidget,
-    ViewportWidgetConfig,
+    OverlaySceneSurface, Panel, PanelId, PopoverPlacement, PropertyGridRow, SelectFieldConfig,
+    StatusBar, StatusItem, StatusItemId, StatusItemKind, TabStrip, TextFieldAccess, Toolbar,
+    ToolbarGroup, ToolbarGroupId, Ui, ViewportSurface, ViewportWidget, ViewportWidgetConfig,
 };
 
-use crate::{DemoActionRegistry, DemoWorkspace};
+use crate::timeline_workspace::{
+    TimelineWorkspace, apply_timeline_output, compose_tool_actions, declare_tool_actions,
+    prepare_feedback, prepare_timeline, timeline_feedback_rects, viewport_actions,
+    viewport_content_rect, viewport_tool_rects,
+};
+use crate::{DemoActionRegistry, DemoApplicationModel, DemoWorkspace};
 
 const ASSETS_PANEL: PanelId = PanelId::from_raw(11);
 const VIEWPORT_PANEL: PanelId = PanelId::from_raw(21);
 const INSPECTOR_PANEL: PanelId = PanelId::from_raw(31);
+const TIMELINE_PANEL: PanelId = PanelId::from_raw(41);
 const VIEWPORT_TEXTURE: TextureId = TextureId::from_raw(1);
 const TOOLBAR_GROUP: ToolbarGroupId = ToolbarGroupId::from_raw(1);
 const APPLICATION_MENU: MenuBarMenuId = MenuBarMenuId::from_raw(1);
@@ -129,7 +134,7 @@ pub(crate) struct EditWorkspace {
     asset_browser: AssetBrowserState,
     opacity_drafts: BTreeMap<ItemId, TextEditState>,
     inspector_picker: InspectorPickerState,
-    pan_zoom: PanZoom,
+    timeline: TimelineWorkspace,
     texture: TextureResource,
     overlay: Option<OverlayScene>,
 }
@@ -154,7 +159,7 @@ impl EditWorkspace {
             asset_browser,
             opacity_drafts,
             inspector_picker: InspectorPickerState::new(),
-            pan_zoom: PanZoom::default(),
+            timeline: TimelineWorkspace::new(),
             texture: viewport_texture(),
             overlay: None,
         }
@@ -164,14 +169,16 @@ impl EditWorkspace {
         self.overlay.is_some()
     }
 
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn compose(
         &mut self,
         ui: &mut Ui<'_>,
         actions: &DemoActionRegistry,
         workspace: DemoWorkspace,
-        revision: u32,
+        model: &mut DemoApplicationModel,
         bounds: Size,
     ) {
+        self.timeline.project(model);
         let layout = WorkspaceLayout::new(bounds);
         let mut menu_bar = MenuBar::from_menus([MenuBarMenu::from_actions(
             APPLICATION_MENU,
@@ -187,12 +194,14 @@ impl EditWorkspace {
             workspace_tab(101, "Edit Workspace", workspace == DemoWorkspace::Edit),
             workspace_tab(102, "Graph Workspace", workspace == DemoWorkspace::Graph),
         ]);
-        let status_bar = StatusBar::from_items([workspace_status(
-            revision,
+        let mut status_items = vec![workspace_status(
+            model.applied_revision(),
             self.asset_browser
                 .rename_conflict()
                 .map(|conflict| conflict.message.as_str()),
-        )]);
+        )];
+        status_items.extend(TimelineWorkspace::status_items(model));
+        let status_bar = StatusBar::from_items(status_items);
         let chrome = ChromeScene::new(
             chrome_config(layout, actions),
             &menu_bar,
@@ -209,10 +218,13 @@ impl EditWorkspace {
         let viewport_bounds = panel_bounds(&dock_scene, VIEWPORT_PANEL).map(|rect| rect.inset(8.0));
         let inspector_bounds =
             panel_bounds(&dock_scene, INSPECTOR_PANEL).map(|rect| rect.inset(8.0));
+        let timeline_bounds = panel_bounds(&dock_scene, TIMELINE_PANEL).map(|rect| rect.inset(6.0));
         let inspector_root = panel_widget_id(&dock_scene, INSPECTOR_PANEL).map(|panel| {
             ui.make_id(("dock-panel-content", panel.raw()))
                 .child("selected-asset")
         });
+        let tool_root = panel_widget_id(&dock_scene, VIEWPORT_PANEL)
+            .map(|panel| ui.make_id(("dock-panel-content", panel.raw())));
         let inspector_rows = self
             .assets
             .iter()
@@ -222,16 +234,42 @@ impl EditWorkspace {
         let asset_browser =
             prepare_asset_browser(ui, assets_bounds, &asset_model, &self.asset_browser);
         let picker_scene = self.inspector_picker.scene().cloned();
+        let tool_rects = viewport_bounds.map(viewport_tool_rects);
         let viewport = viewport_bounds.map(|rect| {
-            ui.prepare_viewport_widget(ViewportWidgetConfig::new(
-                WidgetId::from_key("edit-workspace.viewport"),
-                ViewportSurface {
-                    texture: VIEWPORT_TEXTURE,
-                    source_size: Size::new(1280.0, 720.0),
-                    bounds: rect,
-                    pan_zoom: self.pan_zoom,
-                },
-            ))
+            let id = WidgetId::from_key("edit-workspace.viewport");
+            ui.prepare_viewport_widget(
+                ViewportWidgetConfig::new(
+                    id,
+                    ViewportSurface {
+                        texture: VIEWPORT_TEXTURE,
+                        source_size: Size::new(1280.0, 720.0),
+                        bounds: viewport_content_rect(rect),
+                        pan_zoom: self.timeline.pan_zoom,
+                    },
+                )
+                .with_actions(viewport_actions(actions, id)),
+            )
+        });
+        let viewport_scene = viewport
+            .as_ref()
+            .map(|viewport| TimelineWorkspace::viewport_scene(ui, viewport, model.viewport_tool()));
+        let timeline_rects = timeline_bounds.map(timeline_feedback_rects);
+        let timeline = timeline_rects.map(|(bounds, _)| {
+            prepare_timeline(
+                ui,
+                bounds,
+                &self.timeline.descriptor,
+                &self.timeline.viewport_state,
+            )
+        });
+        let feedback = timeline_rects.map(|(_, bounds)| {
+            prepare_feedback(
+                ui,
+                bounds,
+                &self.timeline.jobs,
+                &self.timeline.diagnostics,
+                &self.timeline.feedback,
+            )
         });
 
         open_palette_if_requested(&mut self.overlay, ui.input(), actions, bounds);
@@ -243,6 +281,12 @@ impl EditWorkspace {
             asset_browser.as_ref(),
             &self.asset_browser,
             viewport.as_ref(),
+            viewport_scene.as_ref(),
+            tool_rects,
+            tool_root,
+            actions,
+            timeline.as_ref(),
+            feedback.as_ref(),
             inspector_bounds,
             inspector_root,
             &inspector_rows,
@@ -257,13 +301,22 @@ impl EditWorkspace {
             &dock_scene,
             asset_browser.as_ref(),
             viewport.as_ref(),
+            viewport_scene.as_ref(),
+            tool_rects,
+            actions,
+            timeline.as_ref(),
+            feedback.as_ref(),
             inspector_bounds,
             &inspector_rows,
             &mut self.asset_browser,
             &mut self.assets,
             &mut self.opacity_drafts,
             &mut self.inspector_picker,
-            &mut self.pan_zoom,
+            &mut self.timeline.pan_zoom,
+            &mut self.timeline.viewport_tools,
+            &mut self.timeline.scrub,
+            &mut self.timeline.clip_edit,
+            model,
         );
         let context_requested = shared_context_requested(ui, viewport_bounds);
         let chrome_output = ui.chrome_scene(&chrome);
@@ -344,6 +397,12 @@ fn declare_workspace_targets(
     asset_browser: Option<&stern::widgets::asset_browser::AssetBrowserScene<'_>>,
     asset_state: &AssetBrowserState,
     viewport: Option<&ViewportWidget>,
+    viewport_scene: Option<&stern::widgets::ViewportToolScene>,
+    tool_rects: Option<[Rect; 2]>,
+    tool_root: Option<WidgetId>,
+    actions: &DemoActionRegistry,
+    timeline: Option<&stern::widgets::TimelineWidget<'_>>,
+    feedback: Option<&stern::widgets::chrome::SystemFeedbackScene<'_>>,
     inspector_bounds: Option<Rect>,
     inspector_root: Option<WidgetId>,
     inspector_rows: &[PropertyGridRow],
@@ -362,6 +421,18 @@ fn declare_workspace_targets(
                 }
                 if let Some(viewport) = viewport {
                     next = viewport.declare_pointer_targets(plan, next);
+                }
+                if let Some(viewport_scene) = viewport_scene {
+                    next = viewport_scene.declare_pointer_targets(plan, next);
+                }
+                if let (Some(rects), Some(root)) = (tool_rects, tool_root) {
+                    next = declare_tool_actions(plan, next, root, actions, rects);
+                }
+                if let Some(timeline) = timeline {
+                    next = timeline.declare_pointer_targets(plan, next);
+                }
+                if let Some(feedback) = feedback {
+                    next = feedback.declare_pointer_targets(plan, next);
                 }
                 if let (Some(bounds), Some(root)) = (inspector_bounds, inspector_root) {
                     next = declare_inspector_targets(plan, next, root, bounds, inspector_rows);
@@ -401,13 +472,22 @@ fn compose_workspace_panels(
     dock_scene: &DockScene,
     asset_browser: Option<&stern::widgets::asset_browser::AssetBrowserScene<'_>>,
     viewport: Option<&ViewportWidget>,
+    viewport_scene: Option<&stern::widgets::ViewportToolScene>,
+    tool_rects: Option<[Rect; 2]>,
+    actions: &DemoActionRegistry,
+    timeline: Option<&stern::widgets::TimelineWidget<'_>>,
+    feedback: Option<&stern::widgets::chrome::SystemFeedbackScene<'_>>,
     inspector_bounds: Option<Rect>,
     inspector_rows: &[PropertyGridRow],
     asset_state: &mut AssetBrowserState,
     assets: &mut [AssetRecord],
     opacity_drafts: &mut BTreeMap<ItemId, TextEditState>,
     inspector_picker: &mut InspectorPickerState,
-    pan_zoom: &mut PanZoom,
+    pan_zoom: &mut stern::widgets::PanZoom,
+    viewport_tools: &mut stern::widgets::ViewportToolController,
+    scrub: &mut stern::widgets::TimelineScrubController,
+    clip_edit: &mut stern::widgets::TimelineClipEditController,
+    model: &mut DemoApplicationModel,
 ) {
     let _ = ui.dock_scene(dock_scene, |ui, panel| match panel.panel {
         ASSETS_PANEL => {
@@ -423,9 +503,15 @@ fn compose_workspace_panels(
             }
         }
         VIEWPORT_PANEL => {
+            if let Some(rects) = tool_rects {
+                compose_tool_actions(ui, actions, rects);
+            }
             if let Some(viewport) = viewport {
                 let output = ui.viewport_widget(viewport, pan_zoom, &[]);
                 *pan_zoom = output.next_pan_zoom;
+            }
+            if let Some(viewport_scene) = viewport_scene {
+                let _ = ui.viewport_tool_scene(viewport_scene, viewport_tools);
             }
         }
         INSPECTOR_PANEL => {
@@ -441,6 +527,20 @@ fn compose_workspace_panels(
                     opacity_draft,
                     inspector_picker,
                 );
+            }
+        }
+        TIMELINE_PANEL => {
+            if let Some(timeline) = timeline {
+                let output = ui.timeline_widget_with_controllers(timeline, scrub, clip_edit);
+                apply_timeline_output(
+                    model,
+                    output.timeline.intent,
+                    &output.timeline.scrub_intents,
+                    &output.clip_edit_intents,
+                );
+            }
+            if let Some(feedback) = feedback {
+                let _ = ui.system_feedback(feedback);
             }
         }
         _ => {}
@@ -696,6 +796,7 @@ fn chrome_config(layout: WorkspaceLayout, actions: &DemoActionRegistry) -> Chrom
         (ChromeSceneItemKey::Tab(PanelId::from_raw(101)), 132.0),
         (ChromeSceneItemKey::Tab(PanelId::from_raw(102)), 140.0),
         (ChromeSceneItemKey::Status(StatusItemId::from_raw(1)), 152.0),
+        (ChromeSceneItemKey::Status(StatusItemId::from_raw(2)), 168.0),
     ];
     widths.extend(actions.iter().map(|action| {
         (
@@ -752,7 +853,9 @@ fn edit_dock() -> Dock {
     let assets = dock_frame(1, ASSETS_PANEL, "Assets");
     let viewport = dock_frame(2, VIEWPORT_PANEL, "Viewport");
     let inspector = dock_frame(3, INSPECTOR_PANEL, "Inspector");
-    let right = split(Axis::Horizontal, 0.60, viewport, inspector);
+    let timeline = dock_frame(4, TIMELINE_PANEL, "Timeline");
+    let upper = split(Axis::Horizontal, 0.60, viewport, inspector);
+    let right = split(Axis::Vertical, 0.62, upper, timeline);
     let mut dock = Dock::new(split(Axis::Horizontal, 0.22, assets, right));
     let _ = dock.set_active_frame(FrameId::from_raw(2));
     dock

@@ -3,6 +3,7 @@
 mod app_model;
 mod edit_workspace;
 mod graph_workspace;
+mod timeline_workspace;
 
 use stern::UiState;
 use stern::core::{
@@ -14,7 +15,9 @@ use stern::render::RenderResources;
 
 use edit_workspace::EditWorkspace;
 
-pub use app_model::{DemoActionRegistry, DemoApplicationModel, DemoWorkspace};
+pub use app_model::{
+    DemoActionRegistry, DemoApplicationModel, DemoJobPhase, DemoViewportTool, DemoWorkspace,
+};
 pub use graph_workspace::{GraphConnectionFeedback, GraphWorkspaceState};
 
 /// Canonical integration-demo title.
@@ -54,6 +57,41 @@ impl DemoApp {
         self.model.applied_revision()
     }
 
+    /// Returns the application-owned projected playhead frame.
+    #[must_use]
+    pub const fn playhead_frame(&self) -> i64 {
+        self.model.playhead_frame()
+    }
+
+    /// Returns the committed application-owned playhead frame.
+    #[must_use]
+    pub const fn committed_playhead_frame(&self) -> i64 {
+        self.model.committed_playhead_frame()
+    }
+
+    /// Returns the application-owned projected clip range.
+    #[must_use]
+    pub const fn clip_frames(&self) -> (i64, i64) {
+        self.model.clip_frames()
+    }
+
+    /// Returns the committed application-owned clip range.
+    #[must_use]
+    pub const fn committed_clip_frames(&self) -> (i64, i64) {
+        self.model.committed_clip_frames()
+    }
+
+    /// Returns the active application-owned viewport tool.
+    #[must_use]
+    pub const fn viewport_tool(&self) -> DemoViewportTool {
+        self.model.viewport_tool()
+    }
+
+    /// Replaces the deterministic preview-job state used by public feedback surfaces.
+    pub fn set_job(&mut self, phase: DemoJobPhase, progress_percent: u8) {
+        self.model.set_job(phase, progress_percent);
+    }
+
     /// Enables or disables the shared action across every public projection.
     pub const fn set_apply_enabled(&mut self, enabled: bool) {
         self.actions.set_apply_shared_state_enabled(enabled);
@@ -73,9 +111,10 @@ impl DemoApp {
         let graph = self.actions.graph_workspace().clone();
         let apply = self.actions.apply_shared_state().clone();
         let workspace = self.model.workspace();
-        let revision = self.model.applied_revision();
         let bounds = context.viewport.logical_size;
         let theme = default_dark_theme();
+        self.actions
+            .project_viewport_tool(self.model.viewport_tool());
         let shortcut_enabled =
             workspace == DemoWorkspace::Edit && !self.edit_workspace.has_overlay();
         let mut output = {
@@ -90,7 +129,7 @@ impl DemoApp {
                         &mut ui,
                         &self.actions,
                         workspace,
-                        revision,
+                        &mut self.model,
                         bounds,
                     );
                 }
