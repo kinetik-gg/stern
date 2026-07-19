@@ -5,7 +5,7 @@ use std::{collections::BTreeSet, fs, path::PathBuf};
 use stern::core::{
     ActionSource, FrameContext, FrameOutput, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
     PhysicalSize, Point, PointerButtonState, PointerInput, ScaleFactor, SemanticNode, SemanticRole,
-    Size, TimeInfo, UiInput, ViewportInfo, WidgetId,
+    SemanticValue, Size, TimeInfo, UiInput, Vec2, ViewportInfo, WidgetId,
 };
 use stern::render::RenderDiagnostic;
 use stern_demo::{DemoApp, demo_context};
@@ -66,6 +66,14 @@ fn collection_pointer_and_keyboard_selection_projects_inspector() {
 }
 
 #[test]
+fn collection_to_inspector_edit_executes_all_three_assertions() {
+    let evidence = collection_inspector_evidence();
+    assert!(evidence.identity_survived_scroll_and_rename);
+    assert!(evidence.inspector_projected_selected_record);
+    assert!(evidence.edit_lifecycle_observed);
+}
+
+#[test]
 fn viewport_texture_translates_without_missing_resource() {
     let mut app = DemoApp::new();
     let output = app.frame(demo_context(UiInput::default()));
@@ -118,7 +126,7 @@ fn shared_menu_escape_and_outside_press_preserve_focus_owner() {
 }
 
 #[test]
-fn edit_workspace_reports_exact_fifteen_public_component_ids() {
+fn edit_workspace_reports_exact_twenty_two_public_component_ids() {
     let trace = edit_workspace_trace();
     let observed = observed_component_ids(&trace);
     let expected = EXPECTED_COMPONENT_IDS.split_ascii_whitespace().collect();
@@ -128,7 +136,7 @@ fn edit_workspace_reports_exact_fifteen_public_component_ids() {
         .collect::<BTreeSet<_>>();
     assert_eq!(required.len(), 34);
     assert!(observed.is_subset(&required));
-    assert_eq!(required.difference(&observed).count(), 19);
+    assert_eq!(required.difference(&observed).count(), 12);
 
     let evidence = runtime_journey_evidence(&trace);
     assert_eq!(
@@ -136,11 +144,7 @@ fn edit_workspace_reports_exact_fifteen_public_component_ids() {
         [
             [RuntimeStepEvidence::Passed; 3],
             [RuntimeStepEvidence::Passed; 3],
-            [
-                RuntimeStepEvidence::NotExecuted,
-                RuntimeStepEvidence::Passed,
-                RuntimeStepEvidence::NotExecuted,
-            ],
+            [RuntimeStepEvidence::Passed; 3],
             [RuntimeStepEvidence::NotExecuted; 3],
             [RuntimeStepEvidence::NotExecuted; 3],
             [RuntimeStepEvidence::NotExecuted; 3],
@@ -175,14 +179,18 @@ fn edit_workspace_reports_exact_fifteen_public_component_ids() {
             completed.push(id);
         }
     }
-    assert_eq!(completed, ["shared-action-projection"]);
+    assert_eq!(
+        completed,
+        ["shared-action-projection", "collection-to-inspector-edit"]
+    );
 }
 
 const EXPECTED_COMPONENT_IDS: &str = concat!(
-    "button virtual-list workspace-chrome dock content-structure-components toolbar-components ",
-    "icon-shortcut-components menu-components command-palette-components overlay-system ",
-    "overlay-components navigation-surface-components collection-components inspector-components ",
-    "editor-chrome-components",
+    "button text-field dropdown selection-controls value-controls virtual-list workspace-chrome ",
+    "dock inspector-collections content-structure-components toolbar-components ",
+    "icon-shortcut-components menu-components command-palette-components advanced-editor-fields ",
+    "choice-value-components overlay-system overlay-components navigation-surface-components ",
+    "collection-components inspector-components editor-chrome-components",
 );
 const JOURNEY_COMPONENTS: &str = "\
 workspace-boot-and-traversal|editor-frame workspace-chrome dock editor-chrome-components navigation-surface-components content-structure-components
@@ -206,11 +214,14 @@ struct ExecutedEditEvidence {
     shared_descriptor_projected: RuntimeStepEvidence,
     shared_activation_exact: RuntimeStepEvidence,
     shared_disabled_consistent: RuntimeStepEvidence,
-    inspector_projected: RuntimeStepEvidence,
+    collection_identity_preserved: RuntimeStepEvidence,
+    inspector_projected_record: RuntimeStepEvidence,
+    edit_lifecycle_observed: RuntimeStepEvidence,
 }
 
 fn edit_workspace_trace() -> EditWorkspaceTrace {
     let shared = shared_action_evidence();
+    let collection = collection_inspector_evidence();
     let mut app = DemoApp::new();
     let initial = app.frame(demo_context(UiInput::default()));
     let translation =
@@ -228,9 +239,6 @@ fn edit_workspace_trace() -> EditWorkspaceTrace {
     let character = node(&selected, item, "Character").state.selected;
     let lighting = node(&moved, item, "Lighting");
     let collection_traversed = character && lighting.state.selected && lighting.state.focused;
-    let inspector_projected = collection_traversed
-        && has_labels(&selected, "Character|Vector layer")
-        && has_labels(&moved, "Lighting|Adjustment layer");
     let shell_booted = has_role(&initial, &SemanticRole::Dock)
         && has_role(&initial, &SemanticRole::Frame)
         && !translation.commands.is_empty()
@@ -248,7 +256,15 @@ fn edit_workspace_trace() -> EditWorkspaceTrace {
             shared_descriptor_projected: RuntimeStepEvidence::executed(shared.descriptor_projected),
             shared_activation_exact: RuntimeStepEvidence::executed(shared.activation_exact),
             shared_disabled_consistent: RuntimeStepEvidence::executed(shared.disabled_consistent),
-            inspector_projected: RuntimeStepEvidence::executed(inspector_projected),
+            collection_identity_preserved: RuntimeStepEvidence::executed(
+                collection.identity_survived_scroll_and_rename,
+            ),
+            inspector_projected_record: RuntimeStepEvidence::executed(
+                collection.inspector_projected_selected_record,
+            ),
+            edit_lifecycle_observed: RuntimeStepEvidence::executed(
+                collection.edit_lifecycle_observed,
+            ),
         },
     }
 }
@@ -257,6 +273,120 @@ struct SharedActionEvidence {
     descriptor_projected: bool,
     activation_exact: bool,
     disabled_consistent: bool,
+}
+
+struct CollectionInspectorEvidence {
+    identity_survived_scroll_and_rename: bool,
+    inspector_projected_selected_record: bool,
+    edit_lifecycle_observed: bool,
+}
+
+#[allow(clippy::too_many_lines)]
+fn collection_inspector_evidence() -> CollectionInspectorEvidence {
+    let mut app = DemoApp::new();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let selected = click(&mut app, &initial, &SemanticRole::ListItem, "Character");
+    let list_bounds = node(&selected, &SemanticRole::List, "Assets").bounds;
+    let character_y = node(&selected, &SemanticRole::ListItem, "Character")
+        .bounds
+        .y;
+    let _ = app.frame(demo_context(wheel(list_bounds.center(), -28.0)));
+    let scrolled = app.frame(demo_context(UiInput::default()));
+    let character = node(&scrolled, &SemanticRole::ListItem, "Character");
+    let selection_survived_scroll = has_semantic_text(&scrolled, "Character")
+        && character.state.selected
+        && character.bounds.y.to_bits() != character_y.to_bits();
+    let _ = click(&mut app, &scrolled, &SemanticRole::ListItem, "Character");
+
+    let _ = app.frame(demo_context(key(Key::Function(2))));
+    let _ = app.frame(demo_context(select_all()));
+    let _ = app.frame(demo_context(typed("Hero")));
+    let _ = app.frame(demo_context(key(Key::Enter)));
+    let renamed = app.frame(demo_context(UiInput::default()));
+    let rename_committed = node(&renamed, &SemanticRole::ListItem, "Hero")
+        .state
+        .selected
+        && has_semantic_text(&renamed, "Hero");
+
+    let opened = click(&mut app, &renamed, &SemanticRole::Button, "Vector layer");
+    let picker = if has_label(&opened, "Text layer") {
+        opened
+    } else {
+        app.frame(demo_context(UiInput::default()))
+    };
+    let _ = click_label(&mut app, &picker, "Text layer");
+    let kind_changed = app.frame(demo_context(UiInput::default()));
+
+    let visibility_changed = click(&mut app, &kind_changed, &SemanticRole::CheckBox, "Visible");
+    let visible_is_false = !node(&visibility_changed, &SemanticRole::CheckBox, "Visible")
+        .state
+        .selected;
+
+    let opacity_point = numeric_node(&visibility_changed).bounds.center();
+    let _ = click_point(&mut app, opacity_point);
+    let _ = app.frame(demo_context(select_all()));
+    let _ = app.frame(demo_context(typed("0.5")));
+    let _ = app.frame(demo_context(key(Key::Enter)));
+    let opacity_changed = app.frame(demo_context(UiInput::default()));
+
+    let _ = click(&mut app, &opacity_changed, &SemanticRole::ListItem, "Hero");
+    let _ = app.frame(demo_context(key(Key::ArrowUp)));
+    let hero = app.frame(demo_context(key(Key::ArrowDown)));
+    let projected_record = visible_is_false
+        && has_description(&hero, "Hero", "Text layer")
+        && !node(&hero, &SemanticRole::CheckBox, "Visible")
+            .state
+            .selected
+        && numeric_value(&hero).to_bits() == 0.5_f32.to_bits();
+
+    let _ = app.frame(demo_context(key(Key::Function(2))));
+    let _ = app.frame(demo_context(select_all()));
+    let _ = app.frame(demo_context(typed("Backdrop")));
+    let _ = app.frame(demo_context(key(Key::Enter)));
+    let duplicate = app.frame(demo_context(UiInput::default()));
+    let duplicate_rejected =
+        has_label(&duplicate, "Name already exists") && has_semantic_text(&duplicate, "Hero");
+    let _ = app.frame(demo_context(key(Key::Escape)));
+    let hero = app.frame(demo_context(UiInput::default()));
+
+    let _ = click(&mut app, &hero, &SemanticRole::ListItem, "Hero");
+    let _ = app.frame(demo_context(key(Key::Function(2))));
+    let _ = app.frame(demo_context(select_all()));
+    let _ = app.frame(demo_context(key(Key::Backspace)));
+    let _ = app.frame(demo_context(key(Key::Enter)));
+    let empty = app.frame(demo_context(UiInput::default()));
+    let empty_rejected = has_label(&empty, "Name is required") && has_semantic_text(&empty, "Hero");
+    let _ = app.frame(demo_context(key(Key::Escape)));
+    let hero = app.frame(demo_context(UiInput::default()));
+
+    let _ = click(&mut app, &hero, &SemanticRole::ListItem, "Hero");
+    let _ = app.frame(demo_context(key(Key::Function(2))));
+    let _ = app.frame(demo_context(select_all()));
+    let _ = app.frame(demo_context(typed("Cancelled")));
+    let _ = app.frame(demo_context(key(Key::Escape)));
+    let cancelled = app.frame(demo_context(UiInput::default()));
+    let cancel_preserved = has_label(&cancelled, "Hero");
+
+    let reset_name = click_label(&mut app, &cancelled, "Reset Name to default");
+    let reset_kind = click_label(&mut app, &reset_name, "Reset Kind to default");
+    let reset_visible = click_label(&mut app, &reset_kind, "Reset Visible to default");
+    let _ = click_label(&mut app, &reset_visible, "Reset Opacity to default");
+    let reset = app.frame(demo_context(UiInput::default()));
+    let defaults_restored = has_label(&reset, "Character")
+        && has_description(&reset, "Character", "Vector layer")
+        && node(&reset, &SemanticRole::CheckBox, "Visible")
+            .state
+            .selected
+        && numeric_value(&reset).to_bits() == 0.9_f32.to_bits();
+
+    CollectionInspectorEvidence {
+        identity_survived_scroll_and_rename: selection_survived_scroll && rename_committed,
+        inspector_projected_selected_record: projected_record,
+        edit_lifecycle_observed: duplicate_rejected
+            && empty_rejected
+            && cancel_preserved
+            && defaults_restored,
+    }
 }
 
 fn shared_action_evidence() -> SharedActionEvidence {
@@ -408,6 +538,14 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
         .selected;
     let inspector = has_role(&trace.selected, &SemanticRole::Grid)
         && has_label(&trace.selected, "Vector layer");
+    let text_field = has_role(&trace.initial, &SemanticRole::TextField);
+    let dropdown = has_label(&trace.initial, "Raster layer")
+        && has_role(&trace.initial, &SemanticRole::Button);
+    let selection_control = has_role(&trace.initial, &SemanticRole::CheckBox);
+    let value_control = numeric_value(&trace.initial).to_bits() == 1.0_f32.to_bits();
+    let inspector_collection = list && inspector;
+    let advanced_fields = text_field && value_control;
+    let choice_values = dropdown && selection_control && value_control;
     let dock = has_labels(&trace.initial, "Editor dock|Assets|Viewport|Inspector");
     let chrome = has_labels(
         &trace.initial,
@@ -423,14 +561,21 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
         .split_ascii_whitespace()
         .zip([
             action,
+            text_field,
+            dropdown,
+            selection_control,
+            value_control,
             list,
             chrome,
             dock,
+            inspector_collection,
             structure,
             toolbar,
             shared_surfaces,
             shared_surfaces,
             shared_surfaces,
+            advanced_fields,
+            choice_values,
             shared_surfaces,
             shared_surfaces,
             navigation,
@@ -472,7 +617,11 @@ fn runtime_journey_evidence(trace: &EditWorkspaceTrace) -> [[RuntimeStepEvidence
             trace.evidence.shared_activation_exact,
             trace.evidence.shared_disabled_consistent,
         ],
-        [unexecuted, trace.evidence.inspector_projected, unexecuted],
+        [
+            trace.evidence.collection_identity_preserved,
+            trace.evidence.inspector_projected_record,
+            trace.evidence.edit_lifecycle_observed,
+        ],
         [unexecuted; 3],
         [unexecuted; 3],
         [unexecuted; 3],
@@ -531,6 +680,36 @@ fn has_labels(output: &FrameOutput, labels: &str) -> bool {
     labels.split('|').all(|label| has_label(output, label))
 }
 
+fn has_semantic_text(output: &FrameOutput, value: &str) -> bool {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .any(|node| matches!(&node.state.value, Some(SemanticValue::Text(text)) if text == value))
+}
+
+fn has_description(output: &FrameOutput, label: &str, description: &str) -> bool {
+    output.semantics.nodes().iter().any(|node| {
+        node.label.as_deref() == Some(label) && node.description.as_deref() == Some(description)
+    })
+}
+
+fn numeric_node(output: &FrameOutput) -> &SemanticNode {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| matches!(&node.state.value, Some(SemanticValue::Number { .. })))
+        .expect("numeric inspector field")
+}
+
+fn numeric_value(output: &FrameOutput) -> f32 {
+    let Some(SemanticValue::Number { current, .. }) = &numeric_node(output).state.value else {
+        unreachable!("numeric node has numeric value")
+    };
+    *current
+}
+
 fn has_role(output: &FrameOutput, role: &SemanticRole) -> bool {
     output
         .semantics
@@ -573,6 +752,23 @@ fn click(app: &mut DemoApp, output: &FrameOutput, role: &SemanticRole, label: &s
     app.frame(demo_context(pointer(point, false, false, true)))
 }
 
+fn click_label(app: &mut DemoApp, output: &FrameOutput, label: &str) -> FrameOutput {
+    let point = output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| node.label.as_deref() == Some(label))
+        .unwrap_or_else(|| panic!("semantic node {label}"))
+        .bounds
+        .center();
+    click_point(app, point)
+}
+
+fn click_point(app: &mut DemoApp, point: Point) -> FrameOutput {
+    let _ = app.frame(demo_context(pointer(point, true, true, false)));
+    app.frame(demo_context(pointer(point, false, false, true)))
+}
+
 fn pointer(point: Point, down: bool, pressed: bool, released: bool) -> UiInput {
     UiInput {
         pointer: PointerInput {
@@ -590,6 +786,41 @@ fn secondary(point: Point, down: bool, pressed: bool, released: bool) -> UiInput
             position: Some(point),
             secondary: PointerButtonState::new(down, pressed, released),
             ..PointerInput::default()
+        },
+        ..UiInput::default()
+    }
+}
+
+fn wheel(point: Point, delta_y: f32) -> UiInput {
+    UiInput {
+        pointer: PointerInput {
+            position: Some(point),
+            wheel_delta: Vec2::new(0.0, delta_y),
+            ..PointerInput::default()
+        },
+        ..UiInput::default()
+    }
+}
+
+fn select_all() -> UiInput {
+    key_with_modifiers(
+        Key::Character("a".to_owned()),
+        Modifiers::new(false, true, false, false),
+    )
+}
+
+fn typed(text: &str) -> UiInput {
+    let event = KeyEvent::new(
+        Key::Character(text.to_owned()),
+        KeyState::Pressed,
+        Modifiers::default(),
+        false,
+    )
+    .with_text(text);
+    UiInput {
+        keyboard: KeyboardInput {
+            modifiers: Modifiers::default(),
+            events: vec![event],
         },
         ..UiInput::default()
     }
