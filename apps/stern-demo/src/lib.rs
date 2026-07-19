@@ -15,7 +15,7 @@ use stern::render::RenderResources;
 use edit_workspace::EditWorkspace;
 
 pub use app_model::{DemoActionRegistry, DemoApplicationModel, DemoWorkspace};
-pub use graph_workspace::GraphWorkspaceState;
+pub use graph_workspace::{GraphConnectionFeedback, GraphWorkspaceState};
 
 /// Canonical integration-demo title.
 pub const DEMO_TITLE: &str = "Stern Integration Demo";
