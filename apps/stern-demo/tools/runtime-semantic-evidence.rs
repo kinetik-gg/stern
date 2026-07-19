@@ -29,13 +29,15 @@ use contract::{
 };
 use json::{Json as Value, json};
 
-const PROVISIONAL_GRAPH_SOURCE_DRIFT: [&str; 4] = [
+const PROVISIONAL_GRAPH_SOURCE_DRIFT: [&str; 5] = [
+    "apps/stern-demo/src/app_model.rs",
     "apps/stern-demo/src/edit_workspace.rs",
     "apps/stern-demo/src/graph_workspace.rs",
     "apps/stern-demo/src/lib.rs",
     "apps/stern-demo/src/overlay_workspace.rs",
 ];
-const PROVISIONAL_GRAPH_CONTRACT_DRIFT: [&str; 2] = [
+const PROVISIONAL_GRAPH_CONTRACT_DRIFT: [&str; 3] = [
+    "apps/stern-demo/tests/graph_journey_contract.rs",
     "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
     "apps/stern-demo/tests/public_consumer_contract.rs",
 ];

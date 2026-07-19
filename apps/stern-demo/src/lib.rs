@@ -55,7 +55,7 @@ impl DemoApp {
             model,
             actions: DemoActionRegistry::for_scenario(scenario),
             edit_workspace,
-            graph_workspace: GraphWorkspaceState::new(),
+            graph_workspace: GraphWorkspaceState::for_scenario(scenario),
             overlays: SharedOverlayRoute::new(),
         }
     }

@@ -32,11 +32,12 @@ use crate::timeline_workspace::{
     compose_tool_actions, declare_tool_actions, viewport_actions, viewport_content_rect,
     viewport_tool_rects,
 };
-use crate::{DemoActionRegistry, DemoApplicationModel, DemoViewportTool};
+use crate::{DemoActionRegistry, DemoApplicationModel, DemoScenario, DemoViewportTool};
 
 const GRAPH_ROOT: WidgetId = WidgetId::from_raw(0x0047_5241_5048);
 const CHROME_ROOT: WidgetId = WidgetId::from_raw(0x4348_524f_4d45);
 const CLEAR_SELECTION_ACTION: &str = "graph.clear-selection";
+const REVERSE_NODE_ORDER_ACTION: &str = "graph.reverse-node-order";
 const TOOLBAR_GROUP: ToolbarGroupId = ToolbarGroupId::from_raw(1);
 const APPLICATION_MENU: MenuBarMenuId = MenuBarMenuId::from_raw(1);
 const SELECTION_STATUS: StatusItemId = StatusItemId::from_raw(1);
@@ -73,6 +74,13 @@ pub enum GraphConnectionFeedback {
     Ready,
     /// Stern resolved a typed preview candidate.
     Previewing,
+    /// Stern accepted stable source and target endpoints before release.
+    Accepted {
+        /// Stable output endpoint accepted by the canonical typed-link policy.
+        from: PortEndpoint,
+        /// Stable input endpoint accepted by the canonical typed-link policy.
+        to: PortEndpoint,
+    },
     /// Stern rejected an incompatible candidate without application mutation.
     Rejected,
     /// The application committed the accepted request as its stable final edge.
@@ -87,6 +95,8 @@ pub struct GraphWorkspaceState {
     dock: Dock,
     graph: NodeGraphDescriptor,
     selection: NodeGraphSelection,
+    graph_journey: bool,
+    node_order_revision: u32,
     connection: NodeGraphConnectionController,
     connection_feedback: GraphConnectionFeedback,
     graph_pan_zoom: NodeGraphPanZoom,
@@ -101,6 +111,12 @@ impl GraphWorkspaceState {
     /// Creates the deterministic app-owned graph fixture.
     #[must_use]
     pub fn new() -> Self {
+        Self::for_scenario(DemoScenario::Default)
+    }
+
+    /// Creates the app-owned graph fixture for an explicit journey scenario.
+    #[must_use]
+    pub fn for_scenario(scenario: DemoScenario) -> Self {
         let source_output =
             PortDescriptor::new(IMAGE_OUTPUT, PortDirection::Output, "Image", IMAGE_TYPE);
         let output_input =
@@ -168,6 +184,8 @@ impl GraphWorkspaceState {
             dock,
             graph,
             selection: NodeGraphSelection::new(),
+            graph_journey: scenario.has_graph_journey(),
+            node_order_revision: 0,
             connection: NodeGraphConnectionController::default(),
             connection_feedback: GraphConnectionFeedback::Ready,
             graph_pan_zoom: NodeGraphPanZoom::new(GraphVector::new(2.0, 2.0), 1.0),
@@ -204,6 +222,18 @@ impl GraphWorkspaceState {
         &self.graph.edges
     }
 
+    /// Returns graph nodes in application presentation order.
+    #[must_use]
+    pub fn nodes(&self) -> &[NodeDescriptor] {
+        &self.graph.nodes
+    }
+
+    /// Returns the application-owned node presentation-order revision.
+    #[must_use]
+    pub const fn node_order_revision(&self) -> u32 {
+        self.node_order_revision
+    }
+
     /// Returns the latest public connection lifecycle outcome.
     #[must_use]
     pub const fn connection_feedback(&self) -> GraphConnectionFeedback {
@@ -234,13 +264,18 @@ impl GraphWorkspaceState {
         self.graph_pan_zoom
     }
 
-    /// Handles the one application-owned action exposed by the Graph workspace.
+    /// Handles application-owned actions exposed by the Graph workspace.
     pub fn handle_action(&mut self, invocation: &ActionInvocation) -> bool {
-        if invocation.action_id.as_str() != CLEAR_SELECTION_ACTION || self.selection.is_empty() {
-            return false;
+        if invocation.action_id.as_str() == CLEAR_SELECTION_ACTION && !self.selection.is_empty() {
+            self.selection = NodeGraphSelection::new();
+            return true;
         }
-        self.selection = NodeGraphSelection::new();
-        true
+        if invocation.action_id.as_str() == REVERSE_NODE_ORDER_ACTION && self.graph_journey {
+            self.graph.nodes.reverse();
+            self.node_order_revision += 1;
+            return true;
+        }
+        false
     }
 
     #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
@@ -296,32 +331,37 @@ impl GraphWorkspaceState {
             .as_ref()
             .map(|viewport| graph_viewport_scene(ui, viewport, model.viewport_tool()));
         overlays.open_palette_if_requested(ui, actions, viewport_size);
-        let chrome_scene = ChromeScene::new(
-            ChromeSceneConfig::new(
-                CHROME_ROOT,
-                menu_rect,
-                toolbar_rect,
-                tab_strip_rect,
-                status_bar_rect,
-                ActionContext::Editor,
-            )
-            .with_widths([
-                (ChromeSceneItemKey::Menu(APPLICATION_MENU), 96.0),
-                (
-                    ChromeSceneItemKey::Toolbar {
-                        group: TOOLBAR_GROUP,
-                        action: stern::core::ActionId::new(CLEAR_SELECTION_ACTION),
-                    },
-                    132.0,
-                ),
-                (ChromeSceneItemKey::Tab(GRAPH_PANEL), 120.0),
-                (ChromeSceneItemKey::Status(SELECTION_STATUS), 160.0),
-            ]),
-            &menu_bar,
-            &toolbar,
-            &tab_strip,
-            &status_bar,
-        );
+        let mut chrome_config = ChromeSceneConfig::new(
+            CHROME_ROOT,
+            menu_rect,
+            toolbar_rect,
+            tab_strip_rect,
+            status_bar_rect,
+            ActionContext::Editor,
+        )
+        .with_widths([
+            (ChromeSceneItemKey::Menu(APPLICATION_MENU), 96.0),
+            (
+                ChromeSceneItemKey::Toolbar {
+                    group: TOOLBAR_GROUP,
+                    action: stern::core::ActionId::new(CLEAR_SELECTION_ACTION),
+                },
+                132.0,
+            ),
+            (ChromeSceneItemKey::Tab(GRAPH_PANEL), 120.0),
+            (ChromeSceneItemKey::Status(SELECTION_STATUS), 160.0),
+        ]);
+        if self.graph_journey {
+            chrome_config = chrome_config.with_width(
+                ChromeSceneItemKey::Toolbar {
+                    group: TOOLBAR_GROUP,
+                    action: stern::core::ActionId::new(REVERSE_NODE_ORDER_ACTION),
+                },
+                168.0,
+            );
+        }
+        let chrome_scene =
+            ChromeScene::new(chrome_config, &menu_bar, &toolbar, &tab_strip, &status_bar);
         ui.resolve_pointer_targets(|plan| {
             for (index, &(id, rect)) in app_targets.iter().enumerate() {
                 plan.target(PointerTarget::new(
@@ -394,10 +434,17 @@ impl GraphWorkspaceState {
         let selected = u32::try_from(self.selection.selected().len()).unwrap_or(u32::MAX);
         let mut clear_selection = ActionDescriptor::new(CLEAR_SELECTION_ACTION, "Clear selection");
         clear_selection.state.enabled = selected != 0;
+        let mut toolbar_actions = vec![clear_selection];
+        if self.graph_journey {
+            toolbar_actions.push(ActionDescriptor::new(
+                REVERSE_NODE_ORDER_ACTION,
+                "Reverse node order",
+            ));
+        }
         self.toolbar.replace_groups([ToolbarGroup::from_actions(
             TOOLBAR_GROUP,
             "Graph selection",
-            [clear_selection],
+            toolbar_actions,
         )]);
         self.status_bar
             .replace_items([connection_status(self.connection_feedback, selected)]);
@@ -426,7 +473,12 @@ impl GraphWorkspaceState {
             NodeGraphConnectionIntent::Begin(_) | NodeGraphConnectionIntent::Preview(_) => {
                 self.connection_feedback = GraphConnectionFeedback::Previewing;
             }
-            NodeGraphConnectionIntent::Accepted(_) => {}
+            NodeGraphConnectionIntent::Accepted(request) => {
+                self.connection_feedback = GraphConnectionFeedback::Accepted {
+                    from: request.from.endpoint,
+                    to: request.to.endpoint,
+                };
+            }
             NodeGraphConnectionIntent::Rejected(_) => {
                 self.connection_feedback = GraphConnectionFeedback::Rejected;
             }
@@ -568,6 +620,17 @@ fn connection_status(feedback: GraphConnectionFeedback, selected: u32) -> Status
         GraphConnectionFeedback::Previewing => (
             "Connection",
             "Previewing typed connection".to_owned(),
+            StatusItemKind::Progress,
+        ),
+        GraphConnectionFeedback::Accepted { from, to } => (
+            "Connection",
+            format!(
+                "Accepted {}:{} -> {}:{}",
+                from.node.raw(),
+                from.port.raw(),
+                to.node.raw(),
+                to.port.raw()
+            ),
             StatusItemKind::Progress,
         ),
         GraphConnectionFeedback::Rejected => (

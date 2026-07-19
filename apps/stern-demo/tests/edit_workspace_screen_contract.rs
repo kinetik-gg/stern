@@ -574,7 +574,11 @@ fn graph_connection_evidence() -> GraphConnectionEvidence {
     let _ = app.frame(demo_context(graph_connection_press(source)));
     let _ = app.frame(demo_context(graph_connection_move(source, target)));
     let preview_isolated = app.graph_workspace().connection_active()
-        && app.graph_workspace().connection_feedback() == GraphConnectionFeedback::Previewing
+        && app.graph_workspace().connection_feedback()
+            == GraphConnectionFeedback::Accepted {
+                from: PortEndpoint::new(NodeId::from_raw(1), PortId::from_raw(1)),
+                to: PortEndpoint::new(NodeId::from_raw(2), PortId::from_raw(2)),
+            }
         && app.graph_workspace().edges() == original_edges;
 
     let _ = app.frame(demo_context(graph_connection_release(target)));

@@ -7,14 +7,16 @@
     "commit": "50edc219ae5d013c242129adf2ec7a25942f5c28",
     "tree": "6c64e4dffe649a1b652cd5b0d15416e254c57b8c",
     "sourceRef": "50edc219ae5d013c242129adf2ec7a25942f5c28",
-    "generatedFromCleanWorktree": true,
+    "generatedFromCleanWorktree": false,
     "provisionalGraphSourceDrift": [
+      "apps/stern-demo/src/app_model.rs",
       "apps/stern-demo/src/edit_workspace.rs",
       "apps/stern-demo/src/graph_workspace.rs",
       "apps/stern-demo/src/lib.rs",
       "apps/stern-demo/src/overlay_workspace.rs"
     ],
     "provisionalGraphContractDrift": [
+      "apps/stern-demo/tests/graph_journey_contract.rs",
       "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
       "apps/stern-demo/tests/public_consumer_contract.rs"
     ],
