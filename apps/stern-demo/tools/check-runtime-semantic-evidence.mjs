@@ -39,6 +39,18 @@ const RENDERER_COMPATIBLE_DRIFT = [
   "apps/stern-demo/tools/platform-smoke-record.mjs",
   "apps/stern-demo/tools/platform-smoke-record.test.mjs",
 ];
+const CANDIDATE_EVIDENCE_DRIFT = [
+  ".github/workflows/ci.yml",
+  "apps/stern-demo/Cargo.toml",
+  "apps/stern-demo/tests/evidence/runtime-semantic-evidence.provisional.json",
+  "apps/stern-demo/tests/runtime_semantic_evidence.rs",
+  "apps/stern-demo/tools/audit.rs",
+  "apps/stern-demo/tools/check-runtime-semantic-evidence.mjs",
+  "apps/stern-demo/tools/color-evidence.rs",
+  "apps/stern-demo/tools/contract.rs",
+  "apps/stern-demo/tools/json.rs",
+  "apps/stern-demo/tools/runtime-semantic-evidence.rs",
+];
 
 const options = parseArgs(process.argv.slice(2));
 const evidencePath = resolve(options.evidence ?? fail("--evidence is required"));
@@ -73,6 +85,11 @@ assert(git("rev-parse", `${evidence.source.commit}^{tree}`) === evidence.source.
   "recorded source commit does not own recorded tree");
 assert(typeof evidence.source.generatedFromCleanWorktree === "boolean",
   "source cleanliness must be explicit");
+const candidateDrift = git(
+  "diff", "--name-only", evidence.source.commit, git("rev-parse", "HEAD^{commit}"),
+).split(/\r?\n/u).filter(Boolean);
+assertExact(candidateDrift, CANDIDATE_EVIDENCE_DRIFT,
+  "canonical-source-to-candidate evidence-only drift");
 
 assertExact(evidence.runtime.components.map(({ id }) => id), COMPONENTS, "component IDs");
 for (const component of evidence.runtime.components) {
