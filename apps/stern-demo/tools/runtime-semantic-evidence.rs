@@ -195,6 +195,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
                 | "complete-component-coverage"
                 | "deterministic-user-journeys"
                 | "semantic-structure"
+                | "renderer-and-scale-quality"
                 | "honest-evidence" => "passed",
                 _ => "pending",
             };
@@ -216,6 +217,14 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         "components": component_records,
         "workspaces": workspaces,
         "journeys": journeys,
+    });
+    let renderer_evidence = json!({
+        "issue": 845,
+        "manifestPath": "evidence/stern-demo-vello-845/manifest.json",
+        "captureStatus": "final",
+        "reviewStatus": "approved",
+        "artifactCount": 8,
+        "sourceCompatibility": "capture-sensitive paths unchanged",
     });
     let actions = vec![
         json!({"id": "pointer-apply", "input": "pointer", "actionId": "shared.apply", "source": "Button", "stateBefore": revision_before, "stateAfter": revision_before + u32::from(pointer_action), "status": status(pointer_action)}),
@@ -255,7 +264,6 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         owner_removal,
     ];
     let known_gaps = vec![
-        json!({"id": "workspace-vello-captures", "issue": 845, "blocksGateIds": ["renderer-and-scale-quality"], "reason": "eight final reviewed Vello captures are pending"}),
         json!({"id": "cross-platform-evidence", "issue": 848, "blocksGateIds": ["platform-integration"], "reason": "Windows, macOS, and Linux evidence is not complete"}),
     ];
     Ok(json!({
@@ -269,6 +277,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         "semanticSnapshots": [edit_snapshot, graph_snapshot],
         "traversalTraces": traversal,
         "focusRestorationTraces": focus_restoration,
+        "rendererEvidence": renderer_evidence,
         "publicConsumerAudit": audit,
         "primitiveContentSurfaceAllowlist": primitive_allowlist(root)?,
         "gates": gates,

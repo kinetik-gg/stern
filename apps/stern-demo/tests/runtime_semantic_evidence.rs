@@ -16,7 +16,7 @@ fn generator_records_honest_current_runtime_packet() {
 }
 
 #[test]
-fn verifier_rejects_stale_source_and_premature_gate_claims() {
+fn verifier_rejects_stale_source_and_premature_platform_gate_claims() {
     let evidence = temp("tampered");
     generate(&evidence);
     mutate(&evidence, "record.source.tree = '0'.repeat(40);");
@@ -25,7 +25,7 @@ fn verifier_rejects_stale_source_and_premature_gate_claims() {
     generate(&evidence);
     mutate(
         &evidence,
-        "record.gates.find(gate => gate.id === 'renderer-and-scale-quality').status = 'passed';",
+        "record.gates.find(gate => gate.id === 'platform-integration').status = 'passed';",
     );
     verify(&evidence, false);
     let _ = fs::remove_file(evidence);
@@ -96,7 +96,7 @@ fn assert_provisional(path: &Path) {
         "if(r.status!=='incomplete'||r.runtime.components.length!==34||",
         "passed(r.runtime.components)!==34||r.runtime.journeys.length!==7||",
         "passed(r.runtime.journeys)!==7||r.semanticSnapshots.length!==2||",
-        "!r.publicConsumerAudit.passed||gate('renderer-and-scale-quality')!=='pending'||",
+        "!r.publicConsumerAudit.passed||gate('renderer-and-scale-quality')!=='passed'||",
         "gate('platform-integration')!=='pending')process.exit(1);",
     );
     let status = Command::new("node")

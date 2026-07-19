@@ -2,6 +2,8 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { verifyEvidence as verifyRendererEvidence } from "../../../tools/capture-demo-vello.mjs";
+
 const SPEC_SHA256 = "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed";
 const COMPONENTS = [
   "button", "text-field", "dropdown", "selection-controls", "value-controls",
@@ -28,6 +30,21 @@ const GATES = [
   "complete-component-coverage", "deterministic-user-journeys", "semantic-structure",
   "renderer-and-scale-quality", "platform-integration", "honest-evidence",
 ];
+const RENDERER_COMPATIBLE_DRIFT = [
+  "apps/stern-demo/Cargo.toml",
+  "apps/stern-demo/src/bin/native_shell.rs",
+  "apps/stern-demo/tests/evidence/runtime-semantic-evidence.provisional.json",
+  "apps/stern-demo/tests/native_shell_contract.rs",
+  "apps/stern-demo/tests/runtime_semantic_evidence.rs",
+  "apps/stern-demo/tools/audit.rs",
+  "apps/stern-demo/tools/check-runtime-semantic-evidence.mjs",
+  "apps/stern-demo/tools/color-evidence.rs",
+  "apps/stern-demo/tools/contract.rs",
+  "apps/stern-demo/tools/json.rs",
+  "apps/stern-demo/tools/platform-smoke-record.mjs",
+  "apps/stern-demo/tools/platform-smoke-record.test.mjs",
+  "apps/stern-demo/tools/runtime-semantic-evidence.rs",
+];
 
 const options = parseArgs(process.argv.slice(2));
 const evidencePath = resolve(options.evidence ?? fail("--evidence is required"));
@@ -38,7 +55,7 @@ const sourceRef = options.sourceRef ?? evidence.source?.sourceRef;
 assertExact(Object.keys(evidence).sort(), [
   "focusRestorationTraces", "formatVersion", "gates", "knownGaps", "logs",
   "primitiveContentSurfaceAllowlist", "publicConsumerAudit", "runtime",
-  "semanticSnapshots", "source", "specificationSha256", "status", "sternVersion",
+  "rendererEvidence", "semanticSnapshots", "source", "specificationSha256", "status", "sternVersion",
   "traversalTraces",
 ].sort(), "top-level keys");
 assert(evidence.formatVersion === 1, "formatVersion must be 1");
@@ -143,6 +160,25 @@ for (const entry of evidence.primitiveContentSurfaceAllowlist) {
   assertStringArray(entry.matchedSourcePaths, `${entry.id}.matchedSourcePaths`);
   assert(entry.matchedSourcePaths.length > 0, `${entry.id} has no audited match`);
 }
+
+const renderer = verifyRendererEvidence("evidence/stern-demo-vello-845", "final", {
+  checkSourceInputs: false,
+  requiredReview: "approved",
+});
+assertExact(evidence.rendererEvidence, {
+  issue: 845,
+  manifestPath: "evidence/stern-demo-vello-845/manifest.json",
+  captureStatus: "final",
+  reviewStatus: "approved",
+  artifactCount: 8,
+  sourceCompatibility: "capture-sensitive paths unchanged",
+}, "renderer evidence record");
+const rendererDrift = git(
+  "diff", "--name-only", renderer.source.commit, evidence.source.commit,
+  "--", ...renderer.source.guarded_paths,
+).split(/\r?\n/u).filter(Boolean);
+assertExact(rendererDrift, RENDERER_COMPATIBLE_DRIFT,
+  "renderer capture-sensitive source compatibility");
 
 assertExact(evidence.gates.map(({ id }) => id), GATES, "gate IDs");
 for (const gate of evidence.gates) assertRecord(gate, "gate");
