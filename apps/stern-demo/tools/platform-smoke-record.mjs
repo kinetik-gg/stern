@@ -8,7 +8,7 @@ export const PRESENTATION_EVIDENCE = "native-shell-smoke=pass status=Presented";
 const PLATFORM_CONTRACT = Object.freeze({
   windows: { backend: "dx12", runnerOs: "Windows" },
   macos: { backend: "metal", runnerOs: "macOS" },
-  linux: { backend: "gl", runnerOs: "Linux" },
+  linux: { backend: "vulkan", runnerOs: "Linux" },
 });
 const PLATFORM_NAMES = Object.freeze(Object.keys(PLATFORM_CONTRACT));
 const RECORD_KEYS = Object.freeze([
