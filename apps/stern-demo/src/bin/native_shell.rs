@@ -1,4 +1,5 @@
 //! Public native host for the real Stern integration demo.
+use std::io::{self, Write};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -32,6 +33,14 @@ struct NativeShell {
     smoke: bool,
     presented: bool,
     failure: Option<String>,
+}
+
+fn should_terminate_successful_smoke(smoke: bool, status: VelloPresentStatus) -> bool {
+    smoke
+        && matches!(
+            status,
+            VelloPresentStatus::Presented | VelloPresentStatus::PresentedSuboptimal
+        )
 }
 
 impl NativeShell {
@@ -114,16 +123,23 @@ impl NativeShell {
                 return;
             }
         };
+        let present_status = report.status();
         if matches!(
-            report.status(),
+            present_status,
             VelloPresentStatus::Presented | VelloPresentStatus::PresentedSuboptimal
         ) {
             self.presented = true;
-            if self.smoke {
-                println!("native-shell-smoke=pass status={:?}", report.status());
-                event_loop.exit();
+        }
+        if should_terminate_successful_smoke(self.smoke, present_status) {
+            let mut stdout = io::stdout().lock();
+            if let Err(error) =
+                writeln!(stdout, "native-shell-smoke=pass status={present_status:?}")
+                    .and_then(|()| stdout.flush())
+            {
+                self.fail(event_loop, error);
                 return;
             }
+            std::process::exit(0);
         }
         if matches!(
             report.status(),
@@ -325,4 +341,24 @@ fn native_shell_presenter_constructs_detached_without_gpu() {
         stern::vello_winit::VelloAttachmentStatus::Detached
     );
     assert!(presenter.status().device_scope().is_none());
+}
+
+#[cfg(test)]
+#[test]
+fn smoke_success_termination_requires_smoke_and_confirmed_presentation() {
+    for status in [
+        VelloPresentStatus::Presented,
+        VelloPresentStatus::PresentedSuboptimal,
+    ] {
+        assert!(should_terminate_successful_smoke(true, status));
+        assert!(!should_terminate_successful_smoke(false, status));
+    }
+    for status in [
+        VelloPresentStatus::SurfaceRecoveryRequired,
+        VelloPresentStatus::DeviceRecoveryRequired,
+        VelloPresentStatus::SurfaceLost,
+        VelloPresentStatus::Detached,
+    ] {
+        assert!(!should_terminate_successful_smoke(true, status));
+    }
 }
