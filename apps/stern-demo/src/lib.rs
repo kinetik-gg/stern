@@ -156,6 +156,7 @@ impl DemoApp {
             .project_viewport_tool(self.model.viewport_tool());
         let shortcut_enabled =
             workspace == DemoWorkspace::Edit && !self.edit_workspace.has_overlay();
+        let mut focus_return = None;
         let mut output = {
             let mut ui = self.ui_state.begin_frame(context, &theme);
             let edit_rect = Rect::new(24.0, 56.0, 112.0, 30.0);
@@ -164,7 +165,7 @@ impl DemoApp {
             ui.push_platform_request(PlatformRequest::SetWindowTitle(DEMO_TITLE.to_owned()));
             match workspace {
                 DemoWorkspace::Edit => {
-                    self.edit_workspace.compose(
+                    focus_return = self.edit_workspace.compose(
                         &mut ui,
                         &self.actions,
                         workspace,
@@ -205,6 +206,9 @@ impl DemoApp {
             }
             ui.finish_output()
         };
+        if let Some(focus_return) = focus_return {
+            self.ui_state.memory_mut().focus(focus_return);
+        }
         if shortcut_enabled {
             let routing = ActionRoutingContext::new().with_editor();
             let mut shortcuts = self

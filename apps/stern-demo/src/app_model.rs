@@ -45,6 +45,13 @@ pub enum DemoColorSaveState {
     Succeeded,
 }
 
+/// One-shot application request projected through Stern's public overlay scene.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DemoColorOverlayNotice {
+    SaveFailed,
+    SaveRecovered,
+}
+
 /// Application-owned viewport tool selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DemoViewportTool {
@@ -104,6 +111,7 @@ pub struct DemoApplicationModel {
     color_save_state: DemoColorSaveState,
     fail_next_color_save: bool,
     serialized_color_style: Option<String>,
+    color_overlay_notice: Option<DemoColorOverlayNotice>,
 }
 
 impl DemoApplicationModel {
@@ -130,6 +138,7 @@ impl DemoApplicationModel {
             color_save_state: DemoColorSaveState::Idle,
             fail_next_color_save: true,
             serialized_color_style: None,
+            color_overlay_notice: None,
         }
     }
 
@@ -261,6 +270,10 @@ impl DemoApplicationModel {
         self.serialized_color_style.as_deref()
     }
 
+    pub(crate) fn take_color_overlay_notice(&mut self) -> Option<DemoColorOverlayNotice> {
+        self.color_overlay_notice.take()
+    }
+
     /// Replaces the deterministic job presentation state.
     pub fn set_job(&mut self, phase: DemoJobPhase, progress_percent: u8) {
         self.job_phase = phase;
@@ -336,6 +349,7 @@ impl DemoApplicationModel {
         if self.fail_next_color_save {
             self.fail_next_color_save = false;
             self.color_save_state = DemoColorSaveState::Failed;
+            self.color_overlay_notice = Some(DemoColorOverlayNotice::SaveFailed);
             return;
         }
         self.serialized_color_style = Some(serialize_color_style(
@@ -343,6 +357,7 @@ impl DemoApplicationModel {
             &self.gradient_stops,
         ));
         self.color_save_state = DemoColorSaveState::Succeeded;
+        self.color_overlay_notice = Some(DemoColorOverlayNotice::SaveRecovered);
     }
 }
 

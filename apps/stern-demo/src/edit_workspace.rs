@@ -21,13 +21,15 @@ use stern::widgets::{
     CommandPaletteOverlay, Dock, DockNode, DropdownItem, DropdownItemId, DropdownModel, Frame,
     FrameId, FrameTab, GridColumns, GridLayout, InlineEditDraftDisposition, InlineEditDraftPolicy,
     InlineEditFocusLossPolicy, InlineEditRequest, ItemId, ListLayout, Menu, MenuBar, MenuBarMenu,
-    MenuBarMenuId, MenuBarOverlayRequest, MenuOverlay, NumericInputDraft, NumericScrubInputConfig,
-    OverlayDismissal, OverlayId, OverlayKind, OverlayScene, OverlaySceneIntent,
-    OverlaySceneSurface, Panel, PanelId, PopoverPlacement, PropertyGridRow, SelectFieldConfig,
-    StatusBar, StatusItem, StatusItemId, StatusItemKind, TabStrip, TextFieldAccess, Toolbar,
-    ToolbarGroup, ToolbarGroupId, Ui, ViewportSurface, ViewportWidget, ViewportWidgetConfig,
+    MenuBarMenuId, MenuBarOverlayRequest, MenuOverlay, ModalDialog, ModalDialogOverlay,
+    ModalFocusContainment, NumericInputDraft, NumericScrubInputConfig, OverlayDismissal,
+    OverlayEntry, OverlayId, OverlayKind, OverlayScene, OverlaySceneIntent, OverlaySceneSurface,
+    Panel, PanelId, PopoverPlacement, PropertyGridRow, SelectFieldConfig, StatusBar, StatusItem,
+    StatusItemId, StatusItemKind, TabStrip, TextFieldAccess, Toolbar, ToolbarGroup, ToolbarGroupId,
+    Ui, ViewportSurface, ViewportWidget, ViewportWidgetConfig,
 };
 
+use crate::app_model::DemoColorOverlayNotice;
 use crate::timeline_workspace::{
     TimelineWorkspace, apply_timeline_output, compose_tool_actions, declare_tool_actions,
     prepare_feedback, prepare_timeline, timeline_feedback_rects, viewport_actions,
@@ -47,6 +49,8 @@ const CONTEXT_MENU_OVERLAY: OverlayId = OverlayId::from_raw(2);
 const COMMAND_PALETTE_OVERLAY: OverlayId = OverlayId::from_raw(3);
 const KIND_PICKER_OVERLAY: OverlayId = OverlayId::from_raw(4);
 const COLOR_PICKER_OVERLAY: OverlayId = OverlayId::from_raw(5);
+const COLOR_FAILURE_POPOVER: OverlayId = OverlayId::from_raw(6);
+const COLOR_RECOVERY_MODAL: OverlayId = OverlayId::from_raw(7);
 const INSPECTOR_SECTION: ItemId = ItemId::from_raw(100);
 const NAME_PROPERTY: ItemId = ItemId::from_raw(101);
 const KIND_PROPERTY: ItemId = ItemId::from_raw(102);
@@ -140,6 +144,7 @@ pub(crate) struct EditWorkspace {
     timeline: TimelineWorkspace,
     texture: TextureResource,
     overlay: Option<OverlayScene>,
+    overlay_focus_return: Option<WidgetId>,
 }
 
 impl EditWorkspace {
@@ -165,6 +170,7 @@ impl EditWorkspace {
             timeline: TimelineWorkspace::new(),
             texture: viewport_texture(),
             overlay: None,
+            overlay_focus_return: None,
         }
     }
 
@@ -180,7 +186,7 @@ impl EditWorkspace {
         workspace: DemoWorkspace,
         model: &mut DemoApplicationModel,
         bounds: Size,
-    ) {
+    ) -> Option<WidgetId> {
         self.timeline.project(model);
         let layout = WorkspaceLayout::new(bounds);
         let mut menu_bar = MenuBar::from_menus([MenuBarMenu::from_actions(
@@ -216,6 +222,7 @@ impl EditWorkspace {
             DockSceneConfig::new(WidgetId::from_key("edit-workspace.dock"), layout.dock),
             &self.dock,
         );
+        self.open_color_notice(ui, model, bounds);
 
         let assets_bounds = panel_bounds(&dock_scene, ASSETS_PANEL).map(|rect| rect.inset(8.0));
         let viewport_bounds = panel_bounds(&dock_scene, VIEWPORT_PANEL).map(|rect| rect.inset(8.0));
@@ -279,7 +286,9 @@ impl EditWorkspace {
             )
         });
 
-        open_palette_if_requested(&mut self.overlay, ui.input(), actions, bounds);
+        if open_palette_if_requested(&mut self.overlay, ui.input(), actions, bounds) {
+            self.overlay_focus_return = ui.memory().focused();
+        }
         let context_route = workspace_context_route(ui, viewport_bounds);
 
         declare_workspace_targets(
@@ -340,7 +349,19 @@ impl EditWorkspace {
             &chrome_output.intents,
             context_requested,
             bounds,
-        );
+        )
+    }
+
+    fn open_color_notice(&mut self, ui: &Ui<'_>, model: &mut DemoApplicationModel, bounds: Size) {
+        if self.overlay.is_some() {
+            return;
+        }
+        let Some(notice) = model.take_color_overlay_notice() else {
+            return;
+        };
+        let owner = ui.memory().focused();
+        self.overlay = Some(color_notice_scene(notice, bounds, owner));
+        self.overlay_focus_return = owner;
     }
 
     fn reconcile_overlay(
@@ -351,17 +372,29 @@ impl EditWorkspace {
         chrome_intents: &[ChromeSceneIntent],
         context_requested: bool,
         bounds: Size,
-    ) {
+    ) -> Option<WidgetId> {
+        let mut focus_return = None;
         let close_overlay = self.overlay.as_mut().is_some_and(|overlay| {
-            ui.overlay_scene(overlay).intents.iter().any(|intent| {
-                matches!(
-                    intent,
-                    OverlaySceneIntent::Action(_) | OverlaySceneIntent::Dismiss(_)
-                )
-            })
+            ui.overlay_scene(overlay)
+                .intents
+                .iter()
+                .any(|intent| match intent {
+                    OverlaySceneIntent::Action(_) => {
+                        focus_return = self.overlay_focus_return;
+                        true
+                    }
+                    OverlaySceneIntent::Dismiss(request) => {
+                        focus_return = request.focus_return.or(self.overlay_focus_return);
+                        true
+                    }
+                    OverlaySceneIntent::OpenSubmenu(_) | OverlaySceneIntent::SelectDropdown(_) => {
+                        false
+                    }
+                })
         });
         if close_overlay {
             self.overlay = None;
+            self.overlay_focus_return = None;
         }
         if self.overlay.is_none() {
             if let Some((menu, anchor)) = chrome_intents.iter().find_map(|intent| {
@@ -372,6 +405,7 @@ impl EditWorkspace {
             }) {
                 let _ = menu_bar.open(menu);
                 self.overlay = application_menu_scene(menu_bar, anchor, bounds);
+                self.overlay_focus_return = ui.memory().focused();
             } else if context_requested {
                 let anchor = ui
                     .input()
@@ -381,8 +415,10 @@ impl EditWorkspace {
                         Rect::new(point.x, point.y, 1.0, 1.0)
                     });
                 self.overlay = Some(context_menu_scene(actions, anchor, bounds));
+                self.overlay_focus_return = ui.memory().focused();
             }
         }
+        focus_return
     }
 
     pub(crate) fn register_resources(&self, resources: &mut RenderResources) {
@@ -485,10 +521,12 @@ fn open_palette_if_requested(
     input: &UiInput,
     actions: &DemoActionRegistry,
     bounds: Size,
-) {
+) -> bool {
     if overlay.is_none() && command_palette_requested(input) {
         *overlay = Some(command_palette_scene(actions, bounds));
+        return true;
     }
+    false
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -734,7 +772,7 @@ fn application_menu_scene(menu_bar: &MenuBar, anchor: Rect, bounds: Size) -> Opt
         overlay_id: APPLICATION_MENU_OVERLAY,
         kind: OverlayKind::Menu,
         anchor,
-        size: Size::new(320.0, 96.0),
+        size: Size::new(320.0, 128.0),
         placement: PopoverPlacement::Below,
         offset: 2.0,
         fit_viewport: true,
@@ -788,6 +826,47 @@ fn command_palette_scene(actions: &DemoActionRegistry, bounds: Size) -> OverlayS
         "Shared command palette",
         overlay,
     ));
+    scene
+}
+
+fn color_notice_scene(
+    notice: DemoColorOverlayNotice,
+    bounds: Size,
+    owner: Option<WidgetId>,
+) -> OverlayScene {
+    let viewport = viewport_rect(bounds);
+    let mut scene = OverlayScene::new();
+    match notice {
+        DemoColorOverlayNotice::SaveFailed => {
+            let rect = Rect::new((viewport.width - 320.0) * 0.5, 96.0, 320.0, 44.0);
+            let entry = OverlayEntry::new(COLOR_FAILURE_POPOVER, OverlayKind::Popover, rect)
+                .dismiss_on(OverlayDismissal::OutsideClickOrEscape);
+            scene.push(OverlaySceneSurface::passive(
+                entry,
+                "Color recovery hint",
+                "Save failed without mutation. Dismiss and retry.",
+            ));
+        }
+        DemoColorOverlayNotice::SaveRecovered => {
+            let focus = owner.map_or_else(ModalFocusContainment::new, |owner| {
+                ModalFocusContainment::new().with_return_focus(owner)
+            });
+            let dialog = ModalDialog::new(
+                WidgetId::from_key("edit-workspace.color-recovery"),
+                "Color style recovered",
+            )
+            .with_body("Explicit sRGB color and gradient serialization succeeded.")
+            .with_focus(focus);
+            let rect = Rect::new((viewport.width - 360.0) * 0.5, 128.0, 360.0, 96.0);
+            scene.push(OverlaySceneSurface::modal(ModalDialogOverlay::placed(
+                COLOR_RECOVERY_MODAL,
+                rect,
+                dialog,
+                OverlayDismissal::OutsideClickOrEscape,
+                ActionContext::Editor,
+            )));
+        }
+    }
     scene
 }
 
@@ -881,7 +960,7 @@ fn edit_dock() -> Dock {
     let inspector = dock_frame(3, INSPECTOR_PANEL, "Inspector");
     let timeline = dock_frame(4, TIMELINE_PANEL, "Timeline");
     let upper = split(Axis::Horizontal, 0.60, viewport, inspector);
-    let right = split(Axis::Vertical, 0.62, upper, timeline);
+    let right = split(Axis::Vertical, 0.68, upper, timeline);
     let mut dock = Dock::new(split(Axis::Horizontal, 0.22, assets, right));
     let _ = dock.set_active_frame(FrameId::from_raw(2));
     dock
@@ -1014,10 +1093,11 @@ fn inspector(
     model: &mut DemoApplicationModel,
 ) {
     let kind_model = kind_model(asset.kind);
+    let picker_width = 260.0;
     let picker_bounds = Rect::new(
-        bounds.x + 4.0,
+        (bounds.max_x() - picker_width).max(4.0),
         bounds.y + 24.0,
-        (bounds.width + 104.0).max(128.0),
+        picker_width,
         164.0,
     );
     let mut name = TextEditState::new(asset.name.clone());
