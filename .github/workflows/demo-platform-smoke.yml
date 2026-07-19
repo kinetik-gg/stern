@@ -1,0 +1,105 @@
+name: Demo platform smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  native-smoke:
+    name: Native smoke (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+            backend: dx12
+          - platform: macos
+            runner: macos-latest
+            backend: metal
+          - platform: linux
+            runner: ubuntu-latest
+            backend: gl
+
+    steps:
+      - name: Checkout exact dispatch commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux display and Mesa runtime
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes xvfb libgl1-mesa-dri libegl1 mesa-utils
+
+      - name: Build native shell
+        run: cargo build -p stern-demo --bin native_shell
+
+      - name: Record Windows DX12 smoke
+        if: runner.os == 'Windows'
+        env:
+          WGPU_BACKEND: dx12
+        run: node apps/stern-demo/tools/platform-smoke-record.mjs record --platform windows --commit "${{ github.sha }}" --runner-os "${{ runner.os }}" --runner-arch "${{ runner.arch }}" --backend dx12 --output platform-smoke/windows.json --timeout-ms 120000 -- target/debug/native_shell.exe --smoke-exit-after-present
+
+      - name: Record macOS Metal smoke
+        if: runner.os == 'macOS'
+        env:
+          WGPU_BACKEND: metal
+        run: node apps/stern-demo/tools/platform-smoke-record.mjs record --platform macos --commit "${{ github.sha }}" --runner-os "${{ runner.os }}" --runner-arch "${{ runner.arch }}" --backend metal --output platform-smoke/macos.json --timeout-ms 120000 -- target/debug/native_shell --smoke-exit-after-present
+
+      - name: Record Linux GL smoke under Xvfb
+        if: runner.os == 'Linux'
+        env:
+          WGPU_BACKEND: gl
+        run: node apps/stern-demo/tools/platform-smoke-record.mjs record --platform linux --commit "${{ github.sha }}" --runner-os "${{ runner.os }}" --runner-arch "${{ runner.arch }}" --backend gl --output platform-smoke/linux.json --timeout-ms 120000 -- xvfb-run -a target/debug/native_shell --smoke-exit-after-present
+
+      - name: Upload platform record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-platform-smoke-${{ matrix.platform }}
+          path: platform-smoke/${{ matrix.platform }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  verify-records:
+    name: Verify platform records
+    if: always()
+    needs: native-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact dispatch commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Download platform records
+        uses: actions/download-artifact@v4
+        with:
+          pattern: demo-platform-smoke-*
+          path: platform-smoke
+          merge-multiple: true
+
+      - name: Verify exact three-platform aggregate
+        run: node apps/stern-demo/tools/platform-smoke-record.mjs verify --commit "${{ github.sha }}" --input platform-smoke/windows.json --input platform-smoke/macos.json --input platform-smoke/linux.json --output platform-smoke/verified.json
+
+      - name: Upload verified records
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-platform-smoke-verified
+          path: platform-smoke
+          if-no-files-found: error
+          retention-days: 14
