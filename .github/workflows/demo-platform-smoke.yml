@@ -27,7 +27,7 @@ jobs:
             backend: metal
           - platform: linux
             runner: ubuntu-latest
-            backend: gl
+            backend: vulkan
 
     steps:
       - name: Checkout exact dispatch commit
@@ -41,9 +41,9 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Linux display and Mesa runtime
+      - name: Install Linux display and Mesa Vulkan runtime
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes xvfb libgl1-mesa-dri libegl1 mesa-utils
+        run: sudo apt-get update && sudo apt-get install --yes xvfb mesa-vulkan-drivers
 
       - name: Build native shell
         run: cargo build -p stern-demo --bin native_shell
@@ -60,11 +60,12 @@ jobs:
           WGPU_BACKEND: metal
         run: node apps/stern-demo/tools/platform-smoke-record.mjs record --platform macos --commit "${{ github.sha }}" --runner-os "${{ runner.os }}" --runner-arch "${{ runner.arch }}" --backend metal --output platform-smoke/macos.json --timeout-ms 120000 -- target/debug/native_shell --smoke-exit-after-present
 
-      - name: Record Linux GL smoke under Xvfb
+      - name: Record Linux Vulkan smoke under Xvfb
         if: runner.os == 'Linux'
         env:
-          WGPU_BACKEND: gl
-        run: node apps/stern-demo/tools/platform-smoke-record.mjs record --platform linux --commit "${{ github.sha }}" --runner-os "${{ runner.os }}" --runner-arch "${{ runner.arch }}" --backend gl --output platform-smoke/linux.json --timeout-ms 120000 -- xvfb-run -a target/debug/native_shell --smoke-exit-after-present
+          WGPU_BACKEND: vulkan
+          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: node apps/stern-demo/tools/platform-smoke-record.mjs record --platform linux --commit "${{ github.sha }}" --runner-os "${{ runner.os }}" --runner-arch "${{ runner.arch }}" --backend vulkan --output platform-smoke/linux.json --timeout-ms 120000 -- xvfb-run -a target/debug/native_shell --smoke-exit-after-present
 
       - name: Upload platform record
         if: always()
