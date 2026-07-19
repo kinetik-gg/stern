@@ -113,6 +113,13 @@ fn public_consumer_contract_routes_workspace_actions_to_application_state() {
             .expect("public Graph workspace root")
             .focusable
     );
+    assert!(graph_output.platform_requests.iter().any(
+        |request| matches!(request, PlatformRequest::SetWindowTitle(title) if title == DEMO_TITLE)
+    ));
+    assert_eq!(
+        WinitPlatformRequests::from_frame_output(&graph_output).window_title(),
+        Some(DEMO_TITLE)
+    );
 }
 
 fn semantic_center(output: &stern::core::FrameOutput, role: &SemanticRole, label: &str) -> Point {

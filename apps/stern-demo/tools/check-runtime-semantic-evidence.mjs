@@ -7,7 +7,7 @@ import { verifyEvidence as verifyRendererEvidence } from "../../../tools/capture
 import { verifyRecords as verifyPlatformRecords } from "./platform-smoke-record.mjs";
 
 const SPEC_SHA256 = "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed";
-const EXPECTED_PACKET_SHA256 = "59a08fa47f48ed745e8a9d36a465114a1721aea75c6d377bc2fbf84c12d23674";
+const EXPECTED_PACKET_SHA256 = "cb468e3280a011d16181368cd4f0485b29376b09860fbee7db907ca48e80d9b6";
 const COMPONENTS = [
   "button", "text-field", "dropdown", "selection-controls", "value-controls",
   "progress-feedback", "overlay-system", "virtual-list", "editor-frame",
@@ -42,7 +42,13 @@ const RENDERER_COMPATIBLE_DRIFT = [
 const CANDIDATE_EVIDENCE_DRIFT = [
   ".github/workflows/ci.yml",
   "apps/stern-demo/Cargo.toml",
+  "apps/stern-demo/src/edit_workspace.rs",
+  "apps/stern-demo/src/graph_workspace.rs",
+  "apps/stern-demo/src/lib.rs",
+  "apps/stern-demo/src/overlay_workspace.rs",
   "apps/stern-demo/tests/evidence/runtime-semantic-evidence.provisional.json",
+  "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
+  "apps/stern-demo/tests/public_consumer_contract.rs",
   "apps/stern-demo/tests/runtime_semantic_evidence.rs",
   "apps/stern-demo/tools/audit.rs",
   "apps/stern-demo/tools/check-runtime-semantic-evidence.mjs",
@@ -51,6 +57,16 @@ const CANDIDATE_EVIDENCE_DRIFT = [
   "apps/stern-demo/tools/json.rs",
   "apps/stern-demo/tools/runtime-semantic-evidence.rs",
   "evidence/stern-demo-vello-845/manifest.json",
+];
+const PROVISIONAL_GRAPH_SOURCE_DRIFT = [
+  "apps/stern-demo/src/edit_workspace.rs",
+  "apps/stern-demo/src/graph_workspace.rs",
+  "apps/stern-demo/src/lib.rs",
+  "apps/stern-demo/src/overlay_workspace.rs",
+];
+const PROVISIONAL_GRAPH_CONTRACT_DRIFT = [
+  "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
+  "apps/stern-demo/tests/public_consumer_contract.rs",
 ];
 
 const options = parseArgs(process.argv.slice(2));
@@ -86,6 +102,10 @@ assert(git("rev-parse", `${evidence.source.commit}^{tree}`) === evidence.source.
   "recorded source commit does not own recorded tree");
 assert(typeof evidence.source.generatedFromCleanWorktree === "boolean",
   "source cleanliness must be explicit");
+assertExact(evidence.source.provisionalGraphSourceDrift, PROVISIONAL_GRAPH_SOURCE_DRIFT,
+  "provisional Graph production drift");
+assertExact(evidence.source.provisionalGraphContractDrift, PROVISIONAL_GRAPH_CONTRACT_DRIFT,
+  "provisional Graph contract drift");
 const candidateDrift = git(
   "diff", "--name-only", evidence.source.commit, git("rev-parse", "HEAD^{commit}"),
 ).split(/\r?\n/u).filter(Boolean);
@@ -106,7 +126,8 @@ assertExact(evidence.runtime.journeys.map(({ id, workspaceId }) => [id, workspac
   JOURNEYS, "journey contracts");
 for (const journey of evidence.runtime.journeys) {
   assertRecord(journey, "journey");
-  assert(journey.status === "passed", `${journey.id} must be passed`);
+  const expected = journey.id === "graph-connection-edit" ? "pending" : "passed";
+  assert(journey.status === expected, `${journey.id} must be ${expected}`);
 }
 
 assert(evidence.semanticSnapshots.length === 2, "expected two semantic snapshots");
@@ -187,7 +208,9 @@ assertExact(evidence.rendererEvidence, {
   captureStatus: "final",
   reviewStatus: "approved",
   artifactCount: 8,
-  sourceCompatibility: "capture-sensitive paths unchanged",
+  provenance: "prior-baseline",
+  currentGraphLayoutStatus: "pending",
+  sourceCompatibility: "Graph layout changed; approved bytes are not current candidate acceptance",
 }, "renderer evidence record");
 const rendererDrift = git(
   "diff", "--name-only", renderer.source.commit, evidence.source.commit,
@@ -216,13 +239,36 @@ assert(git("merge-base", platformCommit, evidence.source.commit) === platformCom
 
 assertExact(evidence.gates.map(({ id }) => id), GATES, "gate IDs");
 for (const gate of evidence.gates) assertRecord(gate, "gate");
+assert(gate("deterministic-user-journeys").status === "pending",
+  "full-journey acceptance must remain pending");
+assert(gate("renderer-and-scale-quality").status === "pending",
+  "current Graph renderer/layout acceptance must remain pending");
+assert(evidence.gates.filter(({ id }) =>
+  !["deterministic-user-journeys", "renderer-and-scale-quality"].includes(id)
+).every(({ status }) => status === "passed"), "unexpected non-passing gate");
 for (const record of [...evidence.runtime.components, ...evidence.runtime.journeys, ...evidence.gates]) {
   for (const ref of record.evidenceRefs) assert(resolvePointer(evidence, ref) !== undefined,
     `${record.id} evidence link does not resolve: ${ref}`);
 }
+assertExact(evidence.knownGaps.map(({ id, issue, blocksGateIds }) =>
+  ({ id, issue, blocksGateIds })), [
+  {
+    id: "graph-current-layout-renderer-acceptance",
+    issue: 855,
+    blocksGateIds: ["renderer-and-scale-quality"],
+  },
+  {
+    id: "graph-full-journey-acceptance",
+    issue: 856,
+    blocksGateIds: ["deterministic-user-journeys"],
+  },
+], "provisional Graph known gaps");
 for (const gap of evidence.knownGaps) {
   assert(Number.isInteger(gap.issue), "known gap needs issue number");
   assertStringArray(gap.blocksGateIds, `${gap.id}.blocksGateIds`);
+  assertStringArray(gap.evidenceRefs, `${gap.id}.evidenceRefs`);
+  for (const ref of gap.evidenceRefs) assert(resolvePointer(evidence, ref) !== undefined,
+    `${gap.id} evidence link does not resolve: ${ref}`);
   for (const gateId of gap.blocksGateIds) {
     assert(GATES.includes(gateId), `${gap.id} blocks unknown gate`);
     assert(gate(gateId).status !== "passed", `${gateId} passed while ${gap.id} remains open`);
@@ -238,6 +284,7 @@ if (evidence.status === "final") {
   assert(evidence.knownGaps.length === 0, "final evidence cannot retain known gaps");
 } else {
   assert(!(allComponents && allJourneys && allGates), "complete evidence must use final status");
+  assert(evidence.knownGaps.length > 0, "provisional evidence must retain linked known gaps");
 }
 
 console.log(`runtime semantic evidence: PASS (${evidence.runtime.components.length} components, ${evidence.runtime.journeys.length} journeys, ${evidence.semanticSnapshots.length} snapshots; ${evidence.status})`);

@@ -3,6 +3,7 @@
 mod app_model;
 mod edit_workspace;
 mod graph_workspace;
+mod overlay_workspace;
 mod timeline_workspace;
 
 use stern::UiState;
@@ -14,6 +15,7 @@ use stern::core::{
 use stern::render::RenderResources;
 
 use edit_workspace::EditWorkspace;
+use overlay_workspace::SharedOverlayRoute;
 
 pub use app_model::{
     DemoActionRegistry, DemoApplicationModel, DemoColorSaveState, DemoJobPhase, DemoTaggedColor,
@@ -31,6 +33,7 @@ pub struct DemoApp {
     actions: DemoActionRegistry,
     edit_workspace: EditWorkspace,
     graph_workspace: GraphWorkspaceState,
+    overlays: SharedOverlayRoute,
 }
 
 impl DemoApp {
@@ -43,6 +46,7 @@ impl DemoApp {
             actions: DemoActionRegistry::new(),
             edit_workspace: EditWorkspace::new(),
             graph_workspace: GraphWorkspaceState::new(),
+            overlays: SharedOverlayRoute::new(),
         }
     }
 
@@ -154,14 +158,13 @@ impl DemoApp {
         let theme = default_dark_theme();
         self.actions
             .project_viewport_tool(self.model.viewport_tool());
-        let shortcut_enabled =
-            workspace == DemoWorkspace::Edit && !self.edit_workspace.has_overlay();
-        let mut focus_return = None;
+        let shortcut_enabled = !self.overlays.is_open();
+        let focus_return;
         let mut output = {
             let mut ui = self.ui_state.begin_frame(context, &theme);
             let edit_rect = Rect::new(24.0, 56.0, 112.0, 30.0);
             let graph_rect = Rect::new(148.0, 56.0, 120.0, 30.0);
-            let apply_rect = Rect::new(24.0, 188.0, 160.0, 30.0);
+            let apply_rect = Rect::new(24.0, 156.0, 160.0, 30.0);
             ui.push_platform_request(PlatformRequest::SetWindowTitle(DEMO_TITLE.to_owned()));
             match workspace {
                 DemoWorkspace::Edit => {
@@ -170,6 +173,7 @@ impl DemoApp {
                         &self.actions,
                         workspace,
                         &mut self.model,
+                        &mut self.overlays,
                         bounds,
                     );
                 }
@@ -177,17 +181,24 @@ impl DemoApp {
                     ui.label(Rect::new(24.0, 20.0, 320.0, 24.0), DEMO_TITLE);
                     let graph_bounds = Rect::new(
                         24.0,
-                        230.0,
+                        202.0,
                         (logical_size.width - 48.0).max(0.0),
-                        (logical_size.height - 254.0).max(0.0),
+                        (logical_size.height - 226.0).max(0.0),
                     );
                     let app_targets = [
                         (ui.make_id(edit.id.as_str()), edit_rect),
                         (ui.make_id(graph.id.as_str()), graph_rect),
                         (ui.make_id(apply.id.as_str()), apply_rect),
                     ];
-                    self.graph_workspace
-                        .compose(&mut ui, graph_bounds, &app_targets);
+                    focus_return = self.graph_workspace.compose(
+                        &mut ui,
+                        graph_bounds,
+                        bounds,
+                        &app_targets,
+                        &self.actions,
+                        &mut self.model,
+                        &mut self.overlays,
+                    );
                     let _ =
                         ui.action_button(edit.id.as_str(), edit_rect, &edit, ActionContext::Global);
                     let _ = ui.action_button(

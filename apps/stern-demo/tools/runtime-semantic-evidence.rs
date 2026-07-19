@@ -29,6 +29,17 @@ use contract::{
 };
 use json::{Json as Value, json};
 
+const PROVISIONAL_GRAPH_SOURCE_DRIFT: [&str; 4] = [
+    "apps/stern-demo/src/edit_workspace.rs",
+    "apps/stern-demo/src/graph_workspace.rs",
+    "apps/stern-demo/src/lib.rs",
+    "apps/stern-demo/src/overlay_workspace.rs",
+];
+const PROVISIONAL_GRAPH_CONTRACT_DRIFT: [&str; 2] = [
+    "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
+    "apps/stern-demo/tests/public_consumer_contract.rs",
+];
+
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -176,10 +187,17 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         .iter()
         .zip(journey_status)
         .map(|((id, workspace), passed)| {
+            let status = if *id == "graph-connection-edit" {
+                "pending"
+            } else if passed {
+                "passed"
+            } else {
+                "notExecuted"
+            };
             json!({
                 "id": id,
                 "workspaceId": workspace,
-                "status": if passed { "passed" } else { "notExecuted" },
+                "status": status,
                 "evidenceRefs": journey_refs(id),
             })
         })
@@ -193,9 +211,7 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
                 "public-consumer-boundary" if audit.bool_field("passed") == Some(true) => "passed",
                 "canonical-component-composition"
                 | "complete-component-coverage"
-                | "deterministic-user-journeys"
                 | "semantic-structure"
-                | "renderer-and-scale-quality"
                 | "platform-integration"
                 | "honest-evidence" => "passed",
                 _ => "pending",
@@ -209,6 +225,8 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         "tree": tree,
         "sourceRef": commit,
         "generatedFromCleanWorktree": clean,
+        "provisionalGraphSourceDrift": PROVISIONAL_GRAPH_SOURCE_DRIFT,
+        "provisionalGraphContractDrift": PROVISIONAL_GRAPH_CONTRACT_DRIFT,
     });
     let workspaces = vec![
         json!({"id": "edit-workspace", "semanticSnapshotRef": "#/semanticSnapshots/0", "passedComponentIds": passed.iter().copied().filter(|id| component_workspaces(id).contains(&"edit-workspace")).collect::<Vec<_>>()}),
@@ -225,7 +243,9 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         "captureStatus": "final",
         "reviewStatus": "approved",
         "artifactCount": 8,
-        "sourceCompatibility": "capture-sensitive paths unchanged",
+        "provenance": "prior-baseline",
+        "currentGraphLayoutStatus": "pending",
+        "sourceCompatibility": "Graph layout changed; approved bytes are not current candidate acceptance",
     });
     let platform_evidence = json!({
         "issue": 848,
@@ -277,12 +297,25 @@ fn generate(root: &Path, source_ref: &str) -> Result<Value, String> {
         recovery.focus_log,
         owner_removal,
     ];
-    let known_gaps: Vec<Value> = Vec::new();
+    let known_gaps = vec![
+        json!({
+            "id": "graph-current-layout-renderer-acceptance",
+            "issue": 855,
+            "blocksGateIds": ["renderer-and-scale-quality"],
+            "evidenceRefs": ["#/source/provisionalGraphSourceDrift", "#/rendererEvidence"],
+        }),
+        json!({
+            "id": "graph-full-journey-acceptance",
+            "issue": 856,
+            "blocksGateIds": ["deterministic-user-journeys"],
+            "evidenceRefs": ["#/source/provisionalGraphContractDrift", "#/runtime/journeys/5"],
+        }),
+    ];
     Ok(json!({
         "formatVersion": 1,
         "sternVersion": VERSION,
         "specificationSha256": SPEC_SHA256,
-        "status": "final",
+        "status": "incomplete",
         "source": source,
         "runtime": runtime,
         "logs": logs,

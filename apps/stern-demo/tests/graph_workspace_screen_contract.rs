@@ -1,14 +1,14 @@
 //! Pure public Graph workspace composition evidence.
 
 use stern::core::{
-    FrameContext, Key, KeyEvent, KeyState, Modifiers, MouseButton, PhysicalSize, Point,
-    PointerButtonState, PointerInput, ScaleFactor, SemanticRole, SemanticValue, Size, TimeInfo,
-    UiInput, UiInputEvent, Vec2, ViewportInfo, WidgetId,
+    ActionSource, FrameContext, Key, KeyEvent, KeyState, Modifiers, MouseButton, PhysicalSize,
+    PlatformRequest, Point, PointerButtonState, PointerInput, ScaleFactor, SemanticRole,
+    SemanticValue, Size, TimeInfo, UiInput, UiInputEvent, Vec2, ViewportInfo, WidgetId,
 };
 use stern::widgets::node_graph::{
     EdgeId, NodeGraphConnectionCancelReason, NodeGraphSelectionTarget, NodeId, PortEndpoint, PortId,
 };
-use stern_demo::{DemoApp, DemoWorkspace, GraphConnectionFeedback, demo_context};
+use stern_demo::{DemoApp, DemoViewportTool, DemoWorkspace, GraphConnectionFeedback, demo_context};
 
 const SOURCE_POINT: Point = Point::new(100.0, 370.0);
 const SOURCE_PORT_POINT: Point = Point::new(216.0, 390.0);
@@ -51,7 +51,7 @@ fn graph_workspace_composes_public_dock_panels() {
         .find(|node| node.role == SemanticRole::Dock)
         .expect("public Dock semantic root");
     assert_eq!(dock.label.as_deref(), Some("Editor dock"));
-    assert_eq!(dock.children.len(), 2);
+    assert_eq!(dock.children.len(), 3);
     assert!(dock.children.iter().all(|id| {
         output
             .semantics
@@ -60,6 +60,7 @@ fn graph_workspace_composes_public_dock_panels() {
     }));
 
     let graph_panel = panel(&output, "Graph");
+    let viewport_panel = panel(&output, "Viewport");
     let inspector_panel = panel(&output, "Inspector");
     let graph = output
         .semantics
@@ -77,10 +78,127 @@ fn graph_workspace_composes_public_dock_panels() {
         inspector_panel.bounds.intersection(inspector.bounds),
         Some(inspector.bounds)
     );
+    let viewport = semantic_node(&output, &SemanticRole::Viewport, "Graph preview viewport");
+    assert_eq!(
+        viewport_panel.bounds.intersection(viewport.bounds),
+        Some(viewport.bounds)
+    );
     assert_eq!(
         inspector_text_values(&output),
         ["Image Source", "36", "28", "1"]
     );
+}
+
+#[test]
+fn graph_viewport_projects_tool_action_and_retained_non_default_transform() {
+    let mut app = DemoApp::new();
+    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    let initial = app.frame(demo_context(UiInput::default()));
+
+    let transform = app.graph_workspace().pan_zoom();
+    assert_eq!(
+        transform.pan,
+        stern::widgets::node_graph::GraphVector::new(2.0, 2.0)
+    );
+    assert_eq!(transform.zoom.to_bits(), 1.0_f32.to_bits());
+    semantic_node(&initial, &SemanticRole::Viewport, "Graph preview viewport");
+    assert_eq!(app.viewport_tool(), DemoViewportTool::Select);
+
+    let action = click_point(
+        &mut app,
+        semantic_center(&initial, &SemanticRole::Button, "Transform Tool"),
+    );
+    assert!(exact_action(
+        &action,
+        ActionSource::Button,
+        "viewport.tool.transform",
+    ));
+    assert_eq!(app.viewport_tool(), DemoViewportTool::Transform);
+
+    let transformed = app.frame(demo_context(UiInput::default()));
+    assert_eq!(
+        semantic_node(&transformed, &SemanticRole::Toggle, "Transform Tool")
+            .state
+            .checked,
+        Some(true)
+    );
+    assert!(has_semantic_role(&transformed, &SemanticRole::Viewport));
+}
+
+#[test]
+fn graph_menu_routes_once_and_escape_or_outside_press_restore_focus() {
+    let mut app = focused_graph_app();
+    let owner = app.focused();
+    let initial = app.frame(demo_context(UiInput::default()));
+    let trigger = semantic_center(&initial, &SemanticRole::MenuItem, "Workspace");
+
+    let _ = click_point(&mut app, trigger);
+    let shown = app.frame(demo_context(UiInput::default()));
+    assert!(has_label(&shown, "Workspace commands"));
+    let revision = app.applied_revision();
+    let action = click_point(
+        &mut app,
+        semantic_center(&shown, &SemanticRole::MenuItem, "Apply Shared State"),
+    );
+    assert!(exact_action(&action, ActionSource::Menu, "shared.apply"));
+    assert_eq!(app.applied_revision(), revision + 1);
+    assert_eq!(app.focused(), owner);
+
+    let closed = app.frame(demo_context(UiInput::default()));
+    let _ = click_point(
+        &mut app,
+        semantic_center(&closed, &SemanticRole::MenuItem, "Workspace"),
+    );
+    let shown = app.frame(demo_context(UiInput::default()));
+    assert!(has_label(&shown, "Workspace commands"));
+    let _ = app.frame(demo_context(key_input(Key::Escape, Modifiers::default())));
+    let closed = app.frame(demo_context(UiInput::default()));
+    assert!(!has_label(&closed, "Workspace commands"));
+    assert_eq!(app.focused(), owner);
+
+    let _ = click_point(
+        &mut app,
+        semantic_center(&closed, &SemanticRole::MenuItem, "Workspace"),
+    );
+    let shown = app.frame(demo_context(UiInput::default()));
+    assert!(has_label(&shown, "Workspace commands"));
+    let outside = Point::new(700.0, 190.0);
+    let _ = app.frame(demo_context(pointer_input(outside, true, true, false)));
+    let closed = app.frame(demo_context(pointer_input(outside, false, false, true)));
+    assert!(!has_label(&closed, "Workspace commands"));
+    assert_eq!(app.focused(), owner);
+}
+
+#[test]
+fn graph_command_palette_routes_once_and_escape_restores_focus() {
+    let mut app = focused_graph_app();
+    let owner = app.focused();
+    let revision = app.applied_revision();
+
+    let shown = app.frame(demo_context(key_input(
+        Key::Character("p".to_owned()),
+        Modifiers::new(true, true, false, false),
+    )));
+    assert!(has_semantic_role(&shown, &SemanticRole::SearchField));
+    assert!(has_label(&shown, "Apply Shared State"));
+    let action = app.frame(demo_context(key_input(Key::Enter, Modifiers::default())));
+    assert!(exact_action(
+        &action,
+        ActionSource::CommandPalette,
+        "shared.apply",
+    ));
+    assert_eq!(app.applied_revision(), revision + 1);
+    assert_eq!(app.focused(), owner);
+
+    let shown = app.frame(demo_context(key_input(
+        Key::Character("p".to_owned()),
+        Modifiers::new(true, true, false, false),
+    )));
+    assert!(has_semantic_role(&shown, &SemanticRole::SearchField));
+    let _ = app.frame(demo_context(key_input(Key::Escape, Modifiers::default())));
+    let closed = app.frame(demo_context(UiInput::default()));
+    assert!(!has_semantic_role(&closed, &SemanticRole::SearchField));
+    assert_eq!(app.focused(), owner);
 }
 
 #[test]
@@ -301,12 +419,47 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
 }
 
 #[test]
-fn graph_workspace_reports_exact_seven_runtime_component_ids() {
+fn graph_workspace_reports_exact_fourteen_runtime_component_ids() {
     let mut app = DemoApp::new();
     activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
     select(&mut app, SOURCE_POINT, Modifiers::default());
     let output = app.frame(demo_context(UiInput::default()));
+    let owner = app.focused();
+
+    let menu_trigger = semantic_center(&output, &SemanticRole::MenuItem, "Workspace");
+    let _ = click_point(&mut app, menu_trigger);
+    let menu = app.frame(demo_context(UiInput::default()));
+    let menu_projected = has_label(&menu, "Workspace commands")
+        && has_semantic_role(&menu, &SemanticRole::Menu)
+        && has_label(&menu, "Apply Shared State");
+    let menu_apply = semantic_center(&menu, &SemanticRole::MenuItem, "Apply Shared State");
+    let menu_action = click_point(&mut app, menu_apply);
+    let menu_exact = exact_action(&menu_action, ActionSource::Menu, "shared.apply");
+    let menu_focus = app.focused() == owner;
+
+    let palette = app.frame(demo_context(key_input(
+        Key::Character("p".to_owned()),
+        Modifiers::new(true, true, false, false),
+    )));
+    let palette_projected = has_semantic_role(&palette, &SemanticRole::SearchField)
+        && has_label(&palette, "Apply Shared State");
+    let palette_action = app.frame(demo_context(key_input(Key::Enter, Modifiers::default())));
+    let palette_exact = exact_action(
+        &palette_action,
+        ActionSource::CommandPalette,
+        "shared.apply",
+    );
+    let palette_focus = app.focused() == owner;
+
     let mut qualified = Vec::new();
+    if output.platform_requests.iter().any(
+        |request| matches!(request, PlatformRequest::SetWindowTitle(title) if title == stern_demo::DEMO_TITLE),
+    ) {
+        qualified.push("editor-frame");
+    }
+    if has_workspace_chrome(&output) {
+        qualified.push("workspace-chrome");
+    }
     if has_public_dock(&output) {
         qualified.push("dock");
     }
@@ -319,11 +472,15 @@ fn graph_workspace_reports_exact_seven_runtime_component_ids() {
     {
         qualified.push("node-components");
     }
+    let viewport = has_semantic_role(&output, &SemanticRole::Viewport);
+    if viewport {
+        qualified.push("viewport");
+    }
+    if viewport && has_label(&output, "Select Tool") && has_label(&output, "Transform Tool") {
+        qualified.push("viewport-components");
+    }
     if has_inspector_rows(&output) {
         qualified.push("inspector-components");
-    }
-    if has_workspace_chrome(&output) {
-        qualified.push("workspace-chrome");
     }
     if has_public_toolbar(&output) && has_action_semantic(&output, "graph.clear-selection") {
         qualified.push("toolbar-components");
@@ -331,37 +488,35 @@ fn graph_workspace_reports_exact_seven_runtime_component_ids() {
     if has_public_navigation(&output) {
         qualified.push("navigation-surface-components");
     }
+    if menu_projected && menu_exact {
+        qualified.push("menu-components");
+    }
+    if palette_projected && palette_exact {
+        qualified.push("command-palette-components");
+    }
+    if menu_projected && palette_projected && menu_focus && palette_focus {
+        qualified.push("overlay-system");
+        qualified.push("overlay-components");
+    }
     assert_eq!(
         qualified,
         [
+            "editor-frame",
+            "workspace-chrome",
             "dock",
             "node-graph",
             "node-components",
+            "viewport",
+            "viewport-components",
             "inspector-components",
-            "workspace-chrome",
             "toolbar-components",
-            "navigation-surface-components"
+            "navigation-surface-components",
+            "menu-components",
+            "command-palette-components",
+            "overlay-system",
+            "overlay-components",
         ]
     );
-
-    let required = concat!(
-        "button,text-field,dropdown,selection-controls,value-controls,progress-feedback,",
-        "overlay-system,virtual-list,editor-frame,workspace-chrome,dock,inspector-collections,",
-        "node-graph,timeline,viewport,color-picker,gradient-editor,content-structure-components,",
-        "icon-shortcut-components,toolbar-components,menu-components,command-palette-components,",
-        "advanced-editor-fields,choice-value-components,feedback-status-components,",
-        "overlay-components,navigation-surface-components,collection-components,",
-        "inspector-components,editor-chrome-components,color-components,timeline-components,",
-        "node-components,viewport-components",
-    );
-    let uncovered = required
-        .split(',')
-        .filter(|id| !qualified.contains(id))
-        .collect::<Vec<_>>();
-    assert_eq!(uncovered.len(), 27);
-    for id in qualified {
-        assert!(!uncovered.contains(&id));
-    }
 }
 
 #[test]
@@ -451,6 +606,12 @@ fn graph_workspace_source_uses_only_public_stern_composition() {
     assert!(source.contains("DockScene::new"));
     assert!(source.contains(".dock_scene("));
     assert!(source.contains("ChromeScene::new"));
+    assert!(source.contains("MenuBar::from_menus"));
+    assert!(source.contains("prepare_viewport_widget"));
+    assert!(source.contains(".viewport_widget("));
+    assert!(source.contains("prepare_viewport_tool_scene"));
+    assert!(source.contains(".viewport_tool_scene("));
+    assert!(source.contains(".overlay_scene("));
     assert!(source.contains(".declare_pointer_targets"));
     assert!(source.contains(".chrome_scene("));
     let forbidden_source = concat!(
@@ -472,8 +633,8 @@ fn has_public_dock(output: &stern::core::FrameOutput) -> bool {
             .iter()
             .filter(|node| node.role == SemanticRole::Frame)
             .count()
-            == 2
-        && ["Graph", "Inspector"].into_iter().all(|title| {
+            == 3
+        && ["Graph", "Viewport", "Inspector"].into_iter().all(|title| {
             semantics.iter().any(|node| {
                 node.role == SemanticRole::Panel && node.label.as_deref() == Some(title)
             })
@@ -725,6 +886,64 @@ fn pointer_input(point: Point, down: bool, pressed: bool, released: bool) -> UiI
         },
         ..UiInput::default()
     }
+}
+
+fn click_point(app: &mut DemoApp, point: Point) -> stern::core::FrameOutput {
+    let _ = app.frame(demo_context(pointer_input(point, true, true, false)));
+    app.frame(demo_context(pointer_input(point, false, false, true)))
+}
+
+fn key_input(key: Key, modifiers: Modifiers) -> UiInput {
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::Key(KeyEvent::new(
+        key,
+        KeyState::Pressed,
+        modifiers,
+        false,
+    )));
+    input
+}
+
+fn semantic_node<'a>(
+    output: &'a stern::core::FrameOutput,
+    role: &SemanticRole,
+    label: &str,
+) -> &'a stern::core::SemanticNode {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| &node.role == role && node.label.as_deref() == Some(label))
+        .expect("semantic control")
+}
+
+fn semantic_center(output: &stern::core::FrameOutput, role: &SemanticRole, label: &str) -> Point {
+    semantic_node(output, role, label).bounds.center()
+}
+
+fn has_label(output: &stern::core::FrameOutput, label: &str) -> bool {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .any(|node| node.label.as_deref() == Some(label))
+}
+
+fn has_semantic_role(output: &stern::core::FrameOutput, role: &SemanticRole) -> bool {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .any(|node| &node.role == role)
+}
+
+fn exact_action(output: &stern::core::FrameOutput, source: ActionSource, action_id: &str) -> bool {
+    let mut actions = output.actions.clone();
+    let actions = actions.drain().collect::<Vec<_>>();
+    matches!(actions.as_slice(), [action]
+        if action.action_id.as_str() == action_id
+            && action.source == source
+            && action.context == stern::core::ActionContext::Editor)
 }
 
 fn has_role(output: &stern::core::FrameOutput, expected: &str) -> bool {

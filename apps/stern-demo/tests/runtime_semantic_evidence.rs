@@ -147,6 +147,28 @@ fn verifier_rejects_failure_preservation_and_feedback_tampering() {
     );
 }
 
+#[test]
+fn verifier_rejects_provisional_packet_claiming_final_or_passed() {
+    assert_mutation_rejected("record.status = 'final';", "provisional-final");
+    assert_mutation_rejected(
+        "record.runtime.journeys.find(journey => journey.id === 'graph-connection-edit').status = 'passed';",
+        "provisional-journey-passed",
+    );
+    assert_mutation_rejected(
+        "record.gates.find(gate => gate.id === 'renderer-and-scale-quality').status = 'passed'; record.rendererEvidence.currentGraphLayoutStatus = 'passed';",
+        "provisional-renderer-passed",
+    );
+}
+
+#[test]
+fn verifier_rejects_missing_gaps_or_unexpected_graph_drift() {
+    assert_mutation_rejected("record.knownGaps = [];", "provisional-gaps-omitted");
+    assert_mutation_rejected(
+        "record.source.provisionalGraphSourceDrift.push('README.md');",
+        "unexpected-graph-drift",
+    );
+}
+
 fn generate(path: &Path) {
     let status = Command::new(env!("CARGO_BIN_EXE_runtime_semantic_evidence"))
         .args(["--output", path.to_str().unwrap(), "--source-ref", "HEAD"])
@@ -233,11 +255,16 @@ fn assert_provisional(path: &Path) {
         "const fs=require('fs');const r=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));",
         "const passed=x=>x.filter(v=>v.status==='passed').length;",
         "const gate=id=>r.gates.find(v=>v.id===id).status;",
-        "if(r.status!=='final'||r.runtime.components.length!==34||",
+        "if(r.status!=='incomplete'||r.runtime.components.length!==34||",
         "passed(r.runtime.components)!==34||r.runtime.journeys.length!==7||",
-        "passed(r.runtime.journeys)!==7||r.semanticSnapshots.length!==2||",
-        "!r.publicConsumerAudit.passed||gate('renderer-and-scale-quality')!=='passed'||",
-        "gate('platform-integration')!=='passed'||r.knownGaps.length!==0)process.exit(1);",
+        "passed(r.runtime.journeys)!==6||r.semanticSnapshots.length!==2||",
+        "!r.publicConsumerAudit.passed||gate('renderer-and-scale-quality')!=='pending'||",
+        "gate('deterministic-user-journeys')!=='pending'||",
+        "gate('platform-integration')!=='passed'||r.knownGaps.length!==2||",
+        "r.rendererEvidence.provenance!=='prior-baseline'||",
+        "r.rendererEvidence.currentGraphLayoutStatus!=='pending'||",
+        "r.source.provisionalGraphSourceDrift.length!==4||",
+        "r.source.provisionalGraphContractDrift.length!==2)process.exit(1);",
     );
     let status = Command::new("node")
         .args(["-e", script, path.to_str().unwrap()])

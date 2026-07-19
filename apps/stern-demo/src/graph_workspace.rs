@@ -1,29 +1,44 @@
 use stern::core::{
     ActionContext, ActionDescriptor, ActionInvocation, Axis, PointerOrder, PointerTarget, Rect,
-    WidgetId,
+    Size, WidgetId,
 };
 use stern::text::TextEditState;
 use stern::widgets::chrome::{
-    ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, MenuBar, StatusBar, StatusItem,
-    StatusItemId, StatusItemKind, TabStrip, Toolbar, ToolbarGroup, ToolbarGroupId,
+    ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, MenuBar, MenuBarMenu, MenuBarMenuId,
+    StatusBar, StatusItem, StatusItemId, StatusItemKind, TabStrip, Toolbar, ToolbarGroup,
+    ToolbarGroupId,
 };
 use stern::widgets::dock::{
     Dock, DockNode, DockScene, DockSceneConfig, Frame, FrameId, FrameTab, Panel, PanelId,
 };
 use stern::widgets::inspector::{PropertyGridConfig, PropertyGridRow};
 use stern::widgets::node_graph::{
-    EdgeDescriptor, EdgeId, GraphRect, NodeDescriptor, NodeGraphConnectionCancelReason,
-    NodeGraphConnectionController, NodeGraphConnectionIntent, NodeGraphCreateLinkRequest,
-    NodeGraphDescriptor, NodeGraphPanZoom, NodeGraphSelection, NodeGraphSelectionTarget,
-    NodeGraphStaticView, NodeGraphViewport, NodeGraphWidgetConfig, NodeGraphWidgetIntent, NodeId,
-    PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
+    EdgeDescriptor, EdgeId, GraphRect, GraphVector, NodeDescriptor,
+    NodeGraphConnectionCancelReason, NodeGraphConnectionController, NodeGraphConnectionIntent,
+    NodeGraphCreateLinkRequest, NodeGraphDescriptor, NodeGraphPanZoom, NodeGraphSelection,
+    NodeGraphSelectionTarget, NodeGraphStaticView, NodeGraphViewport, NodeGraphWidgetConfig,
+    NodeGraphWidgetIntent, NodeId, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
 };
-use stern::widgets::{ItemId, TextFieldAccess, Ui};
+use stern::widgets::{
+    ItemId, PanZoom, TextFieldAccess, Ui, ViewportCursorMetadata, ViewportCursorShape,
+    ViewportSelectionTargetDescriptor, ViewportSelectionTargetId, ViewportSurface,
+    ViewportToolController, ViewportToolDescriptor, ViewportToolId, ViewportToolScene,
+    ViewportToolSceneConfig, ViewportTransformHandleSet, ViewportWidget, ViewportWidgetConfig,
+};
+
+use crate::edit_workspace::VIEWPORT_TEXTURE;
+use crate::overlay_workspace::SharedOverlayRoute;
+use crate::timeline_workspace::{
+    compose_tool_actions, declare_tool_actions, viewport_actions, viewport_content_rect,
+    viewport_tool_rects,
+};
+use crate::{DemoActionRegistry, DemoApplicationModel, DemoViewportTool};
 
 const GRAPH_ROOT: WidgetId = WidgetId::from_raw(0x0047_5241_5048);
 const CHROME_ROOT: WidgetId = WidgetId::from_raw(0x4348_524f_4d45);
 const CLEAR_SELECTION_ACTION: &str = "graph.clear-selection";
 const TOOLBAR_GROUP: ToolbarGroupId = ToolbarGroupId::from_raw(1);
+const APPLICATION_MENU: MenuBarMenuId = MenuBarMenuId::from_raw(1);
 const SELECTION_STATUS: StatusItemId = StatusItemId::from_raw(1);
 const SOURCE_NODE: NodeId = NodeId::from_raw(1);
 const OUTPUT_NODE: NodeId = NodeId::from_raw(2);
@@ -37,14 +52,19 @@ const EXISTING_EDGE: EdgeId = EdgeId::from_raw(1);
 const COMMITTED_EDGE: EdgeId = EdgeId::from_raw(2);
 const DOCK_ROOT: WidgetId = WidgetId::from_raw(0x0044_4f43_4b00);
 const GRAPH_FRAME: FrameId = FrameId::from_raw(1);
-const INSPECTOR_FRAME: FrameId = FrameId::from_raw(2);
+const VIEWPORT_FRAME: FrameId = FrameId::from_raw(2);
+const INSPECTOR_FRAME: FrameId = FrameId::from_raw(3);
 const GRAPH_PANEL: PanelId = PanelId::from_raw(1);
-const INSPECTOR_PANEL: PanelId = PanelId::from_raw(2);
+const VIEWPORT_PANEL: PanelId = PanelId::from_raw(2);
+const INSPECTOR_PANEL: PanelId = PanelId::from_raw(3);
 const INSPECTOR_SECTION: ItemId = ItemId::from_raw(1);
 const INSPECTOR_TITLE: ItemId = ItemId::from_raw(2);
 const INSPECTOR_X: ItemId = ItemId::from_raw(3);
 const INSPECTOR_Y: ItemId = ItemId::from_raw(4);
 const INSPECTOR_PORTS: ItemId = ItemId::from_raw(5);
+const VIEWPORT_TARGET: ViewportSelectionTargetId = ViewportSelectionTargetId::from_raw(2);
+const SELECT_TOOL: ViewportToolId = ViewportToolId::from_raw(1);
+const TRANSFORM_TOOL: ViewportToolId = ViewportToolId::from_raw(2);
 
 /// Application-visible outcome of the latest public graph connection lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,7 +89,9 @@ pub struct GraphWorkspaceState {
     selection: NodeGraphSelection,
     connection: NodeGraphConnectionController,
     connection_feedback: GraphConnectionFeedback,
-    menu_bar: MenuBar,
+    graph_pan_zoom: NodeGraphPanZoom,
+    viewport_pan_zoom: PanZoom,
+    viewport_tools: ViewportToolController,
     toolbar: Toolbar,
     tab_strip: TabStrip,
     status_bar: StatusBar,
@@ -115,6 +137,20 @@ impl GraphWorkspaceState {
         let mut graph = NodeGraphDescriptor::new();
         graph.nodes = vec![source, output];
         graph.edges = vec![edge];
+        let auxiliary = DockNode::Split {
+            axis: Axis::Horizontal,
+            ratio: 0.5,
+            min_first: 72.0,
+            min_second: 72.0,
+            first: Box::new(DockNode::Frame(Frame::new(
+                VIEWPORT_FRAME,
+                vec![Panel::new(VIEWPORT_PANEL, "Viewport")],
+            ))),
+            second: Box::new(DockNode::Frame(Frame::new(
+                INSPECTOR_FRAME,
+                vec![Panel::new(INSPECTOR_PANEL, "Inspector")],
+            ))),
+        };
         let dock = Dock::new(DockNode::Split {
             axis: Axis::Horizontal,
             ratio: 2.0 / 3.0,
@@ -124,10 +160,7 @@ impl GraphWorkspaceState {
                 GRAPH_FRAME,
                 vec![Panel::new(GRAPH_PANEL, "Graph")],
             ))),
-            second: Box::new(DockNode::Frame(Frame::new(
-                INSPECTOR_FRAME,
-                vec![Panel::new(INSPECTOR_PANEL, "Inspector")],
-            ))),
+            second: Box::new(auxiliary),
         });
         let mut clear_selection = ActionDescriptor::new(CLEAR_SELECTION_ACTION, "Clear selection");
         clear_selection.state.enabled = false;
@@ -137,7 +170,9 @@ impl GraphWorkspaceState {
             selection: NodeGraphSelection::new(),
             connection: NodeGraphConnectionController::default(),
             connection_feedback: GraphConnectionFeedback::Ready,
-            menu_bar: MenuBar::new(),
+            graph_pan_zoom: NodeGraphPanZoom::new(GraphVector::new(2.0, 2.0), 1.0),
+            viewport_pan_zoom: PanZoom::default(),
+            viewport_tools: ViewportToolController::default(),
             toolbar: Toolbar::from_groups([ToolbarGroup::from_actions(
                 TOOLBAR_GROUP,
                 "Graph selection",
@@ -193,6 +228,12 @@ impl GraphWorkspaceState {
         GRAPH_ROOT
     }
 
+    /// Returns the retained non-default transform used by Graph presentation and targeting.
+    #[must_use]
+    pub const fn pan_zoom(&self) -> NodeGraphPanZoom {
+        self.graph_pan_zoom
+    }
+
     /// Handles the one application-owned action exposed by the Graph workspace.
     pub fn handle_action(&mut self, invocation: &ActionInvocation) -> bool {
         if invocation.action_id.as_str() != CLEAR_SELECTION_ACTION || self.selection.is_empty() {
@@ -202,30 +243,70 @@ impl GraphWorkspaceState {
         true
     }
 
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(crate) fn compose(
         &mut self,
         ui: &mut Ui<'_>,
         bounds: Rect,
+        viewport_size: Size,
         app_targets: &[(WidgetId, Rect)],
-    ) {
+        actions: &DemoActionRegistry,
+        model: &mut DemoApplicationModel,
+        overlays: &mut SharedOverlayRoute,
+    ) -> Option<WidgetId> {
         self.sync_chrome_models();
-        let [toolbar_rect, tab_strip_rect, dock_rect, status_bar_rect] = chrome_layout(bounds);
+        let [
+            menu_rect,
+            toolbar_rect,
+            tab_strip_rect,
+            dock_rect,
+            status_bar_rect,
+        ] = chrome_layout(bounds);
         let dock = self.dock.clone();
-        let menu_bar = self.menu_bar.clone();
+        let mut menu_bar = MenuBar::from_menus([MenuBarMenu::from_actions(
+            APPLICATION_MENU,
+            "Workspace",
+            actions.iter().cloned(),
+        )]);
         let toolbar = self.toolbar.clone();
         let tab_strip = self.tab_strip.clone();
         let status_bar = self.status_bar.clone();
         let dock_scene = DockScene::new(DockSceneConfig::new(DOCK_ROOT, dock_rect), &dock);
+        let viewport_bounds = panel_bounds(&dock_scene, VIEWPORT_PANEL).map(|rect| rect.inset(4.0));
+        let viewport_root = panel_widget_id(&dock_scene, VIEWPORT_PANEL)
+            .map(|panel| ui.make_id(("dock-panel-content", panel.raw())));
+        let tool_rects = viewport_bounds.map(viewport_tool_rects);
+        let viewport = viewport_bounds.map(|rect| {
+            let id = WidgetId::from_key("graph-workspace.viewport");
+            ui.prepare_viewport_widget(
+                ViewportWidgetConfig::new(
+                    id,
+                    ViewportSurface {
+                        texture: VIEWPORT_TEXTURE,
+                        source_size: Size::new(1280.0, 720.0),
+                        bounds: viewport_content_rect(rect),
+                        pan_zoom: self.viewport_pan_zoom,
+                    },
+                )
+                .with_label("Graph preview viewport")
+                .with_actions(viewport_actions(actions, id)),
+            )
+        });
+        let viewport_scene = viewport
+            .as_ref()
+            .map(|viewport| graph_viewport_scene(ui, viewport, model.viewport_tool()));
+        overlays.open_palette_if_requested(ui, actions, viewport_size);
         let chrome_scene = ChromeScene::new(
             ChromeSceneConfig::new(
                 CHROME_ROOT,
-                Rect::ZERO,
+                menu_rect,
                 toolbar_rect,
                 tab_strip_rect,
                 status_bar_rect,
                 ActionContext::Editor,
             )
             .with_widths([
+                (ChromeSceneItemKey::Menu(APPLICATION_MENU), 96.0),
                 (
                     ChromeSceneItemKey::Toolbar {
                         group: TOOLBAR_GROUP,
@@ -249,32 +330,64 @@ impl GraphWorkspaceState {
                     PointerOrder::new(index as u64 + 1),
                 ));
             }
-            let next = dock_scene.declare_pointer_targets_with_content(
+            let mut next = dock_scene.declare_pointer_targets_with_content(
                 plan,
                 PointerOrder::new(10),
-                |plan, order| {
-                    let Some(panel) = dock_scene
+                |plan, mut order| {
+                    if let Some(panel) = dock_scene
                         .layout()
                         .frames
                         .iter()
                         .filter_map(|frame| frame.panel.as_ref())
                         .find(|panel| panel.panel == GRAPH_PANEL)
-                    else {
-                        return order;
-                    };
-                    plan.target(PointerTarget::new(GRAPH_ROOT, panel.rect, order));
-                    PointerOrder::new(order.raw() + 1)
+                    {
+                        plan.target(PointerTarget::new(GRAPH_ROOT, panel.rect, order));
+                        order = PointerOrder::new(order.raw() + 1);
+                    }
+                    if let Some(viewport) = viewport.as_ref() {
+                        order = viewport.declare_pointer_targets(plan, order);
+                    }
+                    if let Some(viewport_scene) = viewport_scene.as_ref() {
+                        order = viewport_scene.declare_pointer_targets(plan, order);
+                    }
+                    if let (Some(rects), Some(root)) = (tool_rects, viewport_root) {
+                        order = declare_tool_actions(plan, order, root, actions, rects);
+                    }
+                    order
                 },
             );
-            chrome_scene.declare_pointer_targets(plan, next);
+            next = chrome_scene.declare_pointer_targets(plan, next);
+            if let Some(overlay) = overlays.scene() {
+                overlay.declare_pointer_targets(plan, next);
+            }
         })
         .expect("Graph Dock and chrome have unique pointer targets");
         let _ = ui.dock_scene(&dock_scene, |ui, panel| match panel.panel {
             GRAPH_PANEL => self.compose_graph(ui, panel.rect),
+            VIEWPORT_PANEL => {
+                if let Some(rects) = tool_rects {
+                    compose_tool_actions(ui, actions, rects);
+                }
+                if let Some(viewport) = viewport.as_ref() {
+                    let output = ui.viewport_widget(viewport, &mut self.viewport_pan_zoom, &[]);
+                    self.viewport_pan_zoom = output.next_pan_zoom;
+                }
+                if let Some(viewport_scene) = viewport_scene.as_ref() {
+                    let _ = ui.viewport_tool_scene(viewport_scene, &mut self.viewport_tools);
+                }
+            }
             INSPECTOR_PANEL => self.compose_inspector(ui, panel.rect),
-            _ => unreachable!("demo Dock contains only Graph and Inspector panels"),
+            _ => unreachable!("demo Dock contains only Graph, Viewport, and Inspector panels"),
         });
-        let _ = ui.chrome_scene(&chrome_scene);
+        let chrome_output = ui.chrome_scene(&chrome_scene);
+        overlays.reconcile(
+            ui,
+            actions,
+            &mut menu_bar,
+            &chrome_output.intents,
+            false,
+            viewport_size,
+        )
     }
 
     fn sync_chrome_models(&mut self) {
@@ -291,7 +404,7 @@ impl GraphWorkspaceState {
     }
 
     fn compose_graph(&mut self, ui: &mut Ui<'_>, bounds: Rect) {
-        let viewport = NodeGraphViewport::new(bounds, NodeGraphPanZoom::default());
+        let viewport = NodeGraphViewport::new(bounds, self.graph_pan_zoom);
         let view = NodeGraphStaticView::new(GRAPH_ROOT, viewport, &self.graph)
             .with_selection(self.selection.clone());
         let widget = ui
@@ -392,6 +505,59 @@ impl GraphWorkspaceState {
     }
 }
 
+fn graph_viewport_scene(
+    ui: &Ui<'_>,
+    viewport: &ViewportWidget,
+    tool: DemoViewportTool,
+) -> ViewportToolScene {
+    let active = match tool {
+        DemoViewportTool::Select => ViewportToolDescriptor::new(SELECT_TOOL, "Select Tool")
+            .active(true)
+            .with_cursor(ViewportCursorMetadata::new(ViewportCursorShape::Pointer)),
+        DemoViewportTool::Transform => {
+            ViewportToolDescriptor::new(TRANSFORM_TOOL, "Transform Tool")
+                .active(true)
+                .with_cursor(ViewportCursorMetadata::new(ViewportCursorShape::Move))
+        }
+    };
+    let bounds = viewport.surface().bounds;
+    let target = ViewportSelectionTargetDescriptor::new(
+        VIEWPORT_TARGET,
+        Rect::new(
+            bounds.x + bounds.width * 0.2,
+            bounds.y + bounds.height * 0.2,
+            bounds.width * 0.6,
+            bounds.height * 0.6,
+        ),
+    )
+    .with_label("Graph preview selection")
+    .with_handles(ViewportTransformHandleSet::move_only());
+    ui.prepare_viewport_tool_scene(
+        viewport,
+        ViewportToolSceneConfig::new([target])
+            .with_active_tool(active)
+            .disabled(tool == DemoViewportTool::Select),
+    )
+}
+
+fn panel_bounds(scene: &DockScene, panel: PanelId) -> Option<Rect> {
+    scene
+        .layout()
+        .frames
+        .iter()
+        .find_map(|frame| frame.panel.as_ref().filter(|item| item.panel == panel))
+        .map(|panel| panel.rect)
+}
+
+fn panel_widget_id(scene: &DockScene, panel: PanelId) -> Option<WidgetId> {
+    scene
+        .layout()
+        .frames
+        .iter()
+        .find_map(|frame| frame.panel.as_ref().filter(|item| item.panel == panel))
+        .map(|panel| panel.id)
+}
+
 fn connection_status(feedback: GraphConnectionFeedback, selected: u32) -> StatusItem {
     let (label, message, kind) = match feedback {
         GraphConnectionFeedback::Ready => (
@@ -423,24 +589,32 @@ fn connection_status(feedback: GraphConnectionFeedback, selected: u32) -> Status
     StatusItem::new(SELECTION_STATUS, label, message, kind).with_count(selected)
 }
 
-fn chrome_layout(bounds: Rect) -> [Rect; 4] {
+fn chrome_layout(bounds: Rect) -> [Rect; 5] {
+    let menu_height = 28.0_f32.min(bounds.height);
+    let remaining = (bounds.height - menu_height).max(0.0);
     let toolbar_height = 28.0_f32.min(bounds.height);
-    let remaining = (bounds.height - toolbar_height).max(0.0);
+    let remaining = (remaining - toolbar_height).max(0.0);
     let tab_height = 28.0_f32.min(remaining);
     let remaining = (remaining - tab_height).max(0.0);
     let status_height = 28.0_f32.min(remaining);
     let dock_height = (remaining - status_height).max(0.0);
     [
-        Rect::new(bounds.x, bounds.y, bounds.width, toolbar_height),
+        Rect::new(bounds.x, bounds.y, bounds.width, menu_height),
         Rect::new(
             bounds.x,
-            bounds.y + toolbar_height,
+            bounds.y + menu_height,
+            bounds.width,
+            toolbar_height,
+        ),
+        Rect::new(
+            bounds.x,
+            bounds.y + menu_height + toolbar_height,
             bounds.width,
             tab_height,
         ),
         Rect::new(
             bounds.x,
-            bounds.y + toolbar_height + tab_height,
+            bounds.y + menu_height + toolbar_height + tab_height,
             bounds.width,
             dock_height,
         ),

@@ -2,12 +2,22 @@
   "formatVersion": 1,
   "sternVersion": "1.0.0-rc.2.dev",
   "specificationSha256": "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed",
-  "status": "final",
+  "status": "incomplete",
   "source": {
     "commit": "50edc219ae5d013c242129adf2ec7a25942f5c28",
     "tree": "6c64e4dffe649a1b652cd5b0d15416e254c57b8c",
     "sourceRef": "50edc219ae5d013c242129adf2ec7a25942f5c28",
-    "generatedFromCleanWorktree": true
+    "generatedFromCleanWorktree": true,
+    "provisionalGraphSourceDrift": [
+      "apps/stern-demo/src/edit_workspace.rs",
+      "apps/stern-demo/src/graph_workspace.rs",
+      "apps/stern-demo/src/lib.rs",
+      "apps/stern-demo/src/overlay_workspace.rs"
+    ],
+    "provisionalGraphContractDrift": [
+      "apps/stern-demo/tests/graph_workspace_screen_contract.rs",
+      "apps/stern-demo/tests/public_consumer_contract.rs"
+    ]
   },
   "runtime": {
     "components": [
@@ -496,7 +506,7 @@
       {
         "id": "graph-connection-edit",
         "workspaceId": "graph-workspace",
-        "status": "passed",
+        "status": "pending",
         "evidenceRefs": [
           "#/logs/stateTransitions/4",
           "#/logs/failurePaths/0",
@@ -2011,7 +2021,14 @@
       "focusOrder": [
         "c480978a70fbffa3",
         "9c492fae9c016c14",
+        "a490b012778ab1da",
         "0000004752415048",
+        "fe6e41c072a11378",
+        "1aa21fd21eb8a6e9",
+        "0e3f4b2d6e846745",
+        "a7756c7d21df3d12",
+        "34eb263861a3406c",
+        "60ce22847bb96ba8",
         "e7bb8e4a1e818520",
         "4457e40442a8e08b",
         "ff9f83e6ba0e27a0",
@@ -2052,7 +2069,8 @@
           "disabled": false,
           "children": [
             "1d11e4fff55abc7d",
-            "60947f424174088b"
+            "60947f424174088b",
+            "3cc032c61cbe2369"
           ]
         },
         {
@@ -2132,11 +2150,11 @@
           "id": "60947f424174088b",
           "parent": "000000444f434b00",
           "role": "frame",
-          "label": "Inspector",
+          "label": "Viewport",
           "bounds": [
             472,
             286,
-            224,
+            112,
             142
           ],
           "focusable": false,
@@ -2156,7 +2174,7 @@
           "bounds": [
             472,
             286,
-            224,
+            112,
             28
           ],
           "focusable": false,
@@ -2171,11 +2189,11 @@
           "id": "9c492fae9c016c14",
           "parent": "2f909061696d0b06",
           "role": "tab",
-          "label": "Inspector",
+          "label": "Viewport",
           "bounds": [
             472,
             286,
-            160,
+            112,
             28
           ],
           "focusable": true,
@@ -2188,11 +2206,84 @@
           "id": "4bd1503db195582a",
           "parent": "60947f424174088b",
           "role": "panel",
-          "label": "Inspector",
+          "label": "Viewport",
           "bounds": [
             472,
             314,
-            224,
+            112,
+            114
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "3cc032c61cbe2369",
+          "parent": "000000444f434b00",
+          "role": "frame",
+          "label": "Inspector",
+          "bounds": [
+            584,
+            286,
+            112,
+            142
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "1db5dc788ca83cb4",
+            "0e5164e0e32bcd3e"
+          ]
+        },
+        {
+          "id": "1db5dc788ca83cb4",
+          "parent": "3cc032c61cbe2369",
+          "role": "tablist",
+          "label": "Frame tabs",
+          "bounds": [
+            584,
+            286,
+            112,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "a490b012778ab1da"
+          ]
+        },
+        {
+          "id": "a490b012778ab1da",
+          "parent": "1db5dc788ca83cb4",
+          "role": "tab",
+          "label": "Inspector",
+          "bounds": [
+            584,
+            286,
+            112,
+            28
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "0e5164e0e32bcd3e",
+          "parent": "3cc032c61cbe2369",
+          "role": "panel",
+          "label": "Inspector",
+          "bounds": [
+            584,
+            314,
+            112,
             114
           ],
           "focusable": false,
@@ -2228,8 +2319,8 @@
           "role": "custom:edge",
           "label": "Edge 1: Image Source Image to Viewer Image",
           "bounds": [
-            215,
-            365,
+            217,
+            367,
             170,
             26
           ],
@@ -2245,10 +2336,10 @@
           "role": "custom:node",
           "label": "Image Source",
           "bounds": [
-            60,
-            342,
+            62,
+            344,
             156,
-            86
+            84
           ],
           "focusable": false,
           "focused": false,
@@ -2264,8 +2355,8 @@
           "role": "custom:port",
           "label": "Output Image",
           "bounds": [
-            212,
-            386,
+            214,
+            388,
             8,
             8
           ],
@@ -2281,10 +2372,10 @@
           "role": "custom:node",
           "label": "Viewer",
           "bounds": [
-            384,
-            342,
-            88,
-            86
+            386,
+            344,
+            86,
+            84
           ],
           "focusable": false,
           "focused": false,
@@ -2302,8 +2393,8 @@
           "role": "custom:port",
           "label": "Input Image",
           "bounds": [
-            380,
-            362,
+            382,
+            364,
             8,
             8
           ],
@@ -2319,8 +2410,8 @@
           "role": "custom:port",
           "label": "Input Preview Image",
           "bounds": [
-            380,
-            386,
+            382,
+            388,
             8,
             8
           ],
@@ -2336,8 +2427,8 @@
           "role": "custom:port",
           "label": "Input Vector Mask",
           "bounds": [
-            380,
-            410,
+            382,
+            412,
             8,
             8
           ],
@@ -2348,17 +2439,141 @@
           "children": []
         },
         {
-          "id": "e3147ea85f61dac8",
+          "id": "fe6e41c072a11378",
+          "parent": null,
+          "role": "button",
+          "label": "Select Tool",
+          "bounds": [
+            476,
+            318,
+            92,
+            26
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "1aa21fd21eb8a6e9",
+          "parent": null,
+          "role": "button",
+          "label": "Transform Tool",
+          "bounds": [
+            572,
+            318,
+            8,
+            26
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "0e3f4b2d6e846745",
+          "parent": null,
+          "role": "viewport",
+          "label": "Graph preview viewport",
+          "bounds": [
+            476,
+            348,
+            104,
+            76
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "a7756c7d21df3d12",
+            "34eb263861a3406c"
+          ]
+        },
+        {
+          "id": "a7756c7d21df3d12",
+          "parent": "0e3f4b2d6e846745",
+          "role": "toggle",
+          "label": "Select Tool",
+          "bounds": [
+            476,
+            348,
+            104,
+            76
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": true,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "34eb263861a3406c",
+          "parent": "0e3f4b2d6e846745",
+          "role": "toggle",
+          "label": "Transform Tool",
+          "bounds": [
+            476,
+            348,
+            104,
+            76
+          ],
+          "focusable": true,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "b087685096946e66",
           "parent": null,
           "role": "grid",
           "label": "Property grid",
           "bounds": [
-            472,
+            584,
             314,
-            224,
+            112,
             114
           ],
           "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": []
+        },
+        {
+          "id": "c8d2f302ea7cbe1c",
+          "parent": null,
+          "role": "custom:menu-bar",
+          "label": "Application menu",
+          "bounds": [
+            24,
+            202,
+            672,
+            28
+          ],
+          "focusable": false,
+          "focused": false,
+          "selected": false,
+          "disabled": false,
+          "children": [
+            "60ce22847bb96ba8"
+          ]
+        },
+        {
+          "id": "60ce22847bb96ba8",
+          "parent": "c8d2f302ea7cbe1c",
+          "role": "menuitem",
+          "label": "Workspace",
+          "bounds": [
+            24,
+            202,
+            96,
+            28
+          ],
+          "focusable": true,
           "focused": false,
           "selected": false,
           "disabled": false,
@@ -2513,7 +2728,7 @@
           "label": "Apply Shared State",
           "bounds": [
             24,
-            188,
+            156,
             160,
             30
           ],
@@ -2582,7 +2797,9 @@
     "captureStatus": "final",
     "reviewStatus": "approved",
     "artifactCount": 8,
-    "sourceCompatibility": "capture-sensitive paths unchanged"
+    "provenance": "prior-baseline",
+    "currentGraphLayoutStatus": "pending",
+    "sourceCompatibility": "Graph layout changed; approved bytes are not current candidate acceptance"
   },
   "platformEvidence": {
     "issue": 848,
@@ -2653,12 +2870,14 @@
       "use stern::widgets::dock::{",
       "use stern::widgets::inspector::{PropertyGridConfig, PropertyGridRow};",
       "use stern::widgets::node_graph::{",
-      "use stern::widgets::{ItemId, TextFieldAccess, Ui};",
+      "use stern::widgets::{",
       "use stern::UiState;",
       "use stern::core::{",
       "use stern::render::RenderResources;",
       "use stern::core::ScaleFactor;",
       "use stern::platform_winit::{WinitInputAdapter, WinitPlatformRequests};",
+      "use stern::core::{ActionContext, ActionSource, Key, KeyState, Rect, Size, UiInput, WidgetId};",
+      "use stern::widgets::{",
       "use stern::core::{ActionContext, PointerOrder, PointerTarget, PointerTargetPlan, Rect, WidgetId};",
       "use stern::widgets::chrome::{SystemFeedbackScene, SystemFeedbackSceneConfig};",
       "use stern::widgets::{"
@@ -2671,6 +2890,7 @@
       "apps/stern-demo/src/graph_workspace.rs",
       "apps/stern-demo/src/lib.rs",
       "apps/stern-demo/src/main.rs",
+      "apps/stern-demo/src/overlay_workspace.rs",
       "apps/stern-demo/src/timeline_workspace.rs"
     ]
   },
@@ -2695,7 +2915,8 @@
         "RenderImage"
       ],
       "matchedSourcePaths": [
-        "apps/stern-demo/src/edit_workspace.rs"
+        "apps/stern-demo/src/edit_workspace.rs",
+        "apps/stern-demo/src/graph_workspace.rs"
       ],
       "reason": "public output translation or declared content-surface integration; no control painting"
     },
@@ -2739,7 +2960,7 @@
     },
     {
       "id": "deterministic-user-journeys",
-      "status": "passed",
+      "status": "pending",
       "evidenceRefs": [
         "#/runtime/journeys",
         "#/logs"
@@ -2756,7 +2977,7 @@
     },
     {
       "id": "renderer-and-scale-quality",
-      "status": "passed",
+      "status": "pending",
       "evidenceRefs": [
         "#/rendererEvidence"
       ]
@@ -2778,5 +2999,28 @@
       ]
     }
   ],
-  "knownGaps": []
+  "knownGaps": [
+    {
+      "id": "graph-current-layout-renderer-acceptance",
+      "issue": 855,
+      "blocksGateIds": [
+        "renderer-and-scale-quality"
+      ],
+      "evidenceRefs": [
+        "#/source/provisionalGraphSourceDrift",
+        "#/rendererEvidence"
+      ]
+    },
+    {
+      "id": "graph-full-journey-acceptance",
+      "issue": 856,
+      "blocksGateIds": [
+        "deterministic-user-journeys"
+      ],
+      "evidenceRefs": [
+        "#/source/provisionalGraphContractDrift",
+        "#/runtime/journeys/5"
+      ]
+    }
+  ]
 }
