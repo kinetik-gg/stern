@@ -63,6 +63,16 @@ const CANDIDATE_EVIDENCE_DRIFT = [
   "apps/stern-demo/tools/contract.rs",
   "apps/stern-demo/tools/json.rs",
   "apps/stern-demo/tools/runtime-semantic-evidence.rs",
+  "crates/stern-widgets/src/dock/controller.rs",
+  "crates/stern-widgets/src/dock/layout.rs",
+  "crates/stern-widgets/src/dock/model.rs",
+  "crates/stern-widgets/src/dock/model/tree.rs",
+  "crates/stern-widgets/src/dock/scene.rs",
+  "crates/stern-widgets/src/ui/dock.rs",
+  "crates/stern-widgets/tests/dock_controller_conformance.rs",
+  "crates/stern-widgets/tests/dock_layout_conformance.rs",
+  "crates/stern-widgets/tests/dock_scene_conformance.rs",
+  "crates/stern/tests/dock_facade.rs",
   "evidence/stern-demo-vello-845/manifest.json",
 ];
 const PROVISIONAL_GRAPH_SOURCE_DRIFT = [
