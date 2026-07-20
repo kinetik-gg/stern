@@ -3,8 +3,8 @@
 use stern_core::WidgetId;
 
 use super::{
-    DockDropTarget, DockInteractionPolicy, DockSplitPath, DockSplitterContextAction, DockTabDrag,
-    FrameId, PanelId, PanelInstanceLocation,
+    DockDropTarget, DockInteractionPolicy, DockSplitPath, DockSplitTopologyFingerprint,
+    DockSplitterContextAction, DockTabDrag, FrameId, PanelId, PanelInstanceLocation,
 };
 
 /// Caller-owned configuration for one Dock controller evaluation.
@@ -45,12 +45,21 @@ pub struct DockControllerFocus {
     pub widget: WidgetId,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct DockSplitterResizeTransaction {
+    pub(crate) widget: WidgetId,
+    pub(crate) path: DockSplitPath,
+    pub(crate) starting_ratio: f32,
+    pub(crate) topology: DockSplitTopologyFingerprint,
+}
+
 /// Caller-owned retained state for public Dock interactions.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct DockController {
     pub(crate) drag: Option<DockTabDrag>,
     pub(crate) preview: Option<DockDropTarget>,
     pub(crate) focus: Option<DockControllerFocus>,
+    pub(crate) splitter_resize: Option<DockSplitterResizeTransaction>,
 }
 
 impl DockController {
@@ -61,6 +70,7 @@ impl DockController {
             drag: None,
             preview: None,
             focus: None,
+            splitter_resize: None,
         }
     }
 

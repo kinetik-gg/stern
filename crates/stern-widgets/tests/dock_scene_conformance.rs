@@ -258,9 +258,9 @@ fn nested_splits_prepare_expected_geometry_and_splitter_primitives() {
             .map(|frame| (frame.frame, frame.rect))
             .collect::<Vec<_>>(),
         vec![
-            (FrameId::from_raw(1), Rect::new(0.0, 0.0, 240.0, 400.0)),
-            (FrameId::from_raw(2), Rect::new(240.0, 0.0, 360.0, 200.0),),
-            (FrameId::from_raw(3), Rect::new(240.0, 200.0, 360.0, 200.0),),
+            (FrameId::from_raw(1), Rect::new(0.0, 0.0, 236.0, 400.0)),
+            (FrameId::from_raw(2), Rect::new(244.0, 0.0, 356.0, 196.0),),
+            (FrameId::from_raw(3), Rect::new(244.0, 204.0, 356.0, 196.0),),
         ]
     );
 
@@ -270,16 +270,42 @@ fn nested_splits_prepare_expected_geometry_and_splitter_primitives() {
     assert_eq!(splitters[0].axis, Axis::Horizontal);
     assert_eq!(splitters[0].rect, Rect::new(236.0, 0.0, 8.0, 400.0));
     assert_eq!(
+        splitters[0].divider_rect(),
+        Rect::new(239.5, 0.0, 1.0, 400.0)
+    );
+    assert_eq!(
         splitters[1].path,
         DockSplitPath::root().child(DockPathElement::Second)
     );
     assert_eq!(splitters[1].axis, Axis::Vertical);
-    assert_eq!(splitters[1].rect, Rect::new(240.0, 196.0, 360.0, 8.0));
+    assert_eq!(splitters[1].rect, Rect::new(244.0, 196.0, 356.0, 8.0));
+    assert_eq!(
+        splitters[1].divider_rect(),
+        Rect::new(244.0, 199.5, 356.0, 1.0)
+    );
 
     let output = paint(&scene);
+    let theme = default_dark_theme();
     for splitter in splitters {
-        let primitive = rect_primitive_at(&output.primitives, splitter.rect);
-        assert!(primitive.fill.is_some());
+        let divider_rect = splitter.divider_rect();
+        assert!(splitter.rect.min_x() >= BOUNDS.min_x());
+        assert!(splitter.rect.min_y() >= BOUNDS.min_y());
+        assert!(splitter.rect.max_x() <= BOUNDS.max_x());
+        assert!(splitter.rect.max_y() <= BOUNDS.max_y());
+        assert!(divider_rect.min_x() >= splitter.rect.min_x());
+        assert!(divider_rect.min_y() >= splitter.rect.min_y());
+        assert!(divider_rect.max_x() <= splitter.rect.max_x());
+        assert!(divider_rect.max_y() <= splitter.rect.max_y());
+
+        let primitive = rect_primitive_at(&output.primitives, divider_rect);
+        assert_eq!(
+            primitive.fill,
+            Some(Brush::Solid(theme.colors.border.default))
+        );
+        assert_eq!(primitive.stroke, None);
+        assert!(output.primitives.iter().all(|primitive| {
+            !matches!(primitive, Primitive::Rect(rect) if rect.rect == splitter.rect)
+        }));
     }
     assert_eq!(dock.snapshot(), snapshot);
 }

@@ -3,15 +3,16 @@
 use std::time::Duration;
 
 use stern_core::{
-    Axis, FrameContext, Key, KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton,
-    PhysicalSize, Point, PointerOrder, Rect, RepaintRequest, ScaleFactor, Size, TimeInfo, UiInput,
-    UiInputEvent, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
+    Axis, CursorShape, FrameContext, Key, KeyEvent, KeyState, KeyboardInput, Modifiers,
+    MouseButton, PhysicalSize, PlatformRequest, Point, PointerOrder, Rect, RepaintRequest,
+    ScaleFactor, Size, TimeInfo, UiInput, UiInputEvent, UiMemory, Vec2, ViewportInfo, WidgetId,
+    default_dark_theme,
 };
 use stern_widgets::Ui;
 use stern_widgets::dock::{
     Dock, DockController, DockControllerConfig, DockControllerOutput, DockNode, DockScene,
-    DockSceneConfig, DockSplitterContextActionKind, Frame, FrameId, Panel, PanelId,
-    PanelInstanceId, PanelInstanceLocation, PanelInstanceSnapshot, PanelTypeDescriptor,
+    DockSceneConfig, DockSnapshotNode, DockSplitterContextActionKind, Frame, FrameId, Panel,
+    PanelId, PanelInstanceId, PanelInstanceLocation, PanelInstanceSnapshot, PanelTypeDescriptor,
     PanelTypeId,
 };
 
@@ -27,8 +28,12 @@ fn frame(id: u64, panels: Vec<Panel>) -> Frame {
 }
 
 fn split_dock() -> Dock {
+    split_dock_with_axis(Axis::Horizontal)
+}
+
+fn split_dock_with_axis(axis: Axis) -> Dock {
     Dock::new(DockNode::Split {
-        axis: Axis::Horizontal,
+        axis,
         ratio: 0.5,
         min_first: 0.0,
         min_second: 0.0,
@@ -42,6 +47,44 @@ fn split_dock() -> Dock {
         ))),
         second: Box::new(DockNode::Frame(frame(2, vec![panel(21, "Viewport")]))),
     })
+}
+
+fn replacement_split_dock() -> Dock {
+    Dock::new(DockNode::Split {
+        axis: Axis::Horizontal,
+        ratio: 0.25,
+        min_first: 24.0,
+        min_second: 36.0,
+        first: Box::new(DockNode::Frame(frame(
+            7,
+            vec![panel(71, "Replacement left")],
+        ))),
+        second: Box::new(DockNode::Split {
+            axis: Axis::Vertical,
+            ratio: 0.6,
+            min_first: 18.0,
+            min_second: 22.0,
+            first: Box::new(DockNode::Frame(frame(
+                8,
+                vec![panel(81, "Replacement top")],
+            ))),
+            second: Box::new(DockNode::Frame(frame(
+                9,
+                vec![panel(91, "Replacement bottom")],
+            ))),
+        }),
+    })
+}
+
+fn root_split_ratio(dock: &Dock) -> f32 {
+    match dock.snapshot().root {
+        DockSnapshotNode::Split { ratio, .. } => ratio,
+        DockSnapshotNode::Frame { .. } => panic!("expected root split"),
+    }
+}
+
+fn snapshot_bytes(dock: &Dock) -> Vec<u8> {
+    format!("{:?}", dock.snapshot()).into_bytes()
 }
 
 fn context(input: UiInput) -> FrameContext {
@@ -83,6 +126,17 @@ fn run_frame_with_disabled(
     disabled: bool,
 ) -> (DockControllerOutput, stern_core::FrameOutput) {
     let prepared = scene_with_disabled(dock, disabled);
+    run_frame_with_scene(dock, controller, memory, input, new_frame, &prepared)
+}
+
+fn run_frame_with_scene(
+    dock: &mut Dock,
+    controller: &mut DockController,
+    memory: &mut UiMemory,
+    input: UiInput,
+    new_frame: FrameId,
+    prepared: &DockScene,
+) -> (DockControllerOutput, stern_core::FrameOutput) {
     let theme = default_dark_theme();
     let mut ui = Ui::begin_frame(context(input), memory, &theme);
     ui.resolve_pointer_targets(|plan| {
@@ -90,12 +144,12 @@ fn run_frame_with_disabled(
     })
     .expect("valid Dock pointer plan");
     let output = ui.dock_controller(
-        &prepared,
+        prepared,
         dock,
         controller,
         DockControllerConfig::new(new_frame),
     );
-    let _ = ui.dock_scene(&prepared, |_, _| ());
+    let _ = ui.dock_scene(prepared, |_, _| ());
     let frame = ui.finish_output();
     (output, frame)
 }
@@ -118,6 +172,26 @@ fn pointer_move(point: Point, delta: Vec2) -> UiInput {
         position: point,
         delta,
     });
+    input
+}
+
+fn pointer_release_all(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::PointerReleaseAll {
+        position: Some(point),
+    });
+    input
+}
+
+fn window_focus_lost() -> UiInput {
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::WindowFocusChanged(false));
+    input
+}
+
+fn pointer_hover(point: Point) -> UiInput {
+    let mut input = UiInput::default();
+    input.pointer.position = Some(point);
     input
 }
 
@@ -447,6 +521,437 @@ fn splitter_resize_and_context_metadata_use_existing_model_requests() {
     let mut swap_dock = dock.clone();
     assert!(join_dock.apply_join_request(BOUNDS, join));
     assert!(swap_dock.apply_swap_request(BOUNDS, swap));
+}
+
+#[test]
+fn splitter_drag_resizes_immediately_commits_on_release_and_keeps_capture_cursor() {
+    let mut dock = split_dock();
+    let splitter = scene(&dock).layout().splitters[0].clone();
+    let start = center(splitter.rect);
+    let mut controller = DockController::new();
+    let mut memory = UiMemory::new();
+    let initial = dock.snapshot();
+
+    let (_, pressed) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_button(start, MouseButton::Primary, true),
+        FrameId::from_raw(90),
+    );
+    assert_eq!(dock.snapshot(), initial);
+    assert!(
+        pressed
+            .platform_requests
+            .contains(&PlatformRequest::SetCursor(CursorShape::ResizeHorizontal))
+    );
+
+    let first_point = Point::new(start.x + 40.0, start.y);
+    let (first_move, first_frame) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_move(first_point, Vec2::new(40.0, 0.0)),
+        FrameId::from_raw(90),
+    );
+    assert!(first_move.changed);
+    assert!((root_split_ratio(&dock) - (0.5 + 40.0 / 600.0)).abs() < 1e-6);
+    assert!(
+        first_frame
+            .platform_requests
+            .contains(&PlatformRequest::SetCursor(CursorShape::ResizeHorizontal))
+    );
+
+    let second_point = Point::new(start.x + 60.0, start.y);
+    let (second_move, second_frame) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_move(second_point, Vec2::new(20.0, 0.0)),
+        FrameId::from_raw(90),
+    );
+    assert!(second_move.changed);
+    assert!((root_split_ratio(&dock) - 0.6).abs() < 1e-6);
+    assert!(
+        second_frame
+            .platform_requests
+            .contains(&PlatformRequest::SetCursor(CursorShape::ResizeHorizontal))
+    );
+
+    let _ = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_button(second_point, MouseButton::Primary, false),
+        FrameId::from_raw(90),
+    );
+    let committed = dock.snapshot();
+    let (after_release, _) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_release_all(second_point),
+        FrameId::from_raw(90),
+    );
+    assert_eq!(dock.snapshot(), committed);
+    assert!(!after_release.changed);
+    assert_eq!(memory.pointer_capture(), None);
+}
+
+#[test]
+fn splitter_cancellation_restores_exact_start_at_clamps_and_emits_no_requests() {
+    for (case, delta) in [
+        ("release-all-min", -1_000.0),
+        ("focus-loss-max", 1_000.0),
+        ("disabled-owner", 120.0),
+    ] {
+        let mut dock = split_dock();
+        let splitter = scene(&dock).layout().splitters[0].clone();
+        let start = center(splitter.rect);
+        let mut controller = DockController::new();
+        let mut memory = UiMemory::new();
+        let initial = dock.snapshot();
+
+        let _ = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_button(start, MouseButton::Primary, true),
+            FrameId::from_raw(90),
+        );
+        let moved_point = Point::new(start.x + delta, start.y);
+        let _ = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_move(moved_point, Vec2::new(delta, 0.0)),
+            FrameId::from_raw(90),
+        );
+        assert_ne!(dock.snapshot(), initial, "{case}");
+
+        let (cancelled, frame) = match case {
+            "release-all-min" => run_frame(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                pointer_release_all(moved_point),
+                FrameId::from_raw(90),
+            ),
+            "focus-loss-max" => run_frame(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                window_focus_lost(),
+                FrameId::from_raw(90),
+            ),
+            "disabled-owner" => run_frame_with_disabled(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                UiInput::default(),
+                FrameId::from_raw(90),
+                true,
+            ),
+            _ => unreachable!(),
+        };
+
+        assert_eq!(dock.snapshot(), initial, "{case}");
+        assert_eq!(memory.pointer_capture(), None, "{case}");
+        assert!(cancelled.close_requests.is_empty(), "{case}");
+        assert!(cancelled.splitter_context_requests.is_empty(), "{case}");
+        assert!(cancelled.drop_preview.is_none(), "{case}");
+        assert!(
+            frame
+                .platform_requests
+                .iter()
+                .all(|request| !matches!(request, PlatformRequest::SetCursor(_))),
+            "{case}"
+        );
+    }
+}
+
+#[test]
+fn splitter_owner_removal_rolls_back_but_stale_topology_is_not_resurrected() {
+    let mut dock = split_dock();
+    let splitter = scene(&dock).layout().splitters[0].clone();
+    let start = center(splitter.rect);
+    let mut controller = DockController::new();
+    let mut memory = UiMemory::new();
+    let initial = dock.snapshot();
+    let _ = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_button(start, MouseButton::Primary, true),
+        FrameId::from_raw(90),
+    );
+    let _ = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_move(Point::new(start.x + 80.0, start.y), Vec2::new(80.0, 0.0)),
+        FrameId::from_raw(90),
+    );
+    assert_ne!(dock.snapshot(), initial);
+
+    let owner_removed = DockScene::new(DockSceneConfig::new(ROOT, Rect::ZERO), &dock);
+    let (_, removed_frame) = run_frame_with_scene(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        UiInput::default(),
+        FrameId::from_raw(90),
+        &owner_removed,
+    );
+    assert_eq!(dock.snapshot(), initial);
+    assert_eq!(memory.pointer_capture(), None);
+    assert!(removed_frame.platform_requests.is_empty());
+
+    let mut stale_dock = split_dock();
+    let stale_splitter = scene(&stale_dock).layout().splitters[0].clone();
+    let stale_start = center(stale_splitter.rect);
+    let mut stale_controller = DockController::new();
+    let mut stale_memory = UiMemory::new();
+    let _ = run_frame(
+        &mut stale_dock,
+        &mut stale_controller,
+        &mut stale_memory,
+        pointer_button(stale_start, MouseButton::Primary, true),
+        FrameId::from_raw(90),
+    );
+    let _ = run_frame(
+        &mut stale_dock,
+        &mut stale_controller,
+        &mut stale_memory,
+        pointer_move(
+            Point::new(stale_start.x + 80.0, stale_start.y),
+            Vec2::new(80.0, 0.0),
+        ),
+        FrameId::from_raw(90),
+    );
+    assert!(stale_dock.merge_frames(FrameId::from_raw(1), FrameId::from_raw(2)));
+    let merged = stale_dock.snapshot();
+    let (stale, _) = run_frame(
+        &mut stale_dock,
+        &mut stale_controller,
+        &mut stale_memory,
+        UiInput::default(),
+        FrameId::from_raw(90),
+    );
+    assert_eq!(stale_dock.snapshot(), merged);
+    assert!(!stale.changed);
+    assert_eq!(stale_memory.pointer_capture(), None);
+}
+
+#[test]
+fn same_path_replacement_topology_never_receives_old_splitter_transaction() {
+    for case in [
+        "move",
+        "release",
+        "release-all",
+        "focus-loss",
+        "disabled-reconcile",
+        "ordinary-reconcile",
+    ] {
+        let mut dock = split_dock();
+        let splitter = scene(&dock).layout().splitters[0].clone();
+        let start = center(splitter.rect);
+        let moved = Point::new(start.x + 40.0, start.y);
+        let mut controller = DockController::new();
+        let mut memory = UiMemory::new();
+
+        let _ = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_button(start, MouseButton::Primary, true),
+            FrameId::from_raw(90),
+        );
+        let _ = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_move(moved, Vec2::new(40.0, 0.0)),
+            FrameId::from_raw(90),
+        );
+        assert!(
+            (root_split_ratio(&dock) - 0.5).abs() > f32::EPSILON,
+            "{case}"
+        );
+
+        dock = replacement_split_dock();
+        let replacement_snapshot = dock.snapshot();
+        let replacement_bytes = snapshot_bytes(&dock);
+        let (output, frame_output) = match case {
+            "move" => run_frame(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                pointer_move(Point::new(moved.x + 20.0, moved.y), Vec2::new(20.0, 0.0)),
+                FrameId::from_raw(90),
+            ),
+            "release" => run_frame(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                pointer_button(moved, MouseButton::Primary, false),
+                FrameId::from_raw(90),
+            ),
+            "release-all" => run_frame(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                pointer_release_all(moved),
+                FrameId::from_raw(90),
+            ),
+            "focus-loss" => run_frame(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                window_focus_lost(),
+                FrameId::from_raw(90),
+            ),
+            "disabled-reconcile" => run_frame_with_disabled(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                UiInput::default(),
+                FrameId::from_raw(90),
+                true,
+            ),
+            "ordinary-reconcile" => run_frame(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                UiInput::default(),
+                FrameId::from_raw(90),
+            ),
+            _ => unreachable!(),
+        };
+
+        assert_eq!(dock.snapshot(), replacement_snapshot, "{case}");
+        assert_eq!(snapshot_bytes(&dock), replacement_bytes, "{case}");
+        assert!(!output.changed, "{case}");
+        assert!(output.close_requests.is_empty(), "{case}");
+        assert!(output.splitter_context_requests.is_empty(), "{case}");
+        assert!(output.drop_preview.is_none(), "{case}");
+        assert_eq!(memory.pointer_capture(), None, "{case}");
+        assert!(
+            frame_output
+                .platform_requests
+                .iter()
+                .all(|request| !matches!(request, PlatformRequest::SetCursor(_))),
+            "{case}"
+        );
+    }
+}
+
+#[test]
+fn splitter_hover_and_capture_use_axis_cursor_and_cancel_suppresses_it() {
+    for (axis, cursor) in [
+        (Axis::Horizontal, CursorShape::ResizeHorizontal),
+        (Axis::Vertical, CursorShape::ResizeVertical),
+    ] {
+        let mut dock = split_dock_with_axis(axis);
+        let splitter = scene(&dock).layout().splitters[0].clone();
+        let start = center(splitter.rect);
+        let mut controller = DockController::new();
+        let mut memory = UiMemory::new();
+
+        let (_, hovered) = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_hover(start),
+            FrameId::from_raw(90),
+        );
+        assert!(
+            hovered
+                .platform_requests
+                .contains(&PlatformRequest::SetCursor(cursor))
+        );
+
+        let _ = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_button(start, MouseButton::Primary, true),
+            FrameId::from_raw(90),
+        );
+        let outside = match axis {
+            Axis::Horizontal => Point::new(start.x + 80.0, start.y),
+            Axis::Vertical => Point::new(start.x, start.y + 80.0),
+        };
+        let delta = Vec2::new(outside.x - start.x, outside.y - start.y);
+        let (_, captured) = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_move(outside, delta),
+            FrameId::from_raw(90),
+        );
+        assert!(
+            captured
+                .platform_requests
+                .contains(&PlatformRequest::SetCursor(cursor))
+        );
+
+        let (_, cancelled) = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_release_all(outside),
+            FrameId::from_raw(90),
+        );
+        assert!(
+            cancelled
+                .platform_requests
+                .iter()
+                .all(|request| !matches!(request, PlatformRequest::SetCursor(_)))
+        );
+    }
+}
+
+#[test]
+fn tab_drag_cancel_preserves_snapshot_and_clears_preview_without_requests() {
+    let mut dock = split_dock();
+    let tab = scene(&dock).layout().frames[0].tabs[0].clone();
+    let start = center(tab.rect);
+    let target = center(scene(&dock).layout().frames[1].rect);
+    let initial = dock.snapshot();
+    let mut controller = DockController::new();
+    let mut memory = UiMemory::new();
+
+    let _ = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_button(start, MouseButton::Primary, true),
+        FrameId::from_raw(90),
+    );
+    let (moved, _) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_move(target, Vec2::new(target.x - start.x, target.y - start.y)),
+        FrameId::from_raw(90),
+    );
+    assert!(controller.tab_drag().is_some());
+    assert!(moved.drop_preview.is_some());
+
+    let (cancelled, _) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_release_all(target),
+        FrameId::from_raw(90),
+    );
+    assert_eq!(dock.snapshot(), initial);
+    assert!(controller.tab_drag().is_none());
+    assert!(controller.drop_preview().is_none());
+    assert!(cancelled.close_requests.is_empty());
+    assert!(cancelled.splitter_context_requests.is_empty());
+    assert!(cancelled.drop_preview.is_none());
 }
 
 #[test]

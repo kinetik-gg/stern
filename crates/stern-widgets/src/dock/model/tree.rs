@@ -1,7 +1,20 @@
 use super::super::{
-    Axis, DockPathElement, FrameId, Rect, Vec2, split_child_rects, split_ratio_from_drag,
+    Axis, DockPathElement, FrameId, Rect, Vec2, split_child_rects, split_child_rects_with_gutter,
+    split_ratio_from_drag, split_ratio_from_drag_with_gutter,
 };
 use super::{DockNode, DockSplitInsertion, Frame};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DockSplitTopologyFingerprint {
+    Frame(FrameId),
+    Split {
+        axis: Axis,
+        min_first: u32,
+        min_second: u32,
+        first: Box<Self>,
+        second: Box<Self>,
+    },
+}
 
 pub(super) fn collect_frames<'a>(node: &'a DockNode, frames: &mut Vec<&'a Frame>) {
     match node {
@@ -333,5 +346,134 @@ pub(super) fn resize_split_at_path(
     match path[0] {
         DockPathElement::First => resize_split_at_path(first, &path[1..], first_rect, delta),
         DockPathElement::Second => resize_split_at_path(second, &path[1..], second_rect, delta),
+    }
+}
+
+pub(super) fn resize_split_at_path_with_gutter(
+    node: &mut DockNode,
+    path: &[DockPathElement],
+    bounds: Rect,
+    delta: Vec2,
+    thickness: f32,
+) -> bool {
+    let DockNode::Split {
+        axis,
+        ratio,
+        min_first,
+        min_second,
+        first,
+        second,
+    } = node
+    else {
+        return false;
+    };
+
+    if path.is_empty() {
+        *ratio = split_ratio_from_drag_with_gutter(
+            *axis,
+            bounds,
+            *ratio,
+            *min_first,
+            *min_second,
+            thickness,
+            delta,
+        );
+        return true;
+    }
+
+    let (first_rect, _, second_rect) =
+        split_child_rects_with_gutter(*axis, bounds, *ratio, *min_first, *min_second, thickness);
+    match path[0] {
+        DockPathElement::First => {
+            resize_split_at_path_with_gutter(first, &path[1..], first_rect, delta, thickness)
+        }
+        DockPathElement::Second => {
+            resize_split_at_path_with_gutter(second, &path[1..], second_rect, delta, thickness)
+        }
+    }
+}
+
+pub(super) fn split_ratio_at_path(node: &DockNode, path: &[DockPathElement]) -> Option<f32> {
+    let DockNode::Split {
+        ratio,
+        first,
+        second,
+        ..
+    } = node
+    else {
+        return None;
+    };
+
+    match path {
+        [] => Some(*ratio),
+        [DockPathElement::First, rest @ ..] => split_ratio_at_path(first, rest),
+        [DockPathElement::Second, rest @ ..] => split_ratio_at_path(second, rest),
+    }
+}
+
+pub(super) fn split_topology_fingerprint_at_path(
+    node: &DockNode,
+    path: &[DockPathElement],
+) -> Option<DockSplitTopologyFingerprint> {
+    match (node, path) {
+        (DockNode::Split { .. }, []) => Some(topology_fingerprint(node)),
+        (DockNode::Split { first, .. }, [DockPathElement::First, rest @ ..]) => {
+            split_topology_fingerprint_at_path(first, rest)
+        }
+        (DockNode::Split { second, .. }, [DockPathElement::Second, rest @ ..]) => {
+            split_topology_fingerprint_at_path(second, rest)
+        }
+        _ => None,
+    }
+}
+
+fn topology_fingerprint(node: &DockNode) -> DockSplitTopologyFingerprint {
+    match node {
+        DockNode::Frame(frame) => DockSplitTopologyFingerprint::Frame(frame.id),
+        DockNode::Split {
+            axis,
+            min_first,
+            min_second,
+            first,
+            second,
+            ..
+        } => DockSplitTopologyFingerprint::Split {
+            axis: *axis,
+            min_first: min_first.to_bits(),
+            min_second: min_second.to_bits(),
+            first: Box::new(topology_fingerprint(first)),
+            second: Box::new(topology_fingerprint(second)),
+        },
+    }
+}
+
+pub(super) fn set_split_ratio_at_path(
+    node: &mut DockNode,
+    path: &[DockPathElement],
+    restored_ratio: f32,
+) -> bool {
+    if !restored_ratio.is_finite() || !(0.0..=1.0).contains(&restored_ratio) {
+        return false;
+    }
+
+    let DockNode::Split {
+        ratio,
+        first,
+        second,
+        ..
+    } = node
+    else {
+        return false;
+    };
+
+    match path {
+        [] => {
+            *ratio = restored_ratio;
+            true
+        }
+        [DockPathElement::First, rest @ ..] => set_split_ratio_at_path(first, rest, restored_ratio),
+        [DockPathElement::Second, rest @ ..] => {
+            set_split_ratio_at_path(second, rest, restored_ratio)
+        }
     }
 }

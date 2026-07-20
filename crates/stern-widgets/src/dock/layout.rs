@@ -152,6 +152,81 @@ pub fn solve_dock_splitters_with_style(
     splitters
 }
 
+pub(crate) fn solve_dock_scene_geometry(
+    area: &Dock,
+    bounds: Rect,
+    style: DockChromeStyle,
+) -> (Vec<FrameLayout>, Vec<DockSplitter>) {
+    let mut frames = Vec::new();
+    let mut splitters = Vec::new();
+    solve_scene_node(
+        &area.root,
+        bounds,
+        style.sanitized().splitter_hit_thickness,
+        &DockSplitPath::root(),
+        &mut frames,
+        &mut splitters,
+    );
+    (frames, splitters)
+}
+
+fn solve_scene_node(
+    node: &DockNode,
+    bounds: Rect,
+    thickness: f32,
+    path: &DockSplitPath,
+    frames: &mut Vec<FrameLayout>,
+    splitters: &mut Vec<DockSplitter>,
+) {
+    match node {
+        DockNode::Frame(frame) => frames.push(FrameLayout {
+            frame: frame.id,
+            rect: bounds,
+        }),
+        DockNode::Split {
+            axis,
+            ratio,
+            min_first,
+            min_second,
+            first,
+            second,
+        } => {
+            let (first_rect, splitter_rect, second_rect) = split_child_rects_with_gutter(
+                *axis,
+                bounds,
+                *ratio,
+                *min_first,
+                *min_second,
+                thickness,
+            );
+            splitters.push(DockSplitter {
+                path: path.clone(),
+                axis: *axis,
+                rect: splitter_rect,
+                ratio: finite_ratio(*ratio),
+                min_first: finite_non_negative(*min_first),
+                min_second: finite_non_negative(*min_second),
+            });
+            solve_scene_node(
+                first,
+                first_rect,
+                thickness,
+                &path.child(DockPathElement::First),
+                frames,
+                splitters,
+            );
+            solve_scene_node(
+                second,
+                second_rect,
+                thickness,
+                &path.child(DockPathElement::Second),
+                frames,
+                splitters,
+            );
+        }
+    }
+}
+
 fn solve_splitters(
     node: &DockNode,
     bounds: Rect,
@@ -245,6 +320,35 @@ pub(crate) fn split_child_rects(
     }
 }
 
+pub(crate) fn split_child_rects_with_gutter(
+    axis: Axis,
+    bounds: Rect,
+    ratio: f32,
+    min_first: f32,
+    min_second: f32,
+    thickness: f32,
+) -> (Rect, Rect, Rect) {
+    let total = split_total(axis, bounds);
+    let (first_size, gutter_size, second_size) =
+        split_sizes_with_gutter(total, ratio, min_first, min_second, thickness);
+    let x = finite_coordinate(bounds.x);
+    let y = finite_coordinate(bounds.y);
+    let width = finite_non_negative(bounds.width);
+    let height = finite_non_negative(bounds.height);
+    match axis {
+        Axis::Horizontal => (
+            Rect::new(x, y, first_size, height),
+            Rect::new(x + first_size, y, gutter_size, height),
+            Rect::new(x + first_size + gutter_size, y, second_size, height),
+        ),
+        Axis::Vertical => (
+            Rect::new(x, y, width, first_size),
+            Rect::new(x, y + first_size, width, gutter_size),
+            Rect::new(x, y + first_size + gutter_size, width, second_size),
+        ),
+    }
+}
+
 fn split_total(axis: Axis, bounds: Rect) -> f32 {
     match axis {
         Axis::Horizontal => finite_non_negative(bounds.width),
@@ -254,14 +358,36 @@ fn split_total(axis: Axis, bounds: Rect) -> f32 {
 
 fn split_first_size(total: f32, ratio: f32, min_first: f32, min_second: f32) -> f32 {
     let total = finite_non_negative(total);
+    let desired = total * finite_ratio(ratio);
+    split_first_size_from_desired(total, desired, min_first, min_second)
+}
+
+fn split_first_size_from_desired(total: f32, desired: f32, min_first: f32, min_second: f32) -> f32 {
+    let total = finite_non_negative(total);
+    let desired = finite_non_negative(desired).min(total);
     let min_first = finite_non_negative(min_first);
     let min_second = finite_non_negative(min_second);
-    let desired = total * finite_ratio(ratio);
     if total >= min_first + min_second {
         desired.clamp(min_first, total - min_second)
     } else {
         desired.max(min_first.min(total)).min(total)
     }
+}
+
+fn split_sizes_with_gutter(
+    total: f32,
+    ratio: f32,
+    min_first: f32,
+    min_second: f32,
+    thickness: f32,
+) -> (f32, f32, f32) {
+    let total = finite_non_negative(total);
+    let gutter = splitter_thickness(thickness).min(total);
+    let available = (total - gutter).max(0.0);
+    let desired = total * finite_ratio(ratio) - gutter * 0.5;
+    let first = split_first_size_from_desired(available, desired, min_first, min_second);
+    let second = (available - first).max(0.0);
+    (first, gutter, second)
 }
 
 fn splitter_rect(axis: Axis, first_rect: Rect, bounds: Rect, thickness: f32) -> Rect {
@@ -323,6 +449,36 @@ pub fn split_ratio_from_drag(
     let current = split_first_size(total, ratio, min_first, min_second);
     let desired = current + if delta.is_finite() { delta } else { 0.0 };
     split_first_size(total, desired / total, min_first, min_second) / total
+}
+
+pub(crate) fn split_ratio_from_drag_with_gutter(
+    axis: Axis,
+    bounds: Rect,
+    ratio: f32,
+    min_first: f32,
+    min_second: f32,
+    thickness: f32,
+    delta: Vec2,
+) -> f32 {
+    let total = split_total(axis, bounds);
+    if total <= 0.0 {
+        return finite_ratio(ratio);
+    }
+    let delta = match axis {
+        Axis::Horizontal => delta.x,
+        Axis::Vertical => delta.y,
+    };
+    let (current_first, gutter, _) =
+        split_sizes_with_gutter(total, ratio, min_first, min_second, thickness);
+    let desired_center = current_first + gutter * 0.5 + if delta.is_finite() { delta } else { 0.0 };
+    let (first, gutter, _) = split_sizes_with_gutter(
+        total,
+        desired_center / total,
+        min_first,
+        min_second,
+        thickness,
+    );
+    (first + gutter * 0.5) / total
 }
 
 /// Resolves a frame-local drop zone for a pointer position.

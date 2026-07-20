@@ -2,19 +2,23 @@ mod split;
 mod tree;
 
 pub use split::DockSplitInsertion;
-pub(crate) use tree::{collect_frame_ids, frame_is_valid, split_children_at_path};
+pub(crate) use tree::{
+    DockSplitTopologyFingerprint, collect_frame_ids, frame_is_valid, split_children_at_path,
+};
 use tree::{
     collect_frames, find_frame, find_frame_mut, first_valid_frame_id, insert_frame_split,
-    prune_empty_frames, resize_split_at_path, swap_frame_leaves,
+    prune_empty_frames, resize_split_at_path, resize_split_at_path_with_gutter,
+    set_split_ratio_at_path, split_ratio_at_path as node_split_ratio_at_path,
+    split_topology_fingerprint_at_path, swap_frame_leaves,
 };
 
 use super::{
-    Axis, BTreeSet, DEFAULT_SPLIT_MINIMUM, DEFAULT_SPLIT_RATIO, DockInteractionPolicy,
-    DockJoinRequest, DockNeighborDirection, DockPlacement, DockRestoreError, DockSnapshot,
-    DockSplitPath, DockSwapRequest, FrameId, PanelId, PanelInstanceId, PanelInstanceSnapshot,
-    PanelTypeDescriptor, Rect, Vec2, WorkspaceRestoreError, WorkspaceSnapshot, frame_neighbor,
-    join_request_matches_layout, restore_node, snapshot_node, solve_dock_layout,
-    swap_request_matches_layout, validate_dock_snapshot,
+    Axis, BTreeSet, DEFAULT_SPLIT_MINIMUM, DEFAULT_SPLIT_RATIO, DockChromeStyle,
+    DockInteractionPolicy, DockJoinRequest, DockNeighborDirection, DockPlacement, DockRestoreError,
+    DockSnapshot, DockSplitPath, DockSwapRequest, FrameId, PanelId, PanelInstanceId,
+    PanelInstanceSnapshot, PanelTypeDescriptor, Rect, Vec2, WorkspaceRestoreError,
+    WorkspaceSnapshot, frame_neighbor, join_request_matches_layout, restore_node, snapshot_node,
+    solve_dock_layout, swap_request_matches_layout, validate_dock_snapshot,
 };
 
 /// Resolved dock drop zone inside a frame rectangle.
@@ -616,6 +620,42 @@ impl Dock {
         }
 
         resize_split_at_path(&mut self.root, path.elements(), bounds, delta)
+    }
+
+    pub(crate) fn resize_split_with_policy_and_style(
+        &mut self,
+        path: &DockSplitPath,
+        bounds: Rect,
+        delta: Vec2,
+        policy: DockInteractionPolicy,
+        style: DockChromeStyle,
+    ) -> bool {
+        if !policy.sanitized().splitters.allow_resize {
+            return false;
+        }
+
+        resize_split_at_path_with_gutter(
+            &mut self.root,
+            path.elements(),
+            bounds,
+            delta,
+            style.sanitized().splitter_hit_thickness,
+        )
+    }
+
+    pub(crate) fn split_ratio_at_path(&self, path: &DockSplitPath) -> Option<f32> {
+        node_split_ratio_at_path(&self.root, path.elements())
+    }
+
+    pub(crate) fn split_topology_fingerprint_at_path(
+        &self,
+        path: &DockSplitPath,
+    ) -> Option<DockSplitTopologyFingerprint> {
+        split_topology_fingerprint_at_path(&self.root, path.elements())
+    }
+
+    pub(crate) fn restore_split_ratio_at_path(&mut self, path: &DockSplitPath, ratio: f32) -> bool {
+        set_split_ratio_at_path(&mut self.root, path.elements(), ratio)
     }
 
     /// Creates a snapshot for persistence.
