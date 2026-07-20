@@ -1,5 +1,6 @@
 //! Data-only editor chrome contracts.
 
+mod application_bar;
 mod diagnostics;
 mod feedback;
 mod jobs;
@@ -12,6 +13,11 @@ mod tab_strip;
 mod toolbar;
 mod window_system_menu;
 
+pub use application_bar::{
+    ApplicationBar, ApplicationBarConfig, ApplicationBarIntent, ApplicationBarOutput,
+    PreparedApplicationBar, WorkspaceTab, WorkspaceTabId, WorkspaceTabTarget,
+};
+pub(crate) use application_bar::{ApplicationBarRow, ApplicationBarRowKind};
 pub use diagnostics::{
     DiagnosticField, DiagnosticFieldValue, DiagnosticSource, DiagnosticStrip, DiagnosticStripItem,
     DiagnosticStripItemId, DiagnosticStripSeverity, DiagnosticStripSummary,
@@ -24,7 +30,10 @@ pub use jobs::{
     ActiveJobProgress, JobCancel, JobCancelRequest, JobList, JobPhase, JobProgress, JobRow,
     JobRowId, JobSummaryCounts,
 };
-pub use menu_bar::{MenuBar, MenuBarMenu, MenuBarMenuId, MenuBarMove, MenuBarOverlayRequest};
+pub use menu_bar::{
+    MenuBar, MenuBar as ApplicationMenuBar, MenuBarMenu, MenuBarMenuId, MenuBarMove,
+    MenuBarOverlayRequest,
+};
 pub use overflow::{
     ChromeOverflowItem, ChromeOverflowPlacement, ChromeOverflowProjection, ChromeOverflowTrigger,
     project_chrome_overflow,

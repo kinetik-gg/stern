@@ -1,16 +1,17 @@
 mod system_feedback;
 
 use stern_core::{
-    Brush, ClipId, ComponentState, IconPrimitive, Point, Primitive, Rect, RectPrimitive,
-    RepaintRequest, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole, Size,
-    SpacingRole, Stroke, TextPrimitive, TextRole, fit_box,
+    Brush, ClipId, ComponentState, IconPrimitive, Key, KeyEvent, KeyState, Point, Primitive, Rect,
+    RectPrimitive, RepaintRequest, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
+    Size, SpacingRole, Stroke, TextPrimitive, TextRole, fit_box,
 };
 use stern_text::{TextLayoutKey, TextOverflow, TextStyle};
 
 use super::{Ui, response_activated};
 use crate::chrome::{
-    ChromeScene, ChromeSceneIntent, ChromeSceneOutput, ChromeSceneRow, ChromeSceneRowKind,
-    ChromeSurfaceKind, WindowSystemMenuTrigger,
+    ApplicationBar, ApplicationBarIntent, ApplicationBarOutput, ApplicationBarRow,
+    ApplicationBarRowKind, ChromeScene, ChromeSceneIntent, ChromeSceneOutput, ChromeSceneRow,
+    ChromeSceneRowKind, ChromeSurfaceKind, PreparedApplicationBar, WindowSystemMenuTrigger,
 };
 use crate::components::{
     ButtonFocusPlacement, TabFocusPlacement, button_surface_primitives, tab_surface_primitives,
@@ -18,6 +19,154 @@ use crate::components::{
 use crate::icon_button;
 
 impl Ui<'_> {
+    /// Paints and evaluates one public application menu/workspace composition.
+    ///
+    /// Use the same [`PreparedApplicationBar`] for the pointer prepass and this
+    /// evaluation so hit, paint, response, output, and semantic geometry agree.
+    #[allow(clippy::too_many_lines)]
+    pub fn application_bar(
+        &mut self,
+        bar: &mut ApplicationBar,
+        layout: &PreparedApplicationBar,
+    ) -> ApplicationBarOutput {
+        if !layout.matches(bar, self.theme()) {
+            return ApplicationBarOutput::default();
+        }
+        let mut output = ApplicationBarOutput {
+            drag_safe_regions: layout.drag_safe.into_iter().collect(),
+            ..ApplicationBarOutput::default()
+        };
+        let root = bar.config.root;
+        self.register_id(root);
+        self.paint_application_bar_surface(layout.bounds);
+        let composite_children = layout
+            .menu_bounds
+            .zip(layout.workspace_bounds)
+            .map_or_else(Vec::new, |_| {
+                vec![layout.menu_composite, layout.workspace_composite]
+            });
+        self.push_semantic_node(
+            SemanticNode::new(
+                root,
+                SemanticRole::Custom("application-bar".to_owned()),
+                layout.bounds,
+            )
+            .with_label("Application bar")
+            .with_children(composite_children),
+        );
+        let (Some(menu_bounds), Some(workspace_bounds)) =
+            (layout.menu_bounds, layout.workspace_bounds)
+        else {
+            return output;
+        };
+        reconcile_workspace_focus(self, bar, layout);
+        let events = self.input().keyboard.events.clone();
+        let menu_owned = handle_menu_keyboard(self, bar, layout, &events, &mut output);
+        if !menu_owned {
+            handle_workspace_keyboard(self, bar, layout, &events);
+        }
+
+        self.register_id(layout.menu_composite);
+        self.register_id(layout.workspace_composite);
+        self.push_semantic_node(
+            SemanticNode::new(
+                layout.menu_composite,
+                SemanticRole::Custom("menu-bar".to_owned()),
+                menu_bounds,
+            )
+            .with_label("Application menu")
+            .with_children(layout.menu_rows.iter().map(|row| row.id)),
+        );
+        self.push_semantic_node(
+            SemanticNode::new(
+                layout.workspace_composite,
+                SemanticRole::TabList,
+                workspace_bounds,
+            )
+            .with_label("Workspaces")
+            .with_children(layout.workspace_rows.iter().map(|row| row.id)),
+        );
+
+        let clip = ClipId::from_raw(root.child("application-bar-clip").raw());
+        self.primitive(Primitive::ClipBegin {
+            id: clip,
+            rect: layout.bounds,
+        });
+        let mut evaluated = Vec::new();
+        for row in layout.menu_rows.iter().chain(&layout.workspace_rows) {
+            self.register_id(row.id);
+            let mut response = self.pressable_with_id(row.id, row.rect, !row.enabled);
+            let selected = match row.kind {
+                ApplicationBarRowKind::Menu(id) => bar.menu_bar.active_id() == Some(id),
+                ApplicationBarRowKind::Workspace(target) => {
+                    let selected = bar.workspaces[target.index].active;
+                    if response.state.focused && row.enabled {
+                        bar.workspace_focus = Some(target.id);
+                    }
+                    selected
+                }
+            };
+            response.state.selected = selected;
+            if response_activated(&response) {
+                match row.kind {
+                    ApplicationBarRowKind::Menu(menu) => {
+                        let was_active = bar.menu_bar.active_id() == Some(menu);
+                        if bar.menu_bar.toggle(menu) {
+                            let intent = if was_active {
+                                ApplicationBarIntent::DismissMenu { menu }
+                            } else {
+                                ApplicationBarIntent::OpenMenu {
+                                    menu,
+                                    anchor: row.rect,
+                                }
+                            };
+                            output.intents.push(intent);
+                        }
+                    }
+                    ApplicationBarRowKind::Workspace(target) if row.enabled => output
+                        .intents
+                        .push(ApplicationBarIntent::ActivateWorkspace(target)),
+                    ApplicationBarRowKind::Workspace(_) => {}
+                }
+            } else if let ApplicationBarRowKind::Menu(menu) = row.kind
+                && response.state.hovered
+                && bar.menu_bar.active_id().is_some()
+                && bar.menu_bar.active_id() != Some(menu)
+                && bar.menu_bar.hover_open(menu)
+            {
+                output.intents.push(ApplicationBarIntent::OpenMenu {
+                    menu,
+                    anchor: row.rect,
+                });
+            }
+            evaluated.push((row, response, selected));
+            output.responses.push(response);
+        }
+        let menu_roving = layout
+            .menu_rows
+            .iter()
+            .find(|row| self.memory().focused() == Some(row.id))
+            .or_else(|| {
+                bar.menu_bar
+                    .active_id()
+                    .and_then(|active| menu_row(layout, active))
+            })
+            .or_else(|| layout.menu_rows.first())
+            .map(|row| row.id);
+        for (row, response, selected) in evaluated {
+            self.paint_application_bar_row(row, response, selected);
+            self.push_semantic_node(application_bar_row_semantics(
+                bar,
+                row,
+                response,
+                selected,
+                menu_roving,
+            ));
+        }
+        self.primitive(Primitive::ClipEnd { id: clip });
+        output
+    }
+
     /// Paints and evaluates one platform-owned window system-menu trigger.
     ///
     /// Call [`WindowSystemMenuTrigger::declare_pointer_target`] before lower
@@ -120,6 +269,72 @@ impl Ui<'_> {
                 Brush::Solid(self.theme.colors.border.subtle),
             )),
             radius: self.theme.radii.none,
+        }));
+    }
+
+    fn paint_application_bar_surface(&mut self, rect: Rect) {
+        self.primitive(Primitive::Rect(RectPrimitive {
+            rect,
+            fill: Some(Brush::Solid(self.theme.colors.surface.application)),
+            stroke: Some(Stroke::new(
+                self.theme.strokes.hairline,
+                Brush::Solid(self.theme.colors.border.subtle),
+            )),
+            radius: self.theme.radii.none,
+        }));
+    }
+
+    fn paint_application_bar_row(
+        &mut self,
+        row: &ApplicationBarRow,
+        response: stern_core::Response,
+        selected: bool,
+    ) {
+        let state = ComponentState {
+            hovered: response.state.hovered,
+            pressed: response.state.pressed,
+            focused: response.state.focused,
+            disabled: !row.enabled,
+            selected,
+        };
+        let foreground = match row.kind {
+            ApplicationBarRowKind::Menu(_) => {
+                let recipe = self.theme.button(state);
+                self.extend(button_surface_primitives(
+                    self.theme,
+                    &recipe,
+                    state,
+                    row.rect,
+                    recipe.radius,
+                    ButtonFocusPlacement::Inward,
+                ));
+                recipe.foreground
+            }
+            ApplicationBarRowKind::Workspace(_) => {
+                let recipe = self.theme.tab(state);
+                self.extend(tab_surface_primitives(
+                    self.theme,
+                    &recipe,
+                    state,
+                    row.rect,
+                    recipe.radius,
+                    TabFocusPlacement::Inward,
+                ));
+                recipe.foreground
+            }
+        };
+        let font = self.theme.font(TextRole::Label);
+        self.primitive(Primitive::Text(TextPrimitive {
+            layout: None,
+            origin: Point::new(
+                row.rect.x + self.theme.controls.padding_x,
+                row.rect.y + (row.rect.height - font.line_height).max(0.0) * 0.5 + font.size,
+            ),
+            text: row.label.clone(),
+            family: font.family.to_owned(),
+            size: font.size,
+            line_height: font.line_height,
+            brush: Brush::Solid(foreground),
         }));
     }
 
@@ -303,6 +518,226 @@ fn chrome_row_semantics(
                 "Invoke".to_owned()
             },
             action_id: row.action_id.clone(),
+        });
+    }
+    node
+}
+
+fn reconcile_workspace_focus(
+    ui: &mut Ui<'_>,
+    bar: &mut ApplicationBar,
+    layout: &PreparedApplicationBar,
+) {
+    let focused = ui.memory().focused();
+    let focused_row = layout
+        .workspace_rows
+        .iter()
+        .find(|row| focused == Some(row.id));
+    if let Some(ApplicationBarRow {
+        enabled: true,
+        kind: ApplicationBarRowKind::Workspace(target),
+        ..
+    }) = focused_row
+    {
+        bar.workspace_focus = Some(target.id);
+        return;
+    }
+    let retained_owned = focused_row.is_some()
+        || bar
+            .workspace_focus
+            .is_some_and(|id| focused == Some(bar.workspace_widget_id(id)));
+    let retained_valid = bar.workspace_focus.is_some_and(|id| {
+        layout.workspace_rows.iter().any(|row| {
+            row.enabled
+                && matches!(row.kind, ApplicationBarRowKind::Workspace(target) if target.id == id)
+        })
+    });
+    if !retained_valid {
+        bar.workspace_focus = workspace_fallback(bar, layout);
+        if retained_owned {
+            if let Some(id) = bar.workspace_focus {
+                ui.runtime.memory_mut().focus(bar.workspace_widget_id(id));
+            } else {
+                ui.runtime.memory_mut().clear_focus();
+            }
+            ui.request_repaint(RepaintRequest::NextFrame);
+        }
+    }
+}
+
+fn workspace_fallback(
+    bar: &ApplicationBar,
+    layout: &PreparedApplicationBar,
+) -> Option<crate::chrome::WorkspaceTabId> {
+    layout
+        .workspace_rows
+        .iter()
+        .find(|row| {
+            row.enabled
+                && matches!(row.kind, ApplicationBarRowKind::Workspace(target) if bar.workspaces[target.index].active)
+        })
+        .or_else(|| layout.workspace_rows.iter().find(|row| row.enabled))
+        .and_then(|row| match row.kind {
+            ApplicationBarRowKind::Workspace(target) => Some(target.id),
+            ApplicationBarRowKind::Menu(_) => None,
+        })
+}
+
+fn handle_menu_keyboard(
+    ui: &mut Ui<'_>,
+    bar: &mut ApplicationBar,
+    layout: &PreparedApplicationBar,
+    events: &[KeyEvent],
+    output: &mut ApplicationBarOutput,
+) -> bool {
+    if layout.menu_rows.is_empty() {
+        return false;
+    }
+    let mut handled = false;
+    for event in events {
+        if let Some(menu) = bar.menu_bar.open_platform_entry(event)
+            && let Some(row) = menu_row(layout, menu)
+        {
+            ui.runtime.memory_mut().focus(row.id);
+            output.intents.push(ApplicationBarIntent::OpenMenu {
+                menu,
+                anchor: row.rect,
+            });
+            handled = true;
+            continue;
+        }
+        let Some(active) = bar.menu_bar.active_id() else {
+            continue;
+        };
+        if event.state != KeyState::Pressed || !event.modifiers.is_empty() {
+            continue;
+        }
+        if event.key == Key::Escape && !event.repeat {
+            bar.menu_bar.close();
+            if let Some(row) = menu_row(layout, active) {
+                ui.runtime.memory_mut().focus(row.id);
+            }
+            output
+                .intents
+                .push(ApplicationBarIntent::DismissMenu { menu: active });
+            handled = true;
+            continue;
+        }
+        let moved = match event.key {
+            Key::ArrowLeft => bar.menu_bar.move_previous(),
+            Key::ArrowRight => bar.menu_bar.move_next(),
+            _ => None,
+        };
+        if let Some(menu) = moved
+            && let Some(row) = menu_row(layout, menu)
+        {
+            ui.runtime.memory_mut().focus(row.id);
+            output.intents.push(ApplicationBarIntent::OpenMenu {
+                menu,
+                anchor: row.rect,
+            });
+            handled = true;
+        }
+    }
+    handled || bar.menu_bar.active_id().is_some()
+}
+
+fn handle_workspace_keyboard(
+    ui: &mut Ui<'_>,
+    bar: &mut ApplicationBar,
+    layout: &PreparedApplicationBar,
+    events: &[KeyEvent],
+) {
+    let Some(mut index) = layout
+        .workspace_rows
+        .iter()
+        .position(|row| row.enabled && ui.memory().focused() == Some(row.id))
+    else {
+        return;
+    };
+    let enabled = layout
+        .workspace_rows
+        .iter()
+        .enumerate()
+        .filter_map(|(index, row)| row.enabled.then_some(index))
+        .collect::<Vec<_>>();
+    for event in events {
+        if event.state != KeyState::Pressed || !event.modifiers.is_empty() {
+            continue;
+        }
+        let position = enabled
+            .iter()
+            .position(|candidate| *candidate == index)
+            .unwrap_or(0);
+        let next = match event.key {
+            Key::ArrowLeft => Some(enabled[(position + enabled.len() - 1) % enabled.len()]),
+            Key::ArrowRight => Some(enabled[(position + 1) % enabled.len()]),
+            Key::Home => enabled.first().copied(),
+            Key::End => enabled.last().copied(),
+            _ => None,
+        };
+        if let Some(next) = next {
+            index = next;
+            let row = &layout.workspace_rows[index];
+            let ApplicationBarRowKind::Workspace(target) = row.kind else {
+                continue;
+            };
+            bar.workspace_focus = Some(target.id);
+            ui.runtime.memory_mut().focus(row.id);
+            ui.request_repaint(RepaintRequest::NextFrame);
+        }
+    }
+}
+
+fn menu_row(
+    layout: &PreparedApplicationBar,
+    id: crate::chrome::MenuBarMenuId,
+) -> Option<&ApplicationBarRow> {
+    layout
+        .menu_rows
+        .iter()
+        .find(|row| matches!(row.kind, ApplicationBarRowKind::Menu(menu) if menu == id))
+}
+
+fn application_bar_row_semantics(
+    bar: &ApplicationBar,
+    row: &ApplicationBarRow,
+    response: stern_core::Response,
+    selected: bool,
+    menu_roving: Option<stern_core::WidgetId>,
+) -> SemanticNode {
+    let (role, action, roving) = match row.kind {
+        ApplicationBarRowKind::Menu(_menu) => (
+            SemanticRole::MenuItem,
+            SemanticActionKind::Open,
+            menu_roving,
+        ),
+        ApplicationBarRowKind::Workspace(_) => (
+            SemanticRole::Tab,
+            SemanticActionKind::Invoke,
+            bar.workspace_focus.map(|id| bar.workspace_widget_id(id)),
+        ),
+    };
+    let mut node = SemanticNode::new(row.id, role, row.rect)
+        .with_label(&row.label)
+        .focusable(row.enabled && roving == Some(row.id));
+    node.state.disabled = !row.enabled;
+    node.state.selected = selected;
+    node.state.focused = response.state.focused;
+    node.state.pressed = response.state.pressed;
+    if let ApplicationBarRowKind::Menu(menu) = row.kind {
+        node.state.expanded = Some(bar.menu_bar.active_id() == Some(menu));
+    }
+    if row.enabled {
+        node.actions.push(SemanticAction {
+            kind: action.clone(),
+            label: if action == SemanticActionKind::Open {
+                "Open"
+            } else {
+                "Invoke"
+            }
+            .to_owned(),
+            action_id: None,
         });
     }
     node

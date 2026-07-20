@@ -28,17 +28,19 @@ pub use asset_browser::{
     AssetIconFallback, asset_browser_item_widget_id, asset_browser_semantics,
 };
 pub use chrome::{
-    ActiveJobProgress, ChromeOverflowItem, ChromeOverflowPlacement, ChromeOverflowProjection,
-    ChromeOverflowRequest, ChromeOverflowTrigger, ChromeScene, ChromeSceneConfig,
-    ChromeSceneIntent, ChromeSceneItemKey, ChromeSceneOutput, ChromeSurfaceKind, DiagnosticField,
-    DiagnosticFieldValue, DiagnosticSource, DiagnosticStrip, DiagnosticStripItem,
+    ActiveJobProgress, ApplicationBar, ApplicationBarConfig, ApplicationBarIntent,
+    ApplicationBarOutput, ApplicationMenuBar, ChromeOverflowItem, ChromeOverflowPlacement,
+    ChromeOverflowProjection, ChromeOverflowRequest, ChromeOverflowTrigger, ChromeScene,
+    ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey, ChromeSceneOutput, ChromeSurfaceKind,
+    DiagnosticField, DiagnosticFieldValue, DiagnosticSource, DiagnosticStrip, DiagnosticStripItem,
     DiagnosticStripItemId, DiagnosticStripSeverity, DiagnosticStripSummary, FeedbackAction,
     FeedbackActionRequest, FeedbackDismiss, FeedbackDismissRequest, FeedbackId, FeedbackItem,
     FeedbackKind, FeedbackLifetime, FeedbackStack, JobCancel, JobCancelRequest, JobList, JobPhase,
     JobProgress, JobRow, JobRowId, JobSummaryCounts, MenuBar, MenuBarMenu, MenuBarMenuId,
-    MenuBarMove, MenuBarOverlayRequest, StatusBar, StatusItem, StatusItemId, StatusItemKind,
-    StatusProgress, TabStrip, TabStripMove, TabStripTarget, Toolbar, ToolbarGroup, ToolbarGroupId,
-    ToolbarItem, ToolbarItemPresentation, project_chrome_overflow,
+    MenuBarMove, MenuBarOverlayRequest, PreparedApplicationBar, StatusBar, StatusItem,
+    StatusItemId, StatusItemKind, StatusProgress, TabStrip, TabStripMove, TabStripTarget, Toolbar,
+    ToolbarGroup, ToolbarGroupId, ToolbarItem, ToolbarItemPresentation, WorkspaceTab,
+    WorkspaceTabId, WorkspaceTabTarget, project_chrome_overflow,
 };
 pub use collection_actions::{
     CollectionBackgroundContextTarget, CollectionContextAction, CollectionContextActionRequest,
