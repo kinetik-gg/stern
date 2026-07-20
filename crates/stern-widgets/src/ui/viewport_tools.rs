@@ -1,14 +1,15 @@
 use stern_core::{
     Brush, ClipId, CursorShape, DomainDragGestureAction, DomainDragGesturePhase, Modifiers, Point,
-    Primitive, Rect, RectPrimitive, RepaintRequest, Stroke,
+    Primitive, Rect, RectPrimitive, RepaintRequest, Stroke, Vec2,
 };
 
 use super::Ui;
 use crate::viewport::{
     ViewportCursorShape, ViewportToolController, ViewportToolScene, ViewportToolSceneConfig,
-    ViewportToolSceneOutput, ViewportTransformDragCapture, ViewportTransformHandleDescriptor,
-    ViewportTransformHandleKind, ViewportTransformHandleResponse,
-    ViewportTransformInteractionPhase, ViewportTransformInteractionRequest, ViewportWidget,
+    ViewportToolSceneOutput, ViewportTransformDragCapture, ViewportTransformDragRequest,
+    ViewportTransformDragStatus, ViewportTransformHandleDescriptor, ViewportTransformHandleKind,
+    ViewportTransformHandleResponse, ViewportTransformInteractionPhase,
+    ViewportTransformInteractionRequest, ViewportWidget, finite_positive_rect,
 };
 
 impl Ui<'_> {
@@ -32,6 +33,13 @@ impl Ui<'_> {
         scene: &ViewportToolScene,
         controller: &mut ViewportToolController,
     ) -> ViewportToolSceneOutput {
+        let presented_scene = self
+            .viewport_presentations
+            .iter()
+            .rev()
+            .find(|(id, _)| *id == scene.viewport_id())
+            .map(|(_, presentation)| scene.with_presented_surface(presentation.surface()));
+        let presented_scene = presented_scene.as_ref().unwrap_or(scene);
         let mut output = ViewportToolSceneOutput::default();
         let mut repaint = false;
 
@@ -59,7 +67,7 @@ impl Ui<'_> {
             );
             if controller.started {
                 output.interactions.push(transform_interaction(
-                    scene,
+                    presented_scene,
                     &capture,
                     ViewportTransformInteractionPhase::Cancelled,
                     ordinal,
@@ -97,6 +105,7 @@ impl Ui<'_> {
             for (index, action) in gesture.actions.iter().enumerate() {
                 repaint |= self.apply_viewport_handle_action(
                     scene,
+                    presented_scene,
                     handle,
                     controller,
                     action,
@@ -112,7 +121,14 @@ impl Ui<'_> {
             {
                 self.runtime.request_cursor_for(
                     id,
-                    viewport_cursor_shape(&handle.cursor.shape, self.memory().is_drag_source(id)),
+                    viewport_cursor_shape(
+                        &presented_scene
+                            .handle(handle.id)
+                            .unwrap_or(handle)
+                            .cursor
+                            .shape,
+                        self.memory().is_drag_source(id),
+                    ),
                 );
             }
 
@@ -130,9 +146,9 @@ impl Ui<'_> {
         }
 
         if output.hovered_handle.is_none() && controller.captured_handle().is_none() {
-            self.request_active_tool_cursor(scene);
+            self.request_active_tool_cursor(presented_scene);
         }
-        self.paint_viewport_tool_scene(scene, controller, &output);
+        self.paint_viewport_tool_scene(presented_scene, controller, &output);
 
         if repaint {
             self.request_repaint(RepaintRequest::NextFrame);
@@ -143,7 +159,8 @@ impl Ui<'_> {
     #[allow(clippy::too_many_arguments)]
     fn apply_viewport_handle_action(
         &mut self,
-        scene: &ViewportToolScene,
+        routing_scene: &ViewportToolScene,
+        presented_scene: &ViewportToolScene,
         handle: &ViewportTransformHandleDescriptor,
         controller: &mut ViewportToolController,
         action: &DomainDragGestureAction,
@@ -156,9 +173,11 @@ impl Ui<'_> {
                 let point = action
                     .position
                     .unwrap_or_else(|| rect_center(handle.handle_screen_rect));
-                controller.capture = Some(scene.capture_from_handle(handle, point));
+                let presented_handle = presented_scene.handle(handle.id).unwrap_or(handle);
+                controller.capture =
+                    Some(presented_scene.capture_from_handle(presented_handle, point));
                 controller.started = false;
-                self.runtime.memory_mut().focus(scene.viewport_id());
+                self.runtime.memory_mut().focus(routing_scene.viewport_id());
                 true
             }
             DomainDragGesturePhase::Move => {
@@ -179,7 +198,7 @@ impl Ui<'_> {
                     capture.pointer_origin_screen.y + action.delta.y,
                 );
                 output.interactions.push(transform_interaction(
-                    scene,
+                    presented_scene,
                     &capture,
                     phase,
                     action.ordinal,
@@ -195,7 +214,7 @@ impl Ui<'_> {
                 if !controller.started && drag_crossed_threshold {
                     controller.started = true;
                     output.interactions.push(transform_interaction(
-                        scene,
+                        presented_scene,
                         &capture,
                         ViewportTransformInteractionPhase::Started,
                         action.ordinal,
@@ -205,7 +224,7 @@ impl Ui<'_> {
                 }
                 if controller.started {
                     output.interactions.push(transform_interaction(
-                        scene,
+                        presented_scene,
                         &capture,
                         ViewportTransformInteractionPhase::Finished,
                         action.ordinal,
@@ -222,7 +241,7 @@ impl Ui<'_> {
                 };
                 if controller.started {
                     output.interactions.push(transform_interaction(
-                        scene,
+                        presented_scene,
                         &capture,
                         ViewportTransformInteractionPhase::Cancelled,
                         action.ordinal,
@@ -348,13 +367,71 @@ fn transform_interaction(
         event_ordinal,
         modifiers,
         snap_tolerance: scene.config().snap_tolerance,
-        drag: crate::viewport::ViewportTransformDragRequest::update_at(
-            scene.surface(),
-            scene.targets(),
-            capture,
-            point,
-            scene.scale_factor(),
-        ),
+        drag: presented_transform_drag_request(scene, capture, point),
+    }
+}
+
+fn presented_transform_drag_request(
+    scene: &ViewportToolScene,
+    capture: &ViewportTransformDragCapture,
+    pointer_current_screen: Point,
+) -> ViewportTransformDragRequest {
+    let pointer_is_valid =
+        pointer_current_screen.x.is_finite() && pointer_current_screen.y.is_finite();
+    let pointer_current_screen = if pointer_is_valid {
+        pointer_current_screen
+    } else {
+        capture.pointer_origin_screen
+    };
+    let screen_delta = Vec2::new(
+        pointer_current_screen.x - capture.pointer_origin_screen.x,
+        pointer_current_screen.y - capture.pointer_origin_screen.y,
+    );
+    let scale = scene.presentation().content_scale();
+    let scale_is_valid = scale.x > 0.0 && scale.y > 0.0;
+    let content_delta = if scale_is_valid {
+        Vec2::new(screen_delta.x / scale.x, screen_delta.y / scale.y)
+    } else {
+        Vec2::ZERO
+    };
+    let target = scene
+        .targets()
+        .iter()
+        .find(|target| target.id == capture.target);
+    let current_content_rect = target.and_then(|target| finite_positive_rect(target.content_rect));
+    let status = if !pointer_is_valid {
+        ViewportTransformDragStatus::InvalidPointer
+    } else if !scale_is_valid {
+        ViewportTransformDragStatus::InvalidScale
+    } else {
+        match target {
+            None => ViewportTransformDragStatus::StaleTarget,
+            Some(target)
+                if current_content_rect.is_some()
+                    && target.can_request_transform()
+                    && target.handles.contains(capture.kind) =>
+            {
+                ViewportTransformDragStatus::Active
+            }
+            Some(_) => ViewportTransformDragStatus::UnavailableTarget,
+        }
+    };
+
+    ViewportTransformDragRequest {
+        status,
+        handle: capture.handle,
+        target: capture.target,
+        kind: capture.kind,
+        source_content_rect: capture.source_content_rect,
+        current_content_rect,
+        pointer_origin_screen: capture.pointer_origin_screen,
+        pointer_current_screen,
+        pointer_origin_content: capture.pointer_origin_content,
+        pointer_current_content: scene
+            .presentation()
+            .screen_to_content(pointer_current_screen),
+        screen_delta,
+        content_delta,
     }
 }
 

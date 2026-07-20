@@ -31,13 +31,13 @@ use std::time::Duration;
 
 use stern_core::{
     ComponentState, Primitive, Rect, Response, ScrollResponse, TextPrimitive, Theme, TimeInfo,
-    Ui as CoreUi, UiInput,
+    Ui as CoreUi, UiInput, WidgetId,
 };
 use stern_text::{
     TextComposition, TextEditState, TextLayoutKey, TextLayoutStore, TextSelection, TextStyle,
 };
 
-use crate::WidgetOutput;
+use crate::{WidgetOutput, viewport::ViewportPresentation};
 
 const TEXT_CARET_BLINK_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -57,6 +57,7 @@ pub struct Ui<'a> {
     runtime: CoreUi<'a>,
     theme: &'a Theme,
     text_layouts: Option<&'a mut TextLayoutStore>,
+    viewport_presentations: Vec<(WidgetId, ViewportPresentation)>,
 }
 
 /// Output returned by [`Ui::scroll_area`].
