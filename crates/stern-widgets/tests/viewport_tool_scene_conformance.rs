@@ -3,10 +3,10 @@
 use std::time::Duration;
 
 use stern_core::{
-    Brush, CursorShape, FrameContext, Modifiers, MouseButton, PhysicalSize, PlatformRequest, Point,
-    PointerInput, PointerOrder, Primitive, RadiusScale, Rect, RepaintRequest, ScaleFactor,
-    SemanticRole, Size, StrokeScale, Theme, TimeInfo, UiInput, UiInputEvent, UiMemory, Vec2,
-    ViewportInfo, WidgetId, default_dark_theme,
+    Brush, CursorShape, FrameContext, InputWheelDelta, Modifiers, MouseButton, PhysicalSize,
+    PlatformRequest, Point, PointerInput, PointerOrder, Primitive, RadiusScale, Rect,
+    RepaintRequest, ScaleFactor, SemanticRole, Size, StrokeScale, Theme, TimeInfo, UiInput,
+    UiInputEvent, UiMemory, Vec2, ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_widgets::{
     PanZoom, Ui, ViewportSelectionTargetDescriptor, ViewportSelectionTargetId, ViewportSurface,
@@ -391,6 +391,180 @@ fn scene_uses_theme_clip_hides_move_paint_and_keeps_stable_handle_ids() {
     );
     assert_eq!(read_only.outlines().len(), 1);
     assert!(read_only.handles().is_empty());
+}
+
+#[test]
+fn same_frame_pan_keeps_frozen_routing_and_reprojects_tool_presentation() {
+    let selected = target(31);
+    let config = ViewportToolSceneConfig::new([selected.clone()]);
+    let mut controller = ViewportToolController::default();
+    let mut pan_zoom = surface().pan_zoom;
+    let mut memory = UiMemory::new();
+    let pointer = Point::new(280.0, 180.0);
+    let _ = run_frame(
+        surface(),
+        config.clone(),
+        &mut controller,
+        &mut pan_zoom,
+        &mut memory,
+        pointer_button(pointer, true),
+        ScaleFactor::ONE,
+    );
+    let run = run_frame(
+        surface(),
+        config,
+        &mut controller,
+        &mut pan_zoom,
+        &mut memory,
+        pointer_move(Point::new(305.0, 170.0), Vec2::new(25.0, -10.0), None),
+        ScaleFactor::ONE,
+    );
+
+    assert_eq!(run.scene.surface(), surface());
+    assert_eq!(run.viewport.surface.pan_zoom.pan, Vec2::new(25.0, -10.0));
+    let frozen_clone = run.scene.clone();
+    let presented = run.scene.with_presented_surface(run.viewport.surface);
+    assert_eq!(run.scene, frozen_clone);
+    assert_ne!(presented.outlines(), run.scene.outlines());
+
+    let handle_id =
+        ViewportTransformHandleId::new(selected.id, ViewportTransformHandleKind::ResizeRight);
+    let frozen_handle = run.scene.handle_widget_id(handle_id);
+    let frozen_rect = run
+        .scene
+        .handles()
+        .iter()
+        .find(|handle| handle.id == handle_id)
+        .expect("frozen handle")
+        .handle_screen_rect;
+    assert_eq!(
+        run.tools
+            .handle_responses
+            .iter()
+            .find(|response| response.widget_id == frozen_handle)
+            .expect("routed handle")
+            .response
+            .rect,
+        frozen_rect
+    );
+    let presented_handle = presented
+        .handles()
+        .iter()
+        .find(|handle| handle.id == handle_id)
+        .expect("presented handle");
+    let presented_center = Point::new(
+        presented_handle.handle_screen_rect.x + presented_handle.handle_screen_rect.width * 0.5,
+        presented_handle.handle_screen_rect.y + presented_handle.handle_screen_rect.height * 0.5,
+    );
+    assert_eq!(
+        presented
+            .hit_test_handle(presented_center)
+            .map(|handle| handle.id),
+        Some(handle_id)
+    );
+    assert_eq!(run.scene.hit_test_handle(presented_center), None);
+    assert_eq!(
+        presented.presentation().screen_to_content(presented_center),
+        run.viewport
+            .screen_to_content_at(presented_center, ScaleFactor::ONE)
+    );
+    let presented_outline = presented.outlines()[0].screen_rect;
+    assert!(run.frame.primitives.iter().any(
+        |primitive| matches!(primitive, Primitive::Rect(rect) if rect.fill.is_none() && rect.rect == presented_outline)
+    ));
+}
+
+#[test]
+fn same_frame_zoom_drives_tool_capture_domain_conversion() {
+    let selected = target(32);
+    let scene = prepared_scene(
+        surface(),
+        ScaleFactor::new(1.25),
+        ViewportToolSceneConfig::new([selected.clone()]),
+    );
+    let handle_id =
+        ViewportTransformHandleId::new(selected.id, ViewportTransformHandleKind::ResizeRight);
+    let origin = handle_center(&scene, handle_id);
+    let mut input = pointer_button(origin, true);
+    input.push_event(UiInputEvent::Wheel {
+        delta: InputWheelDelta::Lines(Vec2::new(0.0, 2.0)),
+        position: Some(origin),
+    });
+    let mut controller = ViewportToolController::default();
+    let mut pan_zoom = surface().pan_zoom;
+    let mut memory = UiMemory::new();
+    let pressed = run_frame(
+        surface(),
+        ViewportToolSceneConfig::new([selected.clone()]),
+        &mut controller,
+        &mut pan_zoom,
+        &mut memory,
+        input,
+        ScaleFactor::new(1.25),
+    );
+    assert!(pressed.viewport.zoom_changed);
+    assert_eq!(controller.captured_handle(), Some(handle_id));
+    let expected_origin = pressed
+        .viewport
+        .screen_to_content_at(origin, ScaleFactor::new(1.25));
+
+    let mut effective = surface();
+    effective.pan_zoom = pan_zoom;
+    let moved = run_frame(
+        effective,
+        ViewportToolSceneConfig::new([selected]),
+        &mut controller,
+        &mut pan_zoom,
+        &mut memory,
+        pointer_move(
+            Point::new(origin.x + 12.0, origin.y),
+            Vec2::new(12.0, 0.0),
+            None,
+        ),
+        ScaleFactor::new(1.25),
+    );
+    let interaction = moved.tools.interactions.first().expect("started drag");
+    assert_eq!(
+        interaction.phase,
+        ViewportTransformInteractionPhase::Started
+    );
+    assert_eq!(interaction.drag.pointer_origin_content, expected_origin);
+    assert_eq!(
+        interaction.drag.pointer_current_content,
+        moved.viewport.screen_to_content_at(
+            interaction.drag.pointer_current_screen,
+            ScaleFactor::new(1.25)
+        )
+    );
+}
+
+#[test]
+fn missing_same_frame_publication_falls_back_to_the_frozen_scene() {
+    let scene = prepared_scene(
+        surface(),
+        ScaleFactor::new(1.5),
+        ViewportToolSceneConfig::new([target(33)]),
+    );
+    let theme = default_dark_theme();
+    let mut memory = UiMemory::new();
+    let mut controller = ViewportToolController::default();
+    let mut ui = Ui::begin_frame(
+        context(UiInput::default(), ScaleFactor::new(1.5)),
+        &mut memory,
+        &theme,
+    );
+    ui.resolve_pointer_targets(|plan| {
+        scene.declare_pointer_targets(plan, PointerOrder::new(100));
+    })
+    .expect("valid fallback plan");
+    let output = ui.viewport_tool_scene(&scene, &mut controller);
+    let frame = ui.finish_output();
+
+    assert_eq!(output.handle_responses.len(), scene.handles().len());
+    let outline = scene.outlines()[0].screen_rect;
+    assert!(frame.primitives.iter().any(
+        |primitive| matches!(primitive, Primitive::Rect(rect) if rect.fill.is_none() && rect.rect == outline)
+    ));
 }
 
 #[test]

@@ -6,11 +6,11 @@ use stern_core::{
 };
 
 use super::{
-    ViewportSelectionOutlineDescriptor, ViewportSelectionTargetDescriptor, ViewportSurface,
-    ViewportToolDescriptor, ViewportTransformDragCapture, ViewportTransformDragRequest,
-    ViewportTransformHandleDescriptor, ViewportTransformHandleHit, ViewportTransformHandleId,
-    ViewportTransformHandleKind, ViewportWidget, viewport_selection_outlines_at,
-    viewport_transform_handles_at,
+    ViewportCursorMetadata, ViewportPresentation, ViewportSelectionOutlineDescriptor,
+    ViewportSelectionTargetDescriptor, ViewportSurface, ViewportToolDescriptor,
+    ViewportTransformDragCapture, ViewportTransformDragRequest, ViewportTransformHandleDescriptor,
+    ViewportTransformHandleHit, ViewportTransformHandleId, ViewportTransformHandleKind,
+    ViewportWidget, finite_positive_rect, transform_handle_rect,
 };
 
 /// Caller-owned configuration for one viewport transform-tool scene.
@@ -64,8 +64,7 @@ impl ViewportToolSceneConfig {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ViewportToolScene {
     viewport_id: WidgetId,
-    surface: ViewportSurface,
-    scale_factor: ScaleFactor,
+    presentation: ViewportPresentation,
     config: ViewportToolSceneConfig,
     outlines: Vec<ViewportSelectionOutlineDescriptor>,
     handles: Vec<ViewportTransformHandleDescriptor>,
@@ -79,30 +78,12 @@ impl ViewportToolScene {
         config.snap_tolerance = config
             .snap_tolerance
             .filter(|tolerance| tolerance.is_finite() && *tolerance > 0.0);
-        let surface = viewport.surface();
-        let scale_factor = viewport.scale_factor();
-        let mut outlines = viewport_selection_outlines_at(surface, &config.targets, scale_factor);
-        let mut handles = viewport_transform_handles_at(surface, &config.targets, scale_factor);
-
-        // Paint and pointer order must agree with the existing hit-test winner:
-        // higher priorities win, while lower stable IDs win exact ties.
-        outlines.sort_by(|left, right| {
-            left.priority
-                .cmp(&right.priority)
-                .then_with(|| right.target.cmp(&left.target))
-        });
-        handles.sort_by(|left, right| {
-            left.target_priority
-                .cmp(&right.target_priority)
-                .then_with(|| left.handle_priority.cmp(&right.handle_priority))
-                .then_with(|| right.target.cmp(&left.target))
-                .then_with(|| right.kind.cmp(&left.kind))
-        });
+        let presentation = viewport.presentation();
+        let (outlines, handles) = resolve_geometry(presentation, &config.targets);
 
         Self {
             viewport_id: viewport.widget_id(),
-            surface,
-            scale_factor,
+            presentation,
             config,
             outlines,
             handles,
@@ -124,13 +105,29 @@ impl ViewportToolScene {
     /// Returns the exact surface used to resolve this scene.
     #[must_use]
     pub const fn surface(&self) -> ViewportSurface {
-        self.surface
+        self.presentation.surface()
     }
 
     /// Returns the exact scale factor used to resolve this scene.
     #[must_use]
     pub const fn scale_factor(&self) -> ScaleFactor {
-        self.scale_factor
+        self.presentation.scale_factor()
+    }
+
+    /// Returns the exact presentation used to resolve this scene.
+    #[must_use]
+    pub const fn presentation(&self) -> ViewportPresentation {
+        self.presentation
+    }
+
+    /// Derives independent paint and hit geometry for an effective surface.
+    #[must_use]
+    pub fn with_presented_surface(&self, surface: ViewportSurface) -> Self {
+        let mut presented = self.clone();
+        presented.presentation = ViewportPresentation::new(surface, self.scale_factor());
+        (presented.outlines, presented.handles) =
+            resolve_geometry(presented.presentation, &presented.config.targets);
+        presented
     }
 
     /// Returns application-owned selection targets without mutating them.
@@ -151,6 +148,18 @@ impl ViewportToolScene {
         &self.handles
     }
 
+    /// Resolves the highest painted handle containing a finite screen point.
+    #[must_use]
+    pub fn hit_test_handle(&self, point: Point) -> Option<&ViewportTransformHandleDescriptor> {
+        if !point.x.is_finite() || !point.y.is_finite() {
+            return None;
+        }
+        self.handles
+            .iter()
+            .rev()
+            .find(|handle| handle.handle_screen_rect.contains_point(point))
+    }
+
     /// Returns the stable widget ID for one transform handle.
     #[must_use]
     pub fn handle_widget_id(&self, handle: ViewportTransformHandleId) -> WidgetId {
@@ -163,7 +172,7 @@ impl ViewportToolScene {
         plan: &mut PointerTargetPlan,
         first_order: PointerOrder,
     ) -> PointerOrder {
-        let bounds = self.surface.effective_bounds();
+        let bounds = self.surface().effective_bounds();
         let mut order = first_order;
         plan.with_clip(bounds, |plan| {
             for handle in &self.handles {
@@ -194,11 +203,79 @@ impl ViewportToolScene {
         let hit = ViewportTransformHandleHit::from_descriptor(
             handle,
             point,
-            self.surface,
-            self.scale_factor,
+            self.presentation.surface(),
+            self.presentation.scale_factor(),
         );
-        ViewportTransformDragCapture::from_hit(&hit)
+        let mut capture = ViewportTransformDragCapture::from_hit(&hit);
+        capture.pointer_origin_content = self.presentation.screen_to_content(point);
+        capture
     }
+}
+
+fn resolve_geometry(
+    presentation: ViewportPresentation,
+    targets: &[ViewportSelectionTargetDescriptor],
+) -> (
+    Vec<ViewportSelectionOutlineDescriptor>,
+    Vec<ViewportTransformHandleDescriptor>,
+) {
+    let mut outlines = targets
+        .iter()
+        .filter(|target| target.can_show_selection())
+        .filter_map(|target| {
+            let content_rect = finite_positive_rect(target.content_rect)?;
+            Some(ViewportSelectionOutlineDescriptor {
+                target: target.id,
+                content_rect,
+                screen_rect: presentation.content_rect_to_screen(content_rect)?,
+                enabled: target.state.enabled(),
+                available: target.state.available(),
+                read_only: target.state.read_only(),
+                priority: target.priority,
+                label: target.label.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+    let mut handles = targets
+        .iter()
+        .filter(|target| target.can_request_transform())
+        .filter_map(|target| {
+            let source_content_rect = finite_positive_rect(target.content_rect)?;
+            let target_screen_rect = presentation.content_rect_to_screen(source_content_rect)?;
+            Some((target, source_content_rect, target_screen_rect))
+        })
+        .flat_map(|(target, source_content_rect, target_screen_rect)| {
+            target.handles.kinds().filter_map(move |kind| {
+                let handle_screen_rect = transform_handle_rect(target, target_screen_rect, kind)?;
+                Some(ViewportTransformHandleDescriptor {
+                    id: ViewportTransformHandleId::new(target.id, kind),
+                    target: target.id,
+                    kind,
+                    source_content_rect,
+                    target_screen_rect,
+                    handle_screen_rect,
+                    target_priority: target.priority,
+                    handle_priority: kind.hit_priority(),
+                    cursor: ViewportCursorMetadata::new(kind.cursor_shape()),
+                    label: target.label.clone(),
+                })
+            })
+        })
+        .collect::<Vec<_>>();
+
+    outlines.sort_by(|left, right| {
+        left.priority
+            .cmp(&right.priority)
+            .then_with(|| right.target.cmp(&left.target))
+    });
+    handles.sort_by(|left, right| {
+        left.target_priority
+            .cmp(&right.target_priority)
+            .then_with(|| left.handle_priority.cmp(&right.handle_priority))
+            .then_with(|| right.target.cmp(&left.target))
+            .then_with(|| right.kind.cmp(&left.kind))
+    });
+    (outlines, handles)
 }
 
 /// Caller-owned state retained across frames of a viewport handle gesture.

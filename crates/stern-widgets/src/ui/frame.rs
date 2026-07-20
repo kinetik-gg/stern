@@ -87,6 +87,7 @@ impl<'a> Ui<'a> {
             runtime,
             theme,
             text_layouts: None,
+            viewport_presentations: Vec::new(),
         }
     }
 
@@ -101,6 +102,7 @@ impl<'a> Ui<'a> {
             runtime,
             theme,
             text_layouts: Some(text_layouts),
+            viewport_presentations: Vec::new(),
         }
     }
 

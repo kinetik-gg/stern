@@ -1,14 +1,176 @@
 //! Prepared public viewport widget contract.
 
 use stern_core::{
-    Point, PointerOrder, PointerTarget, PointerTargetPlan, Response, ScaleFactor, WidgetId,
+    Point, PointerOrder, PointerTarget, PointerTargetPlan, Primitive, Rect, Response, ScaleFactor,
+    TexturePrimitive, Vec2, WidgetId,
 };
 
-use super::{PanZoom, ViewportActionDescriptor, ViewportActionRequest, ViewportSurface};
+use super::{
+    PanZoom, ViewportActionDescriptor, ViewportActionRequest, ViewportSurface, finite_or_zero,
+};
 
 const DEFAULT_MIN_ZOOM: f32 = 0.05;
 const DEFAULT_MAX_ZOOM: f32 = 64.0;
 const DEFAULT_ZOOM_STEP: f32 = 0.2;
+
+/// Exact value-owned geometry used to present one viewport surface.
+///
+/// The content extent is snapped to the physical grid while finite logical
+/// pan remains continuous in the origin. Paint, same-frame conversions, and
+/// presented tool geometry consume this same value.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ViewportPresentation {
+    surface: ViewportSurface,
+    scale_factor: ScaleFactor,
+    content_rect: Rect,
+}
+
+impl ViewportPresentation {
+    /// Resolves presentation geometry from application-owned surface state.
+    #[must_use]
+    pub fn new(surface: ViewportSurface, scale_factor: ScaleFactor) -> Self {
+        let bounds = surface.effective_bounds();
+        let content_rect = surface.effective_source_size().map_or_else(
+            || Rect::new(bounds.x, bounds.y, 0.0, 0.0),
+            |source| {
+                let content_scale = surface.content_scale_at(scale_factor);
+                let width = snap_extent(source.width * content_scale, scale_factor);
+                let height = snap_extent(source.height * content_scale, scale_factor);
+                if width <= 0.0 || height <= 0.0 {
+                    return Rect::new(bounds.x, bounds.y, 0.0, 0.0);
+                }
+                Rect::new(
+                    bounds.x
+                        + (bounds.width - width) * 0.5
+                        + finite_or_zero(surface.pan_zoom.pan.x),
+                    bounds.y
+                        + (bounds.height - height) * 0.5
+                        + finite_or_zero(surface.pan_zoom.pan.y),
+                    width,
+                    height,
+                )
+            },
+        );
+        Self {
+            surface,
+            scale_factor,
+            content_rect,
+        }
+    }
+
+    /// Returns the application-owned state backing this presentation.
+    #[must_use]
+    pub const fn surface(self) -> ViewportSurface {
+        self.surface
+    }
+
+    /// Returns the scale factor used to resolve this presentation.
+    #[must_use]
+    pub const fn scale_factor(self) -> ScaleFactor {
+        self.scale_factor
+    }
+
+    /// Returns the exact texture, conversion, and overlay rectangle.
+    #[must_use]
+    pub const fn content_rect(self) -> Rect {
+        self.content_rect
+    }
+
+    /// Returns the resolved content-to-screen scale on each axis.
+    #[must_use]
+    pub fn content_scale(self) -> Vec2 {
+        let Some(source) = self.surface.effective_source_size() else {
+            return Vec2::ZERO;
+        };
+        let scale = Vec2::new(
+            self.content_rect.width / source.width,
+            self.content_rect.height / source.height,
+        );
+        if scale.x.is_finite() && scale.x > 0.0 && scale.y.is_finite() && scale.y > 0.0 {
+            scale
+        } else {
+            Vec2::ZERO
+        }
+    }
+
+    /// Converts a screen point through this exact presentation.
+    #[must_use]
+    pub fn screen_to_content(self, point: Point) -> Option<Point> {
+        if !point.x.is_finite() || !point.y.is_finite() {
+            return None;
+        }
+        let scale = self.content_scale();
+        if scale.x <= 0.0 || scale.y <= 0.0 {
+            return None;
+        }
+        Some(Point::new(
+            (point.x - self.content_rect.x) / scale.x,
+            (point.y - self.content_rect.y) / scale.y,
+        ))
+    }
+
+    /// Converts a content point through this exact presentation.
+    #[must_use]
+    pub fn content_to_screen(self, point: Point) -> Option<Point> {
+        if !point.x.is_finite() || !point.y.is_finite() {
+            return None;
+        }
+        let scale = self.content_scale();
+        if scale.x <= 0.0 || scale.y <= 0.0 {
+            return None;
+        }
+        Some(Point::new(
+            self.content_rect.x + point.x * scale.x,
+            self.content_rect.y + point.y * scale.y,
+        ))
+    }
+
+    /// Converts a content rectangle through this exact presentation.
+    #[must_use]
+    pub fn content_rect_to_screen(self, rect: Rect) -> Option<Rect> {
+        if !rect.x.is_finite()
+            || !rect.y.is_finite()
+            || !rect.width.is_finite()
+            || !rect.height.is_finite()
+            || rect.width < 0.0
+            || rect.height < 0.0
+        {
+            return None;
+        }
+        let origin = self.content_to_screen(rect.origin())?;
+        let scale = self.content_scale();
+        Some(Rect::new(
+            origin.x,
+            origin.y,
+            rect.width * scale.x,
+            rect.height * scale.y,
+        ))
+    }
+
+    pub(crate) fn texture_primitive(self) -> Primitive {
+        Primitive::Texture(TexturePrimitive {
+            texture: self.surface.texture,
+            rect: self.content_rect,
+            source_size: self.surface.effective_source_size().unwrap_or_default(),
+        })
+    }
+}
+
+fn snap_extent(value: f32, scale_factor: ScaleFactor) -> f32 {
+    if !value.is_finite() || value < 0.0 || !scale_factor.is_valid() {
+        return finite_or_zero(value).max(0.0);
+    }
+    let physical = (f64::from(value) * scale_factor.value()).round();
+    let logical = physical / scale_factor.value();
+    if logical.is_finite() && logical >= 0.0 && logical <= f64::from(f32::MAX) {
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            logical as f32
+        }
+    } else {
+        0.0
+    }
+}
 
 /// Caller-owned configuration for one prepared viewport widget.
 #[derive(Debug, Clone, PartialEq)]
@@ -126,6 +288,12 @@ impl ViewportWidget {
         self.config.surface
     }
 
+    /// Resolves the widget's frozen presentation geometry.
+    #[must_use]
+    pub fn presentation(&self) -> ViewportPresentation {
+        ViewportPresentation::new(self.config.surface, self.scale_factor)
+    }
+
     /// Returns the frame scale used by paint and coordinate conversion.
     #[must_use]
     pub const fn scale_factor(&self) -> ScaleFactor {
@@ -135,17 +303,13 @@ impl ViewportWidget {
     /// Converts a screen point through the frozen painted snapshot.
     #[must_use]
     pub fn screen_to_content(&self, point: Point) -> Option<Point> {
-        self.config
-            .surface
-            .screen_to_content_at(point, self.scale_factor)
+        self.presentation().screen_to_content(point)
     }
 
     /// Converts a content point through the frozen painted snapshot.
     #[must_use]
     pub fn content_to_screen(&self, point: Point) -> Option<Point> {
-        self.config
-            .surface
-            .content_to_screen_at(point, self.scale_factor)
+        self.presentation().content_to_screen(point)
     }
 
     /// Adds the viewport blocker and routed interaction target to a pointer plan.
@@ -176,11 +340,11 @@ impl ViewportWidget {
 pub struct ViewportWidgetOutput {
     /// Common interaction response for the viewport surface.
     pub response: Response,
-    /// Exact frozen surface used for paint, hit testing, and conversions.
+    /// Accepted effective surface used for current-frame presentation.
     pub surface: ViewportSurface,
     /// Pan/zoom state staged for the caller's next prepared frame.
     pub next_pan_zoom: PanZoom,
-    /// Pointer position converted through the frozen surface, when inside it.
+    /// Pointer position converted through the effective presentation, when inside it.
     pub content_pointer: Option<Point>,
     /// Whether pan changed this frame.
     pub pan_changed: bool,
@@ -197,6 +361,24 @@ impl ViewportWidgetOutput {
     #[must_use]
     pub const fn changed(&self) -> bool {
         self.pan_changed || self.zoom_changed || self.fit_changed
+    }
+
+    /// Resolves this frame's effective presentation at the supplied scale.
+    #[must_use]
+    pub fn presentation_at(&self, scale_factor: ScaleFactor) -> ViewportPresentation {
+        ViewportPresentation::new(self.surface, scale_factor)
+    }
+
+    /// Converts a screen point through this frame's effective presentation.
+    #[must_use]
+    pub fn screen_to_content_at(&self, point: Point, scale_factor: ScaleFactor) -> Option<Point> {
+        self.presentation_at(scale_factor).screen_to_content(point)
+    }
+
+    /// Converts a content point through this frame's effective presentation.
+    #[must_use]
+    pub fn content_to_screen_at(&self, point: Point, scale_factor: ScaleFactor) -> Option<Point> {
+        self.presentation_at(scale_factor).content_to_screen(point)
     }
 }
 

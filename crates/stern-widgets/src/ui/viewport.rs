@@ -6,8 +6,9 @@ use stern_core::{
 
 use super::Ui;
 use crate::viewport::{
-    PanZoom, ViewportActionKind, ViewportActionRequest, ViewportFit, ViewportSurface,
-    ViewportWidget, ViewportWidgetConfig, ViewportWidgetOutput, viewport_action_widget_id,
+    PanZoom, ViewportActionKind, ViewportActionRequest, ViewportFit, ViewportPresentation,
+    ViewportSurface, ViewportWidget, ViewportWidgetConfig, ViewportWidgetOutput,
+    viewport_action_widget_id,
 };
 
 const PIXELS_PER_ZOOM_UNIT: f32 = 100.0;
@@ -21,8 +22,9 @@ impl Ui<'_> {
 
     /// Evaluates and paints one supported viewport component.
     ///
-    /// Paint, hit testing, and coordinate conversions use the prepared frozen
-    /// surface. Accepted pan/zoom changes update `pan_zoom` for the next frame.
+    /// Routing uses the prepared frozen surface. Accepted navigation resolves
+    /// one effective presentation for current-frame paint, output conversions,
+    /// semantics, and subsequently evaluated viewport tools.
     #[allow(clippy::too_many_lines)]
     pub fn viewport_widget(
         &mut self,
@@ -51,6 +53,10 @@ impl Ui<'_> {
                 DomainDragGesturePhase::Release | DomainDragGesturePhase::Cancel
             )
         });
+        let gesture_cancelled = response
+            .actions
+            .iter()
+            .any(|action| matches!(action.phase, DomainDragGesturePhase::Cancel));
 
         if pointer_pressed || response.response.clicked {
             self.runtime.memory_mut().focus(widget.widget_id());
@@ -60,7 +66,7 @@ impl Ui<'_> {
         let drag_has_movement = response.response.dragged
             || self.memory().is_drag_source(widget.widget_id())
             || self.memory().released_drag_source() == Some(widget.widget_id());
-        if drag_has_movement {
+        if drag_has_movement && !gesture_cancelled {
             for action in &response.actions {
                 if matches!(action.phase, DomainDragGesturePhase::Move) {
                     next.pan_by(action.delta);
@@ -73,7 +79,6 @@ impl Ui<'_> {
             .pointer
             .position
             .filter(|point| surface.contains_screen_point(*point));
-        let content_pointer = pointer.and_then(|point| widget.screen_to_content(point));
         let wheel_units = viewport_wheel_units(
             self.input(),
             self.memory(),
@@ -142,6 +147,20 @@ impl Ui<'_> {
         let zoom_changed = original.zoom.to_bits() != next.zoom.to_bits();
         let fit_changed = original.fit != next.fit;
         *pan_zoom = next;
+        let mut effective_surface = surface;
+        effective_surface.pan_zoom = next;
+        let presentation = ViewportPresentation::new(effective_surface, widget.scale_factor());
+        let content_pointer = pointer.and_then(|point| presentation.screen_to_content(point));
+        if let Some((_, published)) = self
+            .viewport_presentations
+            .iter_mut()
+            .find(|(id, _)| *id == widget.widget_id())
+        {
+            *published = presentation;
+        } else {
+            self.viewport_presentations
+                .push((widget.widget_id(), presentation));
+        }
 
         if !disabled {
             let cursor = if self.memory().is_drag_source(widget.widget_id()) {
@@ -168,11 +187,16 @@ impl Ui<'_> {
                 id: clip,
                 rect: bounds,
             });
-            self.primitive(surface.texture_primitive_at(widget.scale_factor()));
+            self.primitive(presentation.texture_primitive());
             self.primitive(Primitive::ClipEnd { id: clip });
         }
 
-        self.push_viewport_semantics(widget, response.response.state.focused, disabled);
+        self.push_viewport_semantics(
+            widget,
+            effective_surface,
+            response.response.state.focused,
+            disabled,
+        );
 
         let focus_changed = old_focus != self.memory().focused();
         if pan_changed
@@ -189,7 +213,7 @@ impl Ui<'_> {
 
         ViewportWidgetOutput {
             response: response.response,
-            surface,
+            surface: effective_surface,
             next_pan_zoom: next,
             content_pointer,
             pan_changed,
@@ -199,9 +223,15 @@ impl Ui<'_> {
         }
     }
 
-    fn push_viewport_semantics(&mut self, widget: &ViewportWidget, focused: bool, disabled: bool) {
+    fn push_viewport_semantics(
+        &mut self,
+        widget: &ViewportWidget,
+        surface: ViewportSurface,
+        focused: bool,
+        disabled: bool,
+    ) {
         let config = widget.config();
-        let bounds = widget.surface().effective_bounds();
+        let bounds = surface.effective_bounds();
         let actions = config
             .actions
             .iter()
@@ -218,8 +248,8 @@ impl Ui<'_> {
         root.state.disabled = disabled;
         root.state.value = Some(SemanticValue::Text(format!(
             "{:?}, zoom {:.2}",
-            widget.surface().pan_zoom.fit,
-            display_zoom(widget.surface(), widget.scale_factor())
+            surface.pan_zoom.fit,
+            display_zoom(surface, widget.scale_factor())
         )));
         self.push_semantic_node(root);
 
@@ -294,7 +324,8 @@ fn zoom_around(
     current_surface.pan_zoom = current;
     let current_zoom = display_zoom(current_surface, scale_factor);
     let desired = (current_zoom * factor).clamp(min_zoom, max_zoom);
-    let Some(content_anchor) = frozen_surface.screen_to_content_at(anchor, scale_factor) else {
+    let current_presentation = ViewportPresentation::new(current_surface, scale_factor);
+    let Some(content_anchor) = current_presentation.screen_to_content(anchor) else {
         return current;
     };
 
@@ -302,7 +333,13 @@ fn zoom_around(
     next.set_zoom(desired);
     let mut next_surface = frozen_surface;
     next_surface.pan_zoom = next;
-    if let Some(projected) = next_surface.content_to_screen_at(content_anchor, scale_factor) {
+    let next_presentation = ViewportPresentation::new(next_surface, scale_factor);
+    if let Some(projected) = next_presentation.content_to_screen(content_anchor) {
+        next.pan_by(Vec2::new(anchor.x - projected.x, anchor.y - projected.y));
+    }
+    next_surface.pan_zoom = next;
+    let final_presentation = ViewportPresentation::new(next_surface, scale_factor);
+    if let Some(projected) = final_presentation.content_to_screen(content_anchor) {
         next.pan_by(Vec2::new(anchor.x - projected.x, anchor.y - projected.y));
     }
     next

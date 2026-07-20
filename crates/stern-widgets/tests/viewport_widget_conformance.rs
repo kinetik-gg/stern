@@ -47,6 +47,7 @@ fn context(input: UiInput, scale_factor: ScaleFactor) -> FrameContext {
 
 struct Run {
     widget: ViewportWidget,
+    widget_clone: ViewportWidget,
     output: ViewportWidgetOutput,
     lower: Option<Response>,
     frame: stern_core::FrameOutput,
@@ -64,6 +65,7 @@ fn run_frame(
     let theme = default_dark_theme();
     let mut ui = Ui::begin_frame(context(input, scale_factor), memory, &theme);
     let widget = ui.prepare_viewport_widget(config);
+    let widget_clone = widget.clone();
     ui.resolve_pointer_targets(|plan| {
         if lower {
             plan.target(PointerTarget::new(
@@ -80,6 +82,7 @@ fn run_frame(
     let frame = ui.finish_output();
     Run {
         widget,
+        widget_clone,
         output,
         lower,
         frame,
@@ -265,7 +268,8 @@ fn pointer_plan_blocks_lower_content_and_click_focuses_with_grab_cursors() {
 }
 
 #[test]
-fn captured_pan_and_routed_wheel_stage_clamped_next_frame_state() {
+#[allow(clippy::too_many_lines)]
+fn captured_pan_and_routed_wheel_present_clamped_state_in_the_same_frame() {
     let point = Point::new(100.0, 100.0);
     let config = config().with_zoom_range(0.5, 1.5);
     let frozen = config.surface;
@@ -289,30 +293,81 @@ fn captured_pan_and_routed_wheel_stage_clamped_next_frame_state() {
         &[],
         false,
     );
-    assert_eq!(panned.output.surface, frozen);
-    assert_eq!(panned.output.surface.pan_zoom.pan, Vec2::ZERO);
+    assert_eq!(panned.widget.surface(), frozen);
+    assert_eq!(panned.widget, panned.widget_clone);
     assert_eq!(panned.output.next_pan_zoom.pan, Vec2::new(25.0, -10.0));
+    assert_eq!(panned.output.surface.pan_zoom, panned.output.next_pan_zoom);
     assert_eq!(pan_zoom, panned.output.next_pan_zoom);
     assert!(panned.output.pan_changed);
     assert_eq!(panned.frame.repaint, RepaintRequest::NextFrame);
-
-    let mut zoom_memory = UiMemory::new();
-    let mut zoom = frozen.pan_zoom;
-    let zoomed = run_frame(
-        config.clone(),
-        &mut zoom,
-        &mut zoom_memory,
-        wheel(point, 20.0),
-        ScaleFactor::ONE,
-        &[],
-        false,
-    );
-    assert_eq!(zoomed.output.surface, frozen);
+    let Primitive::Texture(texture) = panned.frame.primitives[2] else {
+        panic!("viewport texture");
+    };
     assert_eq!(
-        zoomed.output.next_pan_zoom.zoom.to_bits(),
-        1.5_f32.to_bits()
+        texture.rect,
+        panned
+            .output
+            .presentation_at(ScaleFactor::ONE)
+            .content_rect()
     );
-    assert!(zoomed.output.zoom_changed);
+    let frozen_content = panned
+        .widget
+        .screen_to_content(point)
+        .expect("frozen conversion");
+    assert_eq!(panned.widget.content_to_screen(frozen_content), Some(point));
+
+    let anchor = Point::new(161.0, 120.0);
+    for scale_factor in [1.0, 1.25, 1.5, 2.0].map(ScaleFactor::new) {
+        for initial_pan in [-0.000_1, 0.0, 0.000_1, 0.25] {
+            let mut crossing = frozen;
+            crossing.pan_zoom.pan.x = initial_pan;
+            let crossing_config =
+                ViewportWidgetConfig::new(VIEWPORT, crossing).with_zoom_range(0.5, 1.5);
+            let prepared_clone = ViewportWidget::new(crossing_config.clone(), scale_factor).clone();
+            let content_anchor = prepared_clone
+                .screen_to_content(anchor)
+                .expect("frozen anchor");
+            let mut zoom_memory = UiMemory::new();
+            let mut zoom = crossing.pan_zoom;
+            let zoomed = run_frame(
+                crossing_config,
+                &mut zoom,
+                &mut zoom_memory,
+                wheel(anchor, 20.0),
+                scale_factor,
+                &[],
+                false,
+            );
+            assert_eq!(prepared_clone.surface(), crossing);
+            assert_eq!(zoomed.widget.surface(), crossing);
+            assert_eq!(zoomed.output.surface.pan_zoom, zoomed.output.next_pan_zoom);
+            assert_eq!(
+                zoomed.output.next_pan_zoom.zoom.to_bits(),
+                1.5_f32.to_bits()
+            );
+            assert!(zoomed.output.zoom_changed);
+            let projected = zoomed
+                .output
+                .content_to_screen_at(content_anchor, scale_factor)
+                .expect("effective anchor");
+            assert!((projected.x - anchor.x).abs() <= 0.001);
+            assert!((projected.y - anchor.y).abs() <= 0.001);
+            if initial_pan.abs() > 0.01 {
+                assert_eq!(
+                    zoomed.output.next_pan_zoom.pan.x.is_sign_positive(),
+                    initial_pan.is_sign_negative()
+                );
+            }
+            let reconstructed = ViewportWidget::new(
+                ViewportWidgetConfig::new(VIEWPORT, zoomed.output.surface),
+                scale_factor,
+            );
+            assert_eq!(
+                reconstructed.presentation(),
+                zoomed.output.presentation_at(scale_factor)
+            );
+        }
+    }
 
     let mut min_memory = UiMemory::new();
     let mut min_zoom = frozen.pan_zoom;
@@ -354,6 +409,14 @@ fn generic_actions_update_navigation_and_forward_only_targeted_app_requests() {
             false,
         );
         assert_eq!(run.output.next_pan_zoom.fit, expected_fit);
+        assert_eq!(run.output.surface.pan_zoom, run.output.next_pan_zoom);
+        let Primitive::Texture(texture) = run.frame.primitives[2] else {
+            panic!("viewport texture");
+        };
+        assert_eq!(
+            texture.rect,
+            run.output.presentation_at(ScaleFactor::ONE).content_rect()
+        );
         match kind {
             ViewportActionKind::ZoomIn => assert!(run.output.next_pan_zoom.zoom > original_zoom),
             ViewportActionKind::ZoomOut => assert!(run.output.next_pan_zoom.zoom < original_zoom),
