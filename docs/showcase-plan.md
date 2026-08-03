@@ -4,11 +4,11 @@ The showcase app is the proof surface for Stern. It should feel like a
 small editor workbench built from the toolkit, not a marketing page and not a
 bag of decorative primitives.
 
-The S10-S13 catalogue evidence review surface lives in
-[`catalogue-conformance-matrix.md`](catalogue-conformance-matrix.md). It maps
-restarted editor-toolkit capabilities to honest `Experimental` status,
-Model-evidenced deterministic contracts, existing showcase fixtures, and
-explicit non-goals. Fixture reachability alone remains metadata-only evidence.
+Current component conformance status is tracked honestly in
+[`catalogue-conformance-matrix.md`](catalogue-conformance-matrix.md): no
+component has verified paint/platform/accessibility evidence yet, and the
+intended verification ledger is the design system's parity index, not this
+repository.
 
 ## Goals
 
@@ -21,13 +21,20 @@ explicit non-goals. Fixture reachability alone remains metadata-only evidence.
 
 ## Page Roles
 
-| Page | Purpose |
-| --- | --- |
-| Editor | Integrated DCC/game-engine workbench proving the toolkit layers compose into a reachable application surface. |
-| Components | Buttons, controls, text fields, list/grid states, tabs, and primitive output. |
-| Layout | Measurement-aware layout, interactive docking, splitter output, and virtualized tables. |
-| Viewport | Texture surfaces, pan/zoom mapping, guides, crosshair overlays, and dynamic surface placeholders. |
-| Systems | Actions, menus, command palette, overlays, runtime diagnostics, and primitive stress. |
+The demo currently ships two navigable workspaces (`DemoWorkspace` in
+`apps/stern-demo/src/app_model.rs`): `Edit` and `Graph`. The other planned
+pages below were never built as separate pages; their intended content lives,
+if at all, inside the `Edit` workspace's dock (see
+`apps/stern-demo/src/edit_workspace.rs` and `timeline_workspace.rs`).
+
+| Page | Purpose | Status |
+| --- | --- | --- |
+| Editor | Integrated DCC/game-engine workbench proving the toolkit layers compose into a reachable application surface. | Built as the `Edit` workspace. |
+| Graph | Node graph editing surface: node/edge selection, connection, and layout. | Built as the `Graph` workspace (`apps/stern-demo/src/graph_workspace.rs`); not part of the original plan. |
+| Components | Buttons, controls, text fields, list/grid states, tabs, and primitive output as a standalone page. | Not built. |
+| Layout | Measurement-aware layout, interactive docking, splitter output, and virtualized tables as a standalone page. | Not built. |
+| Viewport | Texture surfaces, pan/zoom mapping, guides, crosshair overlays, and dynamic surface placeholders as a standalone page. | Not built. |
+| Systems | Actions, menus, command palette, overlays, runtime diagnostics, and primitive stress as a standalone page. | Not built. |
 
 ## Implementation Rules
 
@@ -75,18 +82,5 @@ cargo check --workspace --examples --all-features
 For visual changes, also render at least one full-size frame and one smaller
 frame through `--render-once` and inspect the resulting bitmaps.
 
-For review packages that need inspectable CPU raster artifacts without invoking a
-GPU renderer, generate an explicit review dump:
-
-```text
-cargo run -p stern-demo -- --dump-review-artifacts review-label --page components --width 1440 --height 900
-```
-
-Review dumps are written under
-`target/stern-artifacts/stern-demo/review-dumps/` and include a
-`manifest.txt`, CPU raster BMP frames, and `<page>-pixel-smoke.txt` summaries for
-the selected page, or all showcase pages when `--page` is omitted. Pixel-smoke
-summaries record dimensions, total pixels, visible variation, non-first-pixel
-count, bounded unique color count, and a deterministic checksum for manual
-comparison. They are manual review outputs only; they are not committed baselines
-and there is no bless/update workflow.
+There is currently no CLI-driven CPU raster review-dump workflow; the demo
+binary only supports `--dump-identity-evidence`.
