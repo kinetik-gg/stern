@@ -16,6 +16,10 @@ Follow [docs/specs.md](docs/specs.md) as the source of truth for architecture, t
 - Add focused tests for any core behavior that can be tested without a window or GPU.
 - Use the spec terminology consistently: `WidgetId`, `UiInput`, `UiMemory`, `Response`, `Primitive`, `SemanticNode`, `Action`, `Dock`, `Frame`, `Panel`, `ViewportSurface`.
 
+## Agent Execution Workflow
+
+See [docs/agent-workflow.md](docs/agent-workflow.md) for the complete workflow: branch creation, incremental commits, pre-PR checks, PR submission, and merge policy. This is the canonical reference for how agents execute GitHub issues.
+
 ## Architecture Constraints
 
 The editor hierarchy is:
