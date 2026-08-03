@@ -599,7 +599,7 @@ fn deprecated_liveness_generation_aliases_remain_importable() {
 fn canonical_advanced_widget_modules_compile() {
     use stern::widgets::{
         asset_browser, chrome, collection_actions, collections, dock, inline_edit, inspector,
-        node_graph, outliner, overlays, taxonomy, timeline, viewport,
+        node_graph, outliner, overlays, timeline, viewport,
     };
 
     let canonical_paths = [
@@ -613,7 +613,6 @@ fn canonical_advanced_widget_modules_compile() {
         std::any::type_name::<node_graph::NodeGraphDescriptor>(),
         std::any::type_name::<outliner::OutlinerModel>(),
         std::any::type_name::<overlays::OverlayStack>(),
-        std::any::type_name::<taxonomy::ComponentConformanceStatus>(),
         std::any::type_name::<timeline::TimelineDescriptor>(),
         std::any::type_name::<viewport::ViewportSurface>(),
     ];
@@ -716,7 +715,7 @@ fn text_overflow_api_is_qualified_and_preserves_complete_source() {
 fn root_widget_compatibility_exports_remain_source_compatible() {
     use stern::widgets::{
         self, asset_browser, chrome, collection_actions, collections, dock, inline_edit, inspector,
-        node_graph, outliner, overlays, taxonomy, timeline, viewport,
+        node_graph, outliner, overlays, timeline, viewport,
     };
 
     fn same_type<T>(_: Option<T>, _: Option<T>) {}
@@ -751,10 +750,6 @@ fn root_widget_compatibility_exports_remain_source_compatible() {
     same_type(
         None::<overlays::OverlayStack>,
         None::<widgets::OverlayStack>,
-    );
-    same_type(
-        None::<taxonomy::ComponentConformanceStatus>,
-        None::<widgets::ComponentConformanceStatus>,
     );
     same_type(
         None::<timeline::TimelineDescriptor>,

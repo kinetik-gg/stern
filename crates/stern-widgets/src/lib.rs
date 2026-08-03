@@ -12,7 +12,6 @@ pub mod inspector;
 pub mod node_graph;
 pub mod outliner;
 pub mod overlays;
-pub mod taxonomy;
 pub mod timeline;
 pub mod ui;
 pub mod viewport;
@@ -196,16 +195,6 @@ pub use overlays::{
     overlay_semantics, place_popover,
 };
 pub use stern_core::{IconGraphic, IconId, IconLayer, IconPath, IconStroke, StaticIcon};
-pub use taxonomy::{
-    COMPONENT_CONFORMANCE_MATRIX, COMPONENT_EVIDENCE, COMPONENT_METADATA, ComponentCapabilityAxis,
-    ComponentCapabilityEvidence, ComponentCategory, ComponentConformanceMatrixRow,
-    ComponentConformanceStatus, ComponentConformanceValidationError, ComponentEvidence,
-    ComponentEvidenceCategory, ComponentEvidenceProof, ComponentMetadata,
-    component_conformance_matrix_by_stage, component_conformance_matrix_row, component_evidence,
-    component_evidence_for, component_metadata, component_status_evidence, components_by_category,
-    components_by_evidence_category, validate_component_capability_claim,
-    validate_component_conformance_matrix_row, validate_component_metadata,
-};
 pub use timeline::{
     DEFAULT_TIMELINE_PIXELS_PER_SECOND, DEFAULT_TIMELINE_RULER_MAX_TICKS,
     MAX_TIMELINE_PIXELS_PER_SECOND, MIN_TIMELINE_PIXELS_PER_SECOND, ResolvedTimelineItem,
