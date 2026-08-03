@@ -1158,17 +1158,167 @@ fn design_token_color(name: &str) -> Color {
     Color::rgb8(channel(0..2), channel(2..4), channel(4..6))
 }
 
+/// Asserts every listed [`SemanticColor`] key resolves, in the default dark
+/// theme, to the exact `stern-design-system` token its
+/// [`SemanticColor::design_token_name`] mapping points at.
+fn assert_group_matches_design_system_tokens(colors: &ThemeColors, roles: &[SemanticColor]) {
+    for &role in roles {
+        let name = role.design_token_name();
+        assert_eq!(
+            colors.get(role),
+            design_token_color(name),
+            "{role:?} does not match design-system token `{name}`"
+        );
+    }
+}
+
 #[test]
 fn default_dark_accent_group_matches_design_system_tokens() {
-    let accent = ThemeColors::default_dark().accent;
+    let colors = ThemeColors::default_dark();
 
-    assert_eq!(accent.subtle, design_token_color("color.accent.subtle"));
-    assert_eq!(accent.default, design_token_color("color.accent.default"));
-    assert_eq!(accent.hover, design_token_color("color.accent.hover"));
-    assert_eq!(accent.pressed, design_token_color("color.accent.pressed"));
-    assert_eq!(accent.focus, design_token_color("color.accent.focus"));
-    assert_eq!(
-        accent.foreground,
-        design_token_color("color.accent.foreground")
+    assert_group_matches_design_system_tokens(
+        &colors,
+        &[
+            SemanticColor::AccentSubtle,
+            SemanticColor::AccentDefault,
+            SemanticColor::AccentHover,
+            SemanticColor::AccentPressed,
+            SemanticColor::AccentFocus,
+            SemanticColor::AccentForeground,
+        ],
     );
+}
+
+#[test]
+fn default_dark_surface_group_matches_design_system_tokens() {
+    let colors = ThemeColors::default_dark();
+
+    assert_group_matches_design_system_tokens(
+        &colors,
+        &[
+            SemanticColor::SurfaceApplication,
+            SemanticColor::SurfaceWorkspace,
+            SemanticColor::SurfacePanel,
+            SemanticColor::SurfacePanelRaised,
+            SemanticColor::SurfaceRaised,
+            SemanticColor::SurfaceControl,
+            SemanticColor::SurfaceControlHover,
+            SemanticColor::SurfaceControlPressed,
+            SemanticColor::SurfaceControlDisabled,
+            SemanticColor::SurfaceOverlay,
+            SemanticColor::SurfaceHover,
+            SemanticColor::SurfaceSunken,
+        ],
+    );
+}
+
+#[test]
+fn default_dark_text_group_matches_design_system_tokens() {
+    let colors = ThemeColors::default_dark();
+
+    assert_group_matches_design_system_tokens(
+        &colors,
+        &[
+            SemanticColor::ContentPrimary,
+            SemanticColor::ContentSecondary,
+            SemanticColor::ContentMuted,
+            SemanticColor::ContentDisabled,
+            SemanticColor::ContentOnAccent,
+            SemanticColor::ContentLink,
+        ],
+    );
+}
+
+#[test]
+fn default_dark_border_group_matches_design_system_tokens() {
+    let colors = ThemeColors::default_dark();
+
+    assert_group_matches_design_system_tokens(
+        &colors,
+        &[
+            SemanticColor::BorderSubtle,
+            SemanticColor::BorderDefault,
+            SemanticColor::BorderStrong,
+            SemanticColor::BorderHover,
+            SemanticColor::BorderFocused,
+            SemanticColor::BorderDisabled,
+            SemanticColor::BorderInvalid,
+        ],
+    );
+}
+
+#[test]
+fn default_dark_selection_group_matches_design_system_tokens() {
+    let colors = ThemeColors::default_dark();
+
+    assert_group_matches_design_system_tokens(
+        &colors,
+        &[
+            SemanticColor::SelectionBackground,
+            SemanticColor::SelectionForeground,
+        ],
+    );
+}
+
+#[test]
+fn default_dark_focus_group_matches_design_system_tokens() {
+    let colors = ThemeColors::default_dark();
+
+    assert_group_matches_design_system_tokens(
+        &colors,
+        &[
+            SemanticColor::FocusIndicator,
+            SemanticColor::FocusSeparator,
+            SemanticColor::FocusRing,
+        ],
+    );
+}
+
+#[test]
+fn default_dark_overlay_group_matches_design_system_tokens() {
+    let colors = ThemeColors::default_dark();
+
+    assert_group_matches_design_system_tokens(&colors, &[SemanticColor::OverlayScrim]);
+}
+
+#[test]
+fn default_dark_status_group_matches_design_system_tokens() {
+    let colors = ThemeColors::default_dark();
+
+    assert_group_matches_design_system_tokens(
+        &colors,
+        &[
+            SemanticColor::StatusInfoForeground,
+            SemanticColor::StatusInfoSurface,
+            SemanticColor::StatusInfoBorder,
+            SemanticColor::StatusInfoStrong,
+            SemanticColor::StatusSuccessForeground,
+            SemanticColor::StatusSuccessSurface,
+            SemanticColor::StatusSuccessBorder,
+            SemanticColor::StatusSuccessStrong,
+            SemanticColor::StatusWarningForeground,
+            SemanticColor::StatusWarningSurface,
+            SemanticColor::StatusWarningBorder,
+            SemanticColor::StatusWarningStrong,
+            SemanticColor::StatusDangerForeground,
+            SemanticColor::StatusDangerSurface,
+            SemanticColor::StatusDangerBorder,
+            SemanticColor::StatusDangerStrong,
+        ],
+    );
+}
+
+/// Completeness guard: every one of the 53 [`SemanticColor`] resolver keys
+/// (`SemanticColor::ALL`) maps to a named `generated_tokens::COLORS` entry
+/// and matches it exactly in the default dark theme. The per-group tests
+/// above exist for readability; this test is the actual end-state guarantee
+/// from the mapping (see `docs/design-system-tokens.md`): a vendored token
+/// value can't drift from the theme without breaking a test, for every key,
+/// not just the ones a group list happens to include.
+#[test]
+fn default_dark_maps_every_semantic_color_to_a_design_system_token() {
+    let colors = ThemeColors::default_dark();
+
+    assert_eq!(SemanticColor::ALL.len(), 53);
+    assert_group_matches_design_system_tokens(&colors, SemanticColor::ALL);
 }
