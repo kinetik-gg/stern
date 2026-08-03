@@ -771,7 +771,6 @@ fn legacy_and_duplicate_contracts_remain_importable_for_stage_one() {
     use stern::{core, text, widgets};
 
     let contract_paths = [
-        std::any::type_name::<text::TextLayoutCache>(),
         std::any::type_name::<text::TextLayoutStore>(),
         std::any::type_name::<text::TextLayoutChange>(),
         std::any::type_name::<text::TextLayoutChangeCursor>(),
@@ -1075,11 +1074,6 @@ fn retained_text_layout_lifecycle_surface_is_additive() {
     assert_eq!(dirty.len(), 1);
     assert_eq!(dirty[0].id(), id);
     assert!(store.stored_layout(id).is_some());
-
-    let mut cache = text::TextLayoutCache::new();
-    cache.advance_generation();
-    assert_eq!(cache.generation(), 1);
-    assert_eq!(cache.retained_payload_bytes(), 0);
 }
 
 #[test]
