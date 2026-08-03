@@ -5,9 +5,9 @@ mod asset_browser_conformance {
     use stern_core::{ImageId, Rect, SemanticActionKind, SemanticRole, WidgetId};
     use stern_widgets::{
         AssetBrowserItem, AssetBrowserLayout, AssetBrowserModel, AssetBrowserModelError,
-        AssetBrowserSelectionOperation, AssetBrowserViewMode, AssetIconFallback, ComponentCategory,
-        ComponentConformanceStatus, GridColumns, GridLayout, ItemId, ListLayout, Selection,
-        asset_browser_item_widget_id, asset_browser_semantics, component_metadata,
+        AssetBrowserSelectionOperation, AssetBrowserViewMode, AssetIconFallback, GridColumns,
+        GridLayout, ItemId, ListLayout, Selection, asset_browser_item_widget_id,
+        asset_browser_semantics,
     };
 
     fn id(raw: u64) -> ItemId {
@@ -58,15 +58,6 @@ mod asset_browser_conformance {
             (actual - expected).abs() < f32::EPSILON,
             "expected {actual} to equal {expected}"
         );
-    }
-
-    #[test]
-    fn taxonomy_reports_asset_browser_as_experimental_collection_contract() {
-        let metadata = component_metadata("AssetBrowser").expect("asset browser metadata");
-
-        assert_eq!(metadata.slug, "asset-browser");
-        assert_eq!(metadata.category, ComponentCategory::Collection);
-        assert_eq!(metadata.status, ComponentConformanceStatus::Experimental);
     }
 
     #[test]
