@@ -196,7 +196,7 @@ fn application_bar_declares_and_evaluates_menu_and_workspace_through_the_public_
             .iter()
             .any(|action| action.kind == SemanticActionKind::Open)
     );
-    assert!(menu_item.state.expanded == Some(true));
+    assert_eq!(menu_item.state.expanded, Some(true));
 
     // Dismiss the open menu before exercising workspace activation so the
     // subsequent intent is unambiguous.
