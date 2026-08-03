@@ -110,14 +110,25 @@ reference looks stale, trust the code and send a correction PR.
     focus, overlay, accent, status) plus a completeness guard pinning
     `ThemeColors::default_dark()` to the vendored tokens (see
     `docs/design-system-tokens.md`); every mapped value already matched its
-    token exactly, so no visual changes and no divergences to record. The
-    hand-rolled theme values remain the runtime source of truth until every
-    token group is mapped; metrics (spacing, radii, sizes, strokes,
-    durations, elevation) and typography/icon tables are not yet wired.
-    Independently, the design system's 486-requirement parity
-    index (`../stern-design-system/generated/parity-index.json`) remains
-    100% `unverified`; wiring stern's behavioral coverage into that ledger
-    is future work (see `docs/catalogue-conformance-matrix.md`).
+    token exactly, so no visual changes and no divergences to record.
+    Typography font families are also mapped now
+    (`crates/stern-text/src/tests.rs`): every `generated_tokens::FONT_FAMILIES`
+    role's primary name is pinned to its stern-text authority constant and
+    shown to shape through its bundled asset. That mapping surfaced two data
+    gaps rather than code gaps: the `brand` font family role (Space Grotesk)
+    has no named stern-text authority constant (stern resolves it via a
+    literal string match instead), and the vendored tokens carry no
+    size/weight fields for typography at all, so the visual-spec's
+    9/10/11/12px type scale (`docs/visual-spec/00-language.md` §Typography,
+    divergence D5) has nothing upstream to pin against yet — see the
+    exceptions table in `docs/design-system-tokens.md`. The hand-rolled
+    theme values remain the runtime source of truth until every token group
+    is mapped; metrics (spacing, radii, sizes, strokes, durations,
+    elevation) and icon tables are not yet wired. Independently, the design
+    system's 486-requirement parity index
+    (`../stern-design-system/generated/parity-index.json`) remains 100%
+    `unverified`; wiring stern's behavioral coverage into that ledger is
+    future work (see `docs/catalogue-conformance-matrix.md`).
 16. `docs/public-api-policy.md` describes a historical, now-retired
     conformance vocabulary (`ALPHA-00`, axes like `M`/`P`/`I`/`A11y`, and
     `Stable`/`Experimental`/`Planned` statuses removed elsewhere in this
