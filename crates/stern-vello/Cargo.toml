@@ -11,15 +11,15 @@ categories.workspace = true
 description = "Vello renderer backend for Stern"
 
 [dependencies]
-stern-core = { version = "=0.2.0-alpha.1", path = "../stern-core" }
-stern-render = { version = "=0.2.0-alpha.1", path = "../stern-render" }
-stern-text = { version = "=0.2.0-alpha.1", path = "../stern-text" }
+stern-core = { version = "=0.0.1-alpha.1", path = "../stern-core" }
+stern-render = { version = "=0.0.1-alpha.1", path = "../stern-render" }
+stern-text = { version = "=0.0.1-alpha.1", path = "../stern-text" }
 vello = "0.9.0"
 
 [dev-dependencies]
 png = "0.18.1"
 pollster = "0.4.0"
-stern-widgets = { version = "=0.2.0-alpha.1", path = "../stern-widgets" }
+stern-widgets = { version = "=0.0.1-alpha.1", path = "../stern-widgets" }
 
 [lints]
 workspace = true

@@ -15,7 +15,7 @@ members = [
 exclude = ["tools/*"]
 
 [workspace.package]
-version = "0.2.0-alpha.1"
+version = "0.0.1-alpha.1"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT"

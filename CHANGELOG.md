@@ -5,10 +5,11 @@ follow the repository release policy.
 
 ## [Unreleased]
 
-The workspace version was restated from `1.0.0-rc.2.dev` to `0.2.0-alpha.1` on
+The workspace version was restated from `1.0.0-rc.2.dev` to `0.0.1-alpha.1` on
 2026-08-03: the rc lineage was adopted in error from the design-system
 specification's document version (commit 4b37e2f); no rc.1 or 1.0 ever existed.
 This codebase is pre-alpha, and nothing has been released or accepted.
+Further restated to 0.0.1-alpha.1 on the owner's decision: no release of any version has ever been published, and the first release target should read accordingly.
 
 ### Changed
 

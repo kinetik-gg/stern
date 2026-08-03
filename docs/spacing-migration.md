@@ -1,6 +1,6 @@
 # Spacing migration
 
-Stern `0.2.0-alpha.1` replaces the provisional five-step spacing API with
+Stern `0.0.1-alpha.1` replaces the provisional five-step spacing API with
 the exact compact spacing foundation. This is a prerelease breaking change.
 There are no compatibility fields, aliases, or forwarding methods.
 

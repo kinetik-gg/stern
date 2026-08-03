@@ -1,6 +1,6 @@
 # Exact Size Foundation Migration
 
-Stern `0.2.0-alpha.1` adds one renderer-neutral `SizeScale` authority to
+Stern `0.0.1-alpha.1` adds one renderer-neutral `SizeScale` authority to
 `Theme`. This is a prerelease breaking shape change: external `Theme` struct
 literals must initialize the new `sizes` field.
 
