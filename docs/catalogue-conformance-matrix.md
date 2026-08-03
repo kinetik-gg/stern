@@ -23,5 +23,5 @@ here.
 ## Known gaps
 
 Wiring stern's behavioral coverage into that parity ledger is future work.
-See [`KNOWN-GAPS.md`](KNOWN-GAPS.md) for the tracked gap list. That file may
-not exist yet; a dangling link here is acceptable until it is added.
+See [`KNOWN-GAPS.md`](../KNOWN-GAPS.md) for the tracked gap list. That file
+may not exist yet; a dangling link here is acceptable until it is added.
