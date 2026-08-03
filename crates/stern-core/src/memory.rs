@@ -104,10 +104,24 @@ pub(crate) struct PlannedDragRelease {
     pub ordinal: usize,
 }
 
+/// Monotonic, internal-only cache-invalidation counter for the text-input
+/// owner identity.
+///
+/// It exists so callers can detect that the same widget re-claimed
+/// ownership (e.g. after a hand-off through another owner) and invalidate
+/// caches keyed on owner identity. It is not part of `UiMemory`'s
+/// observable state: two `UiMemory` values with the same owner but
+/// different intermediate hand-off histories are still logically
+/// equivalent, so equality deliberately ignores this field.
 #[derive(Debug, Default, Clone, Copy, Eq)]
 struct TextInputOwnerEpoch(u64);
 
 impl PartialEq for TextInputOwnerEpoch {
+    /// Always returns `true`.
+    ///
+    /// This is intentional, not a bug: the epoch is a private cache-identity
+    /// counter, not observable UI state, so it must not affect `UiMemory`'s
+    /// derived `PartialEq`. See the struct docs above.
     fn eq(&self, _other: &Self) -> bool {
         true
     }
