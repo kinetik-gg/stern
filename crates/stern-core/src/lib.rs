@@ -105,9 +105,3 @@ pub use theme::{
 };
 pub use units::{PhysicalPoint, PhysicalRect, PhysicalSize, ScaleFactor};
 pub use vector::{FillRule, PathData, PathElement, PathPrimitive, Stroke, StrokeCap, StrokeJoin};
-
-/// Returns the crate name.
-#[must_use]
-pub const fn crate_name() -> &'static str {
-    "stern-core"
-}
