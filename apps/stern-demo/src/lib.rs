@@ -13,6 +13,7 @@ use stern::core::{
     WidgetId, default_dark_theme,
 };
 use stern::render::RenderResources;
+use stern::widgets::Ui;
 
 pub use edit_workspace::DemoSelectedAssetSnapshot;
 use edit_workspace::EditWorkspace;
@@ -211,104 +212,84 @@ impl DemoApp {
 
     /// Builds and dispatches one frame through public toolkit APIs.
     pub fn frame(&mut self, context: FrameContext) -> FrameOutput {
-        let keyboard = context.input.keyboard.clone();
-        let logical_size = context.viewport.logical_size;
-        self.actions
-            .project_apply_shared_state(self.model.apply_availability());
-        self.actions
-            .project_viewport_tool(self.model.viewport_tool());
-        let edit = self.actions.edit_workspace().clone();
-        let graph = self.actions.graph_workspace().clone();
-        let apply = self.actions.apply_shared_state().clone();
-        let workspace = self.model.workspace();
-        let bounds = context.viewport.logical_size;
         let theme = default_dark_theme();
-        self.actions
-            .project_transport_state(self.model.transport_state());
-        let shortcut_enabled = !self.overlays.is_open();
+        let Self {
+            ui_state,
+            model,
+            actions,
+            edit_workspace,
+            graph_workspace,
+            overlays,
+        } = self;
         let focus_return;
-        let mut output = {
-            let mut ui = self.ui_state.begin_frame(context, &theme);
-            let edit_rect = Rect::new(24.0, 56.0, 112.0, 30.0);
-            let graph_rect = Rect::new(148.0, 56.0, 120.0, 30.0);
-            let apply_rect = Rect::new(24.0, 156.0, 160.0, 30.0);
-            ui.push_platform_request(PlatformRequest::SetWindowTitle(DEMO_TITLE.to_owned()));
-            match workspace {
-                DemoWorkspace::Edit => {
-                    focus_return = self.edit_workspace.compose(
-                        &mut ui,
-                        &self.actions,
-                        workspace,
-                        &mut self.model,
-                        &mut self.overlays,
-                        bounds,
-                    );
-                }
-                DemoWorkspace::Graph => {
-                    ui.label(Rect::new(24.0, 20.0, 320.0, 24.0), DEMO_TITLE);
-                    let graph_bounds = Rect::new(
-                        24.0,
-                        202.0,
-                        (logical_size.width - 48.0).max(0.0),
-                        (logical_size.height - 226.0).max(0.0),
-                    );
-                    let app_targets = [
-                        (ui.make_id(edit.id.as_str()), edit_rect),
-                        (ui.make_id(graph.id.as_str()), graph_rect),
-                        (ui.make_id(apply.id.as_str()), apply_rect),
-                    ];
-                    focus_return = self.graph_workspace.compose(
-                        &mut ui,
-                        graph_bounds,
-                        bounds,
-                        &app_targets,
-                        &self.actions,
-                        &mut self.model,
-                        &mut self.overlays,
-                    );
-                    let _ =
-                        ui.action_button(edit.id.as_str(), edit_rect, &edit, ActionContext::Global);
-                    let _ = ui.action_button(
-                        graph.id.as_str(),
-                        graph_rect,
-                        &graph,
-                        ActionContext::Global,
-                    );
-                    let _ = ui.action_button(
-                        apply.id.as_str(),
-                        apply_rect,
-                        &apply,
-                        ActionContext::Global,
-                    );
-                }
-            }
+        let output = {
+            let mut ui = ui_state.begin_frame(context, &theme);
+            focus_return = compose_demo(
+                &mut ui,
+                actions,
+                model,
+                edit_workspace,
+                graph_workspace,
+                overlays,
+            );
             ui.finish_output()
         };
         if let Some(focus_return) = focus_return {
             self.ui_state.memory_mut().focus(focus_return);
         }
-        if shortcut_enabled {
-            let routing = ActionRoutingContext::new().with_editor();
-            let mut shortcuts = self
-                .actions
-                .shortcut_router()
-                .resolve_shortcuts_in_context(&keyboard, routing);
-            for invocation in shortcuts.drain() {
-                output.actions.push(invocation);
-            }
-        }
         let mut actions = output.actions.clone();
         for invocation in actions.drain() {
-            self.dispatch(&invocation);
+            if let Some(target) = self.apply_action(&invocation) {
+                self.ui_state.memory_mut().focus(target);
+            }
         }
         output
+    }
+
+    /// Composes one demo frame into a caller-owned widget frame.
+    ///
+    /// This is the application-shell entry point: the caller owns the frame
+    /// lifecycle and retained UI state, and must apply the returned
+    /// retained-focus request after the frame is finished. Emitted action
+    /// invocations must then be executed through [`Self::apply_action`].
+    pub fn compose(&mut self, ui: &mut Ui<'_>) -> Option<WidgetId> {
+        compose_demo(
+            ui,
+            &mut self.actions,
+            &mut self.model,
+            &mut self.edit_workspace,
+            &mut self.graph_workspace,
+            &mut self.overlays,
+        )
+    }
+
+    /// Executes one emitted action invocation against application state.
+    ///
+    /// Returns a retained-focus request the caller must apply after the
+    /// frame that emitted the invocation.
+    pub fn apply_action(&mut self, invocation: &ActionInvocation) -> Option<WidgetId> {
+        let target = (invocation.action_id.as_str() == self.actions.edit_workspace().id.as_str()
+            || invocation.action_id.as_str() == self.actions.graph_workspace().id.as_str())
+        .then(|| WidgetId::from_key("root").child(invocation.action_id.as_str()));
+        if !self.graph_workspace.handle_action(invocation) {
+            let _ = self.model.execute(invocation);
+        }
+        target
+    }
+
+    /// Registers demo-owned domain resources such as asset textures.
+    ///
+    /// Application shells that own text-layout caching register shaped text
+    /// themselves and add only these domain resources.
+    pub fn register_domain_resources(&self, resources: &mut RenderResources) {
+        self.edit_workspace.register_resources(resources);
     }
 
     /// Returns renderer resources for the latest public frame.
     #[must_use]
     pub fn render_resources(&self) -> RenderResources {
         let mut resources = self.ui_state.text_render_resources();
-        self.edit_workspace.register_resources(&mut resources);
+        self.register_domain_resources(&mut resources);
         resources
     }
 
@@ -317,19 +298,74 @@ impl DemoApp {
     pub fn focused(&self) -> Option<WidgetId> {
         self.ui_state.memory().focused()
     }
+}
 
-    fn dispatch(&mut self, invocation: &ActionInvocation) {
-        if invocation.action_id.as_str() == self.actions.edit_workspace().id.as_str()
-            || invocation.action_id.as_str() == self.actions.graph_workspace().id.as_str()
-        {
-            self.ui_state
-                .memory_mut()
-                .focus(WidgetId::from_key("root").child(invocation.action_id.as_str()));
+/// Composes the maintained demo frame and resolves application shortcuts.
+fn compose_demo(
+    ui: &mut Ui<'_>,
+    actions: &mut DemoActionRegistry,
+    model: &mut DemoApplicationModel,
+    edit_workspace: &mut EditWorkspace,
+    graph_workspace: &mut GraphWorkspaceState,
+    overlays: &mut SharedOverlayRoute,
+) -> Option<WidgetId> {
+    let keyboard = ui.input().keyboard.clone();
+    let logical_size = ui.viewport().logical_size;
+    actions.project_apply_shared_state(model.apply_availability());
+    actions.project_viewport_tool(model.viewport_tool());
+    let edit = actions.edit_workspace().clone();
+    let graph = actions.graph_workspace().clone();
+    let apply = actions.apply_shared_state().clone();
+    let workspace = model.workspace();
+    let bounds = logical_size;
+    actions.project_transport_state(model.transport_state());
+    let shortcut_enabled = !overlays.is_open();
+    let edit_rect = Rect::new(24.0, 56.0, 112.0, 30.0);
+    let graph_rect = Rect::new(148.0, 56.0, 120.0, 30.0);
+    let apply_rect = Rect::new(24.0, 156.0, 160.0, 30.0);
+    ui.push_platform_request(PlatformRequest::SetWindowTitle(DEMO_TITLE.to_owned()));
+    let focus_return = match workspace {
+        DemoWorkspace::Edit => {
+            edit_workspace.compose(ui, actions, workspace, model, overlays, bounds)
         }
-        if !self.graph_workspace.handle_action(invocation) {
-            let _ = self.model.execute(invocation);
+        DemoWorkspace::Graph => {
+            ui.label(Rect::new(24.0, 20.0, 320.0, 24.0), DEMO_TITLE);
+            let graph_bounds = Rect::new(
+                24.0,
+                202.0,
+                (logical_size.width - 48.0).max(0.0),
+                (logical_size.height - 226.0).max(0.0),
+            );
+            let app_targets = [
+                (ui.make_id(edit.id.as_str()), edit_rect),
+                (ui.make_id(graph.id.as_str()), graph_rect),
+                (ui.make_id(apply.id.as_str()), apply_rect),
+            ];
+            let focus_return = graph_workspace.compose(
+                ui,
+                graph_bounds,
+                bounds,
+                &app_targets,
+                actions,
+                model,
+                overlays,
+            );
+            let _ = ui.action_button(edit.id.as_str(), edit_rect, &edit, ActionContext::Global);
+            let _ = ui.action_button(graph.id.as_str(), graph_rect, &graph, ActionContext::Global);
+            let _ = ui.action_button(apply.id.as_str(), apply_rect, &apply, ActionContext::Global);
+            focus_return
+        }
+    };
+    if shortcut_enabled {
+        let routing = ActionRoutingContext::new().with_editor();
+        let mut shortcuts = actions
+            .shortcut_router()
+            .resolve_shortcuts_in_context(&keyboard, routing);
+        for invocation in shortcuts.drain() {
+            ui.push_action(invocation);
         }
     }
+    focus_return
 }
 
 impl Default for DemoApp {

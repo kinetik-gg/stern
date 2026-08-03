@@ -2156,7 +2156,6 @@ dependencies = [
  "stern",
  "stern-icons-phosphor",
  "syn",
- "winit",
 ]
 
 [[package]]
