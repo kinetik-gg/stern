@@ -8,8 +8,31 @@ use stern::core::ScaleFactor;
 use stern::platform_winit::{WinitInputAdapter, WinitPlatformRequests};
 use stern_demo::{DEMO_TITLE, DemoApp, demo_context};
 
+/// Flags recognized by the demo CLI, listed in the unknown-argument error.
+const SUPPORTED_FLAGS: &str = "--dump-identity-evidence <directory>";
+
+/// Rejects any argument the demo CLI does not recognize. The only
+/// recognized shape is `--dump-identity-evidence <directory>`; anything else
+/// (including the retired `--dump-review-artifacts`) is unknown.
+fn validate_arguments(args: &[String]) -> Result<(), &str> {
+    let mut index = 1;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--dump-identity-evidence" => index += 2,
+            other => return Err(other),
+        }
+    }
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args().collect::<Vec<_>>();
+    if let Err(unknown) = validate_arguments(&args) {
+        eprintln!("stern-demo: unrecognized argument `{unknown}`");
+        eprintln!("Supported flags:");
+        eprintln!("  {SUPPORTED_FLAGS}");
+        std::process::exit(1);
+    }
     let mut app = DemoApp::new();
     let mut platform_input = WinitInputAdapter::new(ScaleFactor::ONE);
     platform_input.set_window_focused(true);
