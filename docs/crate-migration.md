@@ -20,11 +20,11 @@ of the checkout):
 stern = { path = "../stern/crates/stern", features = ["vello-winit"] }
 ```
 
-After `0.2.0-alpha.1` has actually been published, the future registry form is:
+After `0.0.1-alpha.1` has actually been published, the future registry form is:
 
 ```toml
 [dependencies]
-stern = { version = "=0.2.0-alpha.1", features = ["vello-winit"] }
+stern = { version = "=0.0.1-alpha.1", features = ["vello-winit"] }
 ```
 
 The facade re-exports the common application stack through
@@ -48,7 +48,7 @@ stern-vello-winit = { path = "../stern/crates/stern-vello-winit" }
 ```
 
 Once published, each lower-level registry dependency must use the exact
-`=0.2.0-alpha.1` requirement. A package dry-run is not publication and is not
+`=0.0.1-alpha.1` requirement. A package dry-run is not publication and is not
 a reason to use the registry snippets early.
 
 ## Migration Map

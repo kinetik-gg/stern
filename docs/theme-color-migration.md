@@ -1,6 +1,6 @@
 # Semantic Theme Color Migration
 
-Stern `0.2.0-alpha.1` deliberately replaces the provisional flat color
+Stern `0.0.1-alpha.1` deliberately replaces the provisional flat color
 palette with grouped semantic roles. This is a prerelease breaking change:
 legacy fields and broad `SemanticColor` variants were removed rather than kept
 as aliases or a second source of truth.
