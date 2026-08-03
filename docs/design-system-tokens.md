@@ -43,14 +43,36 @@ source of truth while adoption is staged. Token groups are adopted one at a
 time by adding mapping tests that pin theme values to the corresponding
 `generated_tokens` entries:
 
-1. Accent colors (done): `default_dark_accent_group_matches_design_system_tokens`
-   asserts that `ThemeColors::default_dark()`'s accent group equals the
-   `color.accent.*` entries.
-2. Remaining semantic colors, then metrics (spacing, radii, sizes, strokes,
-   durations, elevation) and typography/icon tables: planned. Where current
-   theme values differ from the tokens, reconciling them is a product decision
-   taken explicitly per group, not a silent side effect of wiring.
+1. All semantic colors (done): every one of the 53 `SemanticColor` resolver
+   keys carries a `SemanticColor::design_token_name` mapping to its exact
+   `color.*` token name (`crates/stern-core/src/theme/tokens.rs`), keyed off
+   `docs/visual-spec/00-language.md`'s tier tables (surface, text, border,
+   selection, focus, overlay, accent, status). One test per tier group in
+   `crates/stern-core/src/theme/tests.rs` — plus a completeness guard over
+   `SemanticColor::ALL` — asserts `ThemeColors::default_dark()` equals every
+   mapped token. See [Exceptions and divergences](#exceptions-and-divergences)
+   below.
+2. Metrics (spacing, radii, sizes, strokes, durations, elevation) and
+   typography/icon tables: planned. Where current theme values differ from
+   the tokens, reconciling them is a product decision taken explicitly per
+   group, not a silent side effect of wiring.
 
 Once every group is mapped, the hand-rolled definitions can be derived from
 `generated_tokens` directly and the mapping tests collapse into the drift
 test.
+
+## Exceptions and divergences
+
+Every `SemanticColor` key / `ThemeColors` field has a named
+`generated_tokens::COLORS` counterpart — there are no color exceptions
+(hand-rolled color values with no design-system token) to record.
+
+Checking the mapping against `ThemeColors::default_dark()` also found no
+divergences: every mapped theme value already equals its token exactly,
+including the one case `docs/visual-spec/00-language.md` flags as
+historically contested (`surface.control_pressed` / `border.hover`, its
+divergence D1 — labs.css disagrees with the token, but the *token* is
+normative, and stern's theme already used the token value). There is nothing
+here for an owner to decide; this section stays as a record for future
+groups (metrics, typography, icons) to append to if their adoption finds
+either kind of gap.
