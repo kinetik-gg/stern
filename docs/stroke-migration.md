@@ -1,6 +1,6 @@
 # Stroke Width Migration
 
-Stern `1.0.0-rc.2.dev` replaces the three provisional width fields in
+Stern `0.2.0-alpha.1` replaces the three provisional width fields in
 `ControlMetrics` with one shared stroke foundation. This is a prerelease
 breaking change: control sizing and padding remain in `ControlMetrics`, while
 paint widths now come from `Theme::strokes`.

@@ -17,16 +17,16 @@ render-vello = ["dep:stern-vello"]
 vello-winit = ["platform-winit", "render-vello", "dep:stern-vello-winit"]
 
 [dependencies]
-stern-core = { version = "=1.0.0-rc.2.dev", path = "../stern-core" }
-stern-render = { version = "=1.0.0-rc.2.dev", path = "../stern-render" }
-stern-text = { version = "=1.0.0-rc.2.dev", path = "../stern-text" }
-stern-widgets = { version = "=1.0.0-rc.2.dev", path = "../stern-widgets" }
-stern-winit = { version = "=1.0.0-rc.2.dev", path = "../stern-winit", optional = true }
-stern-vello = { version = "=1.0.0-rc.2.dev", path = "../stern-vello", optional = true }
-stern-vello-winit = { version = "=1.0.0-rc.2.dev", path = "../stern-vello-winit", optional = true }
+stern-core = { version = "=0.2.0-alpha.1", path = "../stern-core" }
+stern-render = { version = "=0.2.0-alpha.1", path = "../stern-render" }
+stern-text = { version = "=0.2.0-alpha.1", path = "../stern-text" }
+stern-widgets = { version = "=0.2.0-alpha.1", path = "../stern-widgets" }
+stern-winit = { version = "=0.2.0-alpha.1", path = "../stern-winit", optional = true }
+stern-vello = { version = "=0.2.0-alpha.1", path = "../stern-vello", optional = true }
+stern-vello-winit = { version = "=0.2.0-alpha.1", path = "../stern-vello-winit", optional = true }
 
 [dev-dependencies]
-stern-icons-phosphor = { version = "=1.0.0-rc.2.dev", path = "../stern-icons-phosphor" }
+stern-icons-phosphor = { version = "=0.2.0-alpha.1", path = "../stern-icons-phosphor" }
 
 [lints]
 workspace = true
