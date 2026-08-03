@@ -842,12 +842,6 @@ pub struct Translation<T> {
     pub diagnostics: Vec<RenderDiagnostic>,
 }
 
-/// Returns the crate name.
-#[must_use]
-pub const fn crate_name() -> &'static str {
-    "stern-render"
-}
-
 #[cfg(test)]
 mod tests {
     use std::{convert::Infallible, mem::size_of, sync::Arc};

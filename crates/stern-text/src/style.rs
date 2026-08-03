@@ -31,10 +31,6 @@ impl TextFeatureSet {
     pub(crate) const fn has_tabular_numbers(self) -> bool {
         self.0 & Self::TABULAR_NUMBERS.0 != 0
     }
-
-    pub(crate) const fn ordering_key(self) -> u8 {
-        self.0
-    }
 }
 
 impl Default for TextFeatureSet {

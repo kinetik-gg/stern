@@ -466,12 +466,6 @@ impl Transform {
 
         inverse.is_finite().then_some(inverse)
     }
-
-    /// Returns the inverse transform when this transform is finite and invertible.
-    #[must_use]
-    pub fn inverse(self) -> Option<Self> {
-        self.try_inverse()
-    }
 }
 
 /// Rectangle draw command.
