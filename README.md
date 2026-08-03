@@ -99,6 +99,10 @@ stern-winit
 stern-vello-winit
   Concrete Vello/winit window presenter, surface lifecycle, and recovery policy.
 
+stern-app
+  Application shell/runner owning the winit event loop, window, input,
+  retained UI state, repaint scheduling, and automatic GPU recovery.
+
 stern
   Facade crate.
 
