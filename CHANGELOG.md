@@ -5,8 +5,10 @@ follow the repository release policy.
 
 ## [Unreleased]
 
-`1.0.0-rc.2.dev` is the planned first prerelease. It has not been dated, tagged,
-published, or accepted as an alpha release.
+The workspace version was restated from `1.0.0-rc.2.dev` to `0.2.0-alpha.1` on
+2026-08-03: the rc lineage was adopted in error from the design-system
+specification's document version (commit 4b37e2f); no rc.1 or 1.0 ever existed.
+This codebase is pre-alpha, and nothing has been released or accepted.
 
 ### Changed
 

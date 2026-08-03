@@ -13,8 +13,8 @@ path = "tools/runtime-semantic-evidence.rs"
 
 [dependencies]
 pollster = "0.4.0"
-stern = { version = "=1.0.0-rc.2.dev", path = "../../crates/stern" }
-stern-icons-phosphor = { version = "=1.0.0-rc.2.dev", path = "../../crates/stern-icons-phosphor" }
+stern = { version = "=0.2.0-alpha.1", path = "../../crates/stern" }
+stern-icons-phosphor = { version = "=0.2.0-alpha.1", path = "../../crates/stern-icons-phosphor" }
 winit = "0.30.12"
 
 [dev-dependencies]

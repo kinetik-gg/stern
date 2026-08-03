@@ -11,8 +11,8 @@ categories.workspace = true
 description = "Backend-independent renderer contracts and resource types for Stern"
 
 [dependencies]
-stern-core = { version = "=1.0.0-rc.2.dev", path = "../stern-core" }
-stern-text = { version = "=1.0.0-rc.2.dev", path = "../stern-text" }
+stern-core = { version = "=0.2.0-alpha.1", path = "../stern-core" }
+stern-text = { version = "=0.2.0-alpha.1", path = "../stern-text" }
 
 [lints]
 workspace = true
