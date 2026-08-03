@@ -1,6 +1,8 @@
 //! Theme tokens and component recipes.
 
 mod defaults;
+#[rustfmt::skip] // Vendored generated file; formatting must stay byte-stable.
+pub mod generated_tokens;
 mod model;
 mod recipes;
 #[cfg(test)]
