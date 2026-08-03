@@ -1,71 +1,27 @@
-# Catalogue Conformance Matrix
+# Component Conformance Status
 
-This matrix is the S14 review surface for restarted editor-toolkit S10-S13
-coverage. It summarizes the live data-only registry in
-`stern-widgets::COMPONENT_CONFORMANCE_MATRIX` and points reviewers at the
-existing showcase fixtures that make the coverage inspectable.
+This file previously carried a per-capability matrix (S10-S13 rows) that
+pointed at two things that no longer exist: an in-crate registry
+(`stern-widgets::COMPONENT_CONFORMANCE_MATRIX` / its `taxonomy` module,
+removed in PR #888) and showcase fixtures plus hand-authored evidence
+packets (removed in PR #890). The matrix also used a capability vocabulary
+(`ALPHA-00`, axes `M`/`P`/`I`/`A11y`/`PF`/`LW`, and the
+`Stable`/`Experimental`/`Planned` statuses) that was invented in this
+repository and defined nowhere outside these docs. None of that is restored
+here.
 
-Conformance uses three statuses: `Stable` requires accepted behavioral evidence
-for every declared axis, `Experimental` permits an incomplete evidence set, and
-`Planned` describes vocabulary without an active public surface. The axes are
-Model (`M`), Paint (`P`), Input (`I`), Accessibility (`A11y`), Platform (`PF`),
-and Live Workflow (`LW`). Metadata-only evidence cannot prove an axis.
+## Current honest status
 
-All current rows are intentionally `Experimental`. Each requires
-`M/P/I/A11y/PF/LW` and currently proves only `M` through its specific
-deterministic conformance descriptor. The rows do not claim complete rendered
-widgets, platform integration, accessible interaction, live application/domain
-execution, or committed raster baselines.
+- Behavioral model-layer tests exist and pass: roughly 2,500 tests across
+  the workspace (`cargo test --workspace --all-features`).
+- No component has verified paint, platform, or accessibility evidence.
+  Nothing in this repository is verified `Stable` by any standard.
+- The intended verification ledger is the design system's parity index, not
+  this repository: `../stern-design-system/generated/parity-index.json`
+  (486 requirements, currently all `unverified`).
 
-## S10 Outliner And Asset Browser
+## Known gaps
 
-| Capability | Status | Required axes | Proven axes | Conformance tests | Showcase fixture | Non-goals |
-| --- | --- | --- | --- | --- | --- | --- |
-| `s10-outliner-tree-selection-semantics` | Experimental | M/P/I/A11y/PF/LW | M | `outliner_conformance::*`, `component_taxonomy_conformance::s10_s11_*` | Editor page: Explorer frame/tree fixture | No real project graph mutation or domain scene execution. |
-| `s10-asset-browser-grid-list-metadata` | Experimental | M/P/I/A11y/PF/LW | M | `asset_browser_conformance::*`, `component_taxonomy_conformance::s10_s11_*` | Editor page: Asset Browser frame/grid fixture | No filesystem asset indexing or import pipeline. |
-| `s10-inline-edit-rename-lifecycle` | Experimental | M/P/I/A11y/PF/LW | M | `inline_edit_conformance::*`, `component_taxonomy_conformance::s10_s11_*` | Editor page: Explorer/Asset Browser metadata path | No committed rename side effects. |
-| `s10-collection-drag-drop-context` | Experimental | M/P/I/A11y/PF/LW | M | `collection_drag_context_conformance::*`, `component_taxonomy_conformance::s10_s11_*` | Editor page: Explorer/Asset Browser collection fixtures | No live drag/drop domain mutation. |
-| `s10-collection-filter-sort-selection-preservation` | Experimental | M/P/I/A11y/PF/LW | M | `collection_projection_conformance::*`, `component_taxonomy_conformance::s10_s11_*` | Editor page: Asset Browser filter/sort fixture | No persistent asset database. |
-
-## S11 Timeline
-
-| Capability | Status | Required axes | Proven axes | Conformance tests | Showcase fixture | Non-goals |
-| --- | --- | --- | --- | --- | --- | --- |
-| `s11-timeline-layout-coordinate-selection` | Experimental | M/P/I/A11y/PF/LW | M | `timeline_conformance::*`, `component_taxonomy_conformance::s10_s11_*` | Editor page: Timeline frame fixture | No media playback or clip editing engine. |
-| `s11-ruler-ticks-timecode` | Experimental | M/P/I/A11y/PF/LW | M | `timeline_conformance::*`, `component_taxonomy_conformance::s10_s11_*` | Editor page: Timeline ruler fixture | No renderer-specific time ruler implementation. |
-| `s11-transport-action-controls` | Experimental | M/P/I/A11y/PF/LW | M | `timeline_transport_conformance::*`, `component_taxonomy_conformance::s10_s11_*` | Editor page: transport controls/status fixture | No duplicated command logic in controls. |
-| `s11-timeline-snapping` | Experimental | M/P/I/A11y/PF/LW | M | `timeline_conformance::*`, `component_taxonomy_conformance::s10_s11_*` | Editor page: Timeline snap metadata fixture | No app-owned edit operation execution. |
-| `s11-timeline-preservation` | Experimental | M/P/I/A11y/PF/LW | M | `timeline_conformance::*`, `component_taxonomy_conformance::s10_s11_*` | Editor page: Timeline state fixture | No project persistence format changes. |
-
-## S12 Viewport Tools
-
-| Capability | Status | Required axes | Proven axes | Conformance tests | Showcase fixture | Non-goals |
-| --- | --- | --- | --- | --- | --- | --- |
-| `s12-viewport-surface-overlays` | Experimental | M/P/I/A11y/PF/LW | M | `viewport_conformance::*`, `component_taxonomy_conformance::s12_s13_*` | Editor page: Viewport frame; Viewport page: Pan/Zoom Texture Surface | No GPU/domain texture production beyond existing fixtures. |
-| `s12-viewport-tools-transform-handles` | Experimental | M/P/I/A11y/PF/LW | M | `viewport_conformance::*`, `component_taxonomy_conformance::s12_s13_*` | Editor page: Viewport toolbar/tool fixture | No actual scene transform execution. |
-| `s12-viewport-action-routing` | Experimental | M/P/I/A11y/PF/LW | M | `viewport_conformance::*`, `component_taxonomy_conformance::s12_s13_*` | Editor page: viewport toolbar/status fixture | No application command execution beyond existing action recording. |
-| `s12-viewport-guides-rulers-safe-areas-hud` | Experimental | M/P/I/A11y/PF/LW | M | `viewport_conformance::*`, `component_taxonomy_conformance::s12_s13_*` | Viewport page: guides, rulers, safe area, HUD fixture | No renderer-owned overlay backend behavior. |
-
-## S13 Jobs And Diagnostics
-
-| Capability | Status | Required axes | Proven axes | Conformance tests | Showcase fixture | Non-goals |
-| --- | --- | --- | --- | --- | --- | --- |
-| `s13-progress-indicator-metadata` | Experimental | M/P/I/A11y/PF/LW | M | `status_bar_conformance::*`, `component_taxonomy_conformance::s12_s13_*` | Editor page: status bar progress fixture | No worker queue or async job runtime. |
-| `s13-job-list-progress-cancel` | Experimental | M/P/I/A11y/PF/LW | M | `status_bar_conformance::*`, `component_taxonomy_conformance::s12_s13_*` | Editor page: job list/status fixture | No real cancellation side effects. |
-| `s13-diagnostic-strip-codes-fields-ordering` | Experimental | M/P/I/A11y/PF/LW | M | `status_bar_conformance::*`, `component_taxonomy_conformance::s12_s13_*` | Editor page: diagnostic strip fixture | No compiler or domain diagnostic source execution. |
-| `s13-feedback-stack-lifetime-repaint` | Experimental | M/P/I/A11y/PF/LW | M | `status_bar_conformance::*`, `component_taxonomy_conformance::s12_s13_*` | Editor page: feedback stack fixture | No external feedback/report transport. |
-
-## Manual Review Artifacts
-
-Generate disposable CPU raster artifacts when a reviewer wants inspectable
-showcase output for this matrix:
-
-```text
-cargo run -p stern-demo -- --dump-review-artifacts s14-s10-s13-matrix --width 1440 --height 900
-```
-
-The dump writes a `manifest.txt`, CPU raster BMP frames, and per-page
-`*-pixel-smoke.txt` summaries under
-`target/stern-artifacts/stern-demo/review-dumps/`. These files are
-manual review artifacts only. Do not commit them as raster baselines, and do not
-add a bless/update workflow for this matrix.
+Wiring stern's behavioral coverage into that parity ledger is future work.
+See [`KNOWN-GAPS.md`](../KNOWN-GAPS.md) for the tracked gap list. That file
+may not exist yet; a dangling link here is acceptable until it is added.

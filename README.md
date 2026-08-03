@@ -9,12 +9,11 @@ It is designed for dense, tool-oriented interfaces: docked frames, passive panel
 
 The architecture favors deterministic behavior, crisp rendering, reusable component patterns, and clear boundaries between UI runtime, application state, rendering, platform integration, and domain work.
 
-Catalogue claims use the ALPHA-00 capability vocabulary: **Model**, **Paint**,
-**Input**, **Accessibility**, **Platform**, and **Live Workflow**. A surface is
-`Stable` only when behavioral evidence proves every capability axis it
-requires. `Experimental` and `Planned` surfaces may be incomplete, and
-metadata-only evidence proves no capability axis. There are currently no
-`Stable` catalogue entries.
+Stern is pre-alpha. Model-layer behavior (layout, input, actions, state) is
+extensively tested headlessly; rendering, platform integration, and
+accessibility verification have not started. See
+[`docs/catalogue-conformance-matrix.md`](docs/catalogue-conformance-matrix.md)
+and [`KNOWN-GAPS.md`](KNOWN-GAPS.md) for current status.
 
 ## Architecture
 

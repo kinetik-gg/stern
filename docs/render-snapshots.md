@@ -100,19 +100,7 @@ contracts. Vello 0.9's resolved 512-sample gradient ramp is private; its current
 sRGB/premultiplied implementation is source-verified residual evidence, while
 the executable sentinels stop at public encoded stops.
 
-Showcase review dumps are manual inspection artifacts, not bless/update
-baselines. Generate them explicitly with the showcase CLI when a human needs CPU
-raster BMP frames, compact pixel-smoke summaries, and a manifest for review:
-
-```text
-cargo run -p stern-demo -- --dump-review-artifacts s8-12c --page components --width 1440 --height 900
-```
-
-The dump helper writes below
-`target/stern-artifacts/stern-demo/review-dumps/`. It records the
-selected page, logical and raster dimensions, primitive count, warning count, and
-written BMP and pixel-smoke artifact paths in `manifest.txt`. Each
-`<page>-pixel-smoke.txt` file records the frame dimensions, total pixels, visible
-variation flag, non-first-pixel count, bounded unique color count, and a
-deterministic checksum for manual comparison. These files are disposable review
-outputs under `target/`; do not commit them as baselines.
+There is currently no CLI-driven CPU raster review-dump workflow; the demo
+binary (`apps/stern-demo/src/main.rs`) only supports
+`--dump-identity-evidence`. A showcase-driven raster review workflow remains
+future work.

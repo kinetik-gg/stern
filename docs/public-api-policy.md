@@ -1,5 +1,12 @@
 # Provisional Public API Policy
 
+> **Historical document:** this policy froze an inventory using the retired
+> `ALPHA-00` capability vocabulary (`Stable`/`Experimental`/`Planned`,
+> `Model`/`Paint`/`Input`/`Accessibility`/`Platform`/`Live Workflow`
+> axes) and references items removed since it was written (for example
+> `stern::widgets::taxonomy`, removed in PR #888). It is historical until
+> rewritten; do not treat its classifications as current.
+
 This document freezes an inventory, not the final alpha API. The current
 `stern` facade and default prelude are **provisional Experimental** during
 pre-alpha development. Prelude inclusion is a convenience decision and
