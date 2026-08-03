@@ -1,0 +1,24 @@
+[package]
+name = "stern-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Application shell and event-loop runner for Stern"
+
+[dependencies]
+pollster = "0.4.0"
+stern-core = { version = "=0.0.1-alpha.1", path = "../stern-core" }
+stern-render = { version = "=0.0.1-alpha.1", path = "../stern-render" }
+stern-text = { version = "=0.0.1-alpha.1", path = "../stern-text" }
+stern-vello-winit = { version = "=0.0.1-alpha.1", path = "../stern-vello-winit" }
+stern-widgets = { version = "=0.0.1-alpha.1", path = "../stern-widgets" }
+stern-winit = { version = "=0.0.1-alpha.1", path = "../stern-winit" }
+winit = "0.30.12"
+
+[lints]
+workspace = true

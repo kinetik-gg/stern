@@ -14,9 +14,15 @@ description = "Application-facing facade for the Stern desktop toolkit"
 default = ["platform-winit", "render-vello", "vello-winit"]
 platform-winit = ["dep:stern-winit"]
 render-vello = ["dep:stern-vello"]
-vello-winit = ["platform-winit", "render-vello", "dep:stern-vello-winit"]
+vello-winit = [
+    "platform-winit",
+    "render-vello",
+    "dep:stern-vello-winit",
+    "dep:stern-app",
+]
 
 [dependencies]
+stern-app = { version = "=0.0.1-alpha.1", path = "../stern-app", optional = true }
 stern-core = { version = "=0.0.1-alpha.1", path = "../stern-core" }
 stern-render = { version = "=0.0.1-alpha.1", path = "../stern-render" }
 stern-text = { version = "=0.0.1-alpha.1", path = "../stern-text" }

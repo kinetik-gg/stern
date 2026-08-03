@@ -2119,6 +2119,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 name = "stern"
 version = "0.0.1-alpha.1"
 dependencies = [
+ "stern-app",
  "stern-core",
  "stern-icons-phosphor",
  "stern-render",
@@ -2127,6 +2128,20 @@ dependencies = [
  "stern-vello-winit",
  "stern-widgets",
  "stern-winit",
+]
+
+[[package]]
+name = "stern-app"
+version = "0.0.1-alpha.1"
+dependencies = [
+ "pollster",
+ "stern-core",
+ "stern-render",
+ "stern-text",
+ "stern-vello-winit",
+ "stern-widgets",
+ "stern-winit",
+ "winit",
 ]
 
 [[package]]
@@ -2141,7 +2156,6 @@ dependencies = [
  "stern",
  "stern-icons-phosphor",
  "syn",
- "winit",
 ]
 
 [[package]]

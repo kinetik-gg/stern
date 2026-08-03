@@ -26,11 +26,17 @@ reference looks stale, trust the code and send a correction PR.
    wrapping integration, no baseline alignment, and no layout result cache.
    Every widget still takes a caller-computed `Rect`. Spec phase 5
    ("Measurement") in `docs/specs.md` is unbuilt.
-2. **Application shell.** There is no runner type. The complete
-   application-owned event loop lives in
-   `crates/stern-vello-winit/examples/one_window.rs`, ~630 lines of
-   hand-rolled winit + GPU-recovery plumbing that every application must
-   reproduce or copy.
+2. **Application shell.** First slice delivered: `crates/stern-app` owns the
+   winit event loop, window, input adaptation, platform requests, repaint
+   scheduling, retained UI state, and automatic GPU recovery behind an
+   eframe-class `App` trait (`crates/stern-app/examples/hello_stern.rs` is a
+   complete app in ~60 lines; `apps/stern-demo/src/bin/native_shell.rs` now
+   runs on it). Remaining: multi-window; window chrome/options beyond title
+   and initial/min size (icon, decorations, position, resizability);
+   device-scope access for native GPU texture producers, for which
+   `crates/stern-vello-winit/examples/one_window.rs` stays the manual
+   application-owned path; and the accessibility/font gaps tracked as items
+   3 and 4.
 3. **Accessibility bridge.** `SemanticTree`/`AccessibilitySnapshot` exist and
    are tested (see `crates/stern-core`), but nothing consumes them into an
    OS accessibility tree. `crates/stern-winit/src/accessibility.rs` only

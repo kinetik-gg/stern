@@ -13,6 +13,16 @@ Further restated to 0.0.1-alpha.1 on the owner's decision: no release of any ver
 
 ### Changed
 
+- Added the `stern-app` application shell/runner crate: `run(AppConfig, impl
+  App)` owns the winit event loop, window lifecycle, input adaptation,
+  platform-request application, repaint scheduling, retained UI state, and
+  automatic presenter/GPU recovery, with `ShellCtx` wrappers for close,
+  title, cursor, clipboard, scale factor, repaint, and retained-focus
+  intent. The facade re-exports it as `stern::app` through the existing
+  `vello-winit` feature, the `hello_stern` example demonstrates a complete
+  app in ~60 lines, and the demo's `native_shell` CI smoke host now runs on
+  the runner (dropping its direct winit dependency) while
+  `one_window.rs` remains the manual application-owned path.
 - Replaced the repository identity scanner's JavaScript/Node implementation
   with the development-only, pure-Rust `stern-identity-scan` crate. The Cargo
   CLI preserves the scanner's non-disclosing JSON records, scopes, filtering,

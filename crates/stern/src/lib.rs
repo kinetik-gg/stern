@@ -51,6 +51,12 @@ pub mod vello_winit {
     pub use stern_vello_winit::*;
 }
 
+/// Application shell and event-loop runner.
+#[cfg(feature = "vello-winit")]
+pub mod app {
+    pub use stern_app::*;
+}
+
 /// Retained application-facing toolkit state.
 ///
 /// This owns the core UI memory and shaped text layout cache that most apps
