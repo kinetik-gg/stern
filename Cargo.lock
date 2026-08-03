@@ -2130,6 +2130,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "stern-app"
+version = "0.0.1-alpha.1"
+dependencies = [
+ "pollster",
+ "stern-core",
+ "stern-render",
+ "stern-text",
+ "stern-vello-winit",
+ "stern-widgets",
+ "stern-winit",
+ "winit",
+]
+
+[[package]]
 name = "stern-core"
 version = "0.0.1-alpha.1"
 
