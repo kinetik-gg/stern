@@ -522,6 +522,18 @@ This codebase is pre-alpha, and nothing has been released or accepted.
   exact integer rounding. Public render-resource and snapshot APIs are
   unchanged.
 
+### Corrected
+
+- Formally invalidated the completion claims recorded in issues #781, #846,
+  #855, and #856 as of 2026-08-03: the 486-item requirement inventory
+  remains 100% unassessed, and the rejected `test/final-runtime-evidence`
+  branch must not be treated as evidence. This corrects the abandoned
+  `stern-v1-recovery-2026-07-20` Runway run, which was paused by the user on
+  2026-07-20 after three wave-1 merges (`ac73e26`, `2ded031`, `905745e`) and
+  never resumed; no audit or review was ever performed by that run. See
+  `KNOWN-GAPS.md` and `docs/catalogue-conformance-matrix.md` for the
+  independent 2026-08-03 audit that supersedes it.
+
 ### Documentation
 
 - Distinguished current source-path use from future registry installation.
