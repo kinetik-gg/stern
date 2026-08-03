@@ -188,6 +188,7 @@ crate to `stern-vello` and the old `stern-platform-winit` crate to
 - [Showcase app plan](docs/showcase-plan.md)
 - [Release policy](docs/release.md)
 - [Agent workflow](AGENTS.md)
+- [Known gaps](KNOWN-GAPS.md) — the honest, canonical ledger of missing framework pillars and design debt.
 
 The architecture specification is the primary reference for terminology, subsystem boundaries, test expectations, and phase-based PR workflow.
 
