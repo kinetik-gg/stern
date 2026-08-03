@@ -359,12 +359,10 @@ resource Arc may deliberately outlive store eviction until the next consumer
 reconciliation; it is released when the stale registry entry is removed unless
 another external owner remains.
 
-The public approximate `TextLayoutCache` remains a compatibility surface. It
-uses the same 32 MiB and 120-generation policy with deterministic eviction, but
-has no resource journal. `get` is observational; mutable `get_or_measure`
-refreshes a hit and always returns a measurement even when retention is
-rejected. Final duplicate-cache removal or deprecation is an API-curation
-decision, not part of retained-store correctness.
+The approximate `TextLayoutCache` compatibility surface has been removed.
+`TextLayoutStore` is the sole retained text layout cache; it shapes through
+the real text engine rather than the heuristic measurement the legacy cache
+used.
 
 Production text fields consume one canonical ordered input stream through the
 current text-input owner. Key edit and shortcut commands run before hardware

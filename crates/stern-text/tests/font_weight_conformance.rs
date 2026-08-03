@@ -5,8 +5,8 @@ use std::hash::{Hash, Hasher};
 
 use stern_core::{FontFamilyRole, FontWeightToken, default_dark_theme};
 use stern_text::{
-    CosmicTextEngine, TextFeatureSet, TextLayoutCache, TextLayoutKey, TextLayoutStore,
-    TextNavigationError, TextOverflow, TextStyle, fonts,
+    CosmicTextEngine, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextNavigationError,
+    TextOverflow, TextStyle, fonts,
 };
 
 const SOURCE: &str = "Stern 12038475";
@@ -100,18 +100,6 @@ fn raw_weight_changes_style_key_hash_and_retained_identity() {
         ),
         accounting
     );
-
-    let mut cache = TextLayoutCache::new();
-    let regular_measurement = cache.get_or_measure(regular.clone());
-    let medium_measurement = cache.get_or_measure(medium.clone());
-    let bytes = cache.retained_payload_bytes();
-    assert_eq!(cache.len(), 2);
-    for _ in 0..10_000 {
-        assert_eq!(cache.get_or_measure(regular.clone()), regular_measurement);
-        assert_eq!(cache.get_or_measure(medium.clone()), medium_measurement);
-    }
-    assert_eq!(cache.len(), 2);
-    assert_eq!(cache.retained_payload_bytes(), bytes);
 }
 
 #[test]
@@ -268,11 +256,4 @@ fn explicit_regular_is_exactly_equivalent_to_constructor_default() {
         ),
         accounting
     );
-
-    let mut cache = TextLayoutCache::new();
-    assert_eq!(
-        cache.get_or_measure(default),
-        cache.get_or_measure(explicit)
-    );
-    assert_eq!(cache.len(), 1);
 }

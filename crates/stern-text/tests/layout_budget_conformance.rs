@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use stern_core::TextLayoutId;
 use stern_text::{
-    ShapedGlyph, ShapedGlyphRun, ShapedTextLayout, ShapedTextLine, TextFeatureSet, TextLayoutCache,
-    TextLayoutKey, TextLayoutStore, TextOverflow, TextStyle,
+    ShapedGlyph, ShapedGlyphRun, ShapedTextLayout, ShapedTextLine, TextFeatureSet, TextLayoutKey,
+    TextLayoutStore, TextOverflow, TextStyle,
 };
 
 const MAX_RETAINED_BYTES: usize = 32 * 1024 * 1024;
@@ -148,37 +148,7 @@ fn transient_unicode_shaping_and_observation_do_not_retain_or_touch() {
 }
 
 #[test]
-fn compatibility_cache_dynamic_workload_is_bounded_and_hot_entry_survives() {
-    let mut cache = TextLayoutCache::new();
-    let anchor = key("cache anchor", 100.0, false);
-    let anchor_layout = cache.get_or_measure(anchor.clone());
-
-    for generation in 0..1_000 {
-        cache.advance_generation();
-        assert_eq!(cache.get_or_measure(anchor.clone()), anchor_layout);
-        let source = match generation % 4 {
-            0 => format!("ascii-{generation}"),
-            1 => format!("e\u{301}-{generation}"),
-            2 => format!("👩‍👩‍👧‍👦-{generation}"),
-            _ => format!("العربية\n{generation}"),
-        };
-        let measured = cache.get_or_measure(key(source, 44.0, true));
-        assert!(measured.line_count >= 1);
-        assert!(cache.retained_payload_bytes() <= MAX_RETAINED_BYTES);
-    }
-
-    assert_eq!(cache.get(&anchor), Some(anchor_layout));
-    assert!(cache.len() <= 122);
-    let clone = cache.clone();
-    assert_eq!(clone, cache);
-    assert_eq!(
-        clone.retained_payload_bytes(),
-        cache.retained_payload_bytes()
-    );
-}
-
-#[test]
-fn feature_aware_store_and_cache_identity_stay_bounded_on_hot_hits() {
+fn feature_aware_store_identity_stays_bounded_on_hot_hits() {
     let default_key = key("12038475", 140.0, false);
     let numeric_key = TextLayoutKey::new("12038475", numeric_style(), 140.0, false);
     let mut store = TextLayoutStore::new();
@@ -205,25 +175,10 @@ fn feature_aware_store_and_cache_identity_stay_bounded_on_hot_hits() {
         store.stored_layout(numeric_id).unwrap().key.style.features,
         TextFeatureSet::TABULAR_NUMBERS
     );
-
-    let mut cache = TextLayoutCache::new();
-    let default_layout = cache.get_or_measure(default_key.clone());
-    let numeric_layout = cache.get_or_measure(numeric_key.clone());
-    let cache_bytes = cache.retained_payload_bytes();
-
-    assert_eq!(cache.len(), 2);
-    assert!(cache_bytes <= MAX_RETAINED_BYTES);
-    for _ in 0..10_000 {
-        assert_eq!(cache.get_or_measure(default_key.clone()), default_layout);
-        assert_eq!(cache.get_or_measure(numeric_key.clone()), numeric_layout);
-    }
-    assert_eq!(cache.retained_payload_bytes(), cache_bytes);
-    assert_eq!(cache.get(&default_key), Some(default_layout));
-    assert_eq!(cache.get(&numeric_key), Some(numeric_layout));
 }
 
 #[test]
-fn overflow_policy_has_distinct_stable_store_and_cache_identity() {
+fn overflow_policy_has_distinct_stable_store_identity() {
     let source = "The complete caller-owned source remains retained after presentation elision 👩‍🚀";
     let visible = key(source, 96.0, false);
     let ellipsized = visible.clone().with_overflow(TextOverflow::EndEllipsis);
@@ -256,23 +211,6 @@ fn overflow_policy_has_distinct_stable_store_and_cache_identity() {
     }
     assert_eq!(store.retained_payload_bytes(), bytes);
     assert_eq!(store.change_cursor(), cursor);
-
-    let mut cache = TextLayoutCache::new();
-    let visible_measurement = cache.get_or_measure(visible.clone());
-    let ellipsized_measurement = cache.get_or_measure(ellipsized.clone());
-    let cache_bytes = cache.retained_payload_bytes();
-    assert_eq!(visible_measurement, ellipsized_measurement);
-    assert_eq!(cache.len(), 2);
-    for _ in 0..10_000 {
-        assert_eq!(cache.get_or_measure(visible.clone()), visible_measurement);
-        assert_eq!(
-            cache.get_or_measure(ellipsized.clone()),
-            ellipsized_measurement
-        );
-    }
-    assert_eq!(cache.retained_payload_bytes(), cache_bytes);
-    assert_eq!(cache.get(&visible), Some(visible_measurement));
-    assert_eq!(cache.get(&ellipsized), Some(ellipsized_measurement));
 }
 
 #[test]

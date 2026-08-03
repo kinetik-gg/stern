@@ -3,7 +3,7 @@ use super::{
     ButtonVariant, ComponentState, ControlMetrics, ControlSizeScale, DurationScale, ElevationLevel,
     ElevationScale, FontFamilyRole, HandleSizeScale, IconSizeScale, OpacityScale, RadiusScale,
     RowSizeScale, SemanticColor, SizeScale, SizeToken, SpacingScale, StrokeScale, TextRole,
-    TextRoleMetrics, ThemeColors, TypographyScale, default_dark_theme,
+    TextRoleMetrics, ThemeColors, TypographyScale, default_dark_theme, generated_tokens,
 };
 use crate::{Brush, Color, CornerRadius};
 
@@ -1078,4 +1078,97 @@ fn active_selection_uses_blue_accent_family() {
 #[test]
 fn transparent_color_remains_available() {
     assert_eq!(Color::TRANSPARENT.a, 0.0);
+}
+
+/// Checks the vendored copy of the design-system token module against the
+/// upstream `stern-design-system` checkout when it is present as a sibling of
+/// the workspace root. Skips silently (with a note) when the sibling checkout
+/// is absent, e.g. in CI.
+#[test]
+fn vendored_tokens_match_design_system_output() {
+    let upstream_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("../stern-design-system/generated/rust/stern_tokens.rs");
+    let Ok(upstream) = std::fs::read_to_string(&upstream_path) else {
+        eprintln!(
+            "skipping design-system token drift check: {} is not present",
+            upstream_path.display()
+        );
+        return;
+    };
+    let upstream = upstream.replace("\r\n", "\n");
+
+    let sha_line = upstream
+        .lines()
+        .find(|line| line.starts_with("pub const SOURCE_SHA256"))
+        .expect("upstream stern_tokens.rs declares SOURCE_SHA256");
+    let upstream_sha = sha_line
+        .split('"')
+        .nth(1)
+        .expect("upstream SOURCE_SHA256 declaration carries a quoted value");
+    assert_eq!(
+        upstream_sha,
+        generated_tokens::SOURCE_SHA256,
+        "design-system tokens drifted: re-vendor \
+         stern-design-system/generated/rust/stern_tokens.rs into \
+         crates/stern-core/src/theme/generated_tokens.rs (keep the vendored \
+         provenance header)"
+    );
+
+    // The vendored file is the upstream file with a provenance/doc header
+    // inserted; everything after the upstream `@generated` header must match
+    // byte for byte.
+    let vendored = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/theme/generated_tokens.rs"),
+    )
+    .expect("vendored generated_tokens.rs is readable")
+    .replace("\r\n", "\n");
+    let upstream_body = upstream
+        .split_once("\n\n")
+        .expect("upstream stern_tokens.rs separates its header with a blank line")
+        .1;
+    assert!(
+        vendored.ends_with(upstream_body),
+        "design-system tokens drifted: the vendored generated_tokens.rs body \
+         no longer matches stern-design-system/generated/rust/stern_tokens.rs; \
+         re-vendor it (keep the vendored provenance header)"
+    );
+}
+
+/// Resolves a design-system `#RRGGBB` color token into a [`Color`].
+fn design_token_color(name: &str) -> Color {
+    let token = generated_tokens::COLORS
+        .iter()
+        .find(|token| token.name == name)
+        .unwrap_or_else(|| panic!("design-system color token `{name}` is missing"));
+    let hex = token
+        .value
+        .strip_prefix('#')
+        .unwrap_or_else(|| panic!("token `{name}` is not a hex color: {}", token.value));
+    assert_eq!(
+        hex.len(),
+        6,
+        "token `{name}` must be #RRGGBB: {}",
+        token.value
+    );
+    let channel = |range: std::ops::Range<usize>| {
+        u8::from_str_radix(&hex[range], 16)
+            .unwrap_or_else(|err| panic!("token `{name}` has an invalid hex channel: {err}"))
+    };
+    Color::rgb8(channel(0..2), channel(2..4), channel(4..6))
+}
+
+#[test]
+fn default_dark_accent_group_matches_design_system_tokens() {
+    let accent = ThemeColors::default_dark().accent;
+
+    assert_eq!(accent.subtle, design_token_color("color.accent.subtle"));
+    assert_eq!(accent.default, design_token_color("color.accent.default"));
+    assert_eq!(accent.hover, design_token_color("color.accent.hover"));
+    assert_eq!(accent.pressed, design_token_color("color.accent.pressed"));
+    assert_eq!(accent.focus, design_token_color("color.accent.focus"));
+    assert_eq!(
+        accent.foreground,
+        design_token_color("color.accent.foreground")
+    );
 }

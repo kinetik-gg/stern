@@ -199,7 +199,6 @@ fn transform_hit_singular_transforms_miss_and_return_no_inverse() {
 
     assert!(singular.is_finite());
     assert!(singular.try_inverse().is_none());
-    assert!(singular.inverse().is_none());
     assert!(!hit_test_transformed(
         Rect::new(0.0, 0.0, 10.0, 10.0),
         singular,

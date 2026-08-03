@@ -48,10 +48,6 @@ impl LivenessIncarnation {
     }
 }
 
-/// Deprecated name for [`LivenessIncarnation`].
-#[deprecated(note = "renamed to LivenessIncarnation")]
-pub type LivenessGeneration = LivenessIncarnation;
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct RegistryScope(u64);
 
@@ -113,14 +109,6 @@ impl LivenessToken {
     /// Returns the incarnation carried by this token.
     #[must_use]
     pub const fn incarnation(self) -> LivenessIncarnation {
-        self.incarnation
-    }
-
-    /// Returns the incarnation using the previous generation terminology.
-    #[allow(deprecated)]
-    #[deprecated(note = "use incarnation")]
-    #[must_use]
-    pub const fn generation(self) -> LivenessGeneration {
         self.incarnation
     }
 
@@ -438,18 +426,6 @@ impl LivenessRegistry {
     #[must_use]
     pub fn is_live(&self, target: impl Into<LivenessTargetId>) -> bool {
         self.is_active(target)
-    }
-
-    /// Returns the active incarnation using the previous generation
-    /// terminology.
-    #[allow(deprecated)]
-    #[deprecated(note = "use current_incarnation")]
-    #[must_use]
-    pub fn current_generation(
-        &self,
-        target: impl Into<LivenessTargetId>,
-    ) -> Option<LivenessGeneration> {
-        self.current_incarnation(target)
     }
 
     /// Validates a token against the latest active or tombstoned target
