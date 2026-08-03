@@ -1115,12 +1115,6 @@ impl UiMemory {
         self.liveness.mark_present(target)
     }
 
-    /// Marks an async owner present using the previous live terminology.
-    #[deprecated(note = "use mark_present_target")]
-    pub fn mark_live_target(&mut self, target: impl Into<LivenessTargetId>) -> LivenessToken {
-        self.mark_present_target(target)
-    }
-
     /// Starts a replacement incarnation and marks it present.
     pub fn restart_liveness_target(
         &mut self,

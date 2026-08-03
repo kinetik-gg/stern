@@ -581,20 +581,6 @@ fn canonical_liveness_incarnation_surface_compiles_and_reports_typed_statuses() 
     );
 }
 
-#[allow(deprecated)]
-#[test]
-fn deprecated_liveness_generation_aliases_remain_importable() {
-    use stern::core::{LivenessGeneration, LivenessRegistry, WidgetId};
-
-    let target = WidgetId::from_key("compatibility");
-    let mut registry = LivenessRegistry::new();
-    let token = registry.mark_live(target);
-    let generation: LivenessGeneration = token.generation();
-
-    assert!(registry.is_live(target));
-    assert_eq!(registry.current_generation(target), Some(generation));
-}
-
 #[test]
 fn canonical_advanced_widget_modules_compile() {
     use stern::widgets::{
