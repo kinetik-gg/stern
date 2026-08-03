@@ -1,7 +1,6 @@
 //! Text layout, editing state, and engine adapters for Stern.
 
 mod boundary;
-mod cache;
 mod edit;
 mod engine;
 /// Bundled font assets used by the default text engine.
@@ -14,7 +13,6 @@ mod style;
 mod undo;
 mod viewport;
 
-pub use cache::TextLayoutCache;
 pub use edit::{OrderedTextInputResult, TextEditMode, TextEditState};
 pub use engine::CosmicTextEngine;
 pub use layout::{ShapedGlyph, ShapedGlyphRun, ShapedTextLayout, ShapedTextLine, TextLayout};

@@ -4,8 +4,8 @@ use crate::boundary::{clamp_boundary, next_boundary, previous_boundary};
 use crate::fonts::INTER_FONTDB_FAMILY;
 use crate::{
     CosmicTextEngine, DEFAULT_FONT_FAMILY, DEFAULT_MONOSPACE_FONT_FAMILY, ShapedTextLayout,
-    TextComposition, TextEditMode, TextEditState, TextFeatureSet, TextLayoutCache, TextLayoutKey,
-    TextLayoutStore, TextSelection, TextStyle, fonts,
+    TextComposition, TextEditMode, TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore,
+    TextSelection, TextStyle, fonts,
 };
 use cosmic_text::fontdb;
 use stern_core::{
@@ -452,43 +452,6 @@ fn text_layout_store_exports_cached_layout_entries() {
     );
     let stored = store.stored_layout(id).expect("cached layout");
     assert!(std::sync::Arc::ptr_eq(&entries[0].layout, &stored.layout));
-}
-
-#[test]
-fn cache_returns_hits_and_can_invalidate() {
-    let style = TextStyle::new("Inter", 12.0, 16.0);
-    let key = TextLayoutKey::new("hello", style, 100.0, false);
-    let mut cache = TextLayoutCache::new();
-
-    let first = cache.get_or_measure(key.clone());
-    let second = cache.get_or_measure(key);
-
-    assert_eq!(cache.len(), 1);
-    assert_eq!(first, second);
-    cache.clear();
-    assert!(cache.is_empty());
-}
-
-#[test]
-fn wrapped_measurement_increases_line_count() {
-    let style = TextStyle::new("Inter", 10.0, 14.0);
-    let key = TextLayoutKey::new("long text string", style, 10.0, true);
-    let mut cache = TextLayoutCache::new();
-
-    let layout = cache.get_or_measure(key);
-
-    assert!(layout.line_count > 1);
-}
-
-#[test]
-fn measurement_counts_explicit_lines() {
-    let style = TextStyle::new("Inter", 10.0, 14.0);
-    let key = TextLayoutKey::new("one\ntwo\nthree", style, 200.0, true);
-    let mut cache = TextLayoutCache::new();
-
-    let layout = cache.get_or_measure(key);
-
-    assert_eq!(layout.line_count, 3);
 }
 
 #[test]

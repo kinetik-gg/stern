@@ -364,19 +364,14 @@ fn liveness_token_is_send_and_sync() {
 
 #[allow(deprecated)]
 #[test]
-fn deprecated_generation_and_live_aliases_forward_without_renewal() {
-    use stern_core::LivenessGeneration;
-
+fn deprecated_live_aliases_forward_without_renewal() {
     let id = target("compatibility");
     let mut registry = LivenessRegistry::new();
     let first = registry.mark_live(id);
     let second = registry.mark_live(id);
-    let generation: LivenessGeneration = first.generation();
 
     assert_eq!(first, second);
-    assert_eq!(generation, first.incarnation());
     assert!(registry.is_live(id));
-    assert_eq!(registry.current_generation(id), Some(generation));
 }
 
 #[test]
