@@ -1,6 +1,6 @@
 # Semantic Font-Family Migration
 
-Stern `0.2.0-alpha.1` replaces the five resolved `FontToken` values stored in
+Stern `0.0.1-alpha.1` replaces the five resolved `FontToken` values stored in
 `TypographyScale` with one semantic family authority, four exact foundation
 scales, and five logical metric records. This is a prerelease breaking
 struct-shape change. External `TypographyScale` literals must add `families`,

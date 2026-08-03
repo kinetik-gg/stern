@@ -13,7 +13,7 @@ MAJOR.MINOR.PATCH[-PRERELEASE]
 Examples:
 
 ```text
-0.2.0-alpha.1
+0.0.1-alpha.1
 0.2.0
 1.0.0
 1.1.3
@@ -22,11 +22,11 @@ Examples:
 Tags use a leading `v`:
 
 ```text
-v0.2.0-alpha.1
+v0.0.1-alpha.1
 v1.0.0
 ```
 
-The current package baseline is `0.2.0-alpha.1`. Alpha increments use
+The current package baseline is `0.0.1-alpha.1`. Alpha increments use
 `0.2.0-alpha.N`. A version in a manifest is package metadata, not evidence that
 the corresponding tag, registry release, or accepted alpha exists.
 

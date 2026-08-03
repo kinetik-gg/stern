@@ -11,15 +11,15 @@ categories.workspace = true
 description = "Vello and Winit window presenter for Stern"
 
 [dependencies]
-stern-core = { version = "=0.2.0-alpha.1", path = "../stern-core" }
-stern-render = { version = "=0.2.0-alpha.1", path = "../stern-render" }
-stern-vello = { version = "=0.2.0-alpha.1", path = "../stern-vello" }
+stern-core = { version = "=0.0.1-alpha.1", path = "../stern-core" }
+stern-render = { version = "=0.0.1-alpha.1", path = "../stern-render" }
+stern-vello = { version = "=0.0.1-alpha.1", path = "../stern-vello" }
 vello = "0.9.0"
 winit = "0.30.12"
 
 [dev-dependencies]
 pollster = "0.4.0"
-stern-winit = { version = "=0.2.0-alpha.1", path = "../stern-winit" }
+stern-winit = { version = "=0.0.1-alpha.1", path = "../stern-winit" }
 
 [lints]
 workspace = true

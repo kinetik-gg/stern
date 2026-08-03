@@ -3,7 +3,7 @@
 Stern is a Rust UI toolkit for editor-style desktop applications.
 
 > **Project status:** Stern is pre-alpha and unpublished. The workspace is
-> versioned `0.2.0-alpha.1`; no release of any kind exists yet.
+> versioned `0.0.1-alpha.1`; no release of any kind exists yet.
 
 It is designed for dense, tool-oriented interfaces: docked frames, passive panels, inspectors, property grids, tables, media viewports, timelines, menus, command palettes, and action-driven controls.
 
@@ -157,11 +157,11 @@ with exact prerelease requirements:
 
 ```toml
 [dependencies]
-stern = { version = "=0.2.0-alpha.1", features = ["vello-winit"] }
+stern = { version = "=0.0.1-alpha.1", features = ["vello-winit"] }
 ```
 
 Lower-level registry dependencies would likewise use
-`=0.2.0-alpha.1`. Package dry-runs and generated-archive checks establish
+`=0.0.1-alpha.1`. Package dry-runs and generated-archive checks establish
 packageability only; they do not create a tag, publish a crate, or constitute
 alpha acceptance.
 
