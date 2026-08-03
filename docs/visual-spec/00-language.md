@@ -146,7 +146,11 @@ Each status has a 4-tuple `{surface, border, foreground, strong}` from
 info `#101820/#25343F/#6CBFFF/#0C8CE9`. Banners use surface+border+foreground;
 solid indicators use strong.
 
-## Divergence table (labs vs tokens — owner decisions pending; tokens rule until then)
+## Divergence table (labs vs tokens — **resolutions accepted by the owner, 2026-08-03**)
+
+The "Normative here" column is final. Implementation follows it without further
+review; the labs/DS sources should eventually be updated to match (tracked as a
+design-system follow-up, not an alpha.1 task).
 
 | # | Site | labs.css | Token | Normative here |
 |---|---|---|---|---|
