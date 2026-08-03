@@ -1,10 +1,13 @@
+[workspace]
+resolver = "3"
+
 [package]
 name = "stern-icon-atlas"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
-repository.workspace = true
+version = "0.2.0-alpha.1"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+repository = "https://github.com/kinetik-gg/stern"
 publish = false
 description = "Offline icon source ingestion and Rust definition tooling for Stern"
 
@@ -17,5 +20,10 @@ sha2 = "0.10"
 svgtypes = "0.15"
 tar = "0.4"
 
-[lints]
-workspace = true
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
