@@ -8,6 +8,7 @@ use crate::{
     TextSelection, TextStyle, fonts,
 };
 use cosmic_text::fontdb;
+use stern_core::theme::generated_tokens;
 use stern_core::{
     ClipboardText, Key, KeyEvent, KeyState, Modifiers, PhysicalKey, PlatformRequest,
     TextInputEvent, TextLayoutId, TextRange, UiInputEvent, WidgetId,
@@ -185,6 +186,92 @@ fn space_grotesk_loading_preserves_ui_and_mono_resolution() {
                 .iter()
                 .all(|run| run.font.data.data() == expected_bytes),
             "{family} resolved through unexpected bytes"
+        );
+    }
+}
+
+/// The brand typography contract (issue #902): every design-system
+/// `FONT_FAMILIES` role's primary family must resolve through a stern-text
+/// authority (a named `DEFAULT_*` constant where one exists, otherwise the
+/// literal primary family name) and must shape through the matching bundled
+/// asset. Roles without a named authority constant, or authorities without a
+/// design-system role, are recorded in the exceptions table in
+/// `docs/design-system-tokens.md` rather than guessed here.
+#[test]
+fn font_family_role_primaries_match_stern_authority_constants() {
+    let ui = generated_tokens::FONT_FAMILIES
+        .iter()
+        .find(|family| family.role == "ui")
+        .expect("design-system tokens define a `ui` font family role");
+    assert_eq!(ui.primary, DEFAULT_FONT_FAMILY);
+
+    let mono = generated_tokens::FONT_FAMILIES
+        .iter()
+        .find(|family| family.role == "mono")
+        .expect("design-system tokens define a `mono` font family role");
+    assert_eq!(mono.primary, DEFAULT_MONOSPACE_FONT_FAMILY);
+
+    // `brand` has no named stern-text `DEFAULT_*` authority constant (see
+    // the exceptions table in docs/design-system-tokens.md); stern resolves
+    // it through the literal design-system primary family name instead, as
+    // exercised by `named_space_grotesk_family_shapes_with_bundled_font` and
+    // `design_system_font_family_primaries_shape_through_bundled_assets`.
+    let brand = generated_tokens::FONT_FAMILIES
+        .iter()
+        .find(|family| family.role == "brand")
+        .expect("design-system tokens define a `brand` font family role");
+    assert_eq!(brand.primary, "Space Grotesk");
+
+    assert_eq!(
+        generated_tokens::FONT_FAMILIES.len(),
+        3,
+        "a new design-system font family role appeared; extend this test \
+         and the exceptions table in docs/design-system-tokens.md"
+    );
+}
+
+/// Companion to `font_family_role_primaries_match_stern_authority_constants`:
+/// each design-system `FONT_FAMILIES` primary must actually shape through
+/// its corresponding bundled font asset, not just match a constant by name.
+#[test]
+fn design_system_font_family_primaries_shape_through_bundled_assets() {
+    let mut engine = CosmicTextEngine::new();
+    let bundled_assets: [(&str, &[u8]); 3] = [
+        (DEFAULT_FONT_FAMILY, fonts::INTER_VARIABLE),
+        ("Space Grotesk", fonts::SPACE_GROTESK_VARIABLE),
+        (DEFAULT_MONOSPACE_FONT_FAMILY, fonts::SPACE_MONO_REGULAR),
+    ];
+
+    for family in generated_tokens::FONT_FAMILIES {
+        let (_, expected_bytes) = bundled_assets
+            .iter()
+            .find(|(name, _)| *name == family.primary)
+            .unwrap_or_else(|| {
+                panic!(
+                    "no bundled-asset mapping for design-system font role `{}` \
+                     (primary `{}`); update this test and the exceptions table \
+                     in docs/design-system-tokens.md",
+                    family.role, family.primary
+                )
+            });
+
+        let layout = engine.shape_text(&TextLayoutKey::new(
+            "Stern 0123",
+            TextStyle::new(family.primary, 16.0, 20.0),
+            200.0,
+            false,
+        ));
+
+        assert!(!layout.runs.is_empty(), "{} did not shape", family.primary);
+        assert!(
+            layout
+                .runs
+                .iter()
+                .all(|run| run.font.data.data() == *expected_bytes),
+            "design-system role `{}` primary `{}` did not resolve through its \
+             bundled asset",
+            family.role,
+            family.primary
         );
     }
 }
