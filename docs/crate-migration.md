@@ -4,6 +4,11 @@ Commit `ef7c2f9` consolidated the toolkit into the current crate graph and
 introduced the application-facing `stern` facade crate. This was a
 breaking crate-boundary change.
 
+`stern-icon-atlas` and `stern-identity-scan` moved from `crates/` to `tools/`
+and out of the product `[workspace]`: they are development tooling, not
+product crates. Each now builds as its own standalone Cargo workspace; see
+the README's Crates section.
+
 ## Which Crate To Depend On
 
 The crates are currently unpublished. Most applications working from source

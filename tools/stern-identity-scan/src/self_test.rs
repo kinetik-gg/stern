@@ -166,16 +166,6 @@ fn expected_packages() -> Vec<PackageIdentity> {
         ("stern", "stern", "crates/stern"),
         ("stern-core", "stern_core", "crates/stern-core"),
         (
-            "stern-icon-atlas",
-            "stern_icon_atlas",
-            "crates/stern-icon-atlas",
-        ),
-        (
-            "stern-identity-scan",
-            "stern_identity_scan",
-            "crates/stern-identity-scan",
-        ),
-        (
             "stern-icons-phosphor",
             "stern_icons_phosphor",
             "crates/stern-icons-phosphor",

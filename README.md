@@ -108,6 +108,12 @@ stern-demo
 
 `stern-core` must remain independent of renderer, windowing, and operating-system APIs.
 
+Development-only tooling lives outside the product workspace under `tools/`:
+`stern-icon-atlas` (offline icon-catalog generator/checker) and
+`stern-identity-scan` (repository identity conformance scanner). Each is its
+own standalone Cargo workspace and is excluded from `cargo` commands run at
+the repository root.
+
 ### Using the current source tree
 
 The crates are currently unpublished. From an application next to a Stern

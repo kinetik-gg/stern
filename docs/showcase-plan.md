@@ -79,8 +79,5 @@ cargo build --workspace --all-features
 cargo check --workspace --examples --all-features
 ```
 
-For visual changes, also render at least one full-size frame and one smaller
-frame through `--render-once` and inspect the resulting bitmaps.
-
 There is currently no CLI-driven CPU raster review-dump workflow; the demo
 binary only supports `--dump-identity-evidence`.
