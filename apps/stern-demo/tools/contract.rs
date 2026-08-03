@@ -1,4 +1,4 @@
-pub(super) const VERSION: &str = "1.0.0-rc.2.dev";
+pub(super) const VERSION: &str = "0.2.0-alpha.1";
 pub(super) const SPEC_SHA256: &str =
     "f1d489f6f28b613c0bcfa4490b7855da341457ee20c66c892dc37ebff2d024ed";
 pub(super) const COMPONENTS: [&str; 34] = [

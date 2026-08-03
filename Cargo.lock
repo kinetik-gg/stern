@@ -2276,7 +2276,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stern"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "stern-core",
  "stern-icons-phosphor",
@@ -2290,11 +2290,11 @@ dependencies = [
 
 [[package]]
 name = "stern-core"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 
 [[package]]
 name = "stern-demo"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "pollster",
  "stern",
@@ -2305,7 +2305,7 @@ dependencies = [
 
 [[package]]
 name = "stern-icon-atlas"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "flate2",
  "kurbo 0.13.1",
@@ -2318,14 +2318,14 @@ dependencies = [
 
 [[package]]
 name = "stern-icons-phosphor"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "stern-core",
 ]
 
 [[package]]
 name = "stern-identity-scan"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "icu_collator",
  "serde_json",
@@ -2334,7 +2334,7 @@ dependencies = [
 
 [[package]]
 name = "stern-render"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "stern-core",
  "stern-text",
@@ -2342,7 +2342,7 @@ dependencies = [
 
 [[package]]
 name = "stern-text"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "cosmic-text",
  "stern-core",
@@ -2351,7 +2351,7 @@ dependencies = [
 
 [[package]]
 name = "stern-vello"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "png",
  "pollster",
@@ -2364,7 +2364,7 @@ dependencies = [
 
 [[package]]
 name = "stern-vello-winit"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "pollster",
  "stern-core",
@@ -2377,7 +2377,7 @@ dependencies = [
 
 [[package]]
 name = "stern-widgets"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "stern-core",
  "stern-icons-phosphor",
@@ -2386,7 +2386,7 @@ dependencies = [
 
 [[package]]
 name = "stern-winit"
-version = "1.0.0-rc.2.dev"
+version = "0.2.0-alpha.1"
 dependencies = [
  "arboard",
  "stern-core",

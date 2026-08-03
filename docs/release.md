@@ -13,7 +13,7 @@ MAJOR.MINOR.PATCH[-PRERELEASE]
 Examples:
 
 ```text
-1.0.0-rc.2.dev
+0.2.0-alpha.1
 0.2.0
 1.0.0
 1.1.3
@@ -22,12 +22,12 @@ Examples:
 Tags use a leading `v`:
 
 ```text
-v1.0.0-rc.2.dev
+v0.2.0-alpha.1
 v1.0.0
 ```
 
-The planned first package baseline is `1.0.0-rc.2.dev`. Alpha increments use
-`0.1.0-alpha.N`. A version in a manifest is package metadata, not evidence that
+The current package baseline is `0.2.0-alpha.1`. Alpha increments use
+`0.2.0-alpha.N`. A version in a manifest is package metadata, not evidence that
 the corresponding tag, registry release, or accepted alpha exists.
 
 ## Minimum Supported Rust Version
