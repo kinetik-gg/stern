@@ -118,3 +118,97 @@ reference looks stale, trust the code and send a correction PR.
     `Stable`/`Experimental`/`Planned` statuses removed elsewhere in this
     audit). It is pending a rewrite and should not be read as current
     policy until then.
+
+## Behavior primitive conformance (Issue #904)
+
+Full mapping in `docs/design-system-primitives-map.md`. These are the
+genuine mismatches found there against
+`../stern-design-system/src/behaviors/primitives-and-contracts.md`, not
+doc drift.
+
+17. **`draggable`'s cancellation invariant is not honored for value edits.**
+    The design system's `draggable` primitive promises cancellation
+    "restores the pre-drag value or geometry"
+    (`../stern-design-system/src/behaviors/primitives-and-contracts.md`,
+    primitive table), but stern's `draggable`
+    (`crates/stern-core/src/interaction/drag_select.rs:97-138`) only owns
+    pointer capture, threshold, delta, and drag-source identity — it has no
+    concept of a caller value to restore. The DS explicitly expects this to
+    be closed by composing `draggable` + `value_transaction`
+    (`primitives-and-contracts.md:25`, the `scrubbable` note), but no
+    stern caller does. See #18 for where this actually bites.
+18. **No `value_transaction` composition for pointer-drag value editing;
+    values leak on cancellation.** `slider`/`slider_with_label_and_step`
+    (`crates/stern-widgets/src/components/slider.rs:115-187`) composes
+    `draggable` (line 127) and then mutates `*value` directly from the
+    absolute pointer x-position every frame the gesture is active
+    (`slider.rs:130-136`), with no captured starting value. The public
+    entry point `numeric_scrub_input`
+    (`crates/stern-widgets/src/components/numeric_inputs.rs:287-299`)
+    delegates to `numeric_scrub_input_with_text_layouts_and_caret_visibility`
+    (`numeric_inputs.rs:328-397`), which similarly accumulates
+    `draggable`'s `drag_delta.x` onto the value every frame
+    (`numeric_inputs.rs:363-383`). Neither path snapshots a "starting
+    value" before the drag begins, so a cancelled or interrupted drag
+    (pointer capture lost via `PointerReleaseAll`/window-focus loss, or the
+    widget disabled mid-drag) leaves `*value` at whatever the last preview
+    position produced instead of restoring it — violating
+    STERN-PRIM-002 ("every cancellable direct-manipulation contract must
+    preserve its starting value... and restore it on cancellation"). The
+    *typed-text* editing path already gets this right —
+    `NumericInputPolicy{draft, commit_requested, revert_requested}`
+    (`numeric_inputs.rs:139-158`, resolved at
+    `crates/stern-widgets/src/components/text_fields.rs:576-587`) commits or
+    reverts via `restore_text_draft` (`text_fields.rs:561`) — proving the
+    begin/change/commit/cancel pattern is understood; it was just never
+    added to the drag-scrub call sites. No fix applied here per this issue's
+    non-goals (no behavior changes, no new primitives).
+19. **`roving_focus` has two independent, divergent implementations instead
+    of one canonical primitive** — the exact failure mode STERN-PRIM-001
+    exists to prevent. `CollectionCursor::navigate`
+    (`crates/stern-widgets/src/collections/navigation.rs:114-146`) tracks a
+    stable `ItemId`, does not wrap at the ends
+    (`saturating_sub`/`saturating_add`/`.min(last_index)`), and
+    deterministically reconciles a disappeared active item via
+    `CollectionCursor::reconcile` (`navigation.rs:91-107`). `moved_index`
+    (`crates/stern-widgets/src/overlays/navigation.rs:97-119`), used by
+    menus/menu bars/command palette, tracks a bare `usize` position with no
+    stable identity and wraps at both ends via modulo arithmetic
+    (`overlays/navigation.rs:107-116`), with no reconciliation concept at
+    all. Same behavior primitive, two different identity models (stable ID
+    vs. raw index) and two different boundary policies (clamp vs. wrap),
+    each used by a different widget family. This is naming/behavior drift
+    that invites real bugs (e.g. a widget migrated from one family to the
+    other silently changes wrap behavior and identity stability). No
+    refactor applied here per this issue's non-goals.
+20. **No `two_axis_value` primitive; `vector2_scrub_input` is two
+    independent 1-axis fields, not a joint 2D drag.**
+    `vector2_scrub_input`/`VectorScrubInputOutput<const N: usize>`
+    (`crates/stern-widgets/src/components/vector_color_fields.rs:14-84,163-192`)
+    composes `N` separate `numeric_scrub_input` calls side by side
+    (OR-ing `scrubbed`/`value_changed` across axes,
+    `vector_color_fields.rs:356-406`), each with the same
+    missing-restore-on-cancel gap as #18. The design system's own text says
+    "a two-axis color selector is `two_axis_value` over a tagged color
+    projection" (`primitives-and-contracts.md:25`), describing a single
+    joint pointer-drag surface (e.g. a saturation/brightness square) — a
+    grep for "saturation", "2d drag", "joystick", "xy pad" across the
+    workspace found no such control anywhere. Two side-by-side X/Y number
+    fields are a reasonable UI in their own right but are not the primitive
+    the design system names; flagged here rather than built, per this
+    issue's non-goals (no new primitives).
+21. **`multi-value-state` contract is a bare boolean, not a value wrapper.**
+    The design system's `multi-value-state` contract asks for "zero/one/many
+    source values, common value when equal, mixed flag, and explicit write
+    policy" — the shape needed to edit a property across a multi-selection
+    where values may differ. stern only has a `bool` mixed/indeterminate
+    flag in three unrelated places: `ActionState.mixed`
+    (`crates/stern-core/src/actions.rs:46`), `RowCheckState::Mixed(bool)`
+    (`crates/stern-widgets/src/overlays/scene.rs:719`), and
+    `AccessibilityNode.mixed` (`crates/stern-core/src/accessibility/model.rs:91`).
+    There is no generic `Same(T) | Mixed` (or equivalent) type anywhere,
+    including in the property-grid code
+    (`crates/stern-widgets/src/inspector/property_grid.rs`,
+    `crates/stern-widgets/src/inspector/row.rs`) where multi-selection
+    property editing would need it most. Not built here per this issue's
+    non-goals (no new contracts).
