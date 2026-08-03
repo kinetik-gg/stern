@@ -127,11 +127,40 @@ reference looks stale, trust the code and send a correction PR.
     size/weight fields for typography at all, so the visual-spec's
     9/10/11/12px type scale (`docs/visual-spec/00-language.md` §Typography,
     divergence D5) has nothing upstream to pin against yet — see the
-    exceptions table in `docs/design-system-tokens.md`. The hand-rolled
-    theme values remain the runtime source of truth until every token group
-    is mapped; metrics (spacing, radii, sizes, strokes, durations,
-    elevation) and icon tables are not yet wired. Independently, the design
-    system's 486-requirement parity index
+    exceptions table in `docs/design-system-tokens.md`.
+    Spacing, radii, and sizes are now mapped too: `SpacingStep`,
+    `SpacingRole`, `SizeToken`, and the new `RadiusToken` each carry a
+    `design_token_name()` method, with mapping tests in
+    `crates/stern-core/src/theme/tests.rs` pinning `default_dark_theme()`'s
+    `spacing`, `sizes`, and `radii` scales to the vendored `SPACING`,
+    `SIZES`, and `RADII` tokens; every value already matched exactly (no
+    divergences). A dedicated test
+    (`default_dark_control_and_header_height_ladder_matches_geometry_spec`)
+    pins the exact geometry-ladder values from
+    `docs/visual-spec/00-language.md` (control heights 20/24/28/32, panel
+    header 30, workspace bar 40) through `Theme::sizes`. That said,
+    `Theme::sizes` is not consistently wired into layout: a repo-wide grep
+    found only `sizes.icon.md` (icon rendering) and `sizes.workspace_bar`
+    (`stern_widgets::chrome::ApplicationBar`) actually read by
+    `stern-widgets` layout code; `sizes.control.*`, `sizes.row.*`,
+    `sizes.tab`, `sizes.panel_header`, and `sizes.handle.*` have no widget
+    consumer today. The dock tab strip
+    (`crates/stern-widgets/src/dock/scene.rs`) hardcodes its own
+    `DEFAULT_TAB_HEIGHT = 28.0` instead of reading `sizes.tab` — it
+    currently matches `size.tab`, but is a separate literal, not derived
+    from the theme, and can drift silently. Separately,
+    `ControlMetrics::control_height` (28.0) and `::compact_control_height`
+    (22.0) are an older, unrelated metric pair (used only for
+    `padding_x`/`padding_y`, never as a height) that overlaps conceptually
+    with the `SizeScale` control ladder but has no declared token
+    correspondence — `compact_control_height`'s 22.0 matches no `SIZES`
+    entry. Stern has no single authority for "the" control height; deciding
+    whether `ControlMetrics` should be retired in favor of `SizeScale` (or
+    given its own token) is a product decision, not made here (see
+    `docs/design-system-tokens.md`). The hand-rolled theme values remain the
+    runtime source of truth until every token group is mapped; strokes,
+    durations, elevation, and icon tables are not yet wired. Independently,
+    the design system's 486-requirement parity index
     (`../stern-design-system/generated/parity-index.json`) remains 100%
     `unverified`; wiring stern's behavioral coverage into that ledger is
     future work (see `docs/catalogue-conformance-matrix.md`).

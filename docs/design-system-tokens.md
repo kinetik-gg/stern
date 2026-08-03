@@ -63,10 +63,25 @@ time by adding mapping tests that pin theme values to the corresponding
    family), so there is nothing upstream yet to pin stern's `TextRole`
    metrics against. See
    [Exceptions and divergences](#exceptions-and-divergences).
-3. Metrics (spacing, radii, sizes, strokes, durations, elevation) and icon
-   tables: planned. Where current theme values differ from the tokens,
-   reconciling them is a product decision taken explicitly per group, not a
-   silent side effect of wiring.
+3. Spacing, radii, sizes (done): every [`SpacingStep`] ladder rung, every
+   named semantic [`SpacingRole`], every [`SizeToken`], and every
+   [`RadiusToken`] carries a `design_token_name()` mapping to its exact
+   `spacing.*` / `size.*` / `radius.*` token name
+   (`crates/stern-core/src/theme/tokens.rs`), keyed off
+   `docs/visual-spec/00-language.md`'s Geometry ladder. Mapping tests in
+   `crates/stern-core/src/theme/tests.rs`
+   (`default_dark_spacing_ladder_matches_design_system_tokens`,
+   `default_dark_spacing_roles_match_design_system_named_tokens`,
+   `default_dark_size_scale_matches_design_system_tokens`,
+   `default_dark_radius_scale_matches_design_system_tokens`) assert
+   `default_dark_theme()`'s `spacing`, `sizes`, and `radii` scales equal
+   every mapped token; `default_dark_control_and_header_height_ladder_matches_geometry_spec`
+   additionally pins the exact 20/24/28/32/30/40 control/header ladder
+   values from the spec. See
+   [Exceptions and divergences](#exceptions-and-divergences) below.
+4. Strokes, durations, elevation, and icon tables: planned. Where current
+   theme values differ from the tokens, reconciling them is a product
+   decision taken explicitly per group, not a silent side effect of wiring.
 
 Once every group is mapped, the hand-rolled definitions can be derived from
 `generated_tokens` directly and the mapping tests collapse into the drift
@@ -113,6 +128,24 @@ normative, and stern's theme already used the token value).
   the vendored token data, not something stern's mapping tests can close
   today.
 
+### Spacing, radii, sizes
+
+Checking spacing, radii, and sizes against `default_dark_theme()` (issue
+#901) found the same result as colors: every `SpacingScale`, `SizeScale`,
+and `RadiusScale` field already equals its named token exactly — no numeric
+divergences to record for these three groups.
+
+`ControlMetrics::control_height` (28.0) and `::compact_control_height`
+(22.0) are *not* included in this mapping. They predate the `SizeScale`
+control ladder, have no declared 1:1 `size.control.*` token correspondence
+(`compact_control_height`'s 22.0 does not equal any `SIZES` entry), and are
+consumed only for `padding_x`/`padding_y`, never as an actual control
+height, anywhere in `stern-widgets` — see `KNOWN-GAPS.md` item 15 for the
+full finding. Per the issue's guidance not to invent a mapping stern doesn't
+already establish, this pair is left unmapped rather than force-matched to a
+ladder rung; a future owner decision should either retire `ControlMetrics`
+in favor of `SizeScale::control`, or give it its own token.
+
 There is nothing here for an owner to decide; this section stays as a record
-for future groups (metrics, icons) to append to if their adoption finds
-either kind of gap.
+for future groups (strokes, durations, elevation, icons) to append to if
+their adoption finds either kind of gap.
