@@ -6,7 +6,9 @@ use stern_core::{
     TextLayoutId, TextPrimitive, TimeInfo, Ui as CoreUi, UiInput, UiInputEvent, UiMemory, Vec2,
     ViewportInfo, WidgetId, default_dark_theme,
 };
-use stern_text::{TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextStyle};
+use stern_text::{
+    ShapedTextLayout, TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextStyle,
+};
 use stern_widgets::{NumericScrubInputConfig, Ui, VectorScrubInputConfig};
 
 const FIELD_RECT: Rect = Rect::new(0.0, 0.0, 160.0, 24.0);
@@ -45,6 +47,20 @@ fn moved(x: f32, y: f32, delta_x: f32) -> UiInputEvent {
         position: Point::new(x, y),
         delta: Vec2::new(delta_x, 0.0),
     }
+}
+
+/// Mirrors the widget's retained single-line vertical origin derivation
+/// (see `stern_widgets`' internal `single_line_vertical_origin`) so this
+/// conformance test can independently predict the vertical offset shaped
+/// single-line geometry paints at, instead of assuming the nominal font
+/// size is that offset.
+fn single_line_baseline_offset(layout: &ShapedTextLayout, content_height: f32) -> f32 {
+    let line = layout
+        .lines
+        .iter()
+        .find(|line| line.visual_index == 0)
+        .expect("shaped layout has a first line");
+    (content_height - line.height) * 0.5 - line.top_y
 }
 
 fn field_id() -> WidgetId {
@@ -331,9 +347,11 @@ fn retained_numeric_pointer_geometry_uses_the_tabular_navigation_authority() {
         .layout
         .navigation(text)
         .expect("retained numeric navigation");
+    let content_height = FIELD_RECT.height - recipe.padding_y * 2.0;
+    let vertical_origin = single_line_baseline_offset(&retained.layout, content_height);
     let paint_offset = Vec2::new(
         FIELD_RECT.x + recipe.padding_x,
-        FIELD_RECT.y + recipe.padding_y + recipe.font.size,
+        FIELD_RECT.y + recipe.padding_y + vertical_origin,
     );
     let expected_selection = retained_navigation
         .selection_rects(state.selection.range())

@@ -577,13 +577,13 @@ fn shaped_geometry_reuses_one_layout_for_hit_selection_paint_caret_and_ime() {
         false,
     ));
     let target_offset = 3;
-    let layout_caret = store
-        .layout(expected)
-        .expect("registered shaped layout")
-        .caret_rect(target_offset);
+    let registered_layout = store.layout(expected).expect("registered shaped layout");
+    let layout_caret = registered_layout.caret_rect(target_offset);
+    let content_height = FIELD.height - recipe.padding_y * 2.0;
+    let vertical_origin = super::single_line_baseline_offset(registered_layout, content_height);
     let click = Point::new(
         FIELD.x + recipe.padding_x + layout_caret.x + 0.25,
-        FIELD.y + recipe.padding_y + recipe.font.size + layout_caret.y + layout_caret.height * 0.5,
+        FIELD.y + recipe.padding_y + vertical_origin + layout_caret.y + layout_caret.height * 0.5,
     );
     let input = canonical([
         UiInputEvent::ModifiersChanged(Modifiers::new(true, false, false, false)),
@@ -629,7 +629,7 @@ fn shaped_geometry_reuses_one_layout_for_hit_selection_paint_caret_and_ime() {
         .map(|rect| {
             rect.translate(Vec2::new(
                 FIELD.x + recipe.padding_x,
-                FIELD.y + recipe.padding_y + recipe.font.size,
+                FIELD.y + recipe.padding_y + vertical_origin,
             ))
         })
         .collect::<Vec<_>>();
@@ -649,7 +649,7 @@ fn shaped_geometry_reuses_one_layout_for_hit_selection_paint_caret_and_ime() {
         .caret_rect(target_offset)
         .translate(Vec2::new(
             FIELD.x + recipe.padding_x,
-            FIELD.y + recipe.padding_y + recipe.font.size,
+            FIELD.y + recipe.padding_y + vertical_origin,
         ));
     let content_rect = Rect::new(
         FIELD.x + recipe.padding_x,

@@ -128,6 +128,11 @@ pub(crate) struct TextFieldGeometry {
     selection_rects: Vec<Rect>,
     composition_rects: Vec<Rect>,
     caret_content_rect: Rect,
+    /// Vertical offset from `content_rect`'s top edge to the shaped first-line
+    /// baseline. Derived from real shaped line metrics for a retained
+    /// single-line layout (see [`single_line_vertical_origin`]); falls back to
+    /// the nominal font size for wrapped multiline and non-shaped geometry.
+    vertical_origin: f32,
 }
 
 impl TextFieldGeometry {
@@ -238,6 +243,7 @@ impl TextFieldGeometry {
             composition_rects,
             caret_content_rect,
             size,
+            vertical_origin,
         ) = text_layouts.map_or_else(
             || fallback_geometry(&display, model_selection, content_rect, recipe, kind),
             |store| {
@@ -277,6 +283,7 @@ impl TextFieldGeometry {
             selection_rects,
             composition_rects,
             caret_content_rect,
+            vertical_origin,
         }
     }
 
@@ -291,7 +298,7 @@ impl TextFieldGeometry {
                 let offset = clamp_grapheme_boundary(&self.display.text, offset);
                 TextCaret::at(offset)
             },
-            |navigation| navigation.hit_test_caret(x, y - self.recipe.font.size),
+            |navigation| navigation.hit_test_caret(x, y - self.vertical_origin),
         );
         self.display.display_to_model_caret(display_caret)
     }
@@ -352,7 +359,7 @@ impl TextFieldGeometry {
                 layout: Some(layout),
                 origin: Point::new(
                     self.content_rect.x,
-                    self.content_rect.y + self.recipe.font.size,
+                    self.content_rect.y + self.vertical_origin,
                 ),
                 text: self.display.text.clone(),
                 family: self.recipe.font.family.to_owned(),
@@ -420,6 +427,7 @@ type GeometryParts = (
     Vec<Rect>,
     Rect,
     Size,
+    f32,
 );
 
 #[allow(clippy::too_many_arguments)]
@@ -486,19 +494,33 @@ fn geometry_from_layout_or_fallback(
     id: Option<TextLayoutId>,
     layout: &ShapedTextLayout,
 ) -> GeometryParts {
-    authoritative_geometry(display, selection, recipe, id, layout)
+    authoritative_geometry(display, selection, content_rect, recipe, kind, id, layout)
         .unwrap_or_else(|| fallback_geometry(display, selection, content_rect, recipe, kind))
 }
 
 fn authoritative_geometry(
     display: &DisplayTextMap,
     selection: TextSelection,
+    content_rect: Rect,
     recipe: &TextFieldRecipe,
+    kind: TextFieldKind,
     id: Option<TextLayoutId>,
     layout: &ShapedTextLayout,
 ) -> Option<GeometryParts> {
     let navigation = layout.navigation(&display.text).ok()?;
-    let baseline = Vec2::new(0.0, recipe.font.size);
+    let vertical_origin = match kind {
+        // A retained single-line field derives its vertical origin from the
+        // shaped first-line box, not the nominal font size: nominal font
+        // bounds do not necessarily match the visible glyph bounds shaping
+        // actually produced (bundled UI, brand, and monospace roles all
+        // differ). Any invalid or non-finite metric fails the whole
+        // authoritative geometry closed so callers fall back to the
+        // complete-snapshot geometry instead of mixing origins.
+        TextFieldKind::SingleLine => single_line_vertical_origin(layout, content_rect)?,
+        // Wrapped multiline geometry is unchanged by this fix.
+        TextFieldKind::WrappedMultiLine => recipe.font.size,
+    };
+    let baseline = Vec2::new(0.0, vertical_origin);
     let selection_rects = navigation
         .selection_rects(display.model_range_to_display(selection))
         .into_iter()
@@ -525,7 +547,32 @@ fn authoritative_geometry(
         composition_rects,
         caret,
         layout.size,
+        vertical_origin,
     ))
+}
+
+/// Derives the vertical origin (offset from the content rectangle's top edge
+/// to the shaped first-line baseline) for a retained single-line field.
+///
+/// The shaped first line's box (`top_y`..`top_y + height`) is centered
+/// within the final content rectangle's height, then the origin is the
+/// distance from the content top to that line's baseline. This uses real
+/// shaped metrics — the line's actual ascent above its baseline — instead of
+/// assuming the nominal font size is the baseline offset.
+///
+/// Returns `None` when the layout has no first line or any metric involved
+/// is non-finite, so the caller fails the whole geometry closed rather than
+/// mixing a partial shaped origin with fallback geometry.
+fn single_line_vertical_origin(layout: &ShapedTextLayout, content_rect: Rect) -> Option<f32> {
+    let line = layout.lines.iter().find(|line| line.visual_index == 0)?;
+    if !line.top_y.is_finite() || !line.height.is_finite() || line.height <= 0.0 {
+        return None;
+    }
+    if !content_rect.height.is_finite() {
+        return None;
+    }
+    let origin = (content_rect.height - line.height).mul_add(0.5, -line.top_y);
+    origin.is_finite().then_some(origin)
 }
 
 fn fallback_geometry(
@@ -561,6 +608,7 @@ fn fallback_geometry(
         composition_rects,
         caret,
         Size::new(width, height),
+        recipe.font.size,
     )
 }
 
@@ -737,8 +785,139 @@ const fn default_caret_affinity(text: &str, offset: usize) -> TextAffinity {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stern_core::{ComponentState, TextRange, default_dark_theme};
-    use stern_text::{ShapedTextLine, TextComposition};
+    use stern_core::{ComponentState, FontToken, TextRange, default_dark_theme};
+    use stern_text::{
+        DEFAULT_FONT_FAMILY, DEFAULT_MONOSPACE_FONT_FAMILY, ShapedTextLine, TextComposition,
+    };
+
+    fn focused_recipe(theme: &stern_core::Theme) -> TextFieldRecipe {
+        theme.text_field(ComponentState {
+            hovered: false,
+            pressed: false,
+            focused: true,
+            disabled: false,
+            selected: false,
+        })
+    }
+
+    #[test]
+    fn retained_single_line_origin_reflects_real_shaped_metrics_per_font_role() {
+        let theme = default_dark_theme();
+        let base_recipe = focused_recipe(&theme);
+        let rect = Rect::new(0.0, 0.0, 120.0, 24.0);
+        let mut origins = Vec::new();
+        for family in [
+            DEFAULT_FONT_FAMILY,
+            "Space Grotesk",
+            DEFAULT_MONOSPACE_FONT_FAMILY,
+        ] {
+            let recipe = TextFieldRecipe {
+                font: FontToken::new(family, base_recipe.font.size, base_recipe.font.line_height),
+                ..base_recipe
+            };
+            let state = TextEditState::new("Sample");
+            let mut store = TextLayoutStore::new();
+            let geometry = TextFieldGeometry::build(
+                rect,
+                &state,
+                &recipe,
+                TextFieldKind::SingleLine,
+                Vec2::ZERO,
+                Some(&mut store),
+            );
+            assert!(
+                geometry.navigation.is_some(),
+                "font role {family} must produce valid shaped navigation"
+            );
+            assert!(
+                geometry.vertical_origin.is_finite(),
+                "font role {family} must derive a finite origin"
+            );
+            assert_ne!(
+                geometry.vertical_origin.to_bits(),
+                recipe.font.size.to_bits(),
+                "font role {family} origin must come from shaped metrics, not the nominal font size"
+            );
+            origins.push((family, geometry.vertical_origin));
+        }
+
+        let distinct = origins
+            .iter()
+            .map(|(_, origin)| origin.to_bits())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            distinct.len() > 1,
+            "bundled UI, brand, and monospace roles have distinct real ascent metrics and must not \
+             collapse onto one shared origin: {origins:?}"
+        );
+    }
+
+    #[test]
+    fn retained_single_line_origin_stays_finite_for_compact_and_oversized_content() {
+        let theme = default_dark_theme();
+        let recipe = focused_recipe(&theme);
+        let state = TextEditState::new("abc");
+
+        // Compact: the field is smaller than the shaped line box, so the
+        // content rectangle collapses toward zero height.
+        let compact_rect = Rect::new(0.0, 0.0, 40.0, 6.0);
+        let mut compact_store = TextLayoutStore::new();
+        let compact = TextFieldGeometry::build(
+            compact_rect,
+            &state,
+            &recipe,
+            TextFieldKind::SingleLine,
+            Vec2::ZERO,
+            Some(&mut compact_store),
+        );
+        assert!(compact.navigation.is_some());
+        assert!(compact.vertical_origin.is_finite());
+        assert!(compact.caret_content_rect.y.is_finite());
+
+        // Oversized: the content rectangle is far taller than the line box.
+        let oversized_rect = Rect::new(0.0, 0.0, 200.0, 4000.0);
+        let mut oversized_store = TextLayoutStore::new();
+        let oversized = TextFieldGeometry::build(
+            oversized_rect,
+            &state,
+            &recipe,
+            TextFieldKind::SingleLine,
+            Vec2::ZERO,
+            Some(&mut oversized_store),
+        );
+        assert!(oversized.navigation.is_some());
+        assert!(oversized.vertical_origin.is_finite());
+        assert!(oversized.caret_content_rect.y.is_finite());
+    }
+
+    #[test]
+    fn retained_single_line_geometry_fails_closed_instead_of_mixing_origins_on_non_finite_content()
+    {
+        let theme = default_dark_theme();
+        let recipe = focused_recipe(&theme);
+        let state = TextEditState::new("abc");
+
+        let infinite_rect = Rect::new(0.0, 0.0, 120.0, f32::INFINITY);
+        let mut store = TextLayoutStore::new();
+        let geometry = TextFieldGeometry::build(
+            infinite_rect,
+            &state,
+            &recipe,
+            TextFieldKind::SingleLine,
+            Vec2::ZERO,
+            Some(&mut store),
+        );
+
+        // A non-finite content rectangle must fail the whole authoritative
+        // (shaped) geometry closed: layout id and navigation must both be
+        // absent, never one without the other, so every consumer falls back
+        // to the same complete-snapshot geometry instead of some consumers
+        // painting shaped rects and others painting fallback rects.
+        assert!(geometry.layout_id.is_none());
+        assert!(geometry.navigation.is_none());
+        assert!(!geometry.rows.is_empty(), "fallback rows must own geometry");
+        assert!(geometry.caret_content_rect.y.is_finite());
+    }
 
     #[test]
     fn malformed_shaped_navigation_discards_the_whole_snapshot() {
@@ -836,7 +1015,12 @@ mod tests {
             "an absent platform selection places the display caret at preedit end"
         );
 
-        let baseline = Vec2::new(0.0, recipe.font.size);
+        let baseline = Vec2::new(0.0, geometry.vertical_origin);
+        assert_ne!(
+            geometry.vertical_origin.to_bits(),
+            recipe.font.size.to_bits(),
+            "single-line origin must come from shaped metrics, not the nominal font size"
+        );
         assert_eq!(
             geometry.caret_content_rect,
             navigation

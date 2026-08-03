@@ -10,7 +10,7 @@ use stern_core::{
     Size, TextInputEvent, TimeInfo, UiInput, UiMemory, Vec2, ViewportInfo, WidgetId,
     default_dark_theme,
 };
-use stern_text::{TextEditState, TextLayoutStore, TextSelection};
+use stern_text::{ShapedTextLayout, TextEditState, TextLayoutStore, TextSelection};
 use stern_widgets::{
     NumericInputDraft, NumericScrubInputConfig, PathFieldConfig, Ui, VectorComponentLayout,
     VectorScrubInputConfig, classify_numeric_input_draft, multi_line_text_field, numeric_input,
@@ -264,6 +264,20 @@ fn render_text_wrapper(case: TextWrapperCase, disabled: bool) -> stern_core::Fra
 
 fn has_semantic_action(node: &stern_core::SemanticNode, kind: &SemanticActionKind) -> bool {
     node.actions.iter().any(|action| action.kind == *kind)
+}
+
+/// Mirrors the widget's retained single-line vertical origin derivation
+/// (see `stern_widgets`' internal `single_line_vertical_origin`) so
+/// conformance tests can independently predict the vertical offset shaped
+/// single-line geometry paints, hit-tests, and reports IME rects at, instead
+/// of assuming the nominal font size is that offset.
+fn single_line_baseline_offset(layout: &ShapedTextLayout, content_height: f32) -> f32 {
+    let line = layout
+        .lines
+        .iter()
+        .find(|line| line.visual_index == 0)
+        .expect("shaped layout has a first line");
+    (content_height - line.height) * 0.5 - line.top_y
 }
 
 fn assert_f32_slice_eq(actual: &[f32], expected: &[f32]) {
