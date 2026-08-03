@@ -2,8 +2,9 @@
 use super::{
     ButtonVariant, ComponentState, ControlMetrics, ControlSizeScale, DurationScale, ElevationLevel,
     ElevationScale, FontFamilyRole, HandleSizeScale, IconSizeScale, OpacityScale, RadiusScale,
-    RowSizeScale, SemanticColor, SizeScale, SizeToken, SpacingScale, StrokeScale, TextRole,
-    TextRoleMetrics, ThemeColors, TypographyScale, default_dark_theme, generated_tokens,
+    RadiusToken, RowSizeScale, SemanticColor, SizeScale, SizeToken, SpacingRole, SpacingScale,
+    SpacingStep, StrokeScale, TextRole, TextRoleMetrics, ThemeColors, TypographyScale,
+    default_dark_theme, generated_tokens,
 };
 use crate::{Brush, Color, CornerRadius};
 
@@ -1321,4 +1322,150 @@ fn default_dark_maps_every_semantic_color_to_a_design_system_token() {
 
     assert_eq!(SemanticColor::ALL.len(), 53);
     assert_group_matches_design_system_tokens(&colors, SemanticColor::ALL);
+}
+
+// --- Metrics token mapping (issue #901: spacing, radii, sizes) ---
+//
+// Same mechanism as the semantic-color mapping above: each metric carries a
+// `design_token_name()` naming the exact `generated_tokens` entry it must
+// equal, keyed off `docs/visual-spec/00-language.md`'s Geometry ladder (see
+// `docs/design-system-tokens.md`).
+
+/// Resolves a design-system metric token's numeric value from a named
+/// [`generated_tokens::NamedMetric`] slice (`SPACING`, `RADII`, or `SIZES`).
+fn design_token_metric(tokens: &[generated_tokens::NamedMetric], name: &str) -> f32 {
+    tokens
+        .iter()
+        .find(|token| token.name == name)
+        .unwrap_or_else(|| panic!("design-system metric token `{name}` is missing"))
+        .value
+}
+
+/// Completeness guard: every one of the 9 [`SpacingStep`] ladder rungs
+/// (`SpacingStep::ALL`) resolves, in the default dark theme, to the exact
+/// `spacing.N` token its [`SpacingStep::design_token_name`] mapping points
+/// at.
+#[test]
+fn default_dark_spacing_ladder_matches_design_system_tokens() {
+    let spacing = default_dark_theme().spacing;
+
+    assert_eq!(SpacingStep::ALL.len(), 9);
+    for &step in SpacingStep::ALL {
+        let name = step.design_token_name();
+        assert_eq!(
+            spacing.get(step),
+            design_token_metric(generated_tokens::SPACING, name),
+            "{step:?} does not match design-system token `{name}`"
+        );
+    }
+}
+
+/// Completeness guard: every one of the 9 semantic [`SpacingRole`] keys
+/// (`SpacingRole::ALL`) resolves, in the default dark theme, to the exact
+/// named `spacing.gap.*` / `spacing.padding.*` token its
+/// [`SpacingRole::design_token_name`] mapping points at (a separate, named
+/// token from the generic ladder rung its `step()` also resolves to).
+#[test]
+fn default_dark_spacing_roles_match_design_system_named_tokens() {
+    let spacing = default_dark_theme().spacing;
+
+    assert_eq!(SpacingRole::ALL.len(), 9);
+    for &role in SpacingRole::ALL {
+        let name = role.design_token_name();
+        assert_eq!(
+            spacing.resolve(role),
+            design_token_metric(generated_tokens::SPACING, name),
+            "{role:?} does not match design-system token `{name}`"
+        );
+    }
+}
+
+/// Completeness guard: every one of the 14 [`SizeToken`] keys
+/// (`SizeToken::ALL`) resolves, in the default dark theme, to the exact
+/// `size.*` token its [`SizeToken::design_token_name`] mapping points at.
+#[test]
+fn default_dark_size_scale_matches_design_system_tokens() {
+    let sizes = default_dark_theme().sizes;
+
+    assert_eq!(SizeToken::ALL.len(), 14);
+    for &token in SizeToken::ALL {
+        let name = token.design_token_name();
+        assert_eq!(
+            sizes.get(token),
+            design_token_metric(generated_tokens::SIZES, name),
+            "{token:?} does not match design-system token `{name}`"
+        );
+    }
+}
+
+/// Density ladder assertion (issue #901): the exact geometry-ladder values
+/// from `docs/visual-spec/00-language.md` §Geometry ladder — control heights
+/// 20/24/28/32, panel header 30, workspace bar 40 — resolve through
+/// `Theme::sizes` (`SizeScale`), which is the one stern API surface that
+/// currently carries all six values pinned to the design-system tokens.
+///
+/// `Theme::sizes` is not yet a single authority consumed everywhere it
+/// should be: only `sizes.icon.md` (icon rendering) and `sizes.workspace_bar`
+/// (`stern_widgets::chrome::ApplicationBar`) are read by stern-widgets
+/// layout code today;
+/// `sizes.control.*`, `sizes.row.*`, `sizes.tab`, and `sizes.panel_header`
+/// have no widget consumer yet, and the dock tab strip hardcodes its own
+/// `DEFAULT_TAB_HEIGHT` literal instead of reading `sizes.tab` (see
+/// `KNOWN-GAPS.md` item 15). This test pins the values `Theme::sizes` does
+/// carry so that gap doesn't hide a value drift.
+#[test]
+fn default_dark_control_and_header_height_ladder_matches_geometry_spec() {
+    let sizes = default_dark_theme().sizes;
+
+    assert_eq!(sizes.control.xs, 20.0);
+    assert_eq!(sizes.control.sm, 24.0);
+    assert_eq!(sizes.control.md, 28.0);
+    assert_eq!(sizes.control.lg, 32.0);
+    assert_eq!(sizes.panel_header, 30.0);
+    assert_eq!(sizes.workspace_bar, 40.0);
+
+    assert_eq!(
+        sizes.control.xs,
+        design_token_metric(generated_tokens::SIZES, "size.control.xs")
+    );
+    assert_eq!(
+        sizes.control.sm,
+        design_token_metric(generated_tokens::SIZES, "size.control.sm")
+    );
+    assert_eq!(
+        sizes.control.md,
+        design_token_metric(generated_tokens::SIZES, "size.control.md")
+    );
+    assert_eq!(
+        sizes.control.lg,
+        design_token_metric(generated_tokens::SIZES, "size.control.lg")
+    );
+    assert_eq!(
+        sizes.panel_header,
+        design_token_metric(generated_tokens::SIZES, "size.panelHeader")
+    );
+    assert_eq!(
+        sizes.workspace_bar,
+        design_token_metric(generated_tokens::SIZES, "size.workspaceBar")
+    );
+}
+
+/// Completeness guard: every one of the 5 [`RadiusToken`] keys
+/// (`RadiusToken::ALL`) resolves, in the default dark theme, to the exact
+/// `radius.*` token its [`RadiusToken::design_token_name`] mapping points
+/// at.
+#[test]
+fn default_dark_radius_scale_matches_design_system_tokens() {
+    let radii = default_dark_theme().radii;
+
+    assert_eq!(RadiusToken::ALL.len(), 5);
+    for &token in RadiusToken::ALL {
+        let name = token.design_token_name();
+        let value = design_token_metric(generated_tokens::RADII, name);
+        assert_eq!(
+            radii.get(token),
+            CornerRadius::all(value),
+            "{token:?} does not match design-system token `{name}`"
+        );
+    }
 }
