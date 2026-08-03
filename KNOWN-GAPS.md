@@ -104,12 +104,17 @@ reference looks stale, trust the code and send a correction PR.
 15. Design-system token pipeline: staged adoption in progress. Stern now
     vendors `stern-design-system`'s generated tokens verbatim as
     `stern_core::theme::generated_tokens`, with a sibling-checkout drift
-    test and the first mapping test (accent colors) pinning
-    `ThemeColors::default_dark()` to the vendored `color.accent.*` entries
-    (see `docs/design-system-tokens.md`). The hand-rolled theme values
-    remain the runtime source of truth until every token group is mapped;
-    remaining semantic colors, metrics, typography, and icon tables are not
-    yet wired. Independently, the design system's 486-requirement parity
+    test. All 53 `SemanticColor` resolver keys now carry a
+    `SemanticColor::design_token_name` mapping to their exact `color.*`
+    token, with per-tier mapping tests (surface, text, border, selection,
+    focus, overlay, accent, status) plus a completeness guard pinning
+    `ThemeColors::default_dark()` to the vendored tokens (see
+    `docs/design-system-tokens.md`); every mapped value already matched its
+    token exactly, so no visual changes and no divergences to record. The
+    hand-rolled theme values remain the runtime source of truth until every
+    token group is mapped; metrics (spacing, radii, sizes, strokes,
+    durations, elevation) and typography/icon tables are not yet wired.
+    Independently, the design system's 486-requirement parity
     index (`../stern-design-system/generated/parity-index.json`) remains
     100% `unverified`; wiring stern's behavioral coverage into that ledger
     is future work (see `docs/catalogue-conformance-matrix.md`).

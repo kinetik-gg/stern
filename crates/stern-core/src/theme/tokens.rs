@@ -169,6 +169,74 @@ impl SemanticColor {
         Self::StatusDangerBorder,
         Self::StatusDangerStrong,
     ];
+
+    /// Returns the exact `stern-design-system` `color.*` token name that this
+    /// key is mapped to (see `crate::theme::generated_tokens::COLORS` and
+    /// `docs/visual-spec/00-language.md`'s tier tables, the authority for the
+    /// mapping).
+    ///
+    /// This is the mapping key used by the `default_dark_*_group_matches_design_system_tokens`
+    /// tests in `crate::theme::tests` to pin `ThemeColors::default_dark()` to
+    /// the vendored tokens: every key covers exactly one named token, with no
+    /// exceptions (see `docs/design-system-tokens.md`).
+    #[must_use]
+    pub const fn design_token_name(self) -> &'static str {
+        match self {
+            Self::SurfaceApplication => "color.semantic.surface.application",
+            Self::SurfaceWorkspace => "color.semantic.surface.workspace",
+            Self::SurfacePanel => "color.semantic.surface.panel",
+            Self::SurfacePanelRaised => "color.semantic.surface.panel_raised",
+            Self::SurfaceRaised => "color.semantic.surface.raised",
+            Self::SurfaceControl => "color.semantic.surface.control",
+            Self::SurfaceControlHover => "color.semantic.surface.control_hover",
+            Self::SurfaceControlPressed => "color.semantic.surface.control_pressed",
+            Self::SurfaceControlDisabled => "color.semantic.surface.control_disabled",
+            Self::SurfaceOverlay => "color.semantic.surface.overlay",
+            Self::SurfaceHover => "color.semantic.surface.hover",
+            Self::SurfaceSunken => "color.semantic.surface.sunken",
+            Self::ContentPrimary => "color.semantic.content.primary",
+            Self::ContentSecondary => "color.semantic.content.secondary",
+            Self::ContentMuted => "color.semantic.content.muted",
+            Self::ContentDisabled => "color.semantic.content.disabled",
+            Self::ContentOnAccent => "color.semantic.content.on_accent",
+            Self::ContentLink => "color.semantic.content.link",
+            Self::BorderSubtle => "color.semantic.border.subtle",
+            Self::BorderDefault => "color.semantic.border.default",
+            Self::BorderStrong => "color.semantic.border.strong",
+            Self::BorderHover => "color.semantic.border.hover",
+            Self::BorderFocused => "color.semantic.border.focused",
+            Self::BorderDisabled => "color.semantic.border.disabled",
+            Self::BorderInvalid => "color.semantic.border.invalid",
+            Self::SelectionBackground => "color.semantic.selection.background",
+            Self::SelectionForeground => "color.semantic.selection.foreground",
+            Self::FocusIndicator => "color.semantic.focus.indicator",
+            Self::FocusSeparator => "color.semantic.focus.separator",
+            Self::FocusRing => "color.semantic.focus.ring",
+            Self::OverlayScrim => "color.semantic.overlay.scrim",
+            Self::AccentSubtle => "color.accent.subtle",
+            Self::AccentDefault => "color.accent.default",
+            Self::AccentHover => "color.accent.hover",
+            Self::AccentPressed => "color.accent.pressed",
+            Self::AccentFocus => "color.accent.focus",
+            Self::AccentForeground => "color.accent.foreground",
+            Self::StatusInfoForeground => "color.status.info.foreground",
+            Self::StatusInfoSurface => "color.status.info.surface",
+            Self::StatusInfoBorder => "color.status.info.border",
+            Self::StatusInfoStrong => "color.status.info.strong",
+            Self::StatusSuccessForeground => "color.status.success.foreground",
+            Self::StatusSuccessSurface => "color.status.success.surface",
+            Self::StatusSuccessBorder => "color.status.success.border",
+            Self::StatusSuccessStrong => "color.status.success.strong",
+            Self::StatusWarningForeground => "color.status.warning.foreground",
+            Self::StatusWarningSurface => "color.status.warning.surface",
+            Self::StatusWarningBorder => "color.status.warning.border",
+            Self::StatusWarningStrong => "color.status.warning.strong",
+            Self::StatusDangerForeground => "color.status.danger.foreground",
+            Self::StatusDangerSurface => "color.status.danger.surface",
+            Self::StatusDangerBorder => "color.status.danger.border",
+            Self::StatusDangerStrong => "color.status.danger.strong",
+        }
+    }
 }
 
 /// Surface color tokens.
