@@ -12,6 +12,7 @@ use stern_icons_phosphor as phosphor;
 
 const EDIT_ACTION: &str = "workspace.edit";
 const GRAPH_ACTION: &str = "workspace.graph";
+const GALLERY_ACTION: &str = "workspace.gallery";
 const APPLY_ACTION: &str = "shared.apply";
 const VIEWPORT_SELECT_ACTION: &str = "viewport.tool.select";
 const VIEWPORT_TRANSFORM_ACTION: &str = "viewport.tool.transform";
@@ -347,6 +348,8 @@ pub enum DemoWorkspace {
     Edit,
     /// Graph editing workspace.
     Graph,
+    /// Out-of-the-box component gallery workspace.
+    Gallery,
 }
 
 /// Application-owned availability projected to every shared action surface.
@@ -367,6 +370,7 @@ impl DemoWorkspace {
         match self {
             Self::Edit => "edit-workspace",
             Self::Graph => "graph-workspace",
+            Self::Gallery => "gallery-workspace",
         }
     }
 }
@@ -688,6 +692,7 @@ impl DemoApplicationModel {
         match invocation.action_id.as_str() {
             EDIT_ACTION => self.workspace = DemoWorkspace::Edit,
             GRAPH_ACTION => self.workspace = DemoWorkspace::Graph,
+            GALLERY_ACTION => self.workspace = DemoWorkspace::Gallery,
             APPLY_ACTION if self.apply_availability == DemoActionAvailability::Available => {
                 self.applied_revision = self.applied_revision.saturating_add(1);
             }
@@ -732,7 +737,7 @@ impl Default for DemoApplicationModel {
 /// Single descriptor registry for the demo's existing application actions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DemoActionRegistry {
-    descriptors: [ActionDescriptor; 4],
+    descriptors: [ActionDescriptor; 5],
     viewport_tools: [ActionDescriptor; 2],
     transport: [ActionDescriptor; 2],
 }
@@ -761,6 +766,8 @@ impl DemoActionRegistry {
                     .with_icon(phosphor::regular::PENCIL_SIMPLE),
                 ActionDescriptor::new(GRAPH_ACTION, "Graph Workspace")
                     .with_icon(phosphor::regular::GRAPH),
+                ActionDescriptor::new(GALLERY_ACTION, "Gallery Workspace")
+                    .with_icon(phosphor::regular::SQUARES_FOUR),
                 apply_descriptor(),
                 ActionDescriptor::new(SAVE_COLOR_STYLE_ACTION, "Save Color Style")
                     .with_icon(phosphor::regular::FLOPPY_DISK),
@@ -795,22 +802,28 @@ impl DemoActionRegistry {
         &self.descriptors[1]
     }
 
+    /// Returns the Gallery workspace action descriptor.
+    #[must_use]
+    pub const fn gallery_workspace(&self) -> &ActionDescriptor {
+        &self.descriptors[2]
+    }
+
     /// Returns the shared-state apply action descriptor.
     #[must_use]
     pub const fn apply_shared_state(&self) -> &ActionDescriptor {
-        &self.descriptors[2]
+        &self.descriptors[3]
     }
 
     /// Returns the application-owned color-style save action descriptor.
     #[must_use]
     pub const fn save_color_style(&self) -> &ActionDescriptor {
-        &self.descriptors[3]
+        &self.descriptors[4]
     }
 
     /// Projects application-owned availability to every shared action surface.
     pub const fn project_apply_shared_state(&mut self, availability: DemoActionAvailability) {
-        self.descriptors[2].state.visible = !matches!(availability, DemoActionAvailability::Hidden);
-        self.descriptors[2].state.enabled =
+        self.descriptors[3].state.visible = !matches!(availability, DemoActionAvailability::Hidden);
+        self.descriptors[3].state.enabled =
             matches!(availability, DemoActionAvailability::Available);
     }
 

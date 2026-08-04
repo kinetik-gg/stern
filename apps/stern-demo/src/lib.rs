@@ -2,6 +2,7 @@
 
 mod app_model;
 mod edit_workspace;
+mod gallery_workspace;
 mod graph_workspace;
 mod overlay_workspace;
 mod timeline_workspace;
@@ -17,6 +18,7 @@ use stern::widgets::Ui;
 
 pub use edit_workspace::DemoSelectedAssetSnapshot;
 use edit_workspace::EditWorkspace;
+use gallery_workspace::GalleryWorkspace;
 use overlay_workspace::SharedOverlayRoute;
 
 pub use app_model::{
@@ -36,6 +38,7 @@ pub struct DemoApp {
     actions: DemoActionRegistry,
     edit_workspace: EditWorkspace,
     graph_workspace: GraphWorkspaceState,
+    gallery_workspace: GalleryWorkspace,
     overlays: SharedOverlayRoute,
 }
 
@@ -57,6 +60,7 @@ impl DemoApp {
             actions: DemoActionRegistry::for_scenario(scenario),
             edit_workspace,
             graph_workspace: GraphWorkspaceState::for_scenario(scenario),
+            gallery_workspace: GalleryWorkspace::new(),
             overlays: SharedOverlayRoute::new(),
         }
     }
@@ -219,6 +223,7 @@ impl DemoApp {
             actions,
             edit_workspace,
             graph_workspace,
+            gallery_workspace,
             overlays,
         } = self;
         let focus_return;
@@ -230,6 +235,7 @@ impl DemoApp {
                 model,
                 edit_workspace,
                 graph_workspace,
+                gallery_workspace,
                 overlays,
             );
             ui.finish_output()
@@ -259,6 +265,7 @@ impl DemoApp {
             &mut self.model,
             &mut self.edit_workspace,
             &mut self.graph_workspace,
+            &mut self.gallery_workspace,
             &mut self.overlays,
         )
     }
@@ -269,7 +276,8 @@ impl DemoApp {
     /// frame that emitted the invocation.
     pub fn apply_action(&mut self, invocation: &ActionInvocation) -> Option<WidgetId> {
         let target = (invocation.action_id.as_str() == self.actions.edit_workspace().id.as_str()
-            || invocation.action_id.as_str() == self.actions.graph_workspace().id.as_str())
+            || invocation.action_id.as_str() == self.actions.graph_workspace().id.as_str()
+            || invocation.action_id.as_str() == self.actions.gallery_workspace().id.as_str())
         .then(|| WidgetId::from_key("root").child(invocation.action_id.as_str()));
         if !self.graph_workspace.handle_action(invocation) {
             let _ = self.model.execute(invocation);
@@ -307,6 +315,7 @@ fn compose_demo(
     model: &mut DemoApplicationModel,
     edit_workspace: &mut EditWorkspace,
     graph_workspace: &mut GraphWorkspaceState,
+    gallery_workspace: &mut GalleryWorkspace,
     overlays: &mut SharedOverlayRoute,
 ) -> Option<WidgetId> {
     let keyboard = ui.input().keyboard.clone();
@@ -330,6 +339,9 @@ fn compose_demo(
                 (logical_size.height - 226.0).max(0.0),
             );
             graph_workspace.compose(ui, graph_bounds, bounds, actions, model, overlays)
+        }
+        DemoWorkspace::Gallery => {
+            gallery_workspace.compose(ui, actions, workspace, overlays, bounds)
         }
     };
     if shortcut_enabled {
