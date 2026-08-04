@@ -1,6 +1,10 @@
 # RFC 0001: Layout Engine
 
-- Status: Draft
+- Status: Accepted (2026-08-04 — owner delegated the technical decision to the
+  supervising engineer; accepted with all six §8 defaults: solver as a
+  stern-core module, `Widget` trait, `scroll_area` migrates at L2, `baseline`
+  field reserved in L0, L4 gated on showcase migration, opt-in interactive
+  targets)
 - Tracking: KNOWN-GAPS.md item 1 (framework pillar: layout engine)
 - Related: KNOWN-GAPS.md items 5 (input re-localization cost) and 8 (flat widget API)
 - Spec anchors: `docs/specs/02-layout-and-interaction.md` §11, `docs/specs/01-foundations.md` §6 and §10, `docs/specs/05-quality-workflow.md` Phase 5
