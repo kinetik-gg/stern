@@ -460,10 +460,13 @@ pub struct ToggleRecipe {
 /// Slider visual recipe output.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SliderRecipe {
-    /// Track fill.
+    /// Track (remainder) fill.
     pub track: Brush,
     /// Filled range brush.
     pub fill: Brush,
+    /// Thumb fill. Resolved per state; painting the thumb primitive itself
+    /// is a tracked gap (see `KNOWN-GAPS.md`, Issue #912).
+    pub thumb: Brush,
     /// Track border.
     pub border: Stroke,
     /// Track radius.
