@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "parity-evidence.schema.json",
+  "title": "Stern browser and runtime parity evidence",
+  "type": "object",
+  "required": ["sternVersion", "requiredScales", "requiredPlatforms", "evidence"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "sternVersion": { "type": "string" },
+    "requiredScales": { "type": "array", "items": { "enum": [1.0, 1.25, 1.5, 2.0] }, "minItems": 4, "uniqueItems": true },
+    "requiredPlatforms": { "type": "array", "items": { "enum": ["windows", "macos", "linux"] }, "minItems": 3, "uniqueItems": true },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["requirementId", "status", "specimens", "automatedTests", "browserBaselines", "velloBaselines", "scales", "platforms", "reviewRecords"],
+        "properties": {
+          "requirementId": { "type": "string" },
+          "status": { "enum": ["unverified", "partial", "verified"] },
+          "specimens": { "$ref": "#/$defs/paths" },
+          "automatedTests": { "$ref": "#/$defs/paths" },
+          "browserBaselines": { "$ref": "#/$defs/paths" },
+          "velloBaselines": { "$ref": "#/$defs/paths" },
+          "scales": { "type": "array", "items": { "enum": [1.0, 1.25, 1.5, 2.0] }, "uniqueItems": true },
+          "platforms": { "type": "array", "items": { "enum": ["windows", "macos", "linux"] }, "uniqueItems": true },
+          "reviewRecords": { "$ref": "#/$defs/paths" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": { "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true } }
+}
