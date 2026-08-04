@@ -371,7 +371,13 @@ impl Ui<'_> {
                 rect: entry.rect,
             });
             for row in rows {
-                let recipe = self.theme.row(ComponentState {
+                // The one-shot opening-frame placeholder paints the same
+                // select/asset dropdown-list rows the interactive
+                // `Ui::overlay_scene` path paints a frame later via
+                // `Theme::overlay_item` (docs/visual-spec/04-overlays.md,
+                // issue #913) — keep both on the same recipe so there is no
+                // visible pop between the placeholder and the live frame.
+                let recipe = self.theme.overlay_item(ComponentState {
                     hovered: false,
                     pressed: false,
                     focused: false,

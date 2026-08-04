@@ -41,7 +41,9 @@ pub const fn default_dark_theme() -> Theme {
             hover: 0.08,
             pressed: 0.14,
             selection: 0.35,
-            overlay_scrim: 0.55,
+            // docs/visual-spec/04-overlays.md (issue #913): modal scrim is
+            // `overlay.scrim` at 38% opacity, not the prior unconformed 55%.
+            overlay_scrim: 0.38,
         },
         elevation: ElevationScale::new(0.0, 1.0, 2.0, 3.0),
         duration: DurationScale {

@@ -1,9 +1,9 @@
 use stern_core::{
     Brush, ClipId, Color, ComponentState, ElevationLevel, FontToken, IconPrimitive, Key, KeyState,
-    LinePrimitive, MouseButton, Point, Primitive, Rect, RectPrimitive, RepaintRequest,
-    SemanticAction, SemanticActionKind, SemanticNode, ShortcutLabelLocalizer, ShortcutPlatform,
-    Size, SpacingRole, StaticIcon, Stroke, TextInputEvent, TextPrimitive, TextRole, UiInput,
-    UiInputEvent, WidgetId, fit_box, pressable,
+    LinePrimitive, MouseButton, OverlaySurfaceTier, Point, Primitive, Rect, RectPrimitive,
+    RepaintRequest, SemanticAction, SemanticActionKind, SemanticNode, ShortcutLabelLocalizer,
+    ShortcutPlatform, Size, SpacingRole, StaticIcon, Stroke, TextInputEvent, TextPrimitive,
+    TextRole, UiInput, UiInputEvent, WidgetId, fit_box, pressable,
 };
 
 use super::Ui;
@@ -197,7 +197,7 @@ impl Ui<'_> {
                     None
                 };
 
-                self.paint_overlay_row(&row, response.as_ref(), menu_presentation);
+                self.paint_overlay_row(&row, entry.kind, response.as_ref(), menu_presentation);
                 self.push_semantic_node(overlay_row_semantics(&row, response.as_ref()));
 
                 if !escape_consumed
@@ -242,20 +242,18 @@ impl Ui<'_> {
                 radius: self.theme.radii.none,
             }));
         }
+        let recipe = self.theme.overlay_surface(overlay_surface_tier(entry.kind));
         if let Some(shadow) = self
             .theme
-            .elevation_shadow(overlay_elevation_level(entry), self.theme.radii.md.top_left)
+            .elevation_shadow(overlay_elevation_level(entry), recipe.radius.top_left)
         {
             self.primitive(Primitive::Shadow(shadow.primitive(entry.rect)));
         }
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: entry.rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface.overlay)),
-            stroke: Some(stern_core::Stroke::new(
-                self.theme.strokes.default,
-                Brush::Solid(self.theme.colors.border.default),
-            )),
-            radius: self.theme.radii.md,
+            fill: Some(recipe.background),
+            stroke: Some(recipe.border),
+            radius: recipe.radius,
         }));
     }
 
@@ -263,6 +261,7 @@ impl Ui<'_> {
     fn paint_overlay_row(
         &mut self,
         row: &OverlaySceneRow,
+        surface_kind: OverlayKind,
         response: Option<&stern_core::Response>,
         menu_presentation: Option<MenuPresentation<'_>>,
     ) {
@@ -282,14 +281,32 @@ impl Ui<'_> {
             return;
         }
 
-        let foreground = if row.kind == OverlaySceneRowKind::Action {
-            let recipe = self.theme.row(ComponentState {
+        // `foreground` is the row's label/icon color: destructive rows stay
+        // danger-toned (predates 04-overlays.md, which is silent on
+        // destructive tone) and take precedence over the new neutral/accent
+        // item recipes below. `check_marker` is the fixed
+        // `focus.indicator` blue 04-overlays.md's Menu section specifies for
+        // the "selected option" check glyph — it applies only to the
+        // otherwise-neutral case, since destructive/disabled rows keep their
+        // existing `foreground` precedence for that mark too (an untabled
+        // combination, resolved conservatively rather than inventing a new
+        // one). `decoration` is the shortcut column and submenu caret color,
+        // which 04-overlays.md pins to `content.muted` unconditionally
+        // ("on hover stays muted"), independent of the row's own tone.
+        let decoration = self.theme.colors.content.muted;
+        let (foreground, check_marker) = if row.kind == OverlaySceneRowKind::Action {
+            let state = ComponentState {
                 hovered: response.is_some_and(|response| response.state.hovered),
                 pressed: response.is_some_and(|response| response.state.pressed),
                 focused: response.is_some_and(|response| response.state.focused),
                 disabled: !row.enabled,
                 selected: row.selected,
-            });
+            };
+            let recipe = if surface_kind == OverlayKind::CommandPalette {
+                self.theme.command_palette_item(state)
+            } else {
+                self.theme.overlay_item(state)
+            };
             self.primitive(Primitive::Rect(RectPrimitive {
                 rect: row.rect,
                 fill: Some(recipe.background),
@@ -297,12 +314,16 @@ impl Ui<'_> {
                 radius: recipe.radius,
             }));
             if row.enabled && row.is_destructive() {
-                self.theme.colors.status.danger.foreground
+                let danger = self.theme.colors.status.danger.foreground;
+                (danger, danger)
+            } else if !row.enabled {
+                (recipe.foreground, recipe.foreground)
             } else {
-                recipe.foreground
+                (recipe.foreground, self.theme.colors.focus.indicator)
             }
         } else {
-            self.theme.label(TextRole::Label, false).foreground
+            let label = self.theme.label(TextRole::Label, false).foreground;
+            (label, label)
         };
         let font = self.theme.font(TextRole::Label);
         let extra = (row.rect.height - font.line_height).max(0.0) * 0.5;
@@ -312,7 +333,7 @@ impl Ui<'_> {
             && let Some(presentation) = menu_presentation
             && let Some(columns) = menu_column_geometry(row.rect)
         {
-            let stroke = Stroke::new(self.theme.strokes.default, Brush::Solid(foreground));
+            let stroke = Stroke::new(self.theme.strokes.default, Brush::Solid(check_marker));
             if row.is_mixed() {
                 let center = columns.state.center();
                 self.primitive(Primitive::Line(LinePrimitive {
@@ -354,7 +375,7 @@ impl Ui<'_> {
                     shortcut_label,
                     Point::new(columns.shortcut.x, baseline),
                     font,
-                    foreground,
+                    decoration,
                 );
             }
             if row.expanded.is_some() {
@@ -362,7 +383,7 @@ impl Ui<'_> {
                     "›".to_owned(),
                     Point::new(columns.disclosure.x, baseline),
                     font,
-                    foreground,
+                    decoration,
                 );
             }
             return;
@@ -455,6 +476,24 @@ fn overlay_elevation_level(entry: &crate::overlays::OverlayEntry) -> ElevationLe
         | OverlayKind::ContextMenu
         | OverlayKind::Menu => ElevationLevel::Medium,
         OverlayKind::CommandPalette | OverlayKind::Modal => ElevationLevel::High,
+    }
+}
+
+/// Maps an overlay kind to its `docs/visual-spec/04-overlays.md` chrome
+/// tier. Deliberately keyed by `kind` alone (not the `entry.modal` flag,
+/// which only governs scrim/blocking behavior): a non-modal-kind overlay
+/// flagged `.modal(true)` still paints its own kind's chrome. `DragPreview`
+/// isn't covered by 04-overlays.md; it falls back to `Menu`, its current
+/// (unchanged) treatment — see KNOWN-GAPS.md.
+const fn overlay_surface_tier(kind: OverlayKind) -> OverlaySurfaceTier {
+    match kind {
+        OverlayKind::Modal | OverlayKind::CommandPalette => OverlaySurfaceTier::Panel,
+        OverlayKind::Tooltip => OverlaySurfaceTier::Tooltip,
+        OverlayKind::Popover
+        | OverlayKind::Dropdown
+        | OverlayKind::ContextMenu
+        | OverlayKind::Menu
+        | OverlayKind::DragPreview => OverlaySurfaceTier::Menu,
     }
 }
 

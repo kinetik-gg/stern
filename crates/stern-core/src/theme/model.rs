@@ -1,9 +1,9 @@
 use super::{
     ButtonRecipe, ButtonVariant, CheckRecipe, ComponentState, ControlMetrics, DurationScale,
     ElevationLevel, ElevationScale, FocusRingRecipe, FontFamilyRole, FontToken, OpacityScale,
-    PanelRecipe, RadiusScale, RowRecipe, SemanticColor, SeparatorRecipe, ShadowRecipe, SizeScale,
-    SliderRecipe, SpacingScale, StrokeScale, TabRecipe, TextFieldRecipe, TextRecipe, TextRole,
-    ThemeColors, ToggleRecipe, TypographyScale,
+    OverlaySurfaceRecipe, OverlaySurfaceTier, PanelRecipe, RadiusScale, RowRecipe, SemanticColor,
+    SeparatorRecipe, ShadowRecipe, SizeScale, SliderRecipe, SpacingScale, StrokeScale, TabRecipe,
+    TextFieldRecipe, TextRecipe, TextRole, ThemeColors, ToggleRecipe, TypographyScale,
 };
 use crate::{Brush, Color, CornerRadius, Stroke, Vec2};
 
@@ -356,6 +356,106 @@ impl Theme {
             ),
             radius: self.radii.none,
         }
+    }
+
+    /// Resolves an overlay chrome recipe (fill/border/radius) for a tier.
+    ///
+    /// Values match `docs/visual-spec/04-overlays.md` (family issue #913).
+    /// `Menu` covers menu/context-menu/dropdown-list/popover surfaces;
+    /// `Tooltip` shares their fill/border but drops to `radius.sm`; `Panel`
+    /// covers modal and command-palette chrome, which sit one tier deeper
+    /// (`surface.panel` S2) with a `border.strong` outline instead of
+    /// `border.default`. Elevation (shadow) is resolved separately by
+    /// `Theme::elevation_shadow`, keyed by the same per-kind precedence at
+    /// the call site.
+    #[must_use]
+    pub fn overlay_surface(&self, tier: OverlaySurfaceTier) -> OverlaySurfaceRecipe {
+        let (fill, border_color, radius) = match tier {
+            OverlaySurfaceTier::Menu => (
+                self.colors.surface.overlay,
+                self.colors.border.default,
+                self.radii.md,
+            ),
+            OverlaySurfaceTier::Tooltip => (
+                self.colors.surface.overlay,
+                self.colors.border.default,
+                self.radii.sm,
+            ),
+            OverlaySurfaceTier::Panel => (
+                self.colors.surface.panel,
+                self.colors.border.strong,
+                self.radii.md,
+            ),
+        };
+        OverlaySurfaceRecipe {
+            background: Brush::Solid(fill),
+            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
+            radius,
+        }
+    }
+
+    /// Resolves a menu/context-menu/dropdown-list/popover item row recipe.
+    ///
+    /// Values match `docs/visual-spec/04-overlays.md`'s Menu "Item state"
+    /// table (family issue #913). `state.selected` here is the
+    /// keyboard-highlight / "active-path" sense the same table lists
+    /// alongside hover — NOT data selection (00-language.md
+    /// §Selection-vs-hover doctrine's "chosen-but-not-selection" case) — so
+    /// it maps to the same neutral `surface.hover` highlight as `hovered`,
+    /// never the accent selection brush. The one exception in this family is
+    /// `Theme::command_palette_item`, where the active item genuinely is
+    /// data selection. `state.focused` also promotes to the highlight fill
+    /// (00-language.md §Focus model: "menu items combine \[the ring\] with
+    /// hover fill"), unlike `Theme::row`, whose focus is purely an additive
+    /// ring with no fill change — that is an intentional divergence between
+    /// the two recipes, not an oversight. The check/mixed glyph, shortcut
+    /// column, and submenu caret are painted separately in fixed spec colors
+    /// (`focus.indicator` / `content.muted`) and are not part of this
+    /// recipe's background/foreground.
+    #[must_use]
+    pub fn overlay_item(&self, state: ComponentState) -> RowRecipe {
+        let highlighted = !state.disabled && (state.hovered || state.focused || state.selected);
+        let background = if highlighted {
+            self.colors.surface.hover
+        } else {
+            Color::TRANSPARENT
+        };
+        let foreground = if state.disabled {
+            self.colors.content.disabled
+        } else if highlighted {
+            self.colors.content.primary
+        } else {
+            self.colors.content.secondary
+        };
+        RowRecipe {
+            background: Brush::Solid(background),
+            foreground,
+            border: Stroke::new(self.strokes.default, Brush::Solid(Color::TRANSPARENT)),
+            radius: self.radii.sm,
+        }
+    }
+
+    /// Resolves a command-palette result row recipe.
+    ///
+    /// Values match `docs/visual-spec/04-overlays.md`'s Command palette
+    /// section (family issue #913). Unlike `Theme::overlay_item`, the active
+    /// (`state.selected`) item here genuinely is data selection
+    /// (00-language.md §Selection-vs-hover doctrine's explicit exception:
+    /// "this IS data selection") and takes the accent `selection` brush;
+    /// hover/focus without selection fall back to the same neutral
+    /// highlight menu items use, since 00-language.md's hover doctrine
+    /// ("hover is always neutral") is otherwise universal.
+    #[must_use]
+    pub fn command_palette_item(&self, state: ComponentState) -> RowRecipe {
+        if !state.disabled && state.selected {
+            return RowRecipe {
+                background: Brush::Solid(self.colors.selection.background),
+                foreground: self.colors.selection.foreground,
+                border: Stroke::new(self.strokes.default, Brush::Solid(Color::TRANSPARENT)),
+                radius: self.radii.sm,
+            };
+        }
+        self.overlay_item(state)
     }
 
     /// Resolves a checkbox recipe for a state.

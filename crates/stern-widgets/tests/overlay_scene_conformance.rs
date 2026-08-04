@@ -6,8 +6,8 @@ use stern_core::{
     ActionContext, ActionDescriptor, ActionId, ActionSource, Brush, Color, FrameContext, Key,
     KeyEvent, KeyState, KeyboardInput, Modifiers, MouseButton, PhysicalSize, Point,
     PointerButtonState, PointerInput, PointerOrder, PointerTarget, Primitive, RadiusScale, Rect,
-    Response, ScaleFactor, SemanticActionKind, SemanticRole, ShadowPrimitive, Size, StrokeScale,
-    Theme, TimeInfo, UiInput, UiInputEvent, UiMemory, Vec2, ViewportInfo, WidgetId,
+    Response, ScaleFactor, SemanticActionKind, SemanticRole, ShadowPrimitive, Size, Stroke,
+    StrokeScale, Theme, TimeInfo, UiInput, UiInputEvent, UiMemory, Vec2, ViewportInfo, WidgetId,
     default_dark_theme,
 };
 use stern_widgets::overlays::OverlayNavigationInput;
@@ -993,26 +993,71 @@ fn every_overlay_kind_paints_an_ordered_themed_surface_and_children() {
     let mut theme =
         default_dark_theme().with_radii(RadiusScale::from_values(4.0, 11.0, 23.0, 777.0));
     theme.colors.surface.overlay = Color::rgb8(1, 2, 3);
+    theme.colors.surface.panel = Color::rgb8(50, 51, 52);
+    theme.colors.border.default = Color::rgb8(60, 61, 62);
+    theme.colors.border.strong = Color::rgb8(70, 71, 72);
     theme.colors.overlay.scrim = Color::rgb8(4, 5, 6);
     let (_, _, frame) =
         run_frame_with_theme(&mut scene, &mut memory, UiInput::default(), false, &theme);
 
+    // docs/visual-spec/04-overlays.md (#913): Modal and CommandPalette sit on
+    // `surface.panel` (S2) with `border.strong`; every other kind (including
+    // the out-of-spec DragPreview, left at its prior default — see
+    // KNOWN-GAPS.md) uses `surface.overlay` (S3) with `border.default`.
+    // Tooltip alone drops to `radii.sm`.
+    let panel_tier =
+        |kind: OverlayKind| matches!(kind, OverlayKind::Modal | OverlayKind::CommandPalette);
+    let expected_fill = |kind: OverlayKind| {
+        if panel_tier(kind) {
+            theme.colors.surface.panel
+        } else {
+            theme.colors.surface.overlay
+        }
+    };
+    let expected_border = |kind: OverlayKind| {
+        if panel_tier(kind) {
+            theme.colors.border.strong
+        } else {
+            theme.colors.border.default
+        }
+    };
+    let expected_radius = |kind: OverlayKind| {
+        if kind == OverlayKind::Tooltip {
+            theme.radii.sm
+        } else {
+            theme.radii.md
+        }
+    };
+
     let mut previous = None;
     for entry in &entries {
+        let fill = expected_fill(entry.kind);
+        let border = expected_border(entry.kind);
+        let radius = expected_radius(entry.kind);
         let position = frame
             .primitives
             .iter()
             .position(|primitive| {
                 matches!(primitive, Primitive::Rect(rect)
                     if rect.rect == entry.rect
-                        && rect.fill == Some(Brush::Solid(theme.colors.surface.overlay)))
+                        && rect.fill == Some(Brush::Solid(fill)))
             })
-            .expect("themed overlay surface");
+            .unwrap_or_else(|| panic!("themed overlay surface for {:?}", entry.kind));
         let Primitive::Rect(surface_primitive) = &frame.primitives[position] else {
             panic!("overlay surface primitive");
         };
-        assert_eq!(surface_primitive.radius, theme.radii.md);
+        assert_eq!(
+            surface_primitive.radius, radius,
+            "wrong radius for {:?}",
+            entry.kind
+        );
         assert_ne!(surface_primitive.radius, theme.radii.lg);
+        assert_eq!(
+            surface_primitive.stroke,
+            Some(Stroke::new(theme.strokes.default, Brush::Solid(border))),
+            "wrong border for {:?}",
+            entry.kind
+        );
         let matching_shadows = frame
             .primitives
             .iter()
@@ -1028,7 +1073,7 @@ fn every_overlay_kind_paints_an_ordered_themed_surface_and_children() {
             shadow_position < position,
             "shadow paints before its surface"
         );
-        assert_exact_overlay_shadow(shadow, entry, theme.radii.md.top_left);
+        assert_exact_overlay_shadow(shadow, entry, radius.top_left);
         if let Some(previous) = previous {
             assert!(position > previous, "surfaces remain bottom-to-top");
         }
