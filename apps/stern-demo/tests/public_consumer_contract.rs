@@ -39,6 +39,7 @@ fn public_consumer_contract_emits_components_semantics_focus_and_platform_eviden
                 .id(),
             stern_icons_phosphor::regular::PENCIL_SIMPLE.icon().id(),
             stern_icons_phosphor::regular::GRAPH.icon().id(),
+            stern_icons_phosphor::regular::SQUARES_FOUR.icon().id(),
             stern_icons_phosphor::regular::CHECK_CIRCLE.icon().id(),
             stern_icons_phosphor::regular::FLOPPY_DISK.icon().id(),
         ]

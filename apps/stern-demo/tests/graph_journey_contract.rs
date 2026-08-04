@@ -1,8 +1,10 @@
 //! Public-facade contract for the scenario-gated Graph reorder journey.
 
+use std::collections::BTreeMap;
+
 use stern::core::{
     ActionSource, FrameOutput, Key, KeyEvent, KeyState, Modifiers, MouseButton, Point,
-    PointerButtonState, PointerInput, SemanticRole, UiInput, UiInputEvent, Vec2,
+    PointerButtonState, PointerInput, Primitive, SemanticRole, UiInput, UiInputEvent, Vec2,
 };
 use stern::widgets::node_graph::{
     NodeGraphConnectionCancelReason, NodeGraphSelectionTarget, NodeId, PortEndpoint, PortId,
@@ -13,8 +15,12 @@ const REVERSE_NODE_ORDER_ACTION: &str = "graph.reverse-node-order";
 
 #[test]
 fn default_scenario_omits_reorder_action_and_preserves_pinned_output() {
-    // Fingerprint pin retired 2026-08-04: every legitimate recipe change broke it.
-    // #916 replaces this with structural assertions over FrameOutput.
+    // Structural pin (#916): the opaque frame-fingerprint hash this replaced
+    // broke on every paint-recipe change (color/radius/spacing token PRs)
+    // even though nothing structural moved. These assertions instead pin
+    // primitive counts by type, the exact semantic-node label set, and the
+    // workspace-switch row's key geometry — they only break when a control
+    // is genuinely added, removed, or reordered.
     let mut maintained = DemoApp::new();
     let mut explicit = DemoApp::for_scenario(DemoScenario::Default);
 
@@ -23,7 +29,177 @@ fn default_scenario_omits_reorder_action_and_preserves_pinned_output() {
         let explicit = explicit.frame(demo_context(UiInput::default()));
         assert_eq!(maintained, explicit);
         assert!(!has_action(&maintained, REVERSE_NODE_ORDER_ACTION));
+        assert_default_base_frame_structure(&maintained);
     }
+}
+
+/// Asserts the deterministic Default-scenario base frame's primitive-type
+/// counts, exact semantic-node label multiset, and workspace-switch row
+/// geometry (shared with `overlay_recovery_journey_contract.rs`).
+#[allow(clippy::too_many_lines)] // structural inventory reads better linear
+fn assert_default_base_frame_structure(output: &FrameOutput) {
+    let expected_counts: BTreeMap<&'static str, usize> = BTreeMap::from([
+        ("clip_begin", 25),
+        ("clip_end", 25),
+        ("icon", 7),
+        ("line", 1),
+        ("rect", 123),
+        ("text", 81),
+        ("texture", 1),
+        ("transform_begin", 2),
+        ("transform_end", 2),
+    ]);
+    assert_eq!(primitive_counts(output), expected_counts);
+
+    let expected_labels: Vec<&'static str> = vec![
+        "Application menu",
+        "Application status",
+        "Application toolbar",
+        "Applied revision 0",
+        "Apply Shared State",
+        "Assets",
+        "Assets",
+        "Assets",
+        "Assets",
+        "Backdrop",
+        "Background jobs",
+        "Bloom",
+        "Character",
+        "Clouds",
+        "Color",
+        "Credits",
+        "Document tabs",
+        "Edit Workspace",
+        "Edit Workspace",
+        "Editor dock",
+        "Effects",
+        "Fill color",
+        "Foreground",
+        "Frame tabs",
+        "Frame tabs",
+        "Frame tabs",
+        "Frame tabs",
+        "Gallery Workspace",
+        "Gallery Workspace",
+        "Grade",
+        "Gradient editor",
+        "Gradient stop 1",
+        "Gradient stop 2",
+        "Graph Workspace",
+        "Graph Workspace",
+        "Hero clip",
+        "Inspector",
+        "Inspector",
+        "Inspector",
+        "Kind",
+        "Lighting",
+        "Mountains",
+        "Name",
+        "Notifications",
+        "Opacity",
+        "Preview 40%",
+        "Preview render",
+        "Property grid",
+        "Raster layer",
+        "Reset Kind to default",
+        "Reset Name to default",
+        "Reset Opacity to default",
+        "Reset Visible to default",
+        "Save Color Style",
+        "Select Tool",
+        "Select Tool",
+        "Selection",
+        "Subtitle",
+        "Text field",
+        "Text field",
+        "Timeline",
+        "Timeline",
+        "Timeline",
+        "Timeline",
+        "Title",
+        "Transform Tool",
+        "Transform Tool",
+        "Video",
+        "Viewport",
+        "Viewport",
+        "Viewport",
+        "Viewport",
+        "Visible",
+        "Visible",
+        "Workspace",
+        "sRGB · Reverse",
+    ];
+    assert_eq!(
+        semantic_labels(output),
+        expected_labels
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    );
+
+    // Key geometry: the five workspace/shared-action toolbar buttons sit in
+    // one row, left to right in registry order, sharing height and baseline.
+    let edit = semantic_center_rect(output, "Edit Workspace");
+    let graph = semantic_center_rect(output, "Graph Workspace");
+    let gallery = semantic_center_rect(output, "Gallery Workspace");
+    let apply = semantic_center_rect(output, "Apply Shared State");
+    let save = semantic_center_rect(output, "Save Color Style");
+    for rect in [&graph, &gallery, &apply, &save] {
+        assert_eq!(rect.y.to_bits(), edit.y.to_bits());
+        assert_eq!(rect.height.to_bits(), edit.height.to_bits());
+    }
+    assert!(edit.x < graph.x);
+    assert!(graph.x < gallery.x);
+    assert!(gallery.x < apply.x);
+    assert!(apply.x < save.x);
+}
+
+fn primitive_kind(primitive: &Primitive) -> &'static str {
+    match primitive {
+        Primitive::Rect(_) => "rect",
+        Primitive::Line(_) => "line",
+        Primitive::Shadow(_) => "shadow",
+        Primitive::Path(_) => "path",
+        Primitive::Icon(_) => "icon",
+        Primitive::Text(_) => "text",
+        Primitive::Image(_) => "image",
+        Primitive::Texture(_) => "texture",
+        Primitive::ClipBegin { .. } => "clip_begin",
+        Primitive::ClipEnd { .. } => "clip_end",
+        Primitive::LayerBegin { .. } => "layer_begin",
+        Primitive::LayerEnd { .. } => "layer_end",
+        Primitive::TransformBegin(_) => "transform_begin",
+        Primitive::TransformEnd => "transform_end",
+    }
+}
+
+fn primitive_counts(output: &FrameOutput) -> BTreeMap<&'static str, usize> {
+    let mut counts = BTreeMap::new();
+    for primitive in &output.primitives {
+        *counts.entry(primitive_kind(primitive)).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn semantic_labels(output: &FrameOutput) -> Vec<String> {
+    let mut labels = output
+        .semantics
+        .nodes()
+        .iter()
+        .filter_map(|node| node.label.clone())
+        .collect::<Vec<_>>();
+    labels.sort();
+    labels
+}
+
+fn semantic_center_rect(output: &FrameOutput, label: &str) -> stern::core::Rect {
+    output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| node.label.as_deref() == Some(label))
+        .unwrap_or_else(|| panic!("semantic control: {label}"))
+        .bounds
 }
 
 #[test]

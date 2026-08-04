@@ -31,7 +31,7 @@ if at all, inside the `Edit` workspace's dock (see
 | --- | --- | --- |
 | Editor | Integrated DCC/game-engine workbench proving the toolkit layers compose into a reachable application surface. | Built as the `Edit` workspace. |
 | Graph | Node graph editing surface: node/edge selection, connection, and layout. | Built as the `Graph` workspace (`apps/stern-demo/src/graph_workspace.rs`); not part of the original plan. |
-| Components | Buttons, controls, text fields, list/grid states, tabs, and primitive output as a standalone page. | Not built. |
+| Components | Buttons, controls, text fields, list/grid states, tabs, and primitive output as a standalone page. | Built as the Gallery workspace (issue #916): every core family displayed out of the box in its visual-spec states with live state behind each control. |
 | Layout | Measurement-aware layout, interactive docking, splitter output, and virtualized tables as a standalone page. | Not built. |
 | Viewport | Texture surfaces, pan/zoom mapping, guides, crosshair overlays, and dynamic surface placeholders as a standalone page. | Not built. |
 | Systems | Actions, menus, command palette, overlays, runtime diagnostics, and primitive stress as a standalone page. | Not built. |

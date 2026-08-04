@@ -35,6 +35,7 @@ use crate::timeline_workspace::{
 use crate::{DemoActionRegistry, DemoApplicationModel, DemoScenario, DemoViewportTool};
 
 const EDIT_WORKSPACE_TAB: PanelId = PanelId::from_raw(101);
+const GALLERY_WORKSPACE_TAB: PanelId = PanelId::from_raw(103);
 const GRAPH_ROOT: WidgetId = WidgetId::from_raw(0x0047_5241_5048);
 const CHROME_ROOT: WidgetId = WidgetId::from_raw(0x4348_524f_4d45);
 const CLEAR_SELECTION_ACTION: &str = "graph.clear-selection";
@@ -206,6 +207,7 @@ impl GraphWorkspaceState {
                     close_visible: false,
                     draggable: false,
                 },
+                workspace_tab(GALLERY_WORKSPACE_TAB.raw(), "Gallery Workspace", false),
             ]),
             status_bar: StatusBar::from_items([connection_status(
                 GraphConnectionFeedback::Ready,
@@ -353,6 +355,7 @@ impl GraphWorkspaceState {
             ),
             (ChromeSceneItemKey::Tab(EDIT_WORKSPACE_TAB), 132.0),
             (ChromeSceneItemKey::Tab(GRAPH_PANEL), 120.0),
+            (ChromeSceneItemKey::Tab(GALLERY_WORKSPACE_TAB), 148.0),
             (ChromeSceneItemKey::Status(SELECTION_STATUS), 160.0),
             (
                 ChromeSceneItemKey::Toolbar {
