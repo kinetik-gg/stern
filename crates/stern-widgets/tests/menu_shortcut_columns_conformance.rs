@@ -379,7 +379,7 @@ fn wide_mixed_menu_emits_stable_clipped_columns_and_decorative_semantics() {
         ]
     );
     let disabled_foreground = default_dark_theme()
-        .row(ComponentState {
+        .overlay_item(ComponentState {
             disabled: true,
             ..ComponentState::default()
         })
@@ -981,12 +981,18 @@ fn destructive_menu_rows_preserve_geometry_paint_precedence_and_invocation() {
     let danger = Brush::Solid(theme.colors.status.danger.foreground);
     let disabled = Brush::Solid(
         theme
-            .row(ComponentState {
+            .overlay_item(ComponentState {
                 disabled: true,
                 ..ComponentState::default()
             })
             .foreground,
     );
+    // 04-overlays.md pins the shortcut column and submenu-disclosure caret to
+    // `content.muted` unconditionally ("on hover stays muted"), independent
+    // of the row's own label tone — unlike the label text, whose
+    // destructive/disabled precedence predates 04-overlays.md and is left
+    // intact below.
+    let muted = Brush::Solid(theme.colors.content.muted);
     let text_brush = |content: &str| {
         text_primitives(&frame)
             .into_iter()
@@ -995,18 +1001,22 @@ fn destructive_menu_rows_preserve_geometry_paint_precedence_and_invocation() {
             .brush
     };
     assert_ne!(text_brush("Neutral"), danger);
-    for content in [
-        "Destructive",
-        "control-label-that-is-intentionally-long::alternate-label-that-is-intentionally-long::shift-label-that-is-intentionally-long::logical-key:Character(\"d\")",
-        "Destructive submenu",
-        "control-label-that-is-intentionally-long::alternate-label-that-is-intentionally-long::shift-label-that-is-intentionally-long::logical-key:Character(\"s\")",
-        "›",
-        "Delete permanently",
-    ] {
+    for content in ["Destructive", "Destructive submenu", "Delete permanently"] {
         assert_eq!(
             text_brush(content),
             danger,
             "danger foreground for {content}"
+        );
+    }
+    for content in [
+        "control-label-that-is-intentionally-long::alternate-label-that-is-intentionally-long::shift-label-that-is-intentionally-long::logical-key:Character(\"d\")",
+        "control-label-that-is-intentionally-long::alternate-label-that-is-intentionally-long::shift-label-that-is-intentionally-long::logical-key:Character(\"s\")",
+        "›",
+    ] {
+        assert_eq!(
+            text_brush(content),
+            muted,
+            "shortcut/caret decoration stays muted regardless of row tone for {content}"
         );
     }
     assert_eq!(text_brush("Disabled destructive"), disabled);
@@ -1014,7 +1024,8 @@ fn destructive_menu_rows_preserve_geometry_paint_precedence_and_invocation() {
         text_brush(
             "control-label-that-is-intentionally-long::alternate-label-that-is-intentionally-long::shift-label-that-is-intentionally-long::logical-key:Character(\"x\")"
         ),
-        disabled
+        muted,
+        "shortcut decoration stays muted even for a disabled row"
     );
     let check_lines = frame
         .primitives
@@ -1110,13 +1121,17 @@ fn mixed_and_checked_menu_rows_preserve_geometry_semantics_and_routing() {
     assert_eq!(checked_node.state.checked, Some(true));
     assert!(!checked_node.state.mixed);
 
-    let marks = frame
+    let check_lines = frame
         .primitives
         .iter()
         .filter_map(|primitive| match primitive {
-            Primitive::Line(line) => Some((line.from, line.to)),
+            Primitive::Line(line) => Some(line),
             _ => None,
         })
+        .collect::<Vec<_>>();
+    let marks = check_lines
+        .iter()
+        .map(|line| (line.from, line.to))
         .collect::<Vec<_>>();
     assert_eq!(
         marks,
@@ -1125,6 +1140,14 @@ fn mixed_and_checked_menu_rows_preserve_geometry_semantics_and_routing() {
             (Point::new(35.0, 66.0), Point::new(38.5, 69.0)),
             (Point::new(38.5, 69.0), Point::new(45.0, 62.0)),
         ]
+    );
+    // 04-overlays.md: an enabled, non-destructive check/mixed glyph paints in
+    // the fixed `focus.indicator` accent, not the row's own foreground.
+    let focus_indicator = Brush::Solid(default_dark_theme().colors.focus.indicator);
+    assert!(
+        check_lines
+            .iter()
+            .all(|line| line.stroke.brush == focus_indicator)
     );
 
     let mut memory = UiMemory::new();

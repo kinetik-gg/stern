@@ -392,6 +392,34 @@ pub struct PanelRecipe {
     pub shadow: Option<ShadowRecipe>,
 }
 
+/// Overlay chrome tier — which fill/border/radius pairing an overlay surface
+/// uses, per `docs/visual-spec/04-overlays.md` (family issue #913). Elevation
+/// (shadow) is a separate, kind-driven paint step (`Theme::elevation_shadow`)
+/// and is not part of this recipe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OverlaySurfaceTier {
+    /// Menu, context menu, dropdown list, popover: `surface.overlay` S3
+    /// (00-language.md D2), `border.default`, `radius.md`.
+    Menu,
+    /// Tooltip: the same fill/border as `Menu`, but `radius.sm` — the one
+    /// smaller-chrome surface in this family.
+    Tooltip,
+    /// Modal, command palette: `surface.panel` S2, `border.strong`,
+    /// `radius.md`.
+    Panel,
+}
+
+/// Overlay surface visual recipe output (fill, border, radius).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OverlaySurfaceRecipe {
+    /// Background brush.
+    pub background: Brush,
+    /// Border stroke.
+    pub border: Stroke,
+    /// Corner radius.
+    pub radius: CornerRadius,
+}
+
 /// Separator visual recipe output.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SeparatorRecipe {

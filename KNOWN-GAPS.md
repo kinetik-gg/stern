@@ -311,7 +311,6 @@ engine, no new components).
     concern the caller would own, which does not exist yet. Out of scope for
     a recipe-values-only issue.
 
-
 ## Visual conformance (Issue #911)
 
 Found while conforming field family recipes (`docs/visual-spec/02-fields.md`)
@@ -381,3 +380,76 @@ to `Theme::text_field`. Not fixed here per that issue's non-goals (no new
 ## Visual conformance (Issue #912)
 
 32. **Choice/slider/tab family (Issue #912)**: `Theme::tab` (also painted by dock/chrome document tab strips, family #914) was left unconformed to `03-choice-sliders-tabs.md`'s segmented/tab-strip table to avoid clobbering that concurrent family; no progress-bar widget/recipe exists yet; checkbox/radio glyphs and the slider thumb now resolve correct per-state colors (`CheckRecipe.mark`, new `SliderRecipe.thumb`) but have no paint primitive (`ComponentState` also has no `mixed` checkbox flag) — see PR body for the full before/after table.
+
+## Visual conformance (Issue #913)
+
+Found while conforming overlay family recipes
+(`docs/visual-spec/04-overlays.md`) to `Theme::overlay_surface`,
+`Theme::overlay_item`, and `Theme::command_palette_item`
+(`crates/stern-core/src/theme/model.rs`) and their call sites in
+`crates/stern-widgets/src/ui/overlays.rs`. Not fixed here per that issue's
+non-goals (values only — no anatomy/placement rewrites, no new components).
+
+33. **`OverlaySceneRowKind::Passive` conflates four different text roles
+    04-overlays.md tables separately.** `crates/stern-widgets/src/overlays/
+    scene.rs`'s `rows()` uses the same `OverlaySceneRow::passive`/
+    `menu_label` constructors, and `paint_overlay_row`'s non-`Action` branch
+    (`crates/stern-widgets/src/ui/overlays.rs`) paints all of them with the
+    same `TextRole::Label` foreground, for: menu group headings (spec: meta
+    9/mono, UPPERCASE +0.06em, muted), modal title (control-strong 11/600),
+    modal body (body type), tooltip text (detail 10, secondary), and command
+    palette's query row (body 12, primary). Distinguishing them needs new
+    `OverlaySceneRowKind` variants (or an explicit text-role field) — a
+    row-kind/anatomy change, not a recipe-values fix.
+34. **Modal anatomy has no header/footer chrome.** 04-overlays.md's Modal
+    section specifies a header (height 34, padding-inline 12, title
+    control-strong, `border-b` `border.subtle`), body (padding 12), footer
+    (height 44, padding-inline 12, right-aligned actions, `gap.group` 8,
+    `border-t` `border.subtle`), and a leading danger icon (16,
+    `status.danger.foreground`) in danger modals' title row.
+    `OverlaySceneSurface::Modal`'s `rows()` arm (`crates/stern-widgets/src/
+    overlays/scene.rs:369-403`) only emits a title passive row, an optional
+    body passive row, and flat action rows — no header/footer bands, no
+    borders between them, no danger icon. Building that anatomy is out of
+    scope for a recipe-values-only issue.
+35. **Command palette anatomy has no search-row grid or footer.**
+    04-overlays.md specifies a search row (height 38, grid 18/flex/auto,
+    leading search icon, trailing esc-hint, `border-b` `border.default`) and
+    a footer (height 26, fill `surface.application` S1, `border-t`
+    `border.subtle`, hint items gap 12). `OverlaySceneSurface::CommandPalette`
+    (`crates/stern-widgets/src/overlays/scene.rs:340-368`) only emits a plain
+    `"> {query}"` passive row and flat result rows — no search-row
+    icon/esc-hint columns and no footer row at all. Out of scope here.
+36. **Menu group-heading padding, separator inset, and submenu overlap
+    offset aren't verified against 04-overlays.md's exact metrics.** The
+    spec calls for group-heading padding 7/8/4, a full-width separator inset
+    4 with 4 block margin, and submenus opening overlapping their trigger by
+    -4. `RowLayout`/`placed_entry`
+    (`crates/stern-widgets/src/overlays/scene.rs`,
+    `crates/stern-widgets/src/overlays/placement.rs`) predate this issue and
+    were not audited against these specific numbers — a layout/anatomy
+    check, not a recipe-color fix.
+37. **Typography scale steps aren't wired into `TextRole` at all (D5,
+    background gap, not overlay-specific — surfaced concretely here).**
+    00-language.md's five-step scale (body 12, control 11, control-strong
+    11/600, detail 10, meta 9/mono) has no corresponding `TextRole::Detail`
+    or `TextRole::Meta`/9px entry in `FontSizeScale`
+    (`crates/stern-core/src/theme/model.rs`); every overlay row (menu items,
+    tooltip text, shortcut column, palette results) renders through
+    `TextRole::Label` regardless of which step the spec calls for. Adding
+    the missing steps is a typography-system change tracked by D5, not a
+    per-recipe value fix.
+38. **`DragPreview` has no normative surface treatment in
+    04-overlays.md.** `overlay_surface_tier`
+    (`crates/stern-widgets/src/ui/overlays.rs`) falls it back to the `Menu`
+    tier (`surface.overlay`/`border.default`/`radius.md`) and
+    `overlay_elevation_level` keeps it at `ElevationLevel::Low`, both
+    unchanged from before this issue — there is no spec table to conform to
+    yet.
+39. **Overlay row icons hardcode `size.icon.md` (16px) regardless of D3's
+    control-height-aware sizing**, the same root cause as gap #22 above but
+    a call site #910 didn't enumerate: `paint_overlay_icon`
+    (`crates/stern-widgets/src/ui/overlays.rs`) always requests
+    `theme.sizes.icon.md` for menu rows at `size.row.compact` (24px) height,
+    where D3 calls for `size.icon.sm` (12px). Fixing needs a row-height-aware
+    call, not a recipe change.
