@@ -9,7 +9,7 @@ status policy, exclusions, and vendored-schema provenance are in
 The governing design-system rule: **a claim without a validating record is
 not a claim.** Every entry in the ledger cites the merged in-repo test(s)
 that exercise its requirement, and the validator
-(`apps/stern-demo/tests/conformance_claims_contract.rs`, run by
+(`conformance/tests/claims_contract.rs`, run by
 `cargo test --workspace` and an explicit CI step) fails the build when a
 claim names an unknown requirement, cites a test that does not exist, or
 carries a status the evidence cannot support.

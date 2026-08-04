@@ -76,8 +76,10 @@ see provenance below) defines three statuses:
 
 ## Validation
 
-`apps/stern-demo/tests/conformance_claims_contract.rs` machine-validates
-this directory on every `cargo test --workspace` run (and as an explicit CI
+This directory is also a small dev-test crate (workspace member
+`conformance`; its library exports nothing). Its
+[`tests/claims_contract.rs`](tests/claims_contract.rs) machine-validates
+the manifest on every `cargo test --workspace` run (and as an explicit CI
 step):
 
 - `claims.json` parses, is sorted, has unique requirement ids, and every

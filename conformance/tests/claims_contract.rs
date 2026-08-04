@@ -27,8 +27,12 @@ const SCHEMA_STATUSES: [&str; 3] = ["unverified", "partial", "verified"];
 /// or review-record evidence does.
 const SUPPORTED_STATUS: &str = "partial";
 
+fn crate_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
 fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    crate_root().join("..")
 }
 
 fn design_system_root() -> PathBuf {
@@ -46,7 +50,7 @@ fn read_json(path: &Path) -> Value {
 }
 
 fn claims() -> Vec<Value> {
-    let path = workspace_root().join("conformance/claims.json");
+    let path = crate_root().join("claims.json");
     let manifest = read_json(&path);
     let claims = manifest
         .as_array()
@@ -186,7 +190,7 @@ fn claims_manifest_is_wellformed_and_references_real_tests() {
 
 #[test]
 fn claim_statuses_are_schema_statuses_and_stay_partial() {
-    let schema = read_json(&workspace_root().join("conformance/parity-evidence.schema.json"));
+    let schema = read_json(&crate_root().join("parity-evidence.schema.json"));
     let schema_statuses: Vec<&str> =
         schema["properties"]["evidence"]["items"]["properties"]["status"]["enum"]
             .as_array()
@@ -273,9 +277,8 @@ fn vendored_evidence_schema_matches_design_system_source() {
         );
         return;
     };
-    let vendored =
-        fs::read_to_string(workspace_root().join("conformance/parity-evidence.schema.json"))
-            .expect("vendored parity-evidence.schema.json is readable");
+    let vendored = fs::read_to_string(crate_root().join("parity-evidence.schema.json"))
+        .expect("vendored parity-evidence.schema.json is readable");
 
     assert_eq!(
         vendored.replace("\r\n", "\n"),

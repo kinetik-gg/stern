@@ -166,7 +166,7 @@ reference looks stale, trust the code and send a correction PR.
     first machine-validated claims against that requirement set: 63
     requirements from the foundations/behaviors scope, each citing the
     merged model-layer tests that exercise it, all capped at `partial`
-    (validator: `apps/stern-demo/tests/conformance_claims_contract.rs`;
+    (validator: `conformance/tests/claims_contract.rs`;
     rules: `conformance/README.md`). The remaining 423 requirements are
     unclaimed — accessibility entirely (no OS bridge), everything outside
     foundations/behaviors, and every requirement without a genuinely

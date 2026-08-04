@@ -307,6 +307,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "conformance"
+version = "0.0.1-alpha.1"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2172,7 +2179,6 @@ name = "stern-demo"
 version = "0.0.1-alpha.1"
 dependencies = [
  "pollster",
- "serde_json",
  "stern",
  "stern-icons-phosphor",
  "syn",
