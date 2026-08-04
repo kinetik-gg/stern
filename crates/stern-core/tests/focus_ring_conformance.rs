@@ -294,9 +294,12 @@ fn focused_choice_and_slider_recipes_retain_neutral_base_borders() {
     );
     assert_eq!(theme.toggle(focused).border, theme.toggle(unfocused).border);
     assert_eq!(theme.slider(focused).border, theme.slider(unfocused).border);
+    // Unchecked checkbox border is `border.strong` at rest
+    // (docs/visual-spec/03-choice-sliders-tabs.md §Checkbox); this asserts
+    // `focused` doesn't shift it, not the specific token.
     assert_eq!(
         theme.checkbox(focused).border.brush,
-        Brush::Solid(theme.colors.border.default)
+        Brush::Solid(theme.colors.border.strong)
     );
 }
 

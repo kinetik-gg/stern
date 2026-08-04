@@ -19,12 +19,15 @@ fn ui_text_field_requests_platform_text_input_when_focused() {
     let mut ui = Ui::new(&input, &mut memory, &theme);
     ui.text_field("field", Rect::new(0.0, 0.0, 120.0, 24.0), &mut state, false);
     let press_output = ui.finish_output();
+    // Caret x-origin is `recipe.padding_x` (8, docs/visual-spec/02-fields.md
+    // "padding-inline 8", issue #911) from the field's left edge; a click at
+    // x=4 lands in the left padding and clamps to caret offset 0.
     assert!(press_output.platform_requests.iter().any(|request| {
         matches!(
             request,
             PlatformRequest::StartTextInput {
                 rect: Some(rect),
-            } if *rect == Rect::new(4.0, 4.0, 1.0, 16.0)
+            } if *rect == Rect::new(8.0, 4.0, 1.0, 16.0)
         )
     }));
 
@@ -37,7 +40,7 @@ fn ui_text_field_requests_platform_text_input_when_focused() {
         output
             .platform_requests
             .contains(&PlatformRequest::UpdateTextInputRect {
-                rect: Rect::new(4.0, 4.0, 1.0, 16.0),
+                rect: Rect::new(8.0, 4.0, 1.0, 16.0),
             })
     );
     assert!(!output.platform_requests.iter().any(|request| matches!(
