@@ -141,7 +141,10 @@ fn nested_scroll_projects_focused_text_semantics_and_ime_to_one_screen_rect() {
     state.set_caret(0);
     let child_rect = Rect::new(30.0, 60.0, 20.0, 20.0);
     let expected_screen = Rect::new(15.0, 33.0, 20.0, 20.0);
-    let expected_caret_screen = Rect::new(19.0, 37.0, 1.0, 12.0);
+    // Caret local x is `child_rect.x + recipe.padding_x` (8, docs/visual-spec/
+    // 02-fields.md "padding-inline 8", issue #911), then projected through
+    // the same 15px cumulative scroll offset as the field bounds below.
+    let expected_caret_screen = Rect::new(23.0, 37.0, 1.0, 12.0);
     let input = UiInput::default();
     let mut ui = Ui::new(&input, &mut memory, &theme);
 
