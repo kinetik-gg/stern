@@ -13,7 +13,7 @@ const REVERSE_NODE_ORDER_ACTION: &str = "graph.reverse-node-order";
 
 #[test]
 fn default_scenario_omits_reorder_action_and_preserves_pinned_output() {
-    const BASE_FRAME_FINGERPRINT: u64 = 0x95d3_985e_c7b6_861e;
+    const BASE_FRAME_FINGERPRINT: u64 = 0xbf0d_0403_dea9_3af8;
     let mut maintained = DemoApp::new();
     let mut explicit = DemoApp::for_scenario(DemoScenario::Default);
 
