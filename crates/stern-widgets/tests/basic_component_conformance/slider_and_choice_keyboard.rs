@@ -16,6 +16,7 @@ use super::{
     radio_button_with_label, radio_group_choices, released_at, select_field,
     slider_semantic_current, slider_with_label, stage9_rect, toggle_with_label,
 };
+use stern_core::UiInputEvent;
 
 #[test]
 fn stage2_slider_keyboard_uses_default_and_configured_steps() {
@@ -598,4 +599,114 @@ fn stage2_radio_group_keyboard_activation_uses_choice_control_semantics() {
     assert!(scrub.scrubbed);
     assert!((scrub_value - 4.0).abs() < f32::EPSILON);
     assert_eq!(output.repaint, RepaintRequest::NextFrame);
+}
+
+#[test]
+fn slider_drag_cancelled_by_release_all_restores_pre_drag_value() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 100.0, 12.0);
+    let mut value = 0.05;
+    let mut memory = UiMemory::new();
+
+    let press = pressed_at(60.0, 6.0);
+    let mut ui = Ui::new(&press, &mut memory, &theme);
+    let pressed = ui.slider("slider", rect, &mut value, 0.0..=1.0, false);
+    assert!(pressed.state.active);
+    assert!((value - 0.6).abs() < f32::EPSILON);
+
+    let drag = dragged_at(90.0, 6.0, 30.0);
+    let mut ui = Ui::new(&drag, &mut memory, &theme);
+    let dragging = ui.slider("slider", rect, &mut value, 0.0..=1.0, false);
+    assert!(dragging.dragged);
+    assert!((value - 0.9).abs() < f32::EPSILON);
+
+    let cancel_input = UiInput {
+        events: vec![UiInputEvent::PointerReleaseAll {
+            position: Some(Point::new(90.0, 6.0)),
+        }],
+        ..UiInput::default()
+    };
+    let mut ui = Ui::new(&cancel_input, &mut memory, &theme);
+    let cancelled = ui.slider("slider", rect, &mut value, 0.0..=1.0, false);
+    assert!(!cancelled.state.active);
+    assert!(
+        (value - 0.05).abs() < f32::EPSILON,
+        "a cancelled drag must restore the pre-drag value, got {value}"
+    );
+}
+
+#[test]
+fn slider_drag_cancelled_by_escape_restores_pre_drag_value() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 100.0, 12.0);
+    let mut value = 0.05;
+    let mut memory = UiMemory::new();
+
+    let press = pressed_at(60.0, 6.0);
+    let mut ui = Ui::new(&press, &mut memory, &theme);
+    ui.slider("slider", rect, &mut value, 0.0..=1.0, false);
+    assert!((value - 0.6).abs() < f32::EPSILON);
+
+    let escape_input = UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(60.0, 6.0)),
+            primary: PointerButtonState::new(true, false, false),
+            ..PointerInput::default()
+        },
+        keyboard: KeyboardInput {
+            modifiers: Modifiers::default(),
+            events: vec![KeyEvent::new(
+                Key::Escape,
+                KeyState::Pressed,
+                Modifiers::default(),
+                false,
+            )],
+        },
+        ..UiInput::default()
+    };
+    let mut ui = Ui::new(&escape_input, &mut memory, &theme);
+    let cancelled = ui.slider("slider", rect, &mut value, 0.0..=1.0, false);
+    assert!(!cancelled.state.active);
+    assert!(
+        (value - 0.05).abs() < f32::EPSILON,
+        "escape must cancel an active drag and restore the pre-drag value, got {value}"
+    );
+}
+
+#[test]
+fn slider_drag_released_normally_commits_value() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 100.0, 12.0);
+    let mut value = 0.05;
+    let mut memory = UiMemory::new();
+
+    let press = pressed_at(60.0, 6.0);
+    let mut ui = Ui::new(&press, &mut memory, &theme);
+    ui.slider("slider", rect, &mut value, 0.0..=1.0, false);
+
+    let drag = dragged_at(90.0, 6.0, 30.0);
+    let mut ui = Ui::new(&drag, &mut memory, &theme);
+    ui.slider("slider", rect, &mut value, 0.0..=1.0, false);
+    assert!((value - 0.9).abs() < f32::EPSILON);
+
+    let release = released_at(90.0, 6.0);
+    let mut ui = Ui::new(&release, &mut memory, &theme);
+    let released = ui.slider("slider", rect, &mut value, 0.0..=1.0, false);
+    assert!(!released.state.active);
+    assert!(
+        (value - 0.9).abs() < f32::EPSILON,
+        "an ordinary release must commit the dragged value, got {value}"
+    );
+
+    // A later, unrelated cancellation must not retroactively restore a
+    // value already committed by a prior ordinary release.
+    let cancel_input = UiInput {
+        events: vec![UiInputEvent::PointerReleaseAll {
+            position: Some(Point::new(90.0, 6.0)),
+        }],
+        ..UiInput::default()
+    };
+    let mut ui = Ui::new(&cancel_input, &mut memory, &theme);
+    ui.slider("slider", rect, &mut value, 0.0..=1.0, false);
+    assert!((value - 0.9).abs() < f32::EPSILON);
 }

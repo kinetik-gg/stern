@@ -1,8 +1,8 @@
 use super::{
-    ComponentState, CornerRadius, CursorShape, PlatformRequest, Point, Primitive, Rect,
-    RectPrimitive, Response, SemanticNode, TextRole, Theme,
+    ComponentState, CornerRadius, CursorShape, Key, KeyState, PlatformRequest, Point, Primitive,
+    Rect, RectPrimitive, Response, SemanticNode, TextRole, Theme, UiMemory, WidgetId,
 };
-use stern_core::{ButtonRecipe, RowRecipe, TabRecipe};
+use stern_core::{ButtonRecipe, KeyEvent, RowRecipe, TabRecipe};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ButtonFocusPlacement {
@@ -228,6 +228,67 @@ pub(super) fn clicked_toggle_state(selected: bool, clicked: bool) -> bool {
 
 pub(super) fn clicked_select_state(selected: bool, clicked: bool) -> bool {
     selected || clicked
+}
+
+/// Returns true when `events` contains a non-repeat Escape key press.
+///
+/// This is the same recognition rule used to blur ordered text-input focus on
+/// Escape; value-drag controls reuse it to recognize an in-progress drag as
+/// cancelled by the keyboard.
+pub(super) fn escape_pressed(events: &[KeyEvent]) -> bool {
+    events.iter().any(|event| {
+        event.state == KeyState::Pressed && !event.repeat && matches!(event.key, Key::Escape)
+    })
+}
+
+/// Resolves the pre-drag value snapshot lifecycle for a `draggable`-backed
+/// value control (slider, numeric scrub input, ...).
+///
+/// Call this once per frame after resolving the widget's [`Response`], passing
+/// whether the widget was active *before* that resolution (`was_active`) and
+/// the external value's current, still-live magnitude (`current`) — i.e. the
+/// value the widget may already have mutated this frame from pointer motion.
+///
+/// - On the frame a press/drag begins, the current value is armed as the
+///   restore point.
+/// - While a pointer interaction is cancelled (`PointerReleaseAll`, window
+///   focus loss) or `escape_pressed` reports a non-repeat Escape while the
+///   widget is still active, this returns `Some(pre_drag_value)` so the
+///   caller can restore its external state; the retained snapshot is cleared.
+/// - On an ordinary release (active transitions to inactive without
+///   cancellation), the retained snapshot is cleared and `None` is returned
+///   so the caller keeps the committed value.
+/// - While the drag continues, or before one ever starts, this returns
+///   `None` and leaves any retained snapshot untouched.
+pub(super) fn resolve_drag_value_cancellation(
+    id: WidgetId,
+    was_active: bool,
+    response: Response,
+    escape_pressed: bool,
+    disabled: bool,
+    current: f32,
+    memory: &mut UiMemory,
+) -> Option<f32> {
+    if !disabled && !was_active && response.state.active {
+        memory.set_drag_value_snapshot(id, current);
+    }
+    if !disabled
+        && response.state.active
+        && escape_pressed
+        && memory.drag_value_snapshot(id).is_some()
+    {
+        memory.cancel_pointer_interaction();
+    }
+    let snapshot = memory.drag_value_snapshot(id)?;
+    if memory.pointer_interaction_cancelled() {
+        memory.clear_drag_value_snapshot(id);
+        Some(snapshot)
+    } else if was_active && !response.state.active {
+        memory.clear_drag_value_snapshot(id);
+        None
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
