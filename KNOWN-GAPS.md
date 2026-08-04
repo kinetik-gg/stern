@@ -301,6 +301,7 @@ engine, no new components).
     concern the caller would own, which does not exist yet. Out of scope for
     a recipe-values-only issue.
 
+
 ## Visual conformance (Issue #911)
 
 Found while conforming field family recipes (`docs/visual-spec/02-fields.md`)
@@ -366,3 +367,7 @@ to `Theme::text_field`. Not fixed here per that issue's non-goals (no new
     already exists (`crates/stern-core/src/runtime/types.rs`) but nothing
     requests it during a scrub drag. A widget call-site change, not a
     recipe value.
+
+## Visual conformance (Issue #912)
+
+32. **Choice/slider/tab family (Issue #912)**: `Theme::tab` (also painted by dock/chrome document tab strips, family #914) was left unconformed to `03-choice-sliders-tabs.md`'s segmented/tab-strip table to avoid clobbering that concurrent family; no progress-bar widget/recipe exists yet; checkbox/radio glyphs and the slider thumb now resolve correct per-state colors (`CheckRecipe.mark`, new `SliderRecipe.thumb`) but have no paint primitive (`ComponentState` also has no `mixed` checkbox flag) — see PR body for the full before/after table.
