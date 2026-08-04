@@ -126,7 +126,7 @@ fn actual_tab_focus_translates_as_contained_fill_only_annuli_at_release_scales()
         let translation = translate_primitives(&output.primitives[..3 + offset], &resources);
         assert!(translation.diagnostics.is_empty());
         assert_eq!(translation.commands.len(), 3 + offset);
-        for command in &translation.commands[..1 + offset] {
+        for command in &translation.commands[..=offset] {
             assert!(matches!(command.kind, RenderCommandKind::Rect { .. }));
         }
         for (command, expected) in translation.commands[1 + offset..]
