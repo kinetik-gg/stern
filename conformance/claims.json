@@ -1,0 +1,619 @@
+[
+  {
+    "requirementId": "STERN-CLR-003",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/render_color_conformance.rs::color_constructors_preserve_straight_srgb_inputs",
+      "crates/stern-render/tests/color_alpha_conformance.rs::convenience_constructors_default_to_straight_srgb_bytes",
+      "crates/stern-render/tests/color_alpha_conformance.rs::explicit_premultiplied_metadata_and_payload_survive_construction"
+    ],
+    "notes": "Stored colors default to straight (non-premultiplied) sRGB; premultiplication only travels as explicit metadata. Model layer only; no end-to-end editor pipeline evidence."
+  },
+  {
+    "requirementId": "STERN-CLR-006",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/gradient_editor_conformance.rs::gradient_editor_rejects_invalid_and_unsupported_preview_contracts"
+    ],
+    "notes": "Unsupported interpolation space fails with the structured GradientEditorPrepareError::UnsupportedInterpolationSpace diagnostic. Absence is unrepresentable in the typed config; serialization/deserialization paths are not exercised."
+  },
+  {
+    "requirementId": "STERN-CLR-007",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/gradient_editor_conformance.rs::gradient_editor_preserves_stable_equal_position_order",
+      "crates/stern-widgets/tests/gradient_editor_conformance.rs::gradient_editor_selects_and_moves_stops_with_event_time_geometry",
+      "crates/stern-widgets/tests/gradient_editor_conformance.rs::gradient_editor_keyboard_nudges_deletes_and_reverses_with_typed_intents"
+    ],
+    "notes": "Coincident-position ordering is deterministic and stop identity survives pointer drag and keyboard movement. Identity through undo is not evidenced."
+  },
+  {
+    "requirementId": "STERN-CLR-008",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/gradient_editor_conformance.rs::gradient_editor_composes_opaque_srgb_ramp_and_declared_space"
+    ],
+    "notes": "The gradient editor output carries its declared interpolation space as machine-readable metadata. On-screen display of the space is unverified (no visual evidence)."
+  },
+  {
+    "requirementId": "STERN-CMD-001",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/action_surface_conformance.rs::action_surface_conformance_command_palette_filters_and_invokes_selected_entry_only",
+      "crates/stern-widgets/tests/action_surface_conformance.rs::action_surface_conformance_descriptor_invocation_preserves_source_context_and_order",
+      "crates/stern-widgets/tests/menu_overlay_integration.rs::command_palette_overlay_filters_and_invokes_without_executing_commands"
+    ],
+    "notes": "Palette results and invocations derive from application-owned action descriptors and never execute directly. Shortcut and enabled-state derivation is only partially exercised."
+  },
+  {
+    "requirementId": "STERN-COL-006",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/src/theme/tests.rs::default_dark_accent_group_matches_design_system_tokens",
+      "crates/stern-core/src/theme/tests.rs::vendored_tokens_match_design_system_output",
+      "crates/stern-core/tests/render_color_conformance.rs::color_constants_and_default_theme_accent_are_exact"
+    ],
+    "notes": "color.accent.default is vendored as #0C8CE9 and the resolved default-dark accent is pinned to that token. No rendered-pixel evidence."
+  },
+  {
+    "requirementId": "STERN-COL-007",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/src/theme/tests.rs::default_dark_maps_every_semantic_color_to_a_design_system_token",
+      "crates/stern-core/src/theme/tests.rs::recipe_lookups_follow_independently_overridden_semantic_paths",
+      "crates/stern-core/tests/theme_color_tokens_conformance.rs::with_colors_replaces_only_the_grouped_palette"
+    ],
+    "notes": "Component recipes resolve through semantic roles and role overrides flow into recipes without behavior changes. Only the one normative dark theme exists, so multi-theme introduction is untested."
+  },
+  {
+    "requirementId": "STERN-COL-008",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/virtual_list_conformance.rs::virtual_selected_rows_enumerate_the_white_on_blue_contrast_exception"
+    ],
+    "notes": "The ~3.53:1 white-on-#0C8CE9 ratio is computed, asserted below AA (4.5:1), and enumerated as a deliberate exception rather than reported as compliance. Formal accessibility-report disclosure does not exist yet."
+  },
+  {
+    "requirementId": "STERN-CONTRACT-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/virtual_list_conformance.rs::stable_ids_and_focus_repair_survive_reorder_and_removal",
+      "crates/stern-widgets/tests/dropdown_conformance.rs::selected_by_id_survives_reorder",
+      "crates/stern-widgets/tests/ui_passive_identity.rs::ui_keyed_passive_ids_match_explicit_widget_keys"
+    ],
+    "notes": "Selection, focus, and semantic identity are keyed by stable ids that survive reorder and removal; recycled slots never carry identity. Coverage is per-component, not exhaustive."
+  },
+  {
+    "requirementId": "STERN-CONTRACT-003",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/transform_hit_conformance.rs::transform_hit_identity_matches_rect_hit_test",
+      "crates/stern-core/tests/transform_hit_conformance.rs::transform_hit_nested_composition_matches_vello_formula",
+      "crates/stern-core/tests/pointer_conformance/press_context.rs::pointer_interaction_transformed_pressable_clicks_hits_and_rejects_misses"
+    ],
+    "notes": "Hit testing shares the paint transform composition (including the renderer's nesting formula). Semantics, overlay anchors, and serialization sharing are not evidenced."
+  },
+  {
+    "requirementId": "STERN-CUR-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_capture_blocks_other_active_click_and_cursor_stealing",
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_draggable_starts_updates_and_ends_with_capture_outside_rect"
+    ],
+    "notes": "During capture the drag owner keeps its cursor grant, including outside the origin bounds, and other targets cannot steal it. Platform cursor application is unverified."
+  },
+  {
+    "requirementId": "STERN-CUR-007",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_release_all_cancels_disabled_owner_without_drop_or_cursor",
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_cancellation_flag_and_cursor_suppression_are_frame_local",
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_focus_loss_cancels_capture_without_synthesizing_drop"
+    ],
+    "notes": "Pointer cancellation and window focus loss clear cursor and capture ownership at the model layer. OS-level custom cursor teardown is unverified."
+  },
+  {
+    "requirementId": "STERN-DLG-001",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/modal_dialog_conformance.rs::modal_dialog_conformance_opens_as_modal_overlay_entry",
+      "crates/stern-widgets/tests/modal_dialog_conformance.rs::modal_dialog_conformance_focus_metadata_is_ordered_and_contained",
+      "crates/stern-widgets/tests/overlay_conformance.rs::overlay_conformance_modal_blocks_lower_layers_but_not_higher_hits"
+    ],
+    "notes": "Modal entries block lower-layer hits through routing and dialog focus metadata is ordered and contained in its scope. Full keyboard traversal containment inside a live focus scope is only partially exercised."
+  },
+  {
+    "requirementId": "STERN-DLG-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/modal_dialog_conformance.rs::modal_dialog_conformance_focus_metadata_is_ordered_and_contained",
+      "crates/stern-widgets/tests/modal_dialog_conformance.rs::modal_dialog_conformance_cancel_role_is_discoverable_and_gated",
+      "crates/stern-widgets/tests/modal_dialog_conformance.rs::modal_dialog_conformance_dismissal_policy_returns_close_metadata_only"
+    ],
+    "notes": "Dialogs declare initial focus, a gated cancel role, and a dismissal policy. Default-action declaration and deterministic focus restoration are not evidenced."
+  },
+  {
+    "requirementId": "STERN-DRG-001",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/drag_threshold_conformance.rs::below_threshold_release_clicks_and_exact_threshold_suppresses_click",
+      "crates/stern-core/tests/drag_threshold_conformance.rs::crossing_reports_full_displacement_then_subsequent_delta_and_never_unlatches",
+      "crates/stern-core/tests/dpi_snap_conformance.rs::dpi_foundation_dimensions_stay_logical_across_release_scales"
+    ],
+    "notes": "Thresholds are evaluated in logical units with exact crossing semantics, and foundation dimensions stay logical across DPI scales. Cross-DPI feel is not measured beyond that invariance."
+  },
+  {
+    "requirementId": "STERN-DRG-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_draggable_starts_updates_and_ends_with_capture_outside_rect",
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_drag_capture_suppresses_other_hover",
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_capture_blocks_other_active_click_and_cursor_stealing"
+    ],
+    "notes": "The drag owner retains capture through motion outside its bounds until release or cancellation, and other targets cannot interact meanwhile. Explicit ownership transfer is not exercised."
+  },
+  {
+    "requirementId": "STERN-DRG-003",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_focus_loss_cancels_capture_without_synthesizing_drop",
+      "crates/stern-core/tests/drag_threshold_conformance.rs::canonical_release_outside_clip_is_cancel_only_with_original_ordinal",
+      "crates/stern-widgets/tests/basic_component_conformance/slider_and_choice_keyboard.rs::slider_drag_cancelled_by_escape_restores_pre_drag_value",
+      "crates/stern-widgets/tests/text_field_conformance/numeric_and_scrub.rs::numeric_scrub_input_drag_cancelled_by_escape_restores_pre_drag_value"
+    ],
+    "notes": "Cancellation paths (focus loss, out-of-clip release, escape, release-all) never synthesize a drop or commit, and slider/scrub cancellation restores the pre-drag value."
+  },
+  {
+    "requirementId": "STERN-DRG-004",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/pointer_conformance/drop_target.rs::pointer_interaction_drop_target_rejects_self_disabled_and_missed_releases",
+      "crates/stern-core/tests/pointer_conformance/drop_target.rs::pointer_interaction_transformed_drop_target_rejects_disabled_target"
+    ],
+    "notes": "Ineligible targets (self, disabled, missed) report no affirmative drop response, which is the model input to drop indication. Painted indication itself is unverified."
+  },
+  {
+    "requirementId": "STERN-DRG-005",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/pointer_conformance/drop_target.rs::pointer_interaction_drop_target_reports_active_drag_source_over_target",
+      "crates/stern-core/tests/pointer_conformance/drop_target.rs::pointer_interaction_drop_target_accepts_released_drag_source_over_target",
+      "crates/stern-core/tests/drag_threshold_conformance.rs::planned_drop_uses_first_release_geometry_in_both_evaluation_orders",
+      "crates/stern-core/tests/drag_threshold_conformance.rs::drop_uses_canonical_release_geometry_and_rejects_missing_event_position"
+    ],
+    "notes": "Active-drag reporting and the eventual drop acceptance flow through the same hit-test and policy result, with canonical release geometry authoritative in both evaluation orders."
+  },
+  {
+    "requirementId": "STERN-GEO-001",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/src/theme/tests.rs::canonical_component_recipes_use_radius_roles_by_intent"
+    ],
+    "notes": "Canonical docked-control recipes pin radius.sm (buttons, fields, checkboxes) or no radius (tabs, rows) in every state. Application-level usage is not scanned."
+  },
+  {
+    "requirementId": "STERN-GEO-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/src/theme/tests.rs::canonical_component_recipes_use_radius_roles_by_intent"
+    ],
+    "notes": "Button, tab, and field recipes assert radius != radius.full across the state matrix; radius.full remains reserved for radio and slider handles."
+  },
+  {
+    "requirementId": "STERN-GEO-003",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/src/theme/tests.rs::canonical_recipes_route_distinct_stroke_roles_without_focused_state_width_changes",
+      "crates/stern-core/tests/button_focus_recipe_conformance.rs::every_button_variant_is_focus_neutral_across_the_complete_state_matrix",
+      "crates/stern-core/src/theme/tests.rs::selection_indicator_recipe_size_is_exact_across_component_states"
+    ],
+    "notes": "Border/stroke state changes never change stroke widths or indicator geometry at the recipe layer. Widget-level layout bounds under state change are not measured."
+  },
+  {
+    "requirementId": "STERN-GEO-007",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/focus_ring_conformance.rs::focus_ring_visibility_and_default_tokens_are_exact",
+      "crates/stern-core/tests/focus_ring_conformance.rs::outward_annuli_are_exact_hollow_primary_then_separator_paths",
+      "crates/stern-core/tests/focus_ring_conformance.rs::inward_annuli_use_full_boundary_width_and_remain_inside_component_clips",
+      "crates/stern-widgets/tests/virtual_list_conformance.rs::focused_first_middle_and_last_virtual_rows_add_only_exact_inward_annuli"
+    ],
+    "notes": "The two-tone (primary + separator) focus recipe composes as additive annuli that stay inside clips or outside bounds, adding no layout or hit-test change. Rendered output is unverified."
+  },
+  {
+    "requirementId": "STERN-ICO-003",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/icon_content_conformance.rs::accessible_name_is_independent_of_static_or_bitmap_icon_content",
+      "crates/stern-widgets/tests/icon_content_conformance.rs::icon_rect_and_accessibility_survive_idle_hover_press_and_disabled_states"
+    ],
+    "notes": "Icon content carries an accessible name independent of the graphic and it survives interaction states. A discoverable text description (tooltip pairing) is not evidenced."
+  },
+  {
+    "requirementId": "STERN-ICO-004",
+    "status": "partial",
+    "tests": [
+      "crates/stern-icons-phosphor/src/lib.rs::exposes_complete_six_weight_shape",
+      "crates/stern-widgets/tests/icon_content_conformance.rs::phosphor_constant_converts_directly_and_preserves_borrowed_identity_and_geometry"
+    ],
+    "notes": "Every icon resource carries its upstream Phosphor name and weight, and conversion into widget content preserves that identity."
+  },
+  {
+    "requirementId": "STERN-ICO-006",
+    "status": "partial",
+    "tests": [
+      "crates/stern-icons-phosphor/src/lib.rs::exposes_complete_six_weight_shape",
+      "crates/stern-icons-phosphor/src/lib.rs::definitions_are_borrowed_and_retain_duotone_opacity"
+    ],
+    "notes": "The complete six-weight catalogue shape (including duotone opacity data) is asserted through stable name-and-weight mappings. An explicit resource diagnostic for missing names/weights is not evidenced."
+  },
+  {
+    "requirementId": "STERN-KEY-001",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/virtual_list_conformance.rs::stable_ids_and_focus_repair_survive_reorder_and_removal",
+      "crates/stern-widgets/tests/ui_passive_identity.rs::ui_keyed_panel_semantic_id_is_stable_when_rect_changes"
+    ],
+    "notes": "Focus is keyed to stable widget identity that survives reorder and geometry change across frames. Coverage is collection-focused, not exhaustive."
+  },
+  {
+    "requirementId": "STERN-KEY-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/virtual_list_conformance.rs::stable_ids_and_focus_repair_survive_reorder_and_removal",
+      "crates/stern-widgets/tests/dropdown_conformance.rs::replacing_items_clears_now_disabled_selection_and_highlight",
+      "crates/stern-core/tests/ownership_reconciliation_conformance.rs::disabled_owner_cancels_while_clipped_and_hidden_owners_remain_live"
+    ],
+    "notes": "Removing the focused row repairs focus per collection policy and disabling clears per the reconciliation policy. A single documented policy covering hiding is not fully evidenced."
+  },
+  {
+    "requirementId": "STERN-KEY-003",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/focus_keyboard_conformance/text_lifecycle.rs::focus_keyboard_runtime_window_focus_loss_clears_text_owner_and_stops_input",
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_focus_loss_cancels_capture_without_synthesizing_drop",
+      "crates/stern-core/tests/drag_threshold_conformance.rs::focus_loss_fences_secondary_and_future_pointer_events_with_causal_selection_data"
+    ],
+    "notes": "Window focus loss cancels captured/pressed input, clears text ownership, and fences later input without stale ownership. Per-platform focus-retention policy variation is unverified."
+  },
+  {
+    "requirementId": "STERN-KEY-004",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/focus_keyboard_conformance/traversal.rs::focus_keyboard_focus_traversal_wraps_forward_and_backward",
+      "crates/stern-core/tests/focus_keyboard_conformance/traversal.rs::focus_keyboard_runtime_tab_traverses_forward_from_none_through_middle_and_wraps",
+      "crates/stern-core/tests/focus_keyboard_conformance/traversal.rs::focus_keyboard_runtime_shift_tab_traverses_backward_from_none_through_middle_and_wraps"
+    ],
+    "notes": "Tab order is deterministic and exercised in a windowless, GPU-free harness in both directions with wrapping."
+  },
+  {
+    "requirementId": "STERN-KEY-005",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/focus_keyboard_conformance/traversal.rs::focus_keyboard_focus_traversal_uses_semantic_child_order_and_skips_disabled_focusables",
+      "crates/stern-core/tests/focus_keyboard_conformance/traversal.rs::focus_keyboard_runtime_tab_skips_disabled_and_non_focusable_nodes",
+      "crates/stern-widgets/tests/menu_noninteractive_order_conformance.rs::passive_rows_are_excluded_from_navigation_and_typeahead_order"
+    ],
+    "notes": "Disabled and non-focusable/decorative nodes are skipped by traversal and excluded from navigation order."
+  },
+  {
+    "requirementId": "STERN-KEY-006",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/focus_keyboard_conformance/shortcuts.rs::focus_keyboard_focused_pressable_activates_once_from_enter_and_space",
+      "crates/stern-core/tests/focus_keyboard_conformance/shortcuts.rs::focus_keyboard_pressable_ignores_unfocused_disabled_release_and_repeat_keyboard_activation",
+      "crates/stern-widgets/tests/virtual_list_conformance.rs::enter_and_space_activate_once_and_reject_repeat"
+    ],
+    "notes": "Enter and Space produce exactly one invocation and repeats/releases are rejected, at both the primitive and collection layers."
+  },
+  {
+    "requirementId": "STERN-KEY-008",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/shortcut_presentation_conformance.rs::repeated_presentation_preserves_shortcut_routing_and_action_state",
+      "crates/stern-widgets/tests/menu_shortcut_columns_conformance.rs::widget_uses_each_explicit_platform_and_caller_owned_localizer_policy_verbatim",
+      "crates/stern-widgets/tests/action_surface_conformance.rs::action_surface_conformance_toolbar_reuses_descriptor_metadata_and_button_source"
+    ],
+    "notes": "Shortcut display labels and routing both derive from the same ActionDescriptor/Shortcut definition, and presentation never mutates routing state."
+  },
+  {
+    "requirementId": "STERN-KEY-009",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/dropdown_conformance.rs::outside_click_and_escape_close_dropdown_with_trigger_focus_return"
+    ],
+    "notes": "Dropdown dismissal restores focus to the trigger explicitly and deterministically. Menus, popovers, command palettes, and dialogs are not yet evidenced."
+  },
+  {
+    "requirementId": "STERN-MENU-001",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/menu_shortcut_columns_conformance.rs::wide_mixed_menu_emits_stable_clipped_columns_and_decorative_semantics",
+      "crates/stern-widgets/tests/menu_shortcut_columns_conformance.rs::presentation_preserves_full_row_pointer_keyboard_and_fifo_action_routing",
+      "crates/stern-widgets/tests/menu_noninteractive_order_conformance.rs::passive_rows_have_no_pointer_targets_responses_or_semantic_actions"
+    ],
+    "notes": "Menu rows emit stable aligned columns with decorative content semantically hidden, and full-row pointer/keyboard routing is preserved."
+  },
+  {
+    "requirementId": "STERN-MENU-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/overlay_keyboard_conformance.rs::menu_navigation_skips_non_actionable_items_and_wraps",
+      "crates/stern-widgets/tests/overlay_keyboard_conformance.rs::menu_typeahead_cycles_resets_is_bounded_and_handles_unicode_no_match",
+      "crates/stern-widgets/tests/menu_shortcut_columns_conformance.rs::tall_menu_reveals_submenu_trigger_and_emits_open_intent"
+    ],
+    "notes": "Navigation skips disabled items, typeahead is deterministic and bounded, and submenu open intents are emitted. The full submenu close policy is only partially evidenced."
+  },
+  {
+    "requirementId": "STERN-MENU-003",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/context_invocation_convergence_conformance.rs::asset_browser_pointer_menu_key_and_shift_f10_converge",
+      "crates/stern-widgets/tests/context_invocation_convergence_conformance.rs::outliner_pointer_menu_key_and_shift_f10_converge",
+      "crates/stern-core/tests/pointer_conformance/scroll_focus.rs::pointer_interaction_focused_context_menu_trigger_accepts_shift_f10"
+    ],
+    "notes": "Pointer, menu-key, and Shift+F10 invocation converge on the same context action identity for the covered components."
+  },
+  {
+    "requirementId": "STERN-OVR-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/overlay_conformance.rs::overlay_conformance_popover_flips_and_clamps_in_non_origin_viewport",
+      "crates/stern-widgets/tests/overlay_conformance.rs::overlay_conformance_popover_oversize_outputs_remain_deterministic"
+    ],
+    "notes": "Preferred alignment, collision flip, and clamping inside usable bounds are deterministic, including oversize requests. Resizing and scrolling within bounds are not evidenced."
+  },
+  {
+    "requirementId": "STERN-OVR-003",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/overlay_conformance.rs::overlay_conformance_modal_blocks_lower_layers_but_not_higher_hits",
+      "crates/stern-widgets/tests/overlay_conformance.rs::overlay_conformance_stack_order_replacement_and_descendant_closure_are_deterministic"
+    ],
+    "notes": "Overlay stacking order and pointer hit-test blocking agree at the model layer. Scrim-specific agreement and painted order are unverified."
+  },
+  {
+    "requirementId": "STERN-OVR-004",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/overlay_conformance.rs::overlay_conformance_children_require_present_parent_and_close_with_parent",
+      "crates/stern-widgets/tests/overlay_conformance.rs::overlay_conformance_overlay_stack_open_child_rejects_parent_cycles_without_mutation"
+    ],
+    "notes": "Nested overlays maintain an explicit parent/child ownership chain: children require a present parent, close with it, and cycles are rejected without mutation."
+  },
+  {
+    "requirementId": "STERN-OVR-006",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/dropdown_conformance.rs::outside_click_and_escape_close_dropdown_with_trigger_focus_return",
+      "crates/stern-widgets/tests/overlay_conformance.rs::overlay_conformance_semantics_expose_role_focusability_and_dismiss_action"
+    ],
+    "notes": "Dropdown dismissal returns focus to the valid trigger and overlays expose their dismissal semantics. The documented scope-fallback path is not evidenced."
+  },
+  {
+    "requirementId": "STERN-OVR-008",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/overlay_conformance.rs::overlay_conformance_children_require_present_parent_and_close_with_parent",
+      "crates/stern-widgets/tests/overlay_conformance.rs::overlay_conformance_stack_order_replacement_and_descendant_closure_are_deterministic"
+    ],
+    "notes": "Overlays close deterministically when their owner disappears, including descendant closure. Intentional ownership transfer is not exercised."
+  },
+  {
+    "requirementId": "STERN-PRIM-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/basic_component_conformance/slider_and_choice_keyboard.rs::slider_drag_cancelled_by_release_all_restores_pre_drag_value",
+      "crates/stern-widgets/tests/basic_component_conformance/slider_and_choice_keyboard.rs::slider_drag_cancelled_by_escape_restores_pre_drag_value",
+      "crates/stern-widgets/tests/text_field_conformance/numeric_and_scrub.rs::numeric_scrub_input_drag_cancelled_by_release_all_restores_pre_drag_value",
+      "crates/stern-widgets/tests/text_field_conformance/numeric_and_scrub.rs::numeric_scrub_input_drag_released_normally_commits_value"
+    ],
+    "notes": "Slider and scrub drags preserve the pre-drag value and restore it on cancellation (escape and release-all), while ordinary release commits. Other cancellable contracts are not yet evidenced."
+  },
+  {
+    "requirementId": "STERN-SCR-001",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/scroll_area_contract_conformance.rs::scroll_clamping_sanitizes_invalid_and_oversized_state",
+      "crates/stern-core/tests/pointer_conformance/scroll_focus.rs::pointer_interaction_scrollable_wheel_only_when_hovered_and_clamps_offset",
+      "crates/stern-text/tests/text_viewport_conformance.rs::exact_content_boundaries_clamp_without_cross_axis_motion"
+    ],
+    "notes": "Scroll offsets are clamped into documented bounds under invalid, oversized, and boundary conditions across scroll areas, scrollables, and text viewports."
+  },
+  {
+    "requirementId": "STERN-SCR-005",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/virtual_list_conformance.rs::stable_ids_and_focus_repair_survive_reorder_and_removal",
+      "crates/stern-widgets/tests/virtual_list_conformance.rs::ten_thousand_rows_materialize_only_the_bounded_window",
+      "crates/stern-widgets/tests/virtual_list_conformance.rs::fractional_scroll_keeps_logical_focus_contained_under_the_existing_clip_transform"
+    ],
+    "notes": "Virtualization materializes a bounded window while keyboard focus and selection stay keyed to stable identity, never recycled draw order."
+  },
+  {
+    "requirementId": "STERN-SPC-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/icon_content_conformance.rs::icon_rect_and_accessibility_survive_idle_hover_press_and_disabled_states",
+      "crates/stern-core/src/theme/tests.rs::selection_indicator_recipe_size_is_exact_across_component_states",
+      "crates/stern-core/src/theme/tests.rs::canonical_recipes_route_distinct_stroke_roles_without_focused_state_width_changes"
+    ],
+    "notes": "Recipe geometry, indicator sizes, and icon rects are constant across interaction states. Widget-level outer size, padding, and sibling placement under state change are not measured."
+  },
+  {
+    "requirementId": "STERN-STA-001",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/src/theme/tests.rs::selected_row_remains_selected_while_hovered",
+      "crates/stern-core/src/theme/tests.rs::primary_button_uses_exact_accent_roles_and_bounded_state_precedence",
+      "crates/stern-core/src/theme/tests.rs::component_recipes_cover_common_states"
+    ],
+    "notes": "Recipe state precedence keeps selected, disabled, and other states visible through hover. Focus/invalid/open/dragging precedence is only partially exercised."
+  },
+  {
+    "requirementId": "STERN-STA-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/icon_content_conformance.rs::icon_rect_and_accessibility_survive_idle_hover_press_and_disabled_states",
+      "crates/stern-core/src/theme/tests.rs::selection_indicator_recipe_size_is_exact_across_component_states",
+      "crates/stern-core/tests/button_focus_recipe_conformance.rs::every_button_variant_is_focus_neutral_across_the_complete_state_matrix"
+    ],
+    "notes": "State changes leave recipe geometry, indicator sizes, and icon rects unchanged. Full widget layout bounds under state change are not measured."
+  },
+  {
+    "requirementId": "STERN-STA-003",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/pointer_conformance/press_context.rs::pointer_interaction_pressable_press_release_click_and_double_click_are_frame_driven",
+      "crates/stern-core/tests/pointer_conformance/press_context.rs::pointer_interaction_pressable_release_outside_does_not_click",
+      "crates/stern-core/tests/drag_threshold_conformance.rs::below_threshold_release_clicks_and_exact_threshold_suppresses_click"
+    ],
+    "notes": "One pointer transaction yields at most one activation: release-outside does not click and threshold crossing suppresses the click."
+  },
+  {
+    "requirementId": "STERN-STA-004",
+    "status": "partial",
+    "tests": [
+      "crates/stern-text/tests/read_only_ordered_input_conformance.rs::scalar_and_word_navigation_preserve_text_and_extend_selection",
+      "crates/stern-core/tests/text_owner_mode_conformance.rs::read_only_owner_claims_ordered_input_once_without_platform_ime",
+      "crates/stern-widgets/tests/text_field_conformance/numeric_and_scrub.rs::disabled_and_read_only_numeric_scrub_inputs_do_not_mutate_or_take_ownership"
+    ],
+    "notes": "read_only remains interactive (navigation, selection, copy; claims input without platform IME) while disabled does not interact at all. Semantic-tree exposure of the distinction is not evidenced."
+  },
+  {
+    "requirementId": "STERN-STA-005",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/ownership_reconciliation_conformance.rs::missing_pointer_transaction_cancels_atomically_without_synthetic_release",
+      "crates/stern-core/tests/ownership_reconciliation_conformance.rs::disabled_owner_cancels_while_clipped_and_hidden_owners_remain_live",
+      "crates/stern-core/tests/drag_threshold_conformance.rs::secondary_owner_clears_when_the_participating_widget_becomes_disabled",
+      "crates/stern-core/tests/pointer_conformance/drag_capture.rs::pointer_interaction_focus_loss_cancels_capture_without_synthesizing_drop"
+    ],
+    "notes": "Interaction ownership clears deterministically when the owner disappears, becomes disabled, loses window focus, or is cancelled, without synthetic events."
+  },
+  {
+    "requirementId": "STERN-STA-006",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/ui_passive_identity.rs::ui_keyed_label_semantic_id_is_stable_when_text_changes",
+      "crates/stern-widgets/tests/virtual_list_conformance.rs::stable_ids_and_focus_repair_survive_reorder_and_removal",
+      "crates/stern-widgets/tests/dropdown_conformance.rs::selected_by_id_survives_reorder"
+    ],
+    "notes": "Persistent state (focus, selection, semantic identity) is keyed by stable component identity and survives content changes and reorder."
+  },
+  {
+    "requirementId": "STERN-STA-007",
+    "status": "partial",
+    "tests": [
+      "crates/stern-widgets/tests/modal_dialog_conformance.rs::modal_dialog_conformance_invocations_emit_metadata_without_executing_actions",
+      "crates/stern-widgets/tests/overlay_keyboard_conformance.rs::menu_activation_emits_action_submenu_and_close_intents_without_execution",
+      "crates/stern-widgets/tests/menu_overlay_integration.rs::ui_overlay_helpers_emit_invocations_to_frame_output_only",
+      "crates/stern-widgets/tests/icon_content_conformance.rs::icon_presentation_queues_no_action_and_activation_behavior_is_unchanged"
+    ],
+    "notes": "Components emit invocations and intents as metadata only; rendering and presentation never execute application commands."
+  },
+  {
+    "requirementId": "STERN-TXT-001",
+    "status": "partial",
+    "tests": [
+      "crates/stern-text/tests/unicode_editing_conformance.rs::combining_graphemes_are_atomic_for_clamp_navigation_and_deletion",
+      "crates/stern-text/tests/unicode_editing_conformance.rs::emoji_modifier_flag_and_zwj_sequences_are_single_editing_units",
+      "crates/stern-text/src/tests.rs::backspace_and_delete_use_utf8_character_boundaries",
+      "crates/stern-text/src/tests.rs::boundary_helpers_clamp_inside_multibyte_characters"
+    ],
+    "notes": "Editing uses UAX #29 extended-grapheme boundaries with checked, deterministic clamping of storage offsets."
+  },
+  {
+    "requirementId": "STERN-TXT-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-text/src/tests.rs::shaped_text_layout_returns_caret_rects_for_byte_offsets",
+      "crates/stern-text/src/tests.rs::shaped_text_layout_returns_selection_rects_from_glyph_positions",
+      "crates/stern-text/src/tests.rs::shaped_text_layout_hit_tests_points_to_byte_offsets",
+      "crates/stern-text/tests/text_viewport_conformance.rs::reveal_moves_minimally_to_horizontal_leading_and_trailing_edges"
+    ],
+    "notes": "Caret geometry, selection rects, pointer hit testing, and reveal all derive from the shaped layout. Painting-side authority is covered separately by renderer tests, not claimed here."
+  },
+  {
+    "requirementId": "STERN-TXT-003",
+    "status": "partial",
+    "tests": [
+      "crates/stern-text/src/tests.rs::shift_movement_extends_selection_from_existing_anchor",
+      "crates/stern-text/src/tests.rs::word_movement_collapses_selection_and_extension_preserves_anchor",
+      "crates/stern-text/src/tests.rs::backspace_and_delete_remove_selection_in_either_direction"
+    ],
+    "notes": "Selection stores anchor and focus endpoints, preserves the anchor while extending, and honors direction in either orientation."
+  },
+  {
+    "requirementId": "STERN-TXT-004",
+    "status": "partial",
+    "tests": [
+      "crates/stern-text/src/tests.rs::tracks_composition_lifecycle_without_committing_preedit",
+      "crates/stern-text/src/tests.rs::ordered_preedit_suppresses_hardware_text_until_ime_commit",
+      "crates/stern-text/src/tests.rs::composition_selection_clamps_to_preedit_utf8_boundaries"
+    ],
+    "notes": "IME preedit text, its range, updates, commit, and cancellation are represented separately from committed state and never leak into it early."
+  },
+  {
+    "requirementId": "STERN-TXT-006",
+    "status": "partial",
+    "tests": [
+      "crates/stern-text/src/tests.rs::undo_and_redo_are_local_to_text_state",
+      "crates/stern-text/src/tests.rs::paste_text_records_local_undo",
+      "crates/stern-text/src/tests.rs::successful_word_delete_records_one_exact_undo_snapshot"
+    ],
+    "notes": "Undo/redo is scoped to the text edit state itself; nothing routes into an application-document undo stack."
+  },
+  {
+    "requirementId": "STERN-TXT-008",
+    "status": "partial",
+    "tests": [
+      "crates/stern-text/tests/read_only_ordered_input_conformance.rs::scalar_and_word_navigation_preserve_text_and_extend_selection",
+      "crates/stern-text/tests/read_only_ordered_input_conformance.rs::logical_select_all_and_logical_or_physical_copy_match_editable_shortcuts",
+      "crates/stern-text/tests/read_only_ordered_input_conformance.rs::mutation_composition_clipboard_and_command_intents_are_all_rejected",
+      "crates/stern-text/tests/unicode_editing_conformance.rs::read_only_uses_unicode_navigation_and_copy_without_mutation_or_ime"
+    ],
+    "notes": "Read-only text supports navigation, selection, and copy while rejecting mutation, cut, paste, and composition."
+  },
+  {
+    "requirementId": "STERN-TXT-010",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/focus_keyboard_conformance/text_lifecycle.rs::focus_keyboard_focus_change_retires_stale_text_input_owner",
+      "crates/stern-core/tests/focus_keyboard_conformance/text_lifecycle.rs::focus_keyboard_runtime_window_focus_loss_clears_text_owner_and_stops_input",
+      "crates/stern-text/src/tests.rs::ordered_focus_loss_keeps_earlier_text_ends_composition_and_ignores_later_input",
+      "crates/stern-core/tests/ownership_reconciliation_conformance.rs::missing_text_owner_stops_once_and_same_id_does_not_resurrect"
+    ],
+    "notes": "Focus change, window focus loss, and owner removal clear composition, input ownership, and caret claims deterministically without resurrection."
+  },
+  {
+    "requirementId": "STERN-TYP-000",
+    "status": "partial",
+    "tests": [
+      "crates/stern-core/tests/typography_family_conformance.rs::default_family_scale_has_exact_distinct_role_inventory",
+      "crates/stern-core/tests/typography_family_conformance.rs::production_widget_and_demo_sources_do_not_embed_normative_family_literals",
+      "crates/stern-text/src/tests.rs::font_family_role_primaries_match_stern_authority_constants",
+      "crates/stern-text/src/tests.rs::design_system_font_family_primaries_shape_through_bundled_assets"
+    ],
+    "notes": "Inter, Space Grotesk, and Space Mono are exposed through semantic family roles, pinned to the design-system token primaries, and shape through bundled assets; production sources embed no family literals."
+  },
+  {
+    "requirementId": "STERN-TYP-002",
+    "status": "partial",
+    "tests": [
+      "crates/stern-text/tests/font_feature_conformance.rs::bundled_inter_has_proportional_control_and_equal_tabular_digit_advances",
+      "crates/stern-text/tests/font_feature_conformance.rs::equal_length_changing_numeric_strings_have_equal_tabular_widths",
+      "crates/stern-core/tests/typography_foundation_conformance.rs::production_numeric_feature_adoption_is_narrow_and_semantically_resolved"
+    ],
+    "notes": "Tabular figures resolve semantically and shape with equal digit advances; adoption is pinned to the numeric input path. Timelines, tables, and frame counters are not yet wired."
+  },
+  {
+    "requirementId": "STERN-TYP-004",
+    "status": "partial",
+    "tests": [
+      "crates/stern-text/tests/text_overflow_conformance.rs::eligible_long_source_is_elided_without_changing_the_request",
+      "crates/stern-text/tests/text_overflow_conformance.rs::full_fit_request_does_not_report_elision"
+    ],
+    "notes": "End-ellipsis elision never mutates the source text, so accessible and copied values derive from the unchanged source. Semantic-layer exposure of the full value is not separately evidenced."
+  }
+]

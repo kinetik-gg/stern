@@ -1,27 +1,42 @@
 # Component Conformance Status
 
-This file previously carried a per-capability matrix (S10-S13 rows) that
-pointed at two things that no longer exist: an in-crate registry
-(`stern-widgets::COMPONENT_CONFORMANCE_MATRIX` / its `taxonomy` module,
-removed in PR #888) and showcase fixtures plus hand-authored evidence
-packets (removed in PR #890). The matrix also used a capability vocabulary
-(`ALPHA-00`, axes `M`/`P`/`I`/`A11y`/`PF`/`LW`, and the
-`Stable`/`Experimental`/`Planned` statuses) that was invented in this
-repository and defined nowhere outside these docs. None of that is restored
-here.
+Stern's conformance claims live in one place:
+[`conformance/claims.json`](../conformance/claims.json). That manifest is
+the single ledger; this page only explains how to read it. The rules,
+status policy, exclusions, and vendored-schema provenance are in
+[`conformance/README.md`](../conformance/README.md).
+
+The governing design-system rule: **a claim without a validating record is
+not a claim.** Every entry in the ledger cites the merged in-repo test(s)
+that exercise its requirement, and the validator
+(`conformance/tests/claims_contract.rs`, run by
+`cargo test --workspace` and an explicit CI step) fails the build when a
+claim names an unknown requirement, cites a test that does not exist, or
+carries a status the evidence cannot support.
 
 ## Current honest status
 
-- Behavioral model-layer tests exist and pass: roughly 2,500 tests across
-  the workspace (`cargo test --workspace --all-features`).
-- No component has verified paint, platform, or accessibility evidence.
-  Nothing in this repository is verified `Stable` by any standard.
-- The intended verification ledger is the design system's parity index, not
-  this repository: `../stern-design-system/generated/parity-index.json`
-  (486 requirements, currently all `unverified`).
+- 63 of the design system's 486 requirements carry machine-validated
+  claims, all `partial`: model-layer automated tests only. By family:
+  focus/keyboard 8, interaction states 7, text editing 7, drag/scroll 7,
+  overlays/menus/dialogs/palette 11, primitives/contracts 3, color
+  management 4, colors 3, cursors 2, geometry (radii/borders) 4, icons 3,
+  spacing 1, typography 3.
+- Nothing is `verified`. No component has specimen, browser/Vello
+  baseline, scale, platform, or accessibility evidence, and the validator
+  rejects any claim that says otherwise.
+- The remaining 423 requirements are unclaimed — including all of
+  accessibility (no OS bridge exists) and everything outside
+  `src/foundations/` and `src/behaviors/` (components, collections,
+  patterns, principles, implementation), regardless of how much related
+  test coverage exists. Absence from the ledger is the honest default.
+- The design system's own ledger,
+  `../stern-design-system/generated/parity-index.json`, still records all
+  486 requirements as `unverified`. Syncing stern's claims into it is a
+  later, owner-approved step; stern never writes into the design-system
+  repository.
 
 ## Known gaps
 
-Wiring stern's behavioral coverage into that parity ledger is future work.
-See [`KNOWN-GAPS.md`](../KNOWN-GAPS.md) for the tracked gap list. That file
-may not exist yet; a dangling link here is acceptable until it is added.
+See [`KNOWN-GAPS.md`](../KNOWN-GAPS.md) (item 15 tracks the token and
+parity pipeline).

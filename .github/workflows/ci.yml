@@ -40,6 +40,14 @@ jobs:
       - name: Test
         run: cargo test --workspace --all-features
 
+      # Also covered by the workspace test run above; this explicit step
+      # keeps the conformance/claims.json validation visible on its own.
+      # The design-system checkout is absent in CI, so the requirement-index
+      # membership and schema drift checks skip with a note; the manifest
+      # shape and in-repo test reference checks still run.
+      - name: Parity Claims
+        run: cargo test -p conformance
+
       - name: Build
         run: cargo build --workspace --all-features
 
@@ -86,6 +94,10 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --all-features
+
+      # See the test-linux job for why this explicit step exists.
+      - name: Parity Claims
+        run: cargo test -p conformance
 
       - name: Build
         run: cargo build --workspace --all-features
