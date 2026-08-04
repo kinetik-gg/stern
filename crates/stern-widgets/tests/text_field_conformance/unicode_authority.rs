@@ -484,13 +484,18 @@ fn mixed_bidi_selection_paint_is_exactly_the_navigation_rectangles() {
         disabled: false,
         selected: false,
     });
+    let content_height = FIELD.height - recipe.padding_y * 2.0;
+    let layout = store
+        .layout(layout_id)
+        .expect("retained shaped layout for selection origin");
+    let vertical_origin = super::single_line_baseline_offset(layout, content_height);
     let expected = navigation
         .selection_rects(4..12)
         .into_iter()
         .map(|rect| {
             rect.translate(Vec2::new(
                 FIELD.x + recipe.padding_x,
-                FIELD.y + recipe.padding_y + recipe.font.size,
+                FIELD.y + recipe.padding_y + vertical_origin,
             ))
         })
         .collect::<Vec<_>>();
@@ -697,16 +702,20 @@ fn retained_preedit_uses_display_navigation_and_suppresses_model_arrows() {
         disabled: false,
         selected: false,
     });
-    let expected_caret = navigation.caret_rect(display_caret).translate(Vec2::new(
-        FIELD.x + recipe.padding_x,
-        FIELD.y + recipe.padding_y + recipe.font.size,
-    ));
     let content = Rect::new(
         FIELD.x + recipe.padding_x,
         FIELD.y + recipe.padding_y,
         FIELD.width - recipe.padding_x * 2.0,
         FIELD.height - recipe.padding_y * 2.0,
     );
+    let layout = store
+        .layout(layout_id)
+        .expect("retained shaped layout for caret origin");
+    let vertical_origin = super::single_line_baseline_offset(layout, content.height);
+    let expected_caret = navigation.caret_rect(display_caret).translate(Vec2::new(
+        FIELD.x + recipe.padding_x,
+        FIELD.y + recipe.padding_y + vertical_origin,
+    ));
 
     let mut memory = focused_memory(TextFieldAccess::Editable);
     let output = render(
