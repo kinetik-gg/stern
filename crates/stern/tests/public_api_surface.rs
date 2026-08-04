@@ -469,9 +469,15 @@ fn facade_exposes_exact_radius_construction_and_qualified_fields() {
         theme.button(ComponentState::default()).radius,
         theme.radii.sm
     );
+    // Frame tabs round only their top corners (visual-spec 05-chrome-dock.md).
     assert_eq!(
         theme.tab(ComponentState::default()).radius,
-        theme.radii.none
+        CornerRadius {
+            top_left: theme.radii.sm.top_left,
+            top_right: theme.radii.sm.top_right,
+            bottom_right: 0.0,
+            bottom_left: 0.0,
+        }
     );
     assert_eq!(
         theme.radio_button(ComponentState::default()).radius,

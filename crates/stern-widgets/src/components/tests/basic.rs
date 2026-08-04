@@ -391,7 +391,8 @@ fn tab_and_row_surfaces_are_not_button_clones() {
 
     assert!(tab.response.expect("tab response").state.selected);
     assert!(row.response.expect("row response").state.selected);
-    assert_eq!(tab.primitives.len(), 2);
+    // base surface, selected top indicator, then text.
+    assert_eq!(tab.primitives.len(), 3);
     let Primitive::Rect(tab_surface) = &tab.primitives[0] else {
         panic!("tab surface");
     };
@@ -399,7 +400,8 @@ fn tab_and_row_surfaces_are_not_button_clones() {
         panic!("row surface");
     };
     assert_ne!(tab_surface, row_surface);
-    assert!(matches!(tab.primitives[1], Primitive::Text(_)));
+    assert!(matches!(tab.primitives[1], Primitive::Rect(_)));
+    assert!(matches!(tab.primitives[2], Primitive::Text(_)));
 }
 
 #[test]

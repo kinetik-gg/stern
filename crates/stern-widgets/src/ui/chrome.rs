@@ -255,11 +255,19 @@ impl Ui<'_> {
     }
 
     fn paint_chrome_surface(&mut self, kind: ChromeSurfaceKind, rect: Rect) {
+        // Fill tiers match the density ladder in
+        // `docs/visual-spec/05-chrome-dock.md` §Vertical bar ladder (family
+        // issue #914): menu/status bars sit at S1 (`surface.application`,
+        // matching the application/workspace bar and status bar rows),
+        // while the toolbar and the frame tab strip (aligned in the panel
+        // header) sit at S2 (`surface.panel`).
         let fill = match kind {
-            ChromeSurfaceKind::TabStrip => self.theme.colors.surface.sunken,
-            ChromeSurfaceKind::MenuBar
-            | ChromeSurfaceKind::Toolbar
-            | ChromeSurfaceKind::StatusBar => self.theme.colors.surface.panel,
+            ChromeSurfaceKind::MenuBar | ChromeSurfaceKind::StatusBar => {
+                self.theme.colors.surface.application
+            }
+            ChromeSurfaceKind::Toolbar | ChromeSurfaceKind::TabStrip => {
+                self.theme.colors.surface.panel
+            }
         };
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,

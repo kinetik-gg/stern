@@ -299,31 +299,51 @@ impl Theme {
     }
 
     /// Resolves a tab recipe for a state.
+    ///
+    /// Values match `docs/visual-spec/05-chrome-dock.md` §Frame (docked) &
+    /// tab strip (family issue #914). A selected tab "merges" with the panel
+    /// body it fronts: same `surface.panel` (S2) fill as the idle tab strip
+    /// and frame chrome around it, distinguished only by a `border.strong`
+    /// top-edge indicator (painted via [`TabRecipe::indicator`], never a
+    /// full-perimeter border — `border` itself stays transparent so the
+    /// selected tab has no visible bottom edge, matching the spec's "no
+    /// bottom border, merges with body"). An untabled `pressed` (transient
+    /// mouse-down, not yet selected) state is resolved the same as `hovered`
+    /// — S4 fill and promoted text — the lowest-invention extension of the
+    /// tabled hover behavior. Disabled tab styling is not covered by the
+    /// family file and is kept as prior behavior.
     #[must_use]
     pub fn tab(&self, state: ComponentState) -> TabRecipe {
+        let transient_hover = state.hovered || state.pressed;
         let background = if state.disabled {
             self.colors.surface.control_disabled
-        } else if state.selected || state.pressed {
-            self.colors.surface.control_pressed
-        } else if state.hovered {
+        } else if state.selected {
+            self.colors.surface.panel
+        } else if transient_hover {
             self.colors.surface.hover
         } else {
-            self.colors.surface.panel
+            Color::TRANSPARENT
         };
         let foreground = if state.disabled {
             self.colors.content.disabled
-        } else {
+        } else if state.selected || transient_hover {
             self.colors.content.primary
+        } else {
+            self.colors.content.muted
         };
+        let indicator =
+            (!state.disabled && state.selected).then_some(Brush::Solid(self.colors.border.strong));
         TabRecipe {
             background: Brush::Solid(background),
             foreground,
-            border: Stroke::new(
-                self.strokes.default,
-                Brush::Solid(self.colors.border.default),
-            ),
-            radius: self.radii.none,
-            indicator: None,
+            border: Stroke::new(self.strokes.default, Brush::Solid(Color::TRANSPARENT)),
+            radius: CornerRadius {
+                top_left: self.radii.sm.top_left,
+                top_right: self.radii.sm.top_right,
+                bottom_left: 0.0,
+                bottom_right: 0.0,
+            },
+            indicator,
             indicator_thickness: self.strokes.emphasis,
         }
     }

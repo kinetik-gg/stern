@@ -85,7 +85,7 @@ fn live_state_drives_paint_semantics_access_and_theme() {
     let config = PropertyGridConfig::default();
     let mut memory = UiMemory::new();
     let mut theme = default_dark_theme();
-    theme.colors.surface.sunken = Color::rgba(0.12, 0.23, 0.34, 1.0);
+    theme.colors.surface.application = Color::rgba(0.12, 0.23, 0.34, 1.0);
     let (output, frame) = run_grid(
         &rows,
         BOUNDS,
@@ -120,10 +120,13 @@ fn live_state_drives_paint_semantics_access_and_theme() {
     assert!(text.contains(&"?"));
     assert!(text.contains(&"!"));
     assert!(text.contains(&"value-2"));
+    // Section headers fill S1 `surface.application`
+    // (`docs/visual-spec/07-status-feedback-inspector.md` §Inspector
+    // property rows, family issue #914).
     assert!(frame.primitives.iter().any(|primitive| matches!(
         primitive,
         Primitive::Rect(rect)
-            if rect.fill == Some(Brush::Solid(theme.colors.surface.sunken))
+            if rect.fill == Some(Brush::Solid(theme.colors.surface.application))
     )));
 
     let semantics = frame.semantics.nodes();
