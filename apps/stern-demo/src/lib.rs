@@ -8,7 +8,7 @@ mod timeline_workspace;
 
 use stern::UiState;
 use stern::core::{
-    ActionContext, ActionInvocation, ActionRoutingContext, FrameContext, FrameOutput, PhysicalSize,
+    ActionInvocation, ActionRoutingContext, FrameContext, FrameOutput, PhysicalSize,
     PlatformRequest, Rect, ScaleFactor, SemanticRole, Size, TimeInfo, UiInput, ViewportInfo,
     WidgetId, default_dark_theme,
 };
@@ -313,47 +313,23 @@ fn compose_demo(
     let logical_size = ui.viewport().logical_size;
     actions.project_apply_shared_state(model.apply_availability());
     actions.project_viewport_tool(model.viewport_tool());
-    let edit = actions.edit_workspace().clone();
-    let graph = actions.graph_workspace().clone();
-    let apply = actions.apply_shared_state().clone();
     let workspace = model.workspace();
     let bounds = logical_size;
     actions.project_transport_state(model.transport_state());
     let shortcut_enabled = !overlays.is_open();
-    let edit_rect = Rect::new(24.0, 56.0, 112.0, 30.0);
-    let graph_rect = Rect::new(148.0, 56.0, 120.0, 30.0);
-    let apply_rect = Rect::new(24.0, 156.0, 160.0, 30.0);
     ui.push_platform_request(PlatformRequest::SetWindowTitle(DEMO_TITLE.to_owned()));
     let focus_return = match workspace {
         DemoWorkspace::Edit => {
             edit_workspace.compose(ui, actions, workspace, model, overlays, bounds)
         }
         DemoWorkspace::Graph => {
-            ui.label(Rect::new(24.0, 20.0, 320.0, 24.0), DEMO_TITLE);
             let graph_bounds = Rect::new(
                 24.0,
                 202.0,
                 (logical_size.width - 48.0).max(0.0),
                 (logical_size.height - 226.0).max(0.0),
             );
-            let app_targets = [
-                (ui.make_id(edit.id.as_str()), edit_rect),
-                (ui.make_id(graph.id.as_str()), graph_rect),
-                (ui.make_id(apply.id.as_str()), apply_rect),
-            ];
-            let focus_return = graph_workspace.compose(
-                ui,
-                graph_bounds,
-                bounds,
-                &app_targets,
-                actions,
-                model,
-                overlays,
-            );
-            let _ = ui.action_button(edit.id.as_str(), edit_rect, &edit, ActionContext::Global);
-            let _ = ui.action_button(graph.id.as_str(), graph_rect, &graph, ActionContext::Global);
-            let _ = ui.action_button(apply.id.as_str(), apply_rect, &apply, ActionContext::Global);
-            focus_return
+            graph_workspace.compose(ui, graph_bounds, bounds, actions, model, overlays)
         }
     };
     if shortcut_enabled {

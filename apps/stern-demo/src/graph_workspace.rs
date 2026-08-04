@@ -26,7 +26,7 @@ use stern::widgets::{
     ViewportToolSceneConfig, ViewportTransformHandleSet, ViewportWidget, ViewportWidgetConfig,
 };
 
-use crate::edit_workspace::VIEWPORT_TEXTURE;
+use crate::edit_workspace::{VIEWPORT_TEXTURE, route_workspace_tabs, workspace_tab};
 use crate::overlay_workspace::SharedOverlayRoute;
 use crate::timeline_workspace::{
     compose_tool_actions, declare_tool_actions, viewport_actions, viewport_content_rect,
@@ -34,6 +34,7 @@ use crate::timeline_workspace::{
 };
 use crate::{DemoActionRegistry, DemoApplicationModel, DemoScenario, DemoViewportTool};
 
+const EDIT_WORKSPACE_TAB: PanelId = PanelId::from_raw(101);
 const GRAPH_ROOT: WidgetId = WidgetId::from_raw(0x0047_5241_5048);
 const CHROME_ROOT: WidgetId = WidgetId::from_raw(0x4348_524f_4d45);
 const CLEAR_SELECTION_ACTION: &str = "graph.clear-selection";
@@ -196,13 +197,16 @@ impl GraphWorkspaceState {
                 "Graph selection",
                 [clear_selection],
             )]),
-            tab_strip: TabStrip::from_tabs([FrameTab {
-                panel: GRAPH_PANEL,
-                title: "Graph".to_owned(),
-                active: true,
-                close_visible: false,
-                draggable: false,
-            }]),
+            tab_strip: TabStrip::from_tabs([
+                workspace_tab(EDIT_WORKSPACE_TAB.raw(), "Edit Workspace", false),
+                FrameTab {
+                    panel: GRAPH_PANEL,
+                    title: "Graph".to_owned(),
+                    active: true,
+                    close_visible: false,
+                    draggable: false,
+                },
+            ]),
             status_bar: StatusBar::from_items([connection_status(
                 GraphConnectionFeedback::Ready,
                 0,
@@ -284,12 +288,11 @@ impl GraphWorkspaceState {
         ui: &mut Ui<'_>,
         bounds: Rect,
         viewport_size: Size,
-        app_targets: &[(WidgetId, Rect)],
         actions: &DemoActionRegistry,
         model: &mut DemoApplicationModel,
         overlays: &mut SharedOverlayRoute,
     ) -> Option<WidgetId> {
-        self.sync_chrome_models();
+        self.sync_chrome_models(actions);
         let [
             menu_rect,
             toolbar_rect,
@@ -348,8 +351,16 @@ impl GraphWorkspaceState {
                 },
                 132.0,
             ),
+            (ChromeSceneItemKey::Tab(EDIT_WORKSPACE_TAB), 132.0),
             (ChromeSceneItemKey::Tab(GRAPH_PANEL), 120.0),
             (ChromeSceneItemKey::Status(SELECTION_STATUS), 160.0),
+            (
+                ChromeSceneItemKey::Toolbar {
+                    group: TOOLBAR_GROUP,
+                    action: actions.apply_shared_state().id.clone(),
+                },
+                160.0,
+            ),
         ]);
         if self.graph_journey {
             chrome_config = chrome_config.with_width(
@@ -363,13 +374,6 @@ impl GraphWorkspaceState {
         let chrome_scene =
             ChromeScene::new(chrome_config, &menu_bar, &toolbar, &tab_strip, &status_bar);
         ui.resolve_pointer_targets(|plan| {
-            for (index, &(id, rect)) in app_targets.iter().enumerate() {
-                plan.target(PointerTarget::new(
-                    id,
-                    rect,
-                    PointerOrder::new(index as u64 + 1),
-                ));
-            }
             let mut next = dock_scene.declare_pointer_targets_with_content(
                 plan,
                 PointerOrder::new(10),
@@ -420,6 +424,7 @@ impl GraphWorkspaceState {
             _ => unreachable!("demo Dock contains only Graph, Viewport, and Inspector panels"),
         });
         let chrome_output = ui.chrome_scene(&chrome_scene);
+        route_workspace_tabs(ui, actions, &chrome_output.intents);
         overlays.reconcile(
             ui,
             actions,
@@ -430,7 +435,7 @@ impl GraphWorkspaceState {
         )
     }
 
-    fn sync_chrome_models(&mut self) {
+    fn sync_chrome_models(&mut self, actions: &DemoActionRegistry) {
         let selected = u32::try_from(self.selection.selected().len()).unwrap_or(u32::MAX);
         let mut clear_selection = ActionDescriptor::new(CLEAR_SELECTION_ACTION, "Clear selection");
         clear_selection.state.enabled = selected != 0;
@@ -441,6 +446,7 @@ impl GraphWorkspaceState {
                 "Reverse node order",
             ));
         }
+        toolbar_actions.push(actions.apply_shared_state().clone());
         self.toolbar.replace_groups([ToolbarGroup::from_actions(
             TOOLBAR_GROUP,
             "Graph selection",

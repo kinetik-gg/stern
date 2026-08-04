@@ -400,7 +400,8 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
     let expected_chrome_ids = chrome_ids(&first);
     assert_eq!(app.focused(), Some(app.graph_workspace().root_id()));
 
-    activate_workspace(&mut app, Point::new(60.0, 70.0), DemoWorkspace::Edit);
+    let edit_tab = semantic_center(&first, &SemanticRole::Tab, "Edit Workspace");
+    activate_workspace(&mut app, edit_tab, DemoWorkspace::Edit);
     assert_eq!(
         app.focused(),
         Some(WidgetId::from_key("root").child("workspace.edit"))
@@ -408,8 +409,12 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
     activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
     let graph_action = WidgetId::from_key("root").child("workspace.graph");
     assert_eq!(app.focused(), Some(graph_action));
+    // The activation focus target is synthetic (set directly by `DemoApp::dispatch`)
+    // and is not re-declared by any real Graph-workspace widget on later frames, so
+    // an unrelated resize with no input naturally clears it rather than retargeting
+    // a stale identity.
     let resized = app.frame(resized_context(UiInput::default()));
-    assert_eq!(app.focused(), Some(graph_action));
+    assert_eq!(app.focused(), None);
     assert_eq!(graph_ids(&resized), ids);
     assert_eq!(dock_ids(&resized), expected_dock_ids);
     assert_eq!(inspector_ids(&resized), expected_inspector_ids);
