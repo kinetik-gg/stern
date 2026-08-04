@@ -806,9 +806,14 @@ mod tests {
         let base_recipe = focused_recipe(&theme);
         let rect = Rect::new(0.0, 0.0, 120.0, 24.0);
         let mut origins = Vec::new();
+        let brand_family = stern_core::theme::generated_tokens::FONT_FAMILIES
+            .iter()
+            .find(|family| family.role == "brand")
+            .expect("design-system brand font family token")
+            .primary;
         for family in [
             DEFAULT_FONT_FAMILY,
-            "Space Grotesk",
+            brand_family,
             DEFAULT_MONOSPACE_FONT_FAMILY,
         ] {
             let recipe = TextFieldRecipe {
