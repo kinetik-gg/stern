@@ -795,3 +795,208 @@ fn disabled_and_read_only_vector_scrub_inputs_propagate_to_all_components() {
         })
     );
 }
+
+#[test]
+fn numeric_scrub_input_drag_cancelled_by_release_all_restores_pre_drag_value() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("scrub-release-all-cancel");
+    let rect = Rect::new(0.0, 0.0, 160.0, 24.0);
+    let config = NumericScrubInputConfig::new(0.5);
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new("2");
+    let mut value = 2.0;
+
+    let _ = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &pressed_at(4.0, 4.0),
+        &mut memory,
+        &theme,
+    );
+    let dragging = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &scrub_drag_at(8.0, 4.0, 4.0, Modifiers::default()),
+        &mut memory,
+        &theme,
+    );
+    assert!(dragging.scrubbed);
+    assert!((value - 4.0).abs() < f32::EPSILON);
+
+    let cancel_input = UiInput {
+        events: vec![UiInputEvent::PointerReleaseAll {
+            position: Some(Point::new(8.0, 4.0)),
+        }],
+        ..UiInput::default()
+    };
+    let cancelled = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &cancel_input,
+        &mut memory,
+        &theme,
+    );
+    assert!(!cancelled.scrubbed);
+    assert!(!cancelled.scrub_response.state.active);
+    assert!(
+        (value - 2.0).abs() < f32::EPSILON,
+        "a cancelled scrub drag must restore the pre-drag value, got {value}"
+    );
+    assert_eq!(state.text, "2");
+}
+
+#[test]
+fn numeric_scrub_input_drag_cancelled_by_escape_restores_pre_drag_value() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("scrub-escape-cancel");
+    let rect = Rect::new(0.0, 0.0, 160.0, 24.0);
+    let config = NumericScrubInputConfig::new(0.5);
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new("2");
+    let mut value = 2.0;
+
+    let _ = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &pressed_at(4.0, 4.0),
+        &mut memory,
+        &theme,
+    );
+    let dragging = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &scrub_drag_at(8.0, 4.0, 4.0, Modifiers::default()),
+        &mut memory,
+        &theme,
+    );
+    assert!(dragging.scrubbed);
+    assert!((value - 4.0).abs() < f32::EPSILON);
+
+    let escape_input = UiInput {
+        pointer: PointerInput {
+            position: Some(Point::new(8.0, 4.0)),
+            primary: PointerButtonState::new(true, false, false),
+            ..PointerInput::default()
+        },
+        keyboard: key_input(Key::Escape, Modifiers::default()),
+        ..UiInput::default()
+    };
+    let cancelled = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &escape_input,
+        &mut memory,
+        &theme,
+    );
+    assert!(!cancelled.scrubbed);
+    assert!(!cancelled.scrub_response.state.active);
+    assert!(
+        (value - 2.0).abs() < f32::EPSILON,
+        "escape must cancel an active scrub drag and restore the pre-drag value, got {value}"
+    );
+    assert_eq!(state.text, "2");
+}
+
+#[test]
+fn numeric_scrub_input_drag_released_normally_commits_value() {
+    let theme = default_dark_theme();
+    let id = WidgetId::from_key("scrub-commit");
+    let rect = Rect::new(0.0, 0.0, 160.0, 24.0);
+    let config = NumericScrubInputConfig::new(0.5);
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new("2");
+    let mut value = 2.0;
+
+    let _ = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &pressed_at(4.0, 4.0),
+        &mut memory,
+        &theme,
+    );
+    let _ = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &scrub_drag_at(8.0, 4.0, 4.0, Modifiers::default()),
+        &mut memory,
+        &theme,
+    );
+    assert!((value - 4.0).abs() < f32::EPSILON);
+
+    let released = numeric_scrub_input(
+        id,
+        rect,
+        &mut value,
+        &mut state,
+        config,
+        &released_at(8.0, 4.0),
+        &mut memory,
+        &theme,
+    );
+    assert!(!released.scrub_response.state.active);
+    assert!(
+        (value - 4.0).abs() < f32::EPSILON,
+        "an ordinary release must commit the scrubbed value, got {value}"
+    );
+    assert_eq!(state.text, "4");
+}
+
+#[test]
+fn ui_numeric_scrub_input_drag_cancelled_by_release_all_restores_pre_drag_value() {
+    let theme = default_dark_theme();
+    let rect = Rect::new(0.0, 0.0, 160.0, 24.0);
+    let config = NumericScrubInputConfig::new(0.5);
+    let mut memory = UiMemory::new();
+    let mut state = TextEditState::new("2");
+    let mut value = 2.0;
+
+    let press = pressed_at(4.0, 4.0);
+    let mut ui = Ui::new(&press, &mut memory, &theme);
+    let _ = ui.numeric_scrub_input("scrub", rect, &mut value, &mut state, config);
+
+    let drag = scrub_drag_at(8.0, 4.0, 4.0, Modifiers::default());
+    let mut ui = Ui::new(&drag, &mut memory, &theme);
+    let dragging = ui.numeric_scrub_input("scrub", rect, &mut value, &mut state, config);
+    assert!(dragging.scrubbed);
+    assert!((value - 4.0).abs() < f32::EPSILON);
+
+    let cancel_input = UiInput {
+        events: vec![UiInputEvent::PointerReleaseAll {
+            position: Some(Point::new(8.0, 4.0)),
+        }],
+        ..UiInput::default()
+    };
+    let mut ui = Ui::new(&cancel_input, &mut memory, &theme);
+    let cancelled = ui.numeric_scrub_input("scrub", rect, &mut value, &mut state, config);
+    assert!(!cancelled.scrubbed);
+    assert!(!cancelled.scrub_response.state.active);
+    assert!(
+        (value - 2.0).abs() < f32::EPSILON,
+        "a cancelled scrub drag through the Ui runtime facade must restore the pre-drag value, got {value}"
+    );
+    assert_eq!(state.text, "2");
+}
