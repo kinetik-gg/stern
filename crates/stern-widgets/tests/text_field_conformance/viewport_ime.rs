@@ -543,9 +543,11 @@ fn nested_transform_and_clip_project_only_positive_caret_intersections() {
     });
     ui.primitive(Primitive::TransformEnd);
     let output = ui.finish_output();
+    // Caret local x is `FIELD.x + recipe.padding_x` (8, docs/visual-spec/
+    // 02-fields.md "padding-inline 8", issue #911) before the +10 translation.
     assert_eq!(
         start_rect(&output.platform_requests),
-        Some(Rect::new(14.0, 24.0, 1.0, 6.0))
+        Some(Rect::new(18.0, 24.0, 1.0, 6.0))
     );
 }
 
