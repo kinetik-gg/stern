@@ -2,8 +2,9 @@ use super::common::push_focus_ring;
 use super::{
     ComponentState, CursorShape, DEFAULT_SLIDER_PAGE_DIVISIONS, DEFAULT_SLIDER_STEP_DIVISIONS, Key,
     KeyState, Primitive, Rect, RectPrimitive, Theme, UiInput, UiMemory, WidgetId, WidgetOutput,
-    draggable, response_reported_focus, response_reported_pressed, slider_semantics,
-    suppress_disabled_interaction_reporting, with_hover_cursor, with_response_state,
+    draggable, escape_pressed, resolve_drag_value_cancellation, response_reported_focus,
+    response_reported_pressed, slider_semantics, suppress_disabled_interaction_reporting,
+    with_hover_cursor, with_response_state,
 };
 
 /// Keyboard adjustment contract for sliders.
@@ -124,10 +125,26 @@ pub fn slider_with_label_and_step(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
+    let was_active = memory.is_active(id);
     let mut response = draggable(id, rect, input, memory, disabled);
     suppress_disabled_interaction_reporting(&mut response);
     let (start, end) = slider_range_bounds(&range);
+    if let Some(pre_drag) = resolve_drag_value_cancellation(
+        id,
+        was_active,
+        response,
+        escape_pressed(&input.keyboard.events),
+        disabled,
+        *value,
+        memory,
+    ) {
+        *value = pre_drag;
+        response.state.active = false;
+        response.state.pressed = false;
+        response.dragged = false;
+    }
     if !disabled
+        && !memory.pointer_interaction_cancelled()
         && (response.state.active || (response.clicked && !response.keyboard_activated))
         && let Some(position) = input.pointer.position
     {

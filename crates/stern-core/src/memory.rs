@@ -198,6 +198,10 @@ pub struct UiMemory {
     pending_text_input_stop: Option<WidgetId>,
     scroll_offsets: HashMap<WidgetId, Vec2>,
     pending_scroll_offsets: HashMap<WidgetId, Vec2>,
+    /// Pre-drag value snapshot retained for the widget currently owning a
+    /// value-based pointer drag (e.g. a slider or numeric scrub input), so a
+    /// cancelled or interrupted drag can restore the value it mutated.
+    value_drag_snapshot: Option<(WidgetId, f32)>,
     open_popovers: HashSet<WidgetId>,
     liveness: LivenessRegistry,
     observers: ObserverRegistry,
@@ -1095,6 +1099,30 @@ impl UiMemory {
     #[doc(hidden)]
     pub fn stage_scroll_offset(&mut self, id: WidgetId, offset: Vec2) {
         self.pending_scroll_offsets.insert(id, offset);
+    }
+
+    /// Returns the pre-drag value snapshot retained for a widget's active
+    /// value-based pointer drag, if any.
+    #[must_use]
+    pub fn drag_value_snapshot(&self, id: WidgetId) -> Option<f32> {
+        self.value_drag_snapshot
+            .and_then(|(owner, value)| (owner == id).then_some(value))
+    }
+
+    /// Records the pre-drag value snapshot for a widget, replacing any
+    /// snapshot retained for a different widget.
+    pub fn set_drag_value_snapshot(&mut self, id: WidgetId, value: f32) {
+        self.value_drag_snapshot = Some((id, value));
+    }
+
+    /// Clears the pre-drag value snapshot retained for a widget.
+    pub fn clear_drag_value_snapshot(&mut self, id: WidgetId) {
+        if self
+            .value_drag_snapshot
+            .is_some_and(|(owner, _)| owner == id)
+        {
+            self.value_drag_snapshot = None;
+        }
     }
 
     /// Returns true when a popover is open for a widget.

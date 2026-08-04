@@ -4,8 +4,8 @@ use super::{
     OrderedTextInputResult, Rect, Response, SemanticAction, SemanticActionKind, SemanticValue,
     TextEditState, TextFeatureSet, TextFieldAccess, TextFieldOutput, TextFieldPointerSource,
     TextLayoutStore, Theme, UiInput, UiMemory, WidgetId, classify_numeric_input_draft, draggable,
-    restore_text_draft, text_field_with_access_runtime_and_features,
-    text_field_with_pointer_runtime_and_features,
+    escape_pressed, resolve_drag_value_cancellation, restore_text_draft,
+    text_field_with_access_runtime_and_features, text_field_with_pointer_runtime_and_features,
     text_field_with_resolved_response_and_ordered_result,
     text_field_with_text_layouts_and_caret_visibility_and_ordered_result,
 };
@@ -342,6 +342,7 @@ pub(crate) fn numeric_scrub_input_with_text_layouts_and_caret_visibility(
 ) -> NumericScrubInputOutput {
     let interactions_disabled = config.disabled || config.read_only;
     let before = *value;
+    let was_active = memory.is_active(id);
     let resolved = resolve_numeric_scrub_config(config);
     let mut scrub_response = draggable(id, rect, input, memory, interactions_disabled);
     let mut numeric = numeric_input_with_resolved_response(
@@ -382,6 +383,27 @@ pub(crate) fn numeric_scrub_input_with_text_layouts_and_caret_visibility(
         }
     }
 
+    if let Some(pre_drag) = resolve_drag_value_cancellation(
+        id,
+        was_active,
+        scrub_response,
+        escape_pressed(&input.keyboard.events),
+        interactions_disabled,
+        *value,
+        memory,
+    ) {
+        *value = pre_drag;
+        restore_text_draft(state, format_numeric_scrub_value(pre_drag));
+        numeric.policy.draft = classify_numeric_input_draft(&state.text);
+        numeric.value = numeric.policy.draft.value();
+        numeric.valid = numeric.policy.draft.is_acceptable();
+        numeric.field.changed = true;
+        scrubbed = false;
+        scrub_response.state.active = false;
+        scrub_response.state.pressed = false;
+        scrub_response.dragged = false;
+    }
+
     apply_numeric_scrub_semantics(&mut numeric, resolved.min, resolved.max, true);
 
     NumericScrubInputOutput {
@@ -410,6 +432,7 @@ pub(crate) fn numeric_scrub_input_with_runtime(
     caret_visible: bool,
 ) -> NumericScrubInputOutput {
     let before = *value;
+    let was_active = runtime.memory().is_active(id);
     let resolved = resolve_numeric_scrub_config(config);
     let access = numeric_scrub_access(config);
     let features = numeric_text_features(theme);
@@ -497,6 +520,28 @@ pub(crate) fn numeric_scrub_input_with_runtime(
                 scrubbed = true;
             }
         }
+    }
+
+    let escape_cancel_requested = escape_pressed(&runtime.input().keyboard.events);
+    if let Some(pre_drag) = resolve_drag_value_cancellation(
+        id,
+        was_active,
+        scrub_response,
+        escape_cancel_requested,
+        access != TextFieldAccess::Editable,
+        *value,
+        runtime.memory_mut(),
+    ) {
+        *value = pre_drag;
+        restore_text_draft(state, format_numeric_scrub_value(pre_drag));
+        numeric.policy.draft = classify_numeric_input_draft(&state.text);
+        numeric.value = numeric.policy.draft.value();
+        numeric.valid = numeric.policy.draft.is_acceptable();
+        numeric.field.changed = true;
+        scrubbed = false;
+        scrub_response.state.active = false;
+        scrub_response.state.pressed = false;
+        scrub_response.dragged = false;
     }
 
     apply_numeric_scrub_semantics(
