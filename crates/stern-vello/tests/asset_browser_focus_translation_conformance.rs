@@ -5,9 +5,9 @@
 use std::time::Duration;
 
 use stern_core::{
-    ComponentState, FrameContext, PathElement, PathPrimitive, PhysicalSize, Point, PointerOrder,
-    Primitive, Rect, ScaleFactor, Size, TimeInfo, UiInput, UiMemory, ViewportInfo, WidgetId,
-    default_dark_theme,
+    Brush, ComponentState, FrameContext, PathElement, PathPrimitive, PhysicalSize, Point,
+    PointerOrder, Primitive, Rect, ScaleFactor, Size, TimeInfo, UiInput, UiMemory, ViewportInfo,
+    WidgetId, default_dark_theme,
 };
 use stern_vello::{
     RenderCommandKind, RenderFrameInput, RenderResources, VelloRenderer, translate_primitives,
@@ -184,26 +184,44 @@ fn actual_grid_and_list_focus_translate_as_contained_fill_only_annuli_at_release
             disabled: false,
             selected,
         };
-        let recipe = theme.row(state);
+        let recipe = theme.asset_card(state);
         assert_eq!(base.fill, Some(recipe.background));
         assert_eq!(base.stroke, Some(recipe.border));
         assert_eq!(base.radius, recipe.radius);
         let primary = path(&frame.primitives[base_index + 1]);
         let separator = path(&frame.primitives[base_index + 2]);
+        // Selection paints an additional 2-primitive accent dot badge
+        // (06-collections.md §Asset grid) between the focus ring and the
+        // preview rect.
+        let content_start = if selected {
+            assert!(matches!(
+                frame.primitives[base_index + 3],
+                Primitive::Rect(ref badge) if badge.fill == Some(Brush::Solid(theme.colors.surface.sunken))
+                    && badge.radius == theme.radii.full
+            ));
+            assert!(matches!(
+                frame.primitives[base_index + 4],
+                Primitive::Rect(ref badge) if badge.fill == Some(Brush::Solid(theme.colors.accent.default))
+                    && badge.radius == theme.radii.full
+            ));
+            base_index + 5
+        } else {
+            base_index + 3
+        };
         assert!(matches!(
-            frame.primitives[base_index + 3],
+            frame.primitives[content_start],
             Primitive::Rect(preview) if preview.rect == item.preview_rect
         ));
         assert!(matches!(
-            frame.primitives[base_index + 4],
+            frame.primitives[content_start + 1],
             Primitive::Text(ref fallback) if fallback.text == item.item.fallback.label
         ));
         assert!(matches!(
-            frame.primitives[base_index + 5],
+            frame.primitives[content_start + 2],
             Primitive::Text(ref name) if name.text == item.item.name
         ));
         assert!(matches!(
-            frame.primitives[base_index + 6],
+            frame.primitives[content_start + 3],
             Primitive::Text(ref kind) if kind.text == item.item.kind
         ));
         let focus = theme.focus_ring(true).expect("focus recipe");

@@ -285,7 +285,7 @@ fn assert_header_focus(run: &Run, column: ItemId, selected: bool) -> [Primitive;
         disabled: response.state.disabled,
         selected,
     };
-    let recipe = theme.row(state);
+    let recipe = theme.table_header_row(state);
     let base_index = header_base_index(run, column);
     let Primitive::Rect(base) = &run.frame.primitives[base_index] else {
         unreachable!()
@@ -454,7 +454,7 @@ fn every_header_state_matrix_case_adds_only_exact_owned_annuli_when_focused() {
                     disabled: false,
                     selected,
                 };
-                let recipe = default_dark_theme().row(state);
+                let recipe = default_dark_theme().table_header_row(state);
                 let base_index = header_base_index(&unfocused, column);
                 let Primitive::Rect(base) = &unfocused.frame.primitives[base_index] else {
                     unreachable!()
@@ -1492,7 +1492,7 @@ fn production_header_primitives_inventory_acc005_and_resize_nonconformities() {
                     disabled: false,
                     selected,
                 };
-                let recipe = theme.row(state);
+                let recipe = theme.table_header_row(state);
                 let background = header_base_color(&run, column);
                 let (label, label_color, _) = header_text_evidence(&run, column);
                 assert_eq!(
@@ -1506,14 +1506,30 @@ fn production_header_primitives_inventory_acc005_and_resize_nonconformities() {
                 assert_eq!(idle_resize, theme.colors.border.subtle);
 
                 if selected {
+                    // ACC-005 resolved by family issue #915:
+                    // `Theme::table_header_row` no longer tints the fill for
+                    // an active sort column (06-collections.md: "active sort
+                    // column: text secondary + caret focus.indicator" — text
+                    // only, never fill). Active-sort label text now sits on
+                    // the same fixed-or-hover-promoted fill idle/hovered
+                    // headers use, well above AA normal text in every
+                    // interaction — not the marginal accent-fill exception
+                    // this used to pin at a single constant ratio.
                     let ratio = contrast_ratio(label_color, background);
-                    assert_ratio(ratio, 3.533_269);
-                    assert!(ratio < 4.5, "ACC-005 named selected-label exception");
-                    assert_ratio(contrast_ratio(idle_resize, background), 4.502_908);
+                    assert!(ratio >= 4.5, "ACC-005 selected-label exception is resolved");
+                    if matches!(interaction, HeaderInteraction::Idle) {
+                        assert_ratio(ratio, 9.519_225);
+                        assert_ratio(contrast_ratio(idle_resize, background), 1.186_868_5);
+                    }
                 } else {
                     let ratio = contrast_ratio(idle_resize, background);
                     if matches!(interaction, HeaderInteraction::Idle) {
-                        assert_ratio(ratio, 1.237_124);
+                        // Header idle fill is now the fixed S1
+                        // `surface.application` from `Theme::table_header_row`
+                        // (family issue #915), not the old accidental
+                        // `theme.row()` reuse — shifting this ratio from the
+                        // prior pinned 1.237_124.
+                        assert_ratio(ratio, 1.186_868_5);
                         assert!(ratio < 3.0, "idle neutral resize is a nonconformity");
                     }
                 }
@@ -1554,11 +1570,16 @@ fn production_header_primitives_inventory_acc005_and_resize_nonconformities() {
         let background = header_base_color(&active, column);
         assert_eq!(active_resize, theme.colors.accent.default);
         if selected {
+            // ACC-005 resolved by family issue #915: the active sort column
+            // no longer paints the header fill as `accent.default` (that was
+            // `Theme::row`'s selected-row accent fill, wrongly reused for
+            // headers), so the accent-colored active resize handle is no
+            // longer painted directly on top of an identical accent fill.
             let ratio = contrast_ratio(active_resize, background);
-            assert_ratio(ratio, 1.0);
-            assert!(ratio < 3.0, "active sorted resize is a nonconformity");
+            assert_ratio(ratio, 5.344_361);
+            assert!(ratio >= 3.0, "active sorted resize is no longer invisible");
         } else {
-            assert_ratio(contrast_ratio(active_resize, background), 5.570_656);
+            assert_ratio(contrast_ratio(active_resize, background), 5.344_361);
         }
     }
 
@@ -1571,8 +1592,12 @@ fn production_header_primitives_inventory_acc005_and_resize_nonconformities() {
     );
     let (_, disabled_label, _) = header_text_evidence(&disabled, column);
     let disabled_background = header_base_color(&disabled, column);
+    // Disabled header fill is now the fixed S1 `surface.application` from
+    // `Theme::table_header_row` (family issue #915), not the old accidental
+    // `theme.row()` reuse — shifting this ratio from the prior pinned
+    // 3.208_475.
     let disabled_ratio = contrast_ratio(disabled_label, disabled_background);
-    assert_ratio(disabled_ratio, 3.208_475);
+    assert_ratio(disabled_ratio, 3.288_68);
     assert!(disabled_ratio < 4.5, "disabled text is not claimed as AA");
 
     let (primary, separator) = focused_colors.expect("actual focused header colors");

@@ -215,6 +215,32 @@ fn primitive_without_focus_paths(frame: &stern_core::FrameOutput) -> Vec<Primiti
         .collect()
 }
 
+/// Neutralizes the one primitive delta focus is now allowed to introduce:
+/// 06-collections.md §Rows tables "focused (kbd, not selected): S4 + inset
+/// focus ring" — an otherwise-idle row's fill legitimately promotes to
+/// `surface.hover` on keyboard focus (rows are a documented exception to
+/// 00-language.md's general "focus never recolors the body" rule). Row
+/// rects are the only primitives painted with `radii.none` in this widget,
+/// so that's a safe, narrow discriminator for pairing them up positionally.
+fn primitives_with_row_focus_fill_neutralized(
+    focused: &stern_core::FrameOutput,
+    unfocused: &stern_core::FrameOutput,
+) -> (Vec<Primitive>, Vec<Primitive>) {
+    let theme = default_dark_theme();
+    let mut focused_list = primitive_without_focus_paths(focused);
+    let unfocused_list = unfocused.primitives.clone();
+    for (f, u) in focused_list.iter_mut().zip(unfocused_list.iter()) {
+        if let (Primitive::Rect(fr), Primitive::Rect(ur)) = (f, u)
+            && fr.radius == theme.radii.none
+            && fr.rect == ur.rect
+            && fr.stroke == ur.stroke
+        {
+            fr.fill = ur.fill;
+        }
+    }
+    (focused_list, unfocused_list)
+}
+
 #[allow(clippy::cast_precision_loss)]
 fn click_row(
     row: usize,
@@ -355,10 +381,9 @@ fn focused_first_middle_and_last_virtual_rows_add_only_exact_inward_annuli() {
                     .map(|node| (node.id, node.bounds, node.label.clone()))
                     .collect::<Vec<_>>()
             );
-            assert_eq!(
-                primitive_without_focus_paths(&focused.frame),
-                unfocused.frame.primitives
-            );
+            let (focused_primitives, unfocused_primitives) =
+                primitives_with_row_focus_fill_neutralized(&focused.frame, &unfocused.frame);
+            assert_eq!(focused_primitives, unfocused_primitives);
             assert_eq!(
                 focused
                     .frame
