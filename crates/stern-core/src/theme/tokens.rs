@@ -587,6 +587,26 @@ impl SpacingStep {
         Self::Seven,
         Self::Eight,
     ];
+
+    /// Returns the exact `stern-design-system` `spacing.*` token name that
+    /// this ladder step is mapped to (see
+    /// `crate::theme::generated_tokens::SPACING` and
+    /// `docs/visual-spec/00-language.md`'s Geometry ladder, the authority
+    /// for the mapping).
+    #[must_use]
+    pub const fn design_token_name(self) -> &'static str {
+        match self {
+            Self::Zero => "spacing.0",
+            Self::One => "spacing.1",
+            Self::Two => "spacing.2",
+            Self::Three => "spacing.3",
+            Self::Four => "spacing.4",
+            Self::Five => "spacing.5",
+            Self::Six => "spacing.6",
+            Self::Seven => "spacing.7",
+            Self::Eight => "spacing.8",
+        }
+    }
 }
 
 /// Semantic spacing role resolved from the configured compact ladder.
@@ -639,6 +659,28 @@ impl SpacingRole {
             | Self::GroupGap
             | Self::PanelPadding => SpacingStep::Four,
             Self::SectionGap => SpacingStep::Six,
+        }
+    }
+
+    /// Returns the exact `stern-design-system` named `spacing.gap.*` /
+    /// `spacing.padding.*` token that this semantic role is mapped to (see
+    /// `crate::theme::generated_tokens::SPACING` and
+    /// `docs/visual-spec/00-language.md`'s Geometry ladder, the authority
+    /// for the mapping). This is a separate, named token from the one
+    /// returned by `self.step().design_token_name()`; the ladder defines
+    /// both, and they carry the same value.
+    #[must_use]
+    pub const fn design_token_name(self) -> &'static str {
+        match self {
+            Self::IconLabelGap => "spacing.gap.icon_label",
+            Self::TightControlGap => "spacing.gap.control_tight",
+            Self::CompactInlineControlPadding => "spacing.padding.control.inline.compact",
+            Self::DefaultInlineControlPadding => "spacing.padding.control.inline.default",
+            Self::BlockControlPadding => "spacing.padding.control.block",
+            Self::InspectorLabelValueGap => "spacing.gap.inspector_label_value",
+            Self::GroupGap => "spacing.gap.group",
+            Self::PanelPadding => "spacing.padding.panel",
+            Self::SectionGap => "spacing.gap.section",
         }
     }
 }
@@ -842,6 +884,30 @@ impl SizeToken {
         Self::HandleVisual,
         Self::HandleHit,
     ];
+
+    /// Returns the exact `stern-design-system` `size.*` token name that this
+    /// key is mapped to (see `crate::theme::generated_tokens::SIZES` and
+    /// `docs/visual-spec/00-language.md`'s Geometry ladder, the authority
+    /// for the mapping).
+    #[must_use]
+    pub const fn design_token_name(self) -> &'static str {
+        match self {
+            Self::ControlXs => "size.control.xs",
+            Self::ControlSm => "size.control.sm",
+            Self::ControlMd => "size.control.md",
+            Self::ControlLg => "size.control.lg",
+            Self::RowCompact => "size.row.compact",
+            Self::RowStandard => "size.row.standard",
+            Self::Tab => "size.tab",
+            Self::PanelHeader => "size.panelHeader",
+            Self::WorkspaceBar => "size.workspaceBar",
+            Self::IconSm => "size.icon.sm",
+            Self::IconMd => "size.icon.md",
+            Self::IconLg => "size.icon.lg",
+            Self::HandleVisual => "size.handle.visual",
+            Self::HandleHit => "size.handle.hit",
+        }
+    }
 }
 
 /// Exact grouped size-token foundation in logical units.
@@ -908,6 +974,41 @@ impl SizeScale {
     }
 }
 
+/// Typed identity for every exact radius token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RadiusToken {
+    /// `radius.none`.
+    None,
+    /// `radius.sm`.
+    Sm,
+    /// `radius.md`.
+    Md,
+    /// `radius.lg`.
+    Lg,
+    /// `radius.full`.
+    Full,
+}
+
+impl RadiusToken {
+    /// Every exact radius token in normative grouped-field order.
+    pub const ALL: &'static [Self] = &[Self::None, Self::Sm, Self::Md, Self::Lg, Self::Full];
+
+    /// Returns the exact `stern-design-system` `radius.*` token name that
+    /// this key is mapped to (see `crate::theme::generated_tokens::RADII`
+    /// and `docs/visual-spec/00-language.md`'s Geometry ladder, the
+    /// authority for the mapping).
+    #[must_use]
+    pub const fn design_token_name(self) -> &'static str {
+        match self {
+            Self::None => "radius.none",
+            Self::Sm => "radius.sm",
+            Self::Md => "radius.md",
+            Self::Lg => "radius.lg",
+            Self::Full => "radius.full",
+        }
+    }
+}
+
 /// Radius token scale.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RadiusScale {
@@ -933,6 +1034,18 @@ impl RadiusScale {
             md: CornerRadius::all(md),
             lg: CornerRadius::all(lg),
             full: CornerRadius::all(full),
+        }
+    }
+
+    /// Resolves the configured corner radius for an exact radius token.
+    #[must_use]
+    pub const fn get(self, token: RadiusToken) -> CornerRadius {
+        match token {
+            RadiusToken::None => self.none,
+            RadiusToken::Sm => self.sm,
+            RadiusToken::Md => self.md,
+            RadiusToken::Lg => self.lg,
+            RadiusToken::Full => self.full,
         }
     }
 }
