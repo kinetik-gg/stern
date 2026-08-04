@@ -359,85 +359,146 @@ impl Theme {
     }
 
     /// Resolves a checkbox recipe for a state.
+    ///
+    /// Values match `docs/visual-spec/03-choice-sliders-tabs.md` §Checkbox
+    /// (family issue #912). Hover only promotes the adjoining label text —
+    /// which this recipe doesn't own, the caller paints it separately — per
+    /// that section's explicit "box border unchanged" hover rule, so
+    /// `hovered` never appears in the branches below. `disabled` always
+    /// wins over `selected` for fill/border (S1 fill, `border.disabled`),
+    /// matching every other disabled-fill-tier fix in this theme. The
+    /// table's "disabled: glyph at 100%" is terse about the mark's own
+    /// color; read conservatively here as the universal disabled-content
+    /// rule (`00-language.md` Text tiers) rather than inventing a second,
+    /// untested glyph treatment — see the family PR body.
     #[must_use]
     pub fn checkbox(&self, state: ComponentState) -> CheckRecipe {
-        let fill = if state.disabled {
-            self.colors.surface.control_disabled
-        } else if state.selected {
+        let fill = if state.selected && !state.disabled {
             self.colors.accent.default
-        } else if state.hovered {
-            self.colors.surface.control_hover
         } else {
-            self.colors.surface.sunken
+            self.colors.surface.application
+        };
+        let border_color = if state.disabled {
+            self.colors.border.disabled
+        } else if state.selected {
+            Color::TRANSPARENT
+        } else {
+            self.colors.border.strong
+        };
+        let mark = if state.disabled {
+            self.colors.content.disabled
+        } else {
+            self.colors.content.on_accent
         };
         CheckRecipe {
             fill: Brush::Solid(fill),
-            mark: if state.disabled {
-                self.colors.content.disabled
-            } else {
-                self.colors.content.on_accent
-            },
-            border: Stroke::new(
-                self.strokes.default,
-                Brush::Solid(self.colors.border.default),
-            ),
+            mark,
+            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
             radius: self.radii.sm,
             size: SELECTION_INDICATOR_SIZE,
         }
     }
 
     /// Resolves a radio button recipe for a state.
+    ///
+    /// Values match `docs/visual-spec/03-choice-sliders-tabs.md` §Radio.
+    /// Unlike the checkbox, the box fill/border are NEUTRAL — constant
+    /// across checked/unchecked, per that section's "radios are NEUTRAL
+    /// when checked" rule — so only `mark` (the inner dot color the caller
+    /// paints) reacts to `selected`.
     #[must_use]
     pub fn radio_button(&self, state: ComponentState) -> CheckRecipe {
-        CheckRecipe {
-            radius: self.radii.full,
-            ..self.checkbox(state)
-        }
-    }
-
-    /// Resolves a toggle recipe for a state.
-    #[must_use]
-    pub fn toggle(&self, state: ComponentState) -> ToggleRecipe {
-        let track = if state.disabled {
-            self.colors.surface.control_disabled
-        } else if state.selected {
-            self.colors.accent.default
-        } else if state.hovered {
-            self.colors.surface.control_hover
+        let border_color = if state.disabled {
+            self.colors.border.disabled
         } else {
-            self.colors.surface.control_pressed
+            self.colors.border.strong
         };
-        let thumb = if state.disabled {
+        let mark = if state.disabled {
             self.colors.content.disabled
         } else {
             self.colors.content.primary
         };
+        CheckRecipe {
+            fill: Brush::Solid(self.colors.surface.application),
+            mark,
+            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
+            radius: self.radii.full,
+            size: SELECTION_INDICATOR_SIZE,
+        }
+    }
+
+    /// Resolves a toggle recipe for a state.
+    ///
+    /// Values match `docs/visual-spec/03-choice-sliders-tabs.md` §Switch,
+    /// whose state table only has off/on/disabled rows — no hover row — so
+    /// `hovered` does not appear below. `disabled` always renders the
+    /// off-style track fill regardless of `selected` ("off-style with
+    /// `border.disabled`"), with only the border and knob swapped to their
+    /// disabled tokens.
+    #[must_use]
+    pub fn toggle(&self, state: ComponentState) -> ToggleRecipe {
+        let track = if state.selected && !state.disabled {
+            self.colors.accent.subtle
+        } else {
+            self.colors.border.default
+        };
+        let border_color = if state.disabled {
+            self.colors.border.disabled
+        } else {
+            self.colors.border.strong
+        };
+        let thumb = if state.disabled {
+            self.colors.content.disabled
+        } else if state.selected {
+            self.colors.focus.indicator
+        } else {
+            self.colors.content.muted
+        };
         ToggleRecipe {
             track: Brush::Solid(track),
             thumb: Brush::Solid(thumb),
-            border: Stroke::new(
-                self.strokes.default,
-                Brush::Solid(self.colors.border.default),
-            ),
+            border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
             padding: 2.0,
         }
     }
 
     /// Resolves a slider recipe for a state.
+    ///
+    /// Values match `docs/visual-spec/03-choice-sliders-tabs.md` §Slider.
+    /// The file's "remainder" color is the track's own resting fill, not a
+    /// separate outline, so `border` stays fully transparent at every
+    /// state (width alone still tracks `strokes.default`, matching every
+    /// other recipe's stroke-role test). Only an active drag (`pressed`)
+    /// promotes the filled span to `accent.hover`; hover alone only changes
+    /// the resolved `thumb` color. Painting the thumb circle itself (and
+    /// narrowing the track to its 3px height) is a tracked gap — see
+    /// `KNOWN-GAPS.md`.
     #[must_use]
     pub fn slider(&self, state: ComponentState) -> SliderRecipe {
+        let track = if state.disabled {
+            self.colors.border.subtle
+        } else {
+            self.colors.border.default
+        };
         let fill = if state.disabled {
             self.colors.content.disabled
+        } else if state.pressed {
+            self.colors.accent.hover
         } else {
             self.colors.accent.default
         };
+        let thumb = if state.disabled {
+            self.colors.content.disabled
+        } else if state.pressed || state.hovered {
+            self.colors.content.on_accent
+        } else {
+            self.colors.content.primary
+        };
         SliderRecipe {
-            track: Brush::Solid(self.colors.surface.sunken),
+            track: Brush::Solid(track),
             fill: Brush::Solid(fill),
-            border: Stroke::new(
-                self.strokes.default,
-                Brush::Solid(self.colors.border.default),
-            ),
+            thumb: Brush::Solid(thumb),
+            border: Stroke::new(self.strokes.default, Brush::Solid(Color::TRANSPARENT)),
             radius: self.radii.full,
         }
     }

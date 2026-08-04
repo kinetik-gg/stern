@@ -978,11 +978,11 @@ fn component_recipes_cover_common_states() {
     );
     assert_eq!(
         theme.toggle(selected).track,
-        Brush::Solid(theme.colors.accent.default)
+        Brush::Solid(theme.colors.accent.subtle)
     );
     assert_eq!(
         theme.slider(focused).border.brush,
-        Brush::Solid(theme.colors.border.default)
+        Brush::Solid(Color::TRANSPARENT)
     );
     assert_eq!(
         // docs/visual-spec/02-fields.md: focused resolves to `border.strong`,
@@ -1037,6 +1037,241 @@ fn selection_indicator_recipe_size_is_exact_across_component_states() {
         assert_eq!(radio.size, 14.0, "wrong radio size for {state:?}");
         assert_eq!(radio.size, checkbox.size);
     }
+}
+
+/// Pins `theme.checkbox`/`theme.radio_button` outputs to
+/// `docs/visual-spec/03-choice-sliders-tabs.md`'s Checkbox/Radio tables
+/// (family issue #912). Hover is asserted equal to its non-hovered
+/// counterpart rather than pinned to a third color: that section's Checkbox
+/// hover rule only promotes the (separately painted) label, leaving box
+/// fill/border unchanged, and the Radio section inherits the same "same
+/// row/pattern as checkbox" hover behavior.
+#[test]
+fn checkbox_and_radio_match_visual_spec_state_colors() {
+    let mut colors = ThemeColors::default_dark();
+    colors.surface.application = Color::rgb8(1, 2, 3);
+    colors.accent.default = Color::rgb8(4, 5, 6);
+    colors.border.strong = Color::rgb8(7, 8, 9);
+    colors.border.disabled = Color::rgb8(10, 11, 12);
+    colors.content.on_accent = Color::rgb8(13, 14, 15);
+    colors.content.disabled = Color::rgb8(16, 17, 18);
+    colors.content.primary = Color::rgb8(19, 20, 21);
+    let theme = default_dark_theme().with_colors(colors);
+
+    let unchecked = ComponentState::default();
+    let checked = ComponentState {
+        selected: true,
+        ..ComponentState::default()
+    };
+    let hovered_unchecked = ComponentState {
+        hovered: true,
+        ..ComponentState::default()
+    };
+    let disabled_unchecked = ComponentState {
+        disabled: true,
+        ..ComponentState::default()
+    };
+    let disabled_checked = ComponentState {
+        disabled: true,
+        selected: true,
+        ..ComponentState::default()
+    };
+
+    // Checkbox: checked fills accent and drops its border to transparent;
+    // disabled always reads via S1 fill / `border.disabled`, overriding
+    // checked, and hover changes nothing on the box itself.
+    let check_unchecked = theme.checkbox(unchecked);
+    assert_eq!(
+        check_unchecked.fill,
+        Brush::Solid(colors.surface.application)
+    );
+    assert_eq!(
+        check_unchecked.border.brush,
+        Brush::Solid(colors.border.strong)
+    );
+
+    let check_checked = theme.checkbox(checked);
+    assert_eq!(check_checked.fill, Brush::Solid(colors.accent.default));
+    assert_eq!(check_checked.border.brush, Brush::Solid(Color::TRANSPARENT));
+    assert_eq!(check_checked.mark, colors.content.on_accent);
+
+    let check_hovered = theme.checkbox(hovered_unchecked);
+    assert_eq!(check_hovered.fill, check_unchecked.fill, "hover fill");
+    assert_eq!(check_hovered.border, check_unchecked.border, "hover border");
+
+    let check_disabled_unchecked = theme.checkbox(disabled_unchecked);
+    assert_eq!(
+        check_disabled_unchecked.fill,
+        Brush::Solid(colors.surface.application)
+    );
+    assert_eq!(
+        check_disabled_unchecked.border.brush,
+        Brush::Solid(colors.border.disabled)
+    );
+
+    let check_disabled_checked = theme.checkbox(disabled_checked);
+    assert_eq!(
+        check_disabled_checked.fill,
+        Brush::Solid(colors.surface.application),
+        "disabled checkbox fill stays S1 even when checked"
+    );
+    assert_eq!(
+        check_disabled_checked.border.brush,
+        Brush::Solid(colors.border.disabled)
+    );
+    assert_eq!(check_disabled_checked.mark, colors.content.disabled);
+
+    // Radio: fill/border are neutral (constant) across checked/unchecked —
+    // only the dot color (`mark`) reacts to `selected`.
+    for state in [unchecked, checked, hovered_unchecked] {
+        let radio = theme.radio_button(state);
+        assert_eq!(radio.fill, Brush::Solid(colors.surface.application));
+        assert_eq!(radio.border.brush, Brush::Solid(colors.border.strong));
+    }
+    assert_eq!(theme.radio_button(checked).mark, colors.content.primary);
+
+    for state in [disabled_unchecked, disabled_checked] {
+        let radio = theme.radio_button(state);
+        assert_eq!(radio.fill, Brush::Solid(colors.surface.application));
+        assert_eq!(radio.border.brush, Brush::Solid(colors.border.disabled));
+    }
+    assert_eq!(
+        theme.radio_button(disabled_checked).mark,
+        colors.content.disabled
+    );
+}
+
+/// Pins `theme.toggle` outputs to
+/// `docs/visual-spec/03-choice-sliders-tabs.md` §Switch's off/on/disabled
+/// rows (family issue #912). That table has no separate hover row, so
+/// hover must not change the track or knob color.
+#[test]
+fn toggle_matches_visual_spec_state_colors() {
+    let mut colors = ThemeColors::default_dark();
+    colors.border.default = Color::rgb8(1, 2, 3);
+    colors.border.strong = Color::rgb8(4, 5, 6);
+    colors.border.disabled = Color::rgb8(7, 8, 9);
+    colors.accent.subtle = Color::rgb8(10, 11, 12);
+    colors.focus.indicator = Color::rgb8(13, 14, 15);
+    colors.content.muted = Color::rgb8(16, 17, 18);
+    colors.content.disabled = Color::rgb8(19, 20, 21);
+    let theme = default_dark_theme().with_colors(colors);
+
+    let off = ComponentState::default();
+    let on = ComponentState {
+        selected: true,
+        ..ComponentState::default()
+    };
+    let hovered_off = ComponentState {
+        hovered: true,
+        ..ComponentState::default()
+    };
+    let disabled_off = ComponentState {
+        disabled: true,
+        ..ComponentState::default()
+    };
+    let disabled_on = ComponentState {
+        disabled: true,
+        selected: true,
+        ..ComponentState::default()
+    };
+
+    let off_recipe = theme.toggle(off);
+    assert_eq!(off_recipe.track, Brush::Solid(colors.border.default));
+    assert_eq!(off_recipe.border.brush, Brush::Solid(colors.border.strong));
+    assert_eq!(off_recipe.thumb, Brush::Solid(colors.content.muted));
+
+    let hovered_recipe = theme.toggle(hovered_off);
+    assert_eq!(hovered_recipe.track, off_recipe.track, "hover track");
+    assert_eq!(hovered_recipe.thumb, off_recipe.thumb, "hover knob");
+
+    let on_recipe = theme.toggle(on);
+    assert_eq!(on_recipe.track, Brush::Solid(colors.accent.subtle));
+    assert_eq!(on_recipe.border.brush, Brush::Solid(colors.border.strong));
+    assert_eq!(on_recipe.thumb, Brush::Solid(colors.focus.indicator));
+
+    for (state, name) in [(disabled_off, "disabled off"), (disabled_on, "disabled on")] {
+        let recipe = theme.toggle(state);
+        assert_eq!(
+            recipe.track,
+            Brush::Solid(colors.border.default),
+            "{name} keeps off-style track fill"
+        );
+        assert_eq!(
+            recipe.border.brush,
+            Brush::Solid(colors.border.disabled),
+            "{name} border"
+        );
+        assert_eq!(
+            recipe.thumb,
+            Brush::Solid(colors.content.disabled),
+            "{name} knob"
+        );
+    }
+}
+
+/// Pins `theme.slider` outputs to
+/// `docs/visual-spec/03-choice-sliders-tabs.md` §Slider (family issue
+/// #912). Only an active drag (`pressed`) promotes the filled span to
+/// `accent.hover`; hover alone only changes the resolved thumb color. The
+/// track never draws an outline stroke — the file's "remainder" color is
+/// the track's own fill, so `border` stays transparent at every state.
+#[test]
+fn slider_matches_visual_spec_state_colors() {
+    let mut colors = ThemeColors::default_dark();
+    colors.border.default = Color::rgb8(1, 2, 3);
+    colors.border.subtle = Color::rgb8(4, 5, 6);
+    colors.accent.default = Color::rgb8(7, 8, 9);
+    colors.accent.hover = Color::rgb8(10, 11, 12);
+    colors.content.primary = Color::rgb8(13, 14, 15);
+    colors.content.on_accent = Color::rgb8(16, 17, 18);
+    colors.content.disabled = Color::rgb8(19, 20, 21);
+    let theme = default_dark_theme().with_colors(colors);
+
+    let idle = ComponentState::default();
+    let hovered = ComponentState {
+        hovered: true,
+        ..ComponentState::default()
+    };
+    let dragging = ComponentState {
+        pressed: true,
+        ..ComponentState::default()
+    };
+    let disabled = ComponentState {
+        disabled: true,
+        ..ComponentState::default()
+    };
+
+    let idle_recipe = theme.slider(idle);
+    assert_eq!(idle_recipe.track, Brush::Solid(colors.border.default));
+    assert_eq!(idle_recipe.fill, Brush::Solid(colors.accent.default));
+    assert_eq!(idle_recipe.thumb, Brush::Solid(colors.content.primary));
+    assert_eq!(idle_recipe.border.brush, Brush::Solid(Color::TRANSPARENT));
+
+    let hovered_recipe = theme.slider(hovered);
+    assert_eq!(hovered_recipe.track, idle_recipe.track);
+    assert_eq!(
+        hovered_recipe.fill, idle_recipe.fill,
+        "hover alone doesn't promote the filled span"
+    );
+    assert_eq!(hovered_recipe.thumb, Brush::Solid(colors.content.on_accent));
+
+    let dragging_recipe = theme.slider(dragging);
+    assert_eq!(dragging_recipe.track, idle_recipe.track);
+    assert_eq!(dragging_recipe.fill, Brush::Solid(colors.accent.hover));
+    assert_eq!(
+        dragging_recipe.thumb,
+        Brush::Solid(colors.content.on_accent)
+    );
+
+    let disabled_recipe = theme.slider(disabled);
+    assert_eq!(disabled_recipe.track, Brush::Solid(colors.border.subtle));
+    assert_eq!(disabled_recipe.fill, Brush::Solid(colors.content.disabled));
+    assert_eq!(disabled_recipe.thumb, Brush::Solid(colors.content.disabled));
+    assert_eq!(
+        disabled_recipe.border.brush,
+        Brush::Solid(Color::TRANSPARENT)
+    );
 }
 
 #[test]

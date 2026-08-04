@@ -286,9 +286,12 @@ fn focused_hovered_selected_checkbox_preserves_focus_layers_and_selected_paint()
     assert_eq!(hovered.primitives, focused.primitives);
     let base = rect_primitive(&hovered.primitives[2]);
     assert_eq!(base.fill, Some(Brush::Solid(theme.colors.accent.default)));
+    // Checked checkbox border is transparent
+    // (docs/visual-spec/03-choice-sliders-tabs.md §Checkbox: "checked ...
+    // none"), unaffected by hover.
     assert_eq!(
         base.stroke.expect("neutral base border").brush,
-        Brush::Solid(theme.colors.border.default)
+        Brush::Solid(Color::TRANSPARENT)
     );
     assert_eq!(hovered.semantics[0].state.checked, Some(true));
 }
@@ -402,8 +405,10 @@ fn focused_radio_group_normalization_preserves_ring_layers_and_radio_shape() {
     assert_eq!(base.rect, base_rect);
     assert_eq!(base.radius, theme.radii.full);
     assert!(base.fill.is_some());
+    // Radio border is neutral (`border.strong`) whether checked or not
+    // (docs/visual-spec/03-choice-sliders-tabs.md §Radio).
     assert_eq!(
         base.stroke.expect("neutral base border").brush,
-        Brush::Solid(theme.colors.border.default)
+        Brush::Solid(theme.colors.border.strong)
     );
 }
