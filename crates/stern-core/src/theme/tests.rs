@@ -1,10 +1,10 @@
 #![allow(clippy::float_cmp)]
 use super::{
     ButtonVariant, ComponentState, ControlMetrics, ControlSizeScale, DurationScale, ElevationLevel,
-    ElevationScale, FontFamilyRole, HandleSizeScale, IconSizeScale, OpacityScale, RadiusScale,
-    RadiusToken, RowSizeScale, SemanticColor, SizeScale, SizeToken, SpacingRole, SpacingScale,
-    SpacingStep, StrokeScale, TextRole, TextRoleMetrics, ThemeColors, TypographyScale,
-    default_dark_theme, generated_tokens,
+    ElevationScale, FontFamilyRole, HandleSizeScale, IconSizeScale, OpacityScale,
+    OverlaySurfaceTier, RadiusScale, RadiusToken, RowSizeScale, SemanticColor, SizeScale,
+    SizeToken, SpacingRole, SpacingScale, SpacingStep, StrokeScale, TextRole, TextRoleMetrics,
+    ThemeColors, TypographyScale, default_dark_theme, generated_tokens,
 };
 use crate::{Brush, Color, CornerRadius};
 
@@ -46,6 +46,16 @@ fn default_theme_has_dense_editor_spacing() {
     assert_eq!(theme.font(TextRole::Title).family, "Inter");
     assert_eq!(theme.font(TextRole::Monospace).family, "Space Mono");
     assert_eq!(theme.font(TextRole::Body).line_height, 17.0);
+}
+
+/// `docs/visual-spec/04-overlays.md` (family issue #913): "Scrim:
+/// `overlay.scrim` `#0B0B0B` at 38% opacity" — the default theme previously
+/// carried an unconformed 55%.
+#[test]
+fn default_theme_modal_scrim_opacity_matches_visual_spec() {
+    let theme = default_dark_theme();
+    assert_eq!(theme.opacity.overlay_scrim, 0.38);
+    assert_eq!(theme.colors.overlay.scrim, Color::rgb8(0x0B, 0x0B, 0x0B));
 }
 
 #[test]
@@ -929,6 +939,202 @@ fn primary_button_uses_exact_accent_roles_and_bounded_state_precedence() {
     assert_eq!(focused_hover.border.width, normal.border.width);
     assert_eq!(focused_hover.radius, normal.radius);
     assert_eq!(focused_hover.foreground, normal.foreground);
+}
+
+/// Pins `theme.overlay_surface` outputs to `docs/visual-spec/04-overlays.md`
+/// (family issue #913): `Menu` (menu/context-menu/dropdown/popover) and
+/// `Tooltip` share `surface.overlay`/`border.default`, differing only in
+/// radius (`md` vs `sm`); `Panel` (modal/command-palette) sits one tier
+/// deeper on `surface.panel` with `border.strong`.
+#[test]
+fn overlay_surface_matches_visual_spec_tiers() {
+    let mut colors = ThemeColors::default_dark();
+    colors.surface.overlay = Color::rgb8(1, 2, 3);
+    colors.surface.panel = Color::rgb8(4, 5, 6);
+    colors.border.default = Color::rgb8(7, 8, 9);
+    colors.border.strong = Color::rgb8(10, 11, 12);
+    let theme = default_dark_theme().with_colors(colors);
+
+    let menu = theme.overlay_surface(OverlaySurfaceTier::Menu);
+    assert_eq!(menu.background, Brush::Solid(colors.surface.overlay));
+    assert_eq!(menu.border.brush, Brush::Solid(colors.border.default));
+    assert_eq!(menu.border.width, theme.strokes.default);
+    assert_eq!(menu.radius, theme.radii.md);
+
+    let tooltip = theme.overlay_surface(OverlaySurfaceTier::Tooltip);
+    assert_eq!(tooltip.background, menu.background);
+    assert_eq!(tooltip.border, menu.border);
+    assert_eq!(tooltip.radius, theme.radii.sm);
+    assert_ne!(tooltip.radius, menu.radius);
+
+    let panel = theme.overlay_surface(OverlaySurfaceTier::Panel);
+    assert_eq!(panel.background, Brush::Solid(colors.surface.panel));
+    assert_eq!(panel.border.brush, Brush::Solid(colors.border.strong));
+    assert_eq!(panel.border.width, theme.strokes.default);
+    assert_eq!(panel.radius, theme.radii.md);
+}
+
+/// Pins `theme.overlay_item` outputs to `docs/visual-spec/04-overlays.md`'s
+/// Menu "Item state" table (family issue #913). Rest is transparent with
+/// secondary text (not `Theme::row`'s S0-sunken/primary-text default);
+/// `selected` here is the keyboard-highlight sense, not data selection, so
+/// it maps to the same neutral highlight as `hovered` rather than the accent
+/// selection brush; `focused` alone (no mouse hover) also promotes to the
+/// highlight, since menu items combine the focus ring with the hover fill
+/// (00-language.md §Focus model) — unlike `Theme::row`, which is focus
+/// neutral. The border is always transparent (menu items have no per-row
+/// border) and the radius is `radius.sm`.
+#[test]
+fn overlay_item_matches_visual_spec_state_colors() {
+    let mut colors = ThemeColors::default_dark();
+    colors.surface.hover = Color::rgb8(1, 2, 3);
+    colors.content.primary = Color::rgb8(4, 5, 6);
+    colors.content.secondary = Color::rgb8(7, 8, 9);
+    colors.content.disabled = Color::rgb8(10, 11, 12);
+    colors.selection.background = Color::rgb8(13, 14, 15);
+    colors.selection.foreground = Color::rgb8(16, 17, 18);
+    let theme = default_dark_theme().with_colors(colors);
+
+    let cases = [
+        (
+            "rest",
+            ComponentState::default(),
+            Color::TRANSPARENT,
+            colors.content.secondary,
+        ),
+        (
+            "hovered",
+            ComponentState {
+                hovered: true,
+                ..ComponentState::default()
+            },
+            colors.surface.hover,
+            colors.content.primary,
+        ),
+        (
+            "focused (kbd, no hover)",
+            ComponentState {
+                focused: true,
+                ..ComponentState::default()
+            },
+            colors.surface.hover,
+            colors.content.primary,
+        ),
+        (
+            "selected (keyboard highlight, not data selection)",
+            ComponentState {
+                selected: true,
+                ..ComponentState::default()
+            },
+            colors.surface.hover,
+            colors.content.primary,
+        ),
+        (
+            "disabled",
+            ComponentState {
+                disabled: true,
+                ..ComponentState::default()
+            },
+            Color::TRANSPARENT,
+            colors.content.disabled,
+        ),
+        (
+            "disabled takes precedence over hover/focused/selected",
+            ComponentState {
+                disabled: true,
+                hovered: true,
+                focused: true,
+                selected: true,
+                ..ComponentState::default()
+            },
+            Color::TRANSPARENT,
+            colors.content.disabled,
+        ),
+    ];
+
+    for (name, state, expected_background, expected_foreground) in cases {
+        let recipe = theme.overlay_item(state);
+        assert_eq!(
+            recipe.background,
+            Brush::Solid(expected_background),
+            "{name} background"
+        );
+        assert_eq!(recipe.foreground, expected_foreground, "{name} foreground");
+        assert_eq!(
+            recipe.border.brush,
+            Brush::Solid(Color::TRANSPARENT),
+            "{name} border"
+        );
+        assert_eq!(recipe.border.width, theme.strokes.default);
+        assert_eq!(recipe.radius, theme.radii.sm);
+        assert_ne!(
+            recipe.background,
+            Brush::Solid(colors.selection.background),
+            "{name} must never use the accent selection brush"
+        );
+    }
+}
+
+/// Pins `theme.command_palette_item` to `docs/visual-spec/04-overlays.md`'s
+/// Command palette section (family issue #913): the active
+/// (`state.selected`) item is the one place in this family where selection
+/// genuinely is data selection (00-language.md's explicit "this IS data
+/// selection" exception) and takes the accent brush; every other state
+/// falls back to the same neutral treatment `Theme::overlay_item` uses.
+#[test]
+fn command_palette_item_is_the_one_accent_selection_exception() {
+    let mut colors = ThemeColors::default_dark();
+    colors.surface.hover = Color::rgb8(1, 2, 3);
+    colors.content.primary = Color::rgb8(4, 5, 6);
+    colors.content.secondary = Color::rgb8(7, 8, 9);
+    colors.content.disabled = Color::rgb8(10, 11, 12);
+    colors.selection.background = Color::rgb8(13, 14, 15);
+    colors.selection.foreground = Color::rgb8(16, 17, 18);
+    let theme = default_dark_theme().with_colors(colors);
+
+    let active = theme.command_palette_item(ComponentState {
+        selected: true,
+        ..ComponentState::default()
+    });
+    assert_eq!(active.background, Brush::Solid(colors.selection.background));
+    assert_eq!(active.foreground, colors.selection.foreground);
+
+    let active_hovered = theme.command_palette_item(ComponentState {
+        selected: true,
+        hovered: true,
+        ..ComponentState::default()
+    });
+    assert_eq!(active_hovered, active, "active precedence beats hover too");
+
+    let hovered_only = theme.command_palette_item(ComponentState {
+        hovered: true,
+        ..ComponentState::default()
+    });
+    assert_eq!(
+        hovered_only,
+        theme.overlay_item(ComponentState {
+            hovered: true,
+            ..ComponentState::default()
+        })
+    );
+
+    let rest = theme.command_palette_item(ComponentState::default());
+    assert_eq!(rest, theme.overlay_item(ComponentState::default()));
+
+    let disabled_selected = theme.command_palette_item(ComponentState {
+        selected: true,
+        disabled: true,
+        ..ComponentState::default()
+    });
+    assert_eq!(
+        disabled_selected,
+        theme.overlay_item(ComponentState {
+            selected: true,
+            disabled: true,
+            ..ComponentState::default()
+        }),
+        "disabled beats even the active/selected accent"
+    );
 }
 
 #[test]
