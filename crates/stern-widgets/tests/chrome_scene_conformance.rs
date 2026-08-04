@@ -827,19 +827,42 @@ fn assert_chrome_tab_focus_pair(
     let Primitive::Rect(surface) = &focused.primitives[base] else {
         unreachable!()
     };
-    assert_eq!(surface.radius, theme.radii.none);
+    // `docs/visual-spec/05-chrome-dock.md` §Frame tab strip (family issue
+    // #914): tabs round only their top corners, carry no visible
+    // full-perimeter border, and a selected tab's fill matches the panel
+    // body (S2) it merges with rather than the old `control_pressed` tier.
+    let expected_radius = stern_core::CornerRadius {
+        top_left: theme.radii.sm.top_left,
+        top_right: theme.radii.sm.top_right,
+        bottom_left: 0.0,
+        bottom_right: 0.0,
+    };
+    assert_eq!(surface.radius, expected_radius);
     assert_eq!(
         surface.stroke.expect("neutral border").brush,
-        stern_core::Brush::Solid(theme.colors.border.default)
+        stern_core::Brush::Solid(stern_core::Color::TRANSPARENT)
     );
     assert_eq!(
         surface.fill,
         Some(stern_core::Brush::Solid(if selected {
-            theme.colors.surface.control_pressed
-        } else {
             theme.colors.surface.panel
+        } else {
+            stern_core::Color::TRANSPARENT
         }))
     );
+    // A selected tab paints an extra top-edge `border.strong` indicator
+    // immediately after the base surface.
+    let mut cursor = base + 1;
+    if selected {
+        let Primitive::Rect(indicator) = &focused.primitives[cursor] else {
+            panic!("selected chrome tab indicator");
+        };
+        assert_eq!(
+            indicator.fill,
+            Some(stern_core::Brush::Solid(theme.colors.border.strong))
+        );
+        cursor += 1;
+    }
     let expected = theme
         .focus_ring(true)
         .expect("focus recipe")
@@ -848,9 +871,9 @@ fn assert_chrome_tab_focus_pair(
             surface.radius,
             surface.stroke.expect("neutral border").width,
         );
-    assert_eq!(focused.primitives[base + 1], expected[0]);
-    assert_eq!(focused.primitives[base + 2], expected[1]);
-    for primitive in &focused.primitives[base + 1..base + 3] {
+    assert_eq!(focused.primitives[cursor], expected[0]);
+    assert_eq!(focused.primitives[cursor + 1], expected[1]);
+    for primitive in &focused.primitives[cursor..cursor + 2] {
         let Primitive::Path(path) = primitive else {
             panic!("chrome tab focus path");
         };
@@ -869,9 +892,9 @@ fn assert_chrome_tab_focus_pair(
             assert!(point.y >= strip_rect.min_y() && point.y <= strip_rect.max_y());
         }
     }
-    assert!(matches!(focused.primitives[base + 3], Primitive::Text(_)));
+    assert!(matches!(focused.primitives[cursor + 2], Primitive::Text(_)));
     let mut stripped = focused.primitives.clone();
-    stripped.drain(base + 1..base + 3);
+    stripped.drain(cursor..cursor + 2);
     assert_eq!(stripped, unfocused.primitives);
     let focused_node = focused.semantics.get(id).expect("focused tab semantic");
     let unfocused_node = unfocused.semantics.get(id).expect("unfocused tab semantic");
