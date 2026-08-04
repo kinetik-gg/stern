@@ -186,12 +186,16 @@ fn actual_virtual_tree_focus_translates_as_contained_fill_only_annuli_at_release
             base.stroke.expect("neutral boundary").width,
             theme.strokes.hairline
         );
+        // 06-collections.md §Rows: a keyboard-focused, otherwise-idle row
+        // (every row here is focused) promotes its fill to `surface.hover`,
+        // same tier as hover — rows are a documented exception to
+        // 00-language.md's general "focus never recolors the body" rule.
         assert_eq!(
             base.fill,
             Some(Brush::Solid(if selected {
                 theme.colors.selection.background
             } else {
-                theme.colors.surface.sunken
+                theme.colors.surface.hover
             }))
         );
         let primary = path(&frame.primitives[base_index + 1]);

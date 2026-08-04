@@ -1321,8 +1321,14 @@ fn production_cell_primitives_inventory_acc005_and_grid_border_nonconformities()
         UiInput::default(),
     );
     let (idle_background, idle_border, idle_text) = cell_colors(&idle, target);
-    assert_ratio(contrast_ratio(idle_text, idle_background), 16.063_878);
-    assert_ratio(contrast_ratio(idle_border, idle_background), 1.237_124);
+    // 06-collections.md §Rows fix (family issue #915): idle cell text is
+    // now `content.secondary` (was `content.primary`), and idle fill is
+    // transparent (was `surface.sunken`) — both lower this ratio from the
+    // prior pinned 16.063_878.
+    assert_ratio(contrast_ratio(idle_text, idle_background), 10.586_405);
+    // Idle fill is now transparent (was `surface.sunken`), which shifts this
+    // border-vs-fill ratio from the prior pinned 1.237_124.
+    assert_ratio(contrast_ratio(idle_border, idle_background), 1.319_926);
 
     let hovered = run_frame(
         &items,
@@ -1332,7 +1338,9 @@ fn production_cell_primitives_inventory_acc005_and_grid_border_nonconformities()
         CellInteraction::Hover.input(cell_point(0, 0)),
     );
     let (hover_background, hover_border, hover_text) = cell_colors(&hovered, target);
-    assert_ratio(contrast_ratio(hover_text, hover_background), 13.908_798);
+    // Hover text is now `content.secondary` (was `content.primary`), per
+    // 06-collections.md's Rows table (hover fill promotes, text does not).
+    assert_ratio(contrast_ratio(hover_text, hover_background), 8.591_153);
     assert_ratio(contrast_ratio(hover_border, hover_background), 1.071_155);
 
     let mut selection = VirtualTableSelection::new();
@@ -1367,13 +1375,15 @@ fn production_cell_primitives_inventory_acc005_and_grid_border_nonconformities()
         UiInput::default(),
     );
     let (disabled_background, disabled_border, disabled_text) = cell_colors(&disabled, target);
+    // Disabled fill is now transparent (was `surface.control_disabled`) per
+    // 06-collections.md's Rows table ("disabled row: transparent").
     assert_ratio(
         contrast_ratio(disabled_text, disabled_background),
-        3.208_475,
+        3.657_367,
     );
     assert_ratio(
         contrast_ratio(disabled_border, disabled_background),
-        1.157_923,
+        1.319_926,
     );
 
     let base_index = cell_base_index(&selected, target);

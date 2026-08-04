@@ -349,23 +349,33 @@ impl Theme {
     }
 
     /// Resolves a list or table row recipe for a state.
+    ///
+    /// Values match `docs/visual-spec/06-collections.md` §Rows (family issue
+    /// #915). Unlike buttons/tabs, the family table pins row text to
+    /// `content.secondary` for both rest AND hover (fill is the only signal
+    /// hover promotes) — selection is the sole state that promotes text, to
+    /// `selection.foreground` (white). A keyboard-focused-but-not-selected row
+    /// shares hover's `surface.hover` fill (the focus ring itself is a
+    /// separate, additive paint step per `00-language.md` §Focus model, not a
+    /// fill change), so `focused` participates in the same fill branch as
+    /// `hovered`. Selection takes precedence over both.
     #[must_use]
     pub fn row(&self, state: ComponentState) -> RowRecipe {
         let background = if state.disabled {
-            self.colors.surface.control_disabled
+            Color::TRANSPARENT
         } else if state.selected {
             self.colors.selection.background
-        } else if state.hovered {
+        } else if state.hovered || state.focused {
             self.colors.surface.hover
         } else {
-            self.colors.surface.sunken
+            Color::TRANSPARENT
         };
         let foreground = if state.disabled {
             self.colors.content.disabled
         } else if state.selected {
             self.colors.selection.foreground
         } else {
-            self.colors.content.primary
+            self.colors.content.secondary
         };
         RowRecipe {
             background: Brush::Solid(background),
@@ -476,6 +486,81 @@ impl Theme {
             };
         }
         self.overlay_item(state)
+    }
+
+    /// Resolves the table/column header-row recipe for a state.
+    ///
+    /// Values match `docs/visual-spec/06-collections.md` §Header row (family
+    /// issue #915): fill is a fixed S1 `surface.application` tier (a header
+    /// sits directly atop the S2 collection container — one tier up, per
+    /// `00-language.md` §Surface tiers — never the accent/selection fill
+    /// `Theme::row` uses for data selection). `state.selected` here means
+    /// "this is the active sort column," which promotes text only, from
+    /// `content.muted` to `content.secondary` (00-collections.md: "active
+    /// sort column: text secondary"); sort state never tints the fill,
+    /// unlike a selected data row. The spec's header table is silent on
+    /// pointer affordance for the (clickable, sortable) header cell; hover/
+    /// press still promote to `surface.hover` as the lowest-invention
+    /// extension of the existing pattern, consistent with every other
+    /// interactive surface in `00-language.md`.
+    #[must_use]
+    pub fn table_header_row(&self, state: ComponentState) -> RowRecipe {
+        let background = if !state.disabled && (state.hovered || state.pressed) {
+            self.colors.surface.hover
+        } else {
+            self.colors.surface.application
+        };
+        let foreground = if state.disabled {
+            self.colors.content.disabled
+        } else if state.selected {
+            self.colors.content.secondary
+        } else {
+            self.colors.content.muted
+        };
+        RowRecipe {
+            background: Brush::Solid(background),
+            foreground,
+            border: Stroke::new(
+                self.strokes.hairline,
+                Brush::Solid(self.colors.border.subtle),
+            ),
+            radius: self.radii.none,
+        }
+    }
+
+    /// Resolves the asset-grid card recipe for a state.
+    ///
+    /// Values match `docs/visual-spec/06-collections.md` §Asset grid (family
+    /// issue #915), a deliberate, spec-sanctioned exception to `Theme::row`'s
+    /// selection doctrine: "Cards use border+badge selection, not full
+    /// accent fill." Selection promotes fill S2→S3 and border
+    /// default→strong (the badge dot itself is a separate, additive paint
+    /// step, like the focus ring); hover promotes only the border, never the
+    /// fill. Text stays `content.primary` regardless of state (disabled
+    /// aside) — cards have no hover/selected text-color rule in the spec.
+    #[must_use]
+    pub fn asset_card(&self, state: ComponentState) -> RowRecipe {
+        let background = if state.selected {
+            self.colors.surface.control
+        } else {
+            self.colors.surface.panel
+        };
+        let border = if state.selected || state.hovered {
+            self.colors.border.strong
+        } else {
+            self.colors.border.default
+        };
+        let foreground = if state.disabled {
+            self.colors.content.disabled
+        } else {
+            self.colors.content.primary
+        };
+        RowRecipe {
+            background: Brush::Solid(background),
+            foreground,
+            border: Stroke::new(self.strokes.default, Brush::Solid(border)),
+            radius: self.radii.sm,
+        }
     }
 
     /// Resolves a checkbox recipe for a state.

@@ -445,6 +445,35 @@ fn primitives_without_paths(run: &Run) -> Vec<Primitive> {
         .collect()
 }
 
+/// Neutralizes the one primitive delta focus is now allowed to introduce:
+/// 06-collections.md §Rows tables "focused (kbd, not selected): S4 + inset
+/// focus ring" — an otherwise-idle row's own fill legitimately promotes to
+/// `surface.hover` on keyboard focus (rows are a documented exception to
+/// 00-language.md's general "focus never recolors the body" rule). Row
+/// rects are the only primitives painted with `radii.none` in this widget,
+/// so that's a safe, narrow discriminator; everything else (selected/
+/// hovered/disabled rows, the container, text, annuli) must still compare
+/// byte-identical, exactly like [`output_without_focus`] neutralizes only
+/// the `focused` state bit before comparison.
+fn primitives_with_row_focus_fill_neutralized(
+    focused: &Run,
+    unfocused: &Run,
+) -> (Vec<Primitive>, Vec<Primitive>) {
+    let theme = default_dark_theme();
+    let mut focused_list = primitives_without_paths(focused);
+    let unfocused_list = unfocused.frame.primitives.clone();
+    for (f, u) in focused_list.iter_mut().zip(unfocused_list.iter()) {
+        if let (Primitive::Rect(fr), Primitive::Rect(ur)) = (f, u)
+            && fr.radius == theme.radii.none
+            && fr.rect == ur.rect
+            && fr.stroke == ur.stroke
+        {
+            fr.fill = ur.fill;
+        }
+    }
+    (focused_list, unfocused_list)
+}
+
 fn output_without_focus(mut output: OutlinerOutput) -> OutlinerOutput {
     for response in &mut output.responses {
         response.row.state.focused = false;
@@ -539,10 +568,11 @@ fn selected_and_unselected_branch_leaf_control_matrices_add_only_exact_owned_ann
                                     output_without_focus(focused.output.clone()),
                                     unfocused.output
                                 );
-                                assert_eq!(
-                                    primitives_without_paths(&focused),
-                                    unfocused.frame.primitives
-                                );
+                                let (focused_primitives, unfocused_primitives) =
+                                    primitives_with_row_focus_fill_neutralized(
+                                        &focused, &unfocused,
+                                    );
+                                assert_eq!(focused_primitives, unfocused_primitives);
                                 assert_eq!(
                                     semantics_without_focus(&focused),
                                     unfocused.frame.semantics.nodes()
@@ -1805,20 +1835,33 @@ fn blend_linear_light(foreground: Color, background: Color) -> Color {
     )
 }
 
+// Rewritten for family issue #915: 06-collections.md §Tree rows tables the
+// disclosure glyph as always `content.muted` ("caret-right icon 12 muted"),
+// with no selected-row exception — unlike the prior "named white exception"
+// this test used to document (disclosure inheriting the row's selected
+// white text color was itself a pre-existing nonconformity, not a sanctioned
+// one). The inline visibility/lock toggles keep their own documented
+// exception: "remain visible on selected rows in white at 78%." The
+// existing on/off opacity encoding (full alpha vs 0.5/0.55) is preserved
+// as the lowest-invention composition — it now starts from the 78%-alpha
+// selected base for the "on" appearance, and overwrites to the flat 0.5/
+// 0.55 "off" alpha exactly as it did before this issue.
 fn assert_selected_content_colors(run: &Run, expected_visibility_alpha: f32, locked: bool) {
     let theme = default_dark_theme();
     let foreground = theme.colors.selection.foreground;
+    let toggle_foreground = foreground.with_alpha(0.78);
     let colors = row_content_colors(run, id(1));
-    assert_eq!(colors.disclosure, Some(foreground));
+    assert_eq!(colors.disclosure, Some(theme.colors.content.muted));
     assert_eq!(
         colors.visibility,
-        Some(foreground.with_alpha(expected_visibility_alpha))
+        Some(toggle_foreground.with_alpha(expected_visibility_alpha))
     );
+    let expected_lock_alpha = if locked { toggle_foreground.a } else { 0.55 };
     assert_eq!(
         colors.lock_stroke,
-        Some(foreground.with_alpha(if locked { 1.0 } else { 0.55 }))
+        Some(toggle_foreground.with_alpha(expected_lock_alpha))
     );
-    assert_eq!(colors.lock_fill, locked.then_some(foreground));
+    assert_eq!(colors.lock_fill, locked.then_some(toggle_foreground));
     assert_eq!(colors.label, Some(foreground));
 }
 
@@ -1884,7 +1927,7 @@ fn selected_content_discloses_named_white_exception_and_separate_alpha_nonconfor
                 primary_input(point, pressed, pressed, false, u8::from(pressed))
             },
         );
-        assert_selected_content_colors(&run, 1.0, true);
+        assert_selected_content_colors(&run, 0.78, true);
         if focus {
             assert_row_focus(&run, id(1));
         } else {
@@ -1956,7 +1999,7 @@ fn selected_content_discloses_named_white_exception_and_separate_alpha_nonconfor
         ),
     );
     assert!(row_response(&dragged, id(1)).row.dragged);
-    assert_selected_content_colors(&dragged, 1.0, true);
+    assert_selected_content_colors(&dragged, 0.78, true);
     assert_row_focus(&dragged, id(1));
 
     let mut rename_state = OutlinerState::new();
@@ -1975,10 +2018,11 @@ fn selected_content_discloses_named_white_exception_and_separate_alpha_nonconfor
         UiInput::default(),
     );
     let editing_colors = row_content_colors(&editing, id(1));
+    let toggle_foreground = foreground.with_alpha(0.78);
     assert_eq!(editing_colors.label, None);
-    assert_eq!(editing_colors.disclosure, Some(foreground));
-    assert_eq!(editing_colors.visibility, Some(foreground));
-    assert_eq!(editing_colors.lock_fill, Some(foreground));
+    assert_eq!(editing_colors.disclosure, Some(theme.colors.content.muted));
+    assert_eq!(editing_colors.visibility, Some(toggle_foreground));
+    assert_eq!(editing_colors.lock_fill, Some(toggle_foreground));
     assert_no_row_annuli(&editing, id(1));
 
     let mut context_state = OutlinerState::new();
@@ -2005,6 +2049,6 @@ fn selected_content_discloses_named_white_exception_and_separate_alpha_nonconfor
         &mut context_state,
         &mut context_memory,
     );
-    assert_selected_content_colors(&context, 1.0, true);
+    assert_selected_content_colors(&context, 0.78, true);
     assert_row_focus(&context, id(1));
 }

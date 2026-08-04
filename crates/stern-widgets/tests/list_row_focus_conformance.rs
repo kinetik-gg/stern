@@ -3,8 +3,8 @@
 #![allow(clippy::float_cmp)]
 
 use stern_core::{
-    Brush, Color, CursorShape, PathElement, PlatformRequest, PointerButtonState, PointerInput,
-    Primitive, Rect, SemanticRole, UiInput, UiMemory, WidgetId, default_dark_theme,
+    Brush, Color, ComponentState, CursorShape, PathElement, PlatformRequest, PointerButtonState,
+    PointerInput, Primitive, Rect, SemanticRole, UiInput, UiMemory, WidgetId, default_dark_theme,
 };
 use stern_widgets::{WidgetOutput, list_row};
 
@@ -58,16 +58,6 @@ fn annuli(output: &WidgetOutput) -> [&Primitive; 2] {
     [&output.primitives[1], &output.primitives[2]]
 }
 
-fn without_annuli(output: &WidgetOutput) -> Vec<Primitive> {
-    output
-        .primitives
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| !matches!(index, 1 | 2))
-        .map(|(_, primitive)| primitive.clone())
-        .collect()
-}
-
 fn linear_channel(channel: f32) -> f32 {
     if channel <= 0.040_45 {
         channel / 12.92
@@ -87,16 +77,42 @@ fn contrast_ratio(foreground: Color, background: Color) -> f32 {
     (foreground.max(background) + 0.05) / (foreground.min(background) + 0.05)
 }
 
-fn assert_exact_focus_pair(focused: &WidgetOutput, unfocused: &WidgetOutput, rect: Rect) {
+// 06-collections.md §Rows tables a "focused (kbd, not selected): S4 + inset
+// focus ring" state — collection rows are a deliberate, documented exception
+// to 00-language.md's general "focus never recolors the control body" rule
+// (rows are absent from that rule's explicit component list). So a plain
+// idle-and-focused row's base fill legitimately promotes to `surface.hover`,
+// exactly like a hover would; a selected row's fill does not change (already
+// `selection.background`), and neither row's border, radius, or text color
+// changes. `selected` selects which of those two cases this pair exercises.
+fn assert_exact_focus_pair(
+    focused: &WidgetOutput,
+    unfocused: &WidgetOutput,
+    rect: Rect,
+    selected: bool,
+) {
     let theme = default_dark_theme();
     assert_eq!(focused.primitives.len(), 4);
     assert_eq!(unfocused.primitives.len(), 2);
-    assert_eq!(focused.primitives[0], unfocused.primitives[0]);
+    let focused_recipe = theme.row(ComponentState {
+        selected,
+        focused: true,
+        ..ComponentState::default()
+    });
+    let unfocused_recipe = theme.row(ComponentState {
+        selected,
+        ..ComponentState::default()
+    });
     let Primitive::Rect(base) = &focused.primitives[0] else {
+        panic!("neutral list-row base must be first");
+    };
+    let Primitive::Rect(unfocused_base) = &unfocused.primitives[0] else {
         panic!("neutral list-row base must be first");
     };
     assert_eq!(base.rect, rect);
     assert_eq!(base.radius, theme.radii.none);
+    assert_eq!(base.fill, Some(focused_recipe.background));
+    assert_eq!(unfocused_base.fill, Some(unfocused_recipe.background));
     assert_eq!(
         base.stroke.expect("neutral row boundary").brush,
         Brush::Solid(theme.colors.border.subtle)
@@ -121,7 +137,11 @@ fn assert_exact_focus_pair(focused: &WidgetOutput, unfocused: &WidgetOutput, rec
     }
     assert!(matches!(focused.primitives[3], Primitive::Text(_)));
     assert_eq!(focused.primitives[3], unfocused.primitives[1]);
-    assert_eq!(without_annuli(focused), unfocused.primitives);
+    // Everything but the base fill (which legitimately differs for the
+    // unselected case, per the doc comment above) stays identical.
+    assert_eq!(base.rect, unfocused_base.rect);
+    assert_eq!(base.stroke, unfocused_base.stroke);
+    assert_eq!(base.radius, unfocused_base.radius);
 
     let focused_response = focused.response.as_ref().expect("focused response");
     let unfocused_response = unfocused.response.as_ref().expect("unfocused response");
@@ -174,7 +194,7 @@ fn reusable_rows_use_exact_inward_focus_without_changing_base_content_or_geometr
             &theme,
             false,
         );
-        assert_exact_focus_pair(&focused, &unfocused, rect);
+        assert_exact_focus_pair(&focused, &unfocused, rect, selected);
     }
 }
 
