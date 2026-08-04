@@ -64,23 +64,32 @@ fn is_bootstrap(path: &Path) -> bool {
     path.ends_with(Path::new("src/bin/native_shell.rs"))
 }
 
-/// The app-shell orchestrator (`src/lib.rs`) selects and drives one workspace
-/// composition per frame. It must not paint controls itself: every widget,
-/// including simple ones like a title label or a navigation button, belongs
-/// inside a workspace's own `compose` recipe (or a scene it builds), using
-/// bounds derived from the frame's viewport rather than screen-fixed
-/// constants. This is the mechanical guard for the class of presentation
-/// hack found in issue #917: a hand-assembled, non-adaptive navigation strip
-/// painted directly in `DemoApp::frame`, parallel to and bypassing the real
+/// The app-shell orchestrator (`src/lib.rs`, including `DemoApp::frame`,
+/// `DemoApp::compose`, and the shared `compose_demo` helper they both call)
+/// selects and drives one workspace composition per frame. It must not
+/// paint controls itself: every widget, including simple ones like a title
+/// label or a navigation button, belongs inside a workspace's own `compose`
+/// recipe (or a scene it builds), using bounds derived from the frame's
+/// viewport rather than screen-fixed constants. This is the mechanical
+/// guard for the class of presentation hack found in issue #917: a
+/// hand-assembled, non-adaptive navigation strip painted directly in the
+/// app shell, parallel to and bypassing the real
 /// `ChromeScene`/`Toolbar`/`TabStrip` recipe every workspace otherwise uses.
 fn is_app_shell(path: &Path) -> bool {
     path.ends_with(Path::new("src/lib.rs"))
 }
 
-/// Calls the app shell may make directly on its `ui` binding. Everything
-/// else that paints or composes widgets must be reached through a
-/// workspace's own `compose` method.
-const APP_SHELL_UI_METHODS: [&str; 2] = ["push_platform_request", "finish_output"];
+/// Calls the app shell may make directly on its `ui` binding: frame
+/// lifecycle, read-only context accessors, and action-queue plumbing.
+/// Everything else that paints or composes widgets must be reached through
+/// a workspace's own `compose` method.
+const APP_SHELL_UI_METHODS: [&str; 5] = [
+    "push_platform_request",
+    "finish_output",
+    "push_action",
+    "input",
+    "viewport",
+];
 
 fn expr_is_bare_ident(expr: &Expr, name: &str) -> bool {
     matches!(
@@ -618,8 +627,11 @@ fn structural_checker_rejects_app_shell_painting_outside_workspace_composition()
 
 #[test]
 fn structural_checker_permits_app_shell_frame_lifecycle_calls() {
-    let allowed = "fn frame(ui: &mut stern::widgets::Ui<'_>) { \
+    let allowed = "fn compose_demo(ui: &mut stern::widgets::Ui<'_>) { \
+        let _keyboard = ui.input().keyboard.clone(); \
+        let _size = ui.viewport().logical_size; \
         ui.push_platform_request(stern::core::PlatformRequest::SetWindowTitle(\"Title\".to_owned())); \
+        ui.push_action(todo!()); \
         let _ = ui.finish_output(); }";
     assert!(structural_violations(Path::new("src/lib.rs"), allowed, &[]).is_empty());
 }
