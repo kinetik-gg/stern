@@ -20,8 +20,8 @@ pub use tokens::{
     ElevationLevel, ElevationScale, FocusColors, FocusStrokeScale, FontFamilyRole, FontFamilyScale,
     FontFeatureScale, FontFeatureToken, FontLineHeightScale, FontLineHeightToken, FontSizeScale,
     FontSizeToken, FontToken, FontWeightScale, FontWeightToken, HandleSizeScale, IconSizeScale,
-    OpacityScale, OverlayColors, RadiusScale, RowSizeScale, SelectionColors, SemanticColor,
-    ShadowRecipe, SizeScale, SizeToken, SpacingRole, SpacingScale, SpacingStep,
+    OpacityScale, OverlayColors, RadiusScale, RadiusToken, RowSizeScale, SelectionColors,
+    SemanticColor, ShadowRecipe, SizeScale, SizeToken, SpacingRole, SpacingScale, SpacingStep,
     StatusColorFamilyColors, StatusColors, StrokeScale, SurfaceColors, TextRole, TextRoleMetrics,
     ThemeColors, TypographyScale,
 };
