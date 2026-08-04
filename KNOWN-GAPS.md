@@ -381,6 +381,7 @@ to `Theme::text_field`. Not fixed here per that issue's non-goals (no new
 
 32. **Choice/slider/tab family (Issue #912)**: `Theme::tab` (also painted by dock/chrome document tab strips, family #914) was left unconformed to `03-choice-sliders-tabs.md`'s segmented/tab-strip table to avoid clobbering that concurrent family; no progress-bar widget/recipe exists yet; checkbox/radio glyphs and the slider thumb now resolve correct per-state colors (`CheckRecipe.mark`, new `SliderRecipe.thumb`) but have no paint primitive (`ComponentState` also has no `mixed` checkbox flag) — see PR body for the full before/after table.
 
+
 ## Visual conformance (Issue #913)
 
 Found while conforming overlay family recipes
@@ -453,3 +454,38 @@ non-goals (values only — no anatomy/placement rewrites, no new components).
     `theme.sizes.icon.md` for menu rows at `size.row.compact` (24px) height,
     where D3 calls for `size.icon.sm` (12px). Fixing needs a row-height-aware
     call, not a recipe change.
+
+## Visual conformance (Issue #914)
+
+Found while conforming chrome/dock/inspector recipes (`docs/visual-spec/05-chrome-dock.md`,
+`07-status-feedback-inspector.md` §inspector/§status-dots/§jobs). Not fixed here per that
+issue's recipe-only scope. `Theme::tab` itself (deferred by #912 above) *is* conformed here,
+closing that deferral.
+
+40. **Chrome bars, dock frames, and tabs paint a full-perimeter border**
+    where the density ladder specifies a single edge (e.g. panel header
+    `border-b`, status bar `border-t`). `RectPrimitive` has one uniform
+    `stroke`, no per-edge variant; fixing this needs either a directional-
+    stroke primitive or the extra-thin-rect idiom already used for the
+    property-grid status accent (`crates/stern-widgets/src/ui/property_grid.rs`)
+    applied to every bar, not attempted broadly here.
+41. **Inspector property rows never hover-promote to S4 or right-align
+    their labels.** `07-status-feedback-inspector.md` §Inspector property
+    rows: "Row hover: fill S4"; "Label: ... right-aligned". But
+    `paint_property_grid_row` (`crates/stern-widgets/src/ui/property_grid.rs`)
+    has no hover `ComponentState` plumbed in (only `PropertyGridAccess`) and
+    left-aligns the label origin unconditionally.
+42. **System-feedback job/diagnostic/feedback rows don't match 07's job-row
+    anatomy.** `07-status-feedback-inspector.md` §Job list rows specifies
+    name / progress-bar / percent / cancel-or-retry-button with a status dot
+    replacing progress on completion; `paint_system_feedback_row`/
+    `paint_job_progress` (`crates/stern-widgets/src/ui/chrome/system_feedback.rs`)
+    instead share one generic row shape (left tone stripe + bottom progress
+    track) across jobs, diagnostics, and feedback. A structural anatomy
+    change, not a recipe fix.
+43. **Dock frames don't take `radius.md` despite `00-language.md`'s "editor
+    frames = radius.md" rule.** `paint_dock_frame`
+    (`crates/stern-widgets/src/ui/dock.rs`) keeps `radii.none`: frames tile
+    edge-to-edge via 1px splitters, so naive rounding would show
+    gaps/overlaps at internal seams without per-seam corner suppression,
+    which this recipe-only pass does not attempt.
