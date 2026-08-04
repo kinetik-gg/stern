@@ -52,31 +52,58 @@ fn path_bounds(elements: &[PathElement]) -> Rect {
     Rect::new(min_x, min_y, max_x - min_x, max_y - min_y)
 }
 
-fn annuli(output: &WidgetOutput) -> [&Primitive; 2] {
-    [&output.primitives[1], &output.primitives[2]]
+// A selected tab paints an extra top-edge `border.strong` indicator rect
+// immediately after the base surface
+// (`docs/visual-spec/05-chrome-dock.md` §Frame tab strip), shifting every
+// later primitive index by one.
+fn indicator_offset(selected: bool) -> usize {
+    usize::from(selected)
 }
 
-fn assert_focus_pair(focused: &WidgetOutput, unfocused: &WidgetOutput, rect: Rect) {
+fn annuli(output: &WidgetOutput, selected: bool) -> [&Primitive; 2] {
+    let base = 1 + indicator_offset(selected);
+    [&output.primitives[base], &output.primitives[base + 1]]
+}
+
+fn assert_focus_pair(focused: &WidgetOutput, unfocused: &WidgetOutput, rect: Rect, selected: bool) {
     let theme = default_dark_theme();
-    assert_eq!(focused.primitives.len(), 4);
-    assert_eq!(unfocused.primitives.len(), 2);
+    let offset = indicator_offset(selected);
+    assert_eq!(focused.primitives.len(), 4 + offset);
+    assert_eq!(unfocused.primitives.len(), 2 + offset);
     assert_eq!(focused.primitives[0], unfocused.primitives[0]);
     let Primitive::Rect(base) = &focused.primitives[0] else {
         panic!("neutral tab base must be first");
     };
     assert_eq!(base.rect, rect);
-    assert_eq!(base.radius, theme.radii.none);
+    let expected_radius = stern_core::CornerRadius {
+        top_left: theme.radii.sm.top_left,
+        top_right: theme.radii.sm.top_right,
+        bottom_left: 0.0,
+        bottom_right: 0.0,
+    };
+    assert_eq!(base.radius, expected_radius);
     assert_eq!(
         base.stroke.expect("neutral tab boundary").brush,
-        Brush::Solid(theme.colors.border.default)
+        Brush::Solid(stern_core::Color::TRANSPARENT)
     );
+    if selected {
+        let Primitive::Rect(indicator) = &focused.primitives[1] else {
+            panic!("selected tab indicator must be second");
+        };
+        assert_eq!(
+            indicator.fill,
+            Some(Brush::Solid(theme.colors.border.strong))
+        );
+        assert_eq!(focused.primitives[1], unfocused.primitives[1]);
+    }
+    let annulus_base = 1 + offset;
     let expected = theme
         .focus_ring(true)
         .expect("focus recipe")
         .inward_annulus_primitives(rect, base.radius, base.stroke.unwrap().width);
-    assert_eq!(focused.primitives[1], expected[0]);
-    assert_eq!(focused.primitives[2], expected[1]);
-    for primitive in annuli(focused) {
+    assert_eq!(focused.primitives[annulus_base], expected[0]);
+    assert_eq!(focused.primitives[annulus_base + 1], expected[1]);
+    for primitive in annuli(focused, selected) {
         let Primitive::Path(path) = primitive else {
             panic!("tab focus must remain a compound path");
         };
@@ -84,10 +111,14 @@ fn assert_focus_pair(focused: &WidgetOutput, unfocused: &WidgetOutput, rect: Rec
         assert_eq!(path.stroke, None);
         assert!(rect.contains_rect(path_bounds(&path.elements)));
     }
-    assert!(matches!(focused.primitives[3], Primitive::Text(_)));
-    assert_eq!(focused.primitives[3], unfocused.primitives[1]);
+    let text_index = annulus_base + 2;
+    assert!(matches!(focused.primitives[text_index], Primitive::Text(_)));
+    assert_eq!(
+        focused.primitives[text_index],
+        unfocused.primitives[1 + offset]
+    );
     let mut stripped = focused.primitives.clone();
-    stripped.drain(1..3);
+    stripped.drain(annulus_base..annulus_base + 2);
     assert_eq!(stripped, unfocused.primitives);
 
     let focused_response = focused.response.as_ref().expect("focused response");
@@ -114,7 +145,8 @@ fn assert_focus_pair(focused: &WidgetOutput, unfocused: &WidgetOutput, rect: Rec
 }
 
 #[test]
-fn reusable_tabs_use_exact_inward_focus_and_neutral_indicator_free_selection() {
+#[allow(clippy::too_many_lines)]
+fn reusable_tabs_use_exact_inward_focus_and_neutral_top_indicator_selection() {
     let theme = default_dark_theme();
     let rect = Rect::new(10.25, 20.5, 74.0, 24.0);
     let id = WidgetId::from_key("tab-focus-basic");
@@ -141,14 +173,14 @@ fn reusable_tabs_use_exact_inward_focus_and_neutral_indicator_free_selection() {
             &theme,
             false,
         );
-        assert_focus_pair(&focused, &unfocused, rect);
+        assert_focus_pair(&focused, &unfocused, rect, selected);
         assert_eq!(
             unfocused
                 .primitives
                 .iter()
                 .filter(|primitive| matches!(primitive, Primitive::Rect(_)))
                 .count(),
-            1
+            1 + indicator_offset(selected)
         );
         assert!(
             unfocused
@@ -184,16 +216,17 @@ fn reusable_tabs_use_exact_inward_focus_and_neutral_indicator_free_selection() {
     let Primitive::Rect(unselected_base) = &unselected.primitives[0] else {
         unreachable!()
     };
+    // Selected tabs "merge" with the panel body they front (S2), unselected
+    // tabs carry no fill of their own; neither differs by an accent color.
     assert_eq!(
         selected_base.fill,
-        Some(Brush::Solid(theme.colors.surface.control_pressed))
+        Some(Brush::Solid(theme.colors.surface.panel))
     );
     assert_eq!(
         unselected_base.fill,
-        Some(Brush::Solid(theme.colors.surface.panel))
+        Some(Brush::Solid(stern_core::Color::TRANSPARENT))
     );
     assert_eq!(selected_base.stroke, unselected_base.stroke);
-    assert_eq!(selected.primitives[1], unselected.primitives[1]);
     assert_ne!(
         selected_base.stroke.unwrap().brush,
         Brush::Solid(theme.colors.accent.default)
@@ -201,6 +234,40 @@ fn reusable_tabs_use_exact_inward_focus_and_neutral_indicator_free_selection() {
     assert_ne!(
         selected_base.stroke.unwrap().brush,
         Brush::Solid(theme.colors.focus.ring)
+    );
+
+    // The only visible distinguishing mark is a neutral top-edge indicator
+    // (never accent-colored), immediately after the base surface.
+    let Primitive::Rect(indicator) = &selected.primitives[1] else {
+        panic!("selected tab indicator must be second");
+    };
+    assert_eq!(
+        indicator.fill,
+        Some(Brush::Solid(theme.colors.border.strong))
+    );
+    assert_ne!(
+        indicator.fill,
+        Some(Brush::Solid(theme.colors.accent.default))
+    );
+    assert_ne!(indicator.fill, Some(Brush::Solid(theme.colors.focus.ring)));
+
+    // Text promotes from muted (idle) to primary (selected) — same content
+    // and geometry, only the foreground tier differs.
+    let Primitive::Text(selected_text) = &selected.primitives[2] else {
+        panic!("selected tab label must follow the indicator");
+    };
+    let Primitive::Text(unselected_text) = &unselected.primitives[1] else {
+        panic!("unselected tab label must follow the base surface");
+    };
+    assert_eq!(selected_text.text, unselected_text.text);
+    assert_eq!(selected_text.origin, unselected_text.origin);
+    assert_eq!(
+        selected_text.brush,
+        Brush::Solid(theme.colors.content.primary)
+    );
+    assert_eq!(
+        unselected_text.brush,
+        Brush::Solid(theme.colors.content.muted)
     );
 }
 
@@ -236,7 +303,7 @@ fn tab_focus_is_state_independent_and_disabled_focus_is_suppressed() {
             &theme,
             false,
         );
-        assert_eq!(annuli(&output), annuli(&baseline));
+        assert_eq!(annuli(&output, selected), annuli(&baseline, false));
     }
 
     let disabled = tab_button(

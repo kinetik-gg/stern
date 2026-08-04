@@ -56,6 +56,23 @@ pub(crate) fn tab_surface_primitives(
         stroke: Some(recipe.border),
         radius,
     })];
+    // A selected tab's distinguishing mark is a top-edge accent, not a
+    // full-perimeter border (`docs/visual-spec/05-chrome-dock.md` §Frame tab
+    // strip: "b-t 1px border.strong, no bottom border, merges with body").
+    if let Some(indicator) = recipe.indicator {
+        let thickness = recipe.indicator_thickness.min(rect.height.max(0.0));
+        primitives.push(Primitive::Rect(RectPrimitive {
+            rect: Rect::new(rect.x, rect.y, rect.width, thickness),
+            fill: Some(indicator),
+            stroke: None,
+            radius: CornerRadius {
+                top_left: radius.top_left,
+                top_right: radius.top_right,
+                bottom_left: 0.0,
+                bottom_right: 0.0,
+            },
+        }));
+    }
     if state.focused
         && !state.disabled
         && let Some(focus) = theme.focus_ring(true)
@@ -509,7 +526,8 @@ mod tab_focus_tests {
             .expect("focus recipe")
             .inward_annulus_primitives(rect, radius, recipe.border.width);
 
-        assert_eq!(primitives.len(), 3);
+        // base rect, top indicator (selected), then the two inward focus annuli.
+        assert_eq!(primitives.len(), 4);
         let Primitive::Rect(base) = &primitives[0] else {
             panic!("neutral tab base first");
         };
@@ -519,10 +537,15 @@ mod tab_focus_tests {
         assert_eq!(base.radius, radius);
         assert_eq!(
             base.stroke.unwrap().brush,
-            Brush::Solid(theme.colors.border.default)
+            Brush::Solid(stern_core::Color::TRANSPARENT)
         );
-        assert_eq!(primitives[1], expected[0]);
-        assert_eq!(primitives[2], expected[1]);
+        let Primitive::Rect(indicator) = &primitives[1] else {
+            panic!("selected tab top indicator second");
+        };
+        assert_eq!(indicator.fill, recipe.indicator);
+        assert_eq!(indicator.stroke, None);
+        assert_eq!(primitives[2], expected[0]);
+        assert_eq!(primitives[3], expected[1]);
 
         for state in [
             ComponentState::default(),

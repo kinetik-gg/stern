@@ -135,19 +135,42 @@ fn assert_dock_tab_focus_pair(
     let Primitive::Rect(surface) = &focused.primitives[base] else {
         unreachable!()
     };
-    assert_eq!(surface.radius, theme.radii.none);
+    // `docs/visual-spec/05-chrome-dock.md` §Frame tab strip (family issue
+    // #914): tabs round only their top corners, carry no visible
+    // full-perimeter border, and a selected tab's fill matches the panel
+    // body (S2) it merges with rather than the old `control_pressed` tier.
+    let expected_radius = CornerRadius {
+        top_left: theme.radii.sm.top_left,
+        top_right: theme.radii.sm.top_right,
+        bottom_left: 0.0,
+        bottom_right: 0.0,
+    };
+    assert_eq!(surface.radius, expected_radius);
     assert_eq!(
         surface.stroke.expect("neutral border").brush,
-        Brush::Solid(theme.colors.border.default)
+        Brush::Solid(Color::TRANSPARENT)
     );
     assert_eq!(
         surface.fill,
         Some(Brush::Solid(if tab.selected {
-            theme.colors.surface.control_pressed
-        } else {
             theme.colors.surface.panel
+        } else {
+            Color::TRANSPARENT
         }))
     );
+    // A selected tab paints an extra top-edge `border.strong` indicator
+    // immediately after the base surface.
+    let mut cursor = base + 1;
+    if tab.selected {
+        let Primitive::Rect(indicator) = &focused.primitives[cursor] else {
+            panic!("selected dock tab indicator");
+        };
+        assert_eq!(
+            indicator.fill,
+            Some(Brush::Solid(theme.colors.border.strong))
+        );
+        cursor += 1;
+    }
     let expected = theme
         .focus_ring(true)
         .expect("focus recipe")
@@ -156,9 +179,9 @@ fn assert_dock_tab_focus_pair(
             surface.radius,
             surface.stroke.expect("neutral border").width,
         );
-    assert_eq!(focused.primitives[base + 1], expected[0]);
-    assert_eq!(focused.primitives[base + 2], expected[1]);
-    for primitive in &focused.primitives[base + 1..base + 3] {
+    assert_eq!(focused.primitives[cursor], expected[0]);
+    assert_eq!(focused.primitives[cursor + 1], expected[1]);
+    for primitive in &focused.primitives[cursor..cursor + 2] {
         let Primitive::Path(path) = primitive else {
             panic!("dock tab focus path");
         };
@@ -178,21 +201,21 @@ fn assert_dock_tab_focus_pair(
         }
     }
     assert!(matches!(
-        focused.primitives[base + 3],
+        focused.primitives[cursor + 2],
         Primitive::ClipBegin { rect, .. } if rect == tab.rect
     ));
     assert!(matches!(
-        &focused.primitives[base + 4],
+        &focused.primitives[cursor + 3],
         Primitive::Text(text) if text.text == tab.title
     ));
     if tab.close_rect.is_some() {
         assert!(matches!(
-            &focused.primitives[base + 5],
+            &focused.primitives[cursor + 4],
             Primitive::Text(text) if text.text == "×"
         ));
     }
     let mut stripped = focused.primitives.clone();
-    stripped.drain(base + 1..base + 3);
+    stripped.drain(cursor..cursor + 2);
     assert_eq!(stripped, unfocused.primitives);
     let focused_node = focused
         .semantics
@@ -319,7 +342,7 @@ fn customized_two_frame_dock_panels_use_exact_flat_recipe_without_changing_owner
     let radius = CornerRadius::all(5.5);
     let base = default_dark_theme();
     let mut colors = ThemeColors::default_dark();
-    colors.surface.panel_raised = background;
+    colors.surface.panel = background;
     colors.border.default = border;
     let theme = base
         .with_colors(colors)
@@ -335,8 +358,6 @@ fn customized_two_frame_dock_panels_use_exact_flat_recipe_without_changing_owner
             low: 37.0,
             ..base.elevation
         });
-    let recipe = theme.panel();
-    assert_eq!(recipe.shadow, None);
 
     let dock = two_frame_dock();
     let snapshot = dock.snapshot();
@@ -387,14 +408,14 @@ fn customized_two_frame_dock_panels_use_exact_flat_recipe_without_changing_owner
     );
     for (frame, panel) in expected_panels {
         let surface = rect_primitive_at(&output.primitives, panel.rect);
+        // The dock panel body resolves its own flat S2 recipe directly
+        // (`docs/visual-spec/05-chrome-dock.md` §Panel body) rather than the
+        // generic, raised-panel `Theme::panel()` recipe.
         assert_eq!(surface.fill, Some(Brush::Solid(background)));
         let stroke = surface.stroke.expect("panel border");
         assert_eq!(stroke.brush, Brush::Solid(border));
         assert_eq!(stroke.width, border_width);
         assert_eq!(surface.radius, radius);
-        assert_eq!(surface.fill, Some(recipe.background));
-        assert_eq!(surface.stroke, Some(recipe.border));
-        assert_eq!(surface.radius, recipe.radius);
 
         let semantic = output.semantics.get(panel.id).expect("panel semantic");
         assert_eq!(semantic.role, SemanticRole::Panel);

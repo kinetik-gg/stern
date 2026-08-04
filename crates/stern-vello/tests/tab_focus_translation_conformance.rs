@@ -73,35 +73,45 @@ fn actual_tab_focus_translates_as_contained_fill_only_annuli_at_release_scales()
             &theme,
             false,
         );
-        assert_eq!(output.primitives.len(), 4);
+        // Selected tabs add a top-edge indicator primitive (visual-spec 05).
+        let offset = usize::from(selected);
+        assert_eq!(output.primitives.len(), 4 + offset);
         let Primitive::Rect(base) = &output.primitives[0] else {
             panic!("neutral base first");
         };
         assert_eq!(base.rect, rect);
-        assert_eq!(base.radius, theme.radii.none);
+        let top_radius = stern_core::CornerRadius {
+            top_left: theme.radii.sm.top_left,
+            top_right: theme.radii.sm.top_right,
+            bottom_left: 0.0,
+            bottom_right: 0.0,
+        };
+        assert_eq!(base.radius, top_radius);
         assert_eq!(
-            base.stroke.expect("neutral boundary").brush,
-            Brush::Solid(theme.colors.border.default)
+            base.stroke.expect("transparent boundary").brush,
+            Brush::Solid(stern_core::Color::TRANSPARENT)
         );
-        assert_ne!(
-            base.stroke.expect("neutral boundary").brush,
-            Brush::Solid(theme.colors.focus.ring)
-        );
-        assert_ne!(
-            base.stroke.expect("neutral boundary").brush,
-            Brush::Solid(theme.colors.accent.default)
-        );
+        if selected {
+            let Primitive::Rect(indicator) = &output.primitives[1] else {
+                panic!("selected indicator second");
+            };
+            assert_eq!(
+                indicator.fill,
+                Some(Brush::Solid(theme.colors.border.strong))
+            );
+            assert_eq!(indicator.rect.height, theme.strokes.emphasis);
+        }
         assert_eq!(
             base.fill,
             Some(Brush::Solid(if selected {
-                theme.colors.surface.control_pressed
-            } else {
                 theme.colors.surface.panel
+            } else {
+                stern_core::Color::TRANSPARENT
             }))
         );
-        let primary = path(&output.primitives[1]);
-        let separator = path(&output.primitives[2]);
-        assert!(matches!(output.primitives[3], Primitive::Text(_)));
+        let primary = path(&output.primitives[1 + offset]);
+        let separator = path(&output.primitives[2 + offset]);
+        assert!(matches!(output.primitives[3 + offset], Primitive::Text(_)));
         assert_eq!(
             primary.fill,
             Some(theme.focus_ring(true).unwrap().primary.brush)
@@ -113,14 +123,16 @@ fn actual_tab_focus_translates_as_contained_fill_only_annuli_at_release_scales()
         assert_eq!(primary.stroke, None);
         assert_eq!(separator.stroke, None);
 
-        let translation = translate_primitives(&output.primitives[..3], &resources);
+        let translation = translate_primitives(&output.primitives[..3 + offset], &resources);
         assert!(translation.diagnostics.is_empty());
-        assert_eq!(translation.commands.len(), 3);
-        assert!(matches!(
-            translation.commands[0].kind,
-            RenderCommandKind::Rect { .. }
-        ));
-        for (command, expected) in translation.commands[1..].iter().zip([primary, separator]) {
+        assert_eq!(translation.commands.len(), 3 + offset);
+        for command in &translation.commands[..=offset] {
+            assert!(matches!(command.kind, RenderCommandKind::Rect { .. }));
+        }
+        for (command, expected) in translation.commands[1 + offset..]
+            .iter()
+            .zip([primary, separator])
+        {
             let RenderCommandKind::Path {
                 elements,
                 fill,
@@ -156,7 +168,7 @@ fn actual_tab_focus_translates_as_contained_fill_only_annuli_at_release_scales()
             for span in primary_spans.into_iter().chain(separator_spans) {
                 assert!(span * scale >= 1.0);
             }
-            let focus_primitives = &output.primitives[1..3];
+            let focus_primitives = &output.primitives[1 + offset..3 + offset];
             let mut renderer = VelloRenderer::new();
             let frame = renderer.submit_frame(RenderFrameInput {
                 viewport: ViewportInfo::new(

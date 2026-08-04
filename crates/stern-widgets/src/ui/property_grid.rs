@@ -185,13 +185,21 @@ impl Ui<'_> {
         access: PropertyGridAccess,
     ) {
         let section = matches!(row.kind, PropertyGridRowKind::Section);
+        // `docs/visual-spec/07-status-feedback-inspector.md` §Inspector
+        // property rows (family issue #914): section headers fill S1
+        // (`surface.application`); plain property rows carry no fill of
+        // their own at rest (only "Row hover: fill S4" is specified, so an
+        // idle row is transparent and shows the panel body's S2 through
+        // it) — hover-fill is not yet plumbed into this painter, see
+        // KNOWN-GAPS.md.
+        let fill = if section {
+            self.theme.colors.surface.application
+        } else {
+            Color::TRANSPARENT
+        };
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: geometry.rect,
-            fill: Some(Brush::Solid(if section {
-                self.theme.colors.surface.raised
-            } else {
-                self.theme.colors.surface.sunken
-            })),
+            fill: Some(Brush::Solid(fill)),
             stroke: Some(Stroke::new(
                 self.theme.strokes.hairline,
                 Brush::Solid(self.theme.colors.border.subtle),

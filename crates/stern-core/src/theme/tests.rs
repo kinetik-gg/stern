@@ -312,7 +312,17 @@ fn canonical_component_recipes_use_radius_roles_by_intent() {
             assert_eq!(radius, theme.radii.sm);
             assert_ne!(radius, theme.radii.full);
         }
-        assert_eq!(theme.tab(state).radius, theme.radii.none);
+        // Tabs round only their top corners (05-chrome-dock.md §Frame tab
+        // strip: "radius.sm top corners only").
+        assert_eq!(
+            theme.tab(state).radius,
+            CornerRadius {
+                top_left: theme.radii.sm.top_left,
+                top_right: theme.radii.sm.top_right,
+                bottom_left: 0.0,
+                bottom_right: 0.0,
+            }
+        );
         assert_ne!(theme.tab(state).radius, theme.radii.full);
         assert_eq!(theme.row(state).radius, theme.radii.none);
         assert_eq!(theme.text_field(state).radius, theme.radii.sm);
@@ -1169,7 +1179,12 @@ fn component_recipes_cover_common_states() {
         ..ComponentState::default()
     };
 
-    assert_eq!(theme.tab(selected).indicator, None);
+    // A selected tab's top-edge indicator is the border.strong accent that
+    // distinguishes it from the strip (05-chrome-dock.md §Frame tab strip).
+    assert_eq!(
+        theme.tab(selected).indicator,
+        Some(Brush::Solid(theme.colors.border.strong))
+    );
     assert_eq!(
         theme.row(selected).background,
         Brush::Solid(theme.colors.selection.background)

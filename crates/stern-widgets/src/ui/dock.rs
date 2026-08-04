@@ -646,19 +646,20 @@ impl Ui<'_> {
 
     fn paint_dock_frame(&mut self, frame: &DockSceneFrame, disabled: bool) {
         self.register_id(frame.id);
-        let fill = if frame.active {
-            self.theme.colors.surface.panel_raised
-        } else {
-            self.theme.colors.surface.panel
-        };
+        // `docs/visual-spec/05-chrome-dock.md` §Frame (docked) & tab strip
+        // (family issue #914): "Frame: border 1px border.default; ACTIVE
+        // frame: border.strong (this is the focus hierarchy signal — no
+        // accent)." Fill stays the constant S2 `surface.panel` the header
+        // and body already use; only the border tier promotes for the
+        // active frame, and never to an accent color.
         let border = if frame.active {
-            self.theme.colors.focus.ring
+            self.theme.colors.border.strong
         } else {
-            self.theme.colors.border.subtle
+            self.theme.colors.border.default
         };
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: frame.rect,
-            fill: Some(Brush::Solid(fill)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.panel)),
             stroke: Some(Stroke::new(
                 self.theme.strokes.hairline,
                 Brush::Solid(border),
@@ -669,7 +670,7 @@ impl Ui<'_> {
         self.register_id(frame.tab_list_id);
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: frame.tab_list_rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.panel)),
             stroke: Some(Stroke::new(
                 self.theme.strokes.hairline,
                 Brush::Solid(self.theme.colors.border.subtle),
@@ -779,12 +780,23 @@ impl Ui<'_> {
     }
 
     fn paint_dock_panel(&mut self, rect: Rect) {
-        let recipe = self.theme.panel();
+        // `docs/visual-spec/05-chrome-dock.md` §Panel body (family issue
+        // #914): "Fill S2 `#141414` (`surface.panel`); raised sub-cards S3."
+        // The dock panel body is the flat content area itself, not a raised
+        // sub-card, so it resolves S2 directly rather than through the
+        // generic `Theme::panel()` recipe (which returns the S3
+        // `panel_raised` tier used by other, genuinely-raised passive
+        // surfaces such as the shared `components::surfaces::panel` helper).
+        // Border and radius are unspecified by the family file for this
+        // element and are kept as prior behavior.
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(recipe.background),
-            stroke: Some(recipe.border),
-            radius: recipe.radius,
+            fill: Some(Brush::Solid(self.theme.colors.surface.panel)),
+            stroke: Some(Stroke::new(
+                self.theme.strokes.default,
+                Brush::Solid(self.theme.colors.border.default),
+            )),
+            radius: self.theme.radii.sm,
         }));
     }
 }
