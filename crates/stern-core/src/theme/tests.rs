@@ -418,7 +418,13 @@ fn button_recipe_uses_state_colors() {
     assert_eq!(primary.foreground, theme.colors.content.on_accent);
 }
 
-const PRESERVED_BUTTON_STATES: [(&str, ComponentState); 7] = [
+/// The seven button interaction-state combinations distinct enough to need
+/// individually asserted recipe output. "Chosen" (`selected` without
+/// `pressed`) is the mode-choice state documented in
+/// `docs/visual-spec/01-buttons.md` §Icon button / 00-language.md
+/// §Selection-vs-hover doctrine (selectable icon button "chosen" mode); a
+/// transient `pressed` always takes precedence over it.
+const BUTTON_VARIANT_STATES: [(&str, ComponentState); 7] = [
     (
         "normal",
         ComponentState {
@@ -440,7 +446,7 @@ const PRESERVED_BUTTON_STATES: [(&str, ComponentState); 7] = [
         },
     ),
     (
-        "selected",
+        "chosen (selected, not pressed)",
         ComponentState {
             hovered: false,
             pressed: false,
@@ -460,7 +466,7 @@ const PRESERVED_BUTTON_STATES: [(&str, ComponentState); 7] = [
         },
     ),
     (
-        "selected and hovered",
+        "chosen and hovered",
         ComponentState {
             hovered: true,
             pressed: false,
@@ -491,40 +497,31 @@ const PRESERVED_BUTTON_STATES: [(&str, ComponentState); 7] = [
     ),
 ];
 
-struct PreservedButtonVariantCase {
+struct ButtonVariantCase {
     name: &'static str,
     variant: ButtonVariant,
     backgrounds: [Color; 7],
-    enabled_foreground: Color,
-    border: Color,
+    foregrounds: [Color; 7],
+    borders: [Color; 7],
 }
 
-fn assert_preserved_button_variant(theme: &super::Theme, case: &PreservedButtonVariantCase) {
-    for ((state_name, state), expected_background) in PRESERVED_BUTTON_STATES
-        .iter()
-        .copied()
-        .zip(case.backgrounds)
-    {
+fn assert_button_variant_case(theme: &super::Theme, case: &ButtonVariantCase) {
+    for (index, (state_name, state)) in BUTTON_VARIANT_STATES.iter().copied().enumerate() {
         let recipe = theme.button_variant(case.variant, state);
-        let expected_foreground = if state.disabled {
-            theme.colors.content.disabled
-        } else {
-            case.enabled_foreground
-        };
         assert_eq!(
             recipe.background,
-            Brush::Solid(expected_background),
+            Brush::Solid(case.backgrounds[index]),
             "wrong {} {state_name} background",
             case.name
         );
         assert_eq!(
-            recipe.foreground, expected_foreground,
+            recipe.foreground, case.foregrounds[index],
             "wrong {} {state_name} foreground",
             case.name
         );
         assert_eq!(
             recipe.border.brush,
-            Brush::Solid(case.border),
+            Brush::Solid(case.borders[index]),
             "wrong {} {state_name} border",
             case.name
         );
@@ -533,74 +530,129 @@ fn assert_preserved_button_variant(theme: &super::Theme, case: &PreservedButtonV
     }
 }
 
+/// Pins `theme.button_variant` outputs to `docs/visual-spec/01-buttons.md`'s
+/// per-state Standard/Ghost/Danger tables (family issue #910). Primary is
+/// covered separately below since its accent-role precedence predates this
+/// issue and is left intact (01-buttons.md's Primary table has no "selected"
+/// row; the DS never exercises a selectable primary button).
 #[test]
-fn non_primary_button_variants_preserve_existing_outcomes() {
+#[allow(clippy::too_many_lines)]
+fn button_variants_match_visual_spec_state_colors() {
     let mut colors = ThemeColors::default_dark();
     colors.surface.control = Color::rgb8(1, 2, 3);
     colors.surface.control_hover = Color::rgb8(4, 5, 6);
     colors.surface.control_pressed = Color::rgb8(7, 8, 9);
-    colors.surface.control_disabled = Color::rgb8(10, 11, 12);
+    colors.surface.application = Color::rgb8(10, 11, 12);
     colors.status.danger.strong = Color::rgb8(13, 14, 15);
     colors.content.primary = Color::rgb8(16, 17, 18);
     colors.content.on_accent = Color::rgb8(19, 20, 21);
     colors.content.disabled = Color::rgb8(22, 23, 24);
     colors.border.default = Color::rgb8(25, 26, 27);
-    colors.border.subtle = Color::rgb8(28, 29, 30);
+    colors.border.strong = Color::rgb8(31, 32, 33);
+    colors.border.disabled = Color::rgb8(34, 35, 36);
+    colors.content.secondary = Color::rgb8(37, 38, 39);
+    colors.status.danger.surface = Color::rgb8(40, 41, 42);
+    colors.status.danger.border = Color::rgb8(43, 44, 45);
+    colors.status.danger.foreground = Color::rgb8(46, 47, 48);
     let theme = default_dark_theme().with_colors(colors);
 
-    // Danger alpha values are legacy recipe characterization, not status conformance evidence.
-    let danger_hover = colors.status.danger.strong.with_alpha(0.92);
-    let danger_active = colors.status.danger.strong.with_alpha(0.86);
+    // Standard and Ghost: idle/hover/pressed/chosen/disabled per
+    // 01-buttons.md's default-variant table; chosen fill/text match idle
+    // (S3, secondary) with the border alone promoted to `border.strong`,
+    // and (per doctrine) always take precedence over hover for fill/text.
+    let neutral_foregrounds = [
+        colors.content.secondary, // normal
+        colors.content.primary,   // hovered
+        colors.content.secondary, // chosen
+        colors.content.primary,   // pressed
+        colors.content.secondary, // chosen and hovered
+        colors.content.primary,   // pressed and hovered
+        colors.content.disabled,  // disabled
+    ];
+    let neutral_borders = [
+        colors.border.default,
+        colors.border.strong,
+        colors.border.strong,
+        colors.border.strong,
+        colors.border.strong,
+        colors.border.strong,
+        colors.border.disabled,
+    ];
+
     let cases = [
-        PreservedButtonVariantCase {
+        ButtonVariantCase {
             name: "Standard",
             variant: ButtonVariant::Standard,
             backgrounds: [
                 colors.surface.control,
                 colors.surface.control_hover,
+                colors.surface.control,
                 colors.surface.control_pressed,
+                colors.surface.control,
                 colors.surface.control_pressed,
-                colors.surface.control_pressed,
-                colors.surface.control_pressed,
-                colors.surface.control_disabled,
+                colors.surface.application,
             ],
-            enabled_foreground: colors.content.primary,
-            border: colors.border.default,
+            foregrounds: neutral_foregrounds,
+            borders: neutral_borders,
         },
-        PreservedButtonVariantCase {
+        ButtonVariantCase {
             name: "Ghost",
             variant: ButtonVariant::Ghost,
             backgrounds: [
                 Color::TRANSPARENT,
                 colors.surface.control_hover,
+                colors.surface.control,
                 colors.surface.control_pressed,
+                colors.surface.control,
                 colors.surface.control_pressed,
-                colors.surface.control_pressed,
-                colors.surface.control_pressed,
-                colors.surface.control_disabled,
+                colors.surface.application,
             ],
-            enabled_foreground: colors.content.primary,
-            border: colors.border.subtle,
+            foregrounds: neutral_foregrounds,
+            borders: [
+                Color::TRANSPARENT,
+                colors.border.strong,
+                colors.border.strong,
+                colors.border.strong,
+                colors.border.strong,
+                colors.border.strong,
+                colors.border.disabled,
+            ],
         },
-        PreservedButtonVariantCase {
+        ButtonVariantCase {
             name: "Danger",
             variant: ButtonVariant::Danger,
             backgrounds: [
-                colors.status.danger.strong,
-                danger_hover,
-                danger_active,
-                danger_active,
-                danger_active,
-                danger_active,
-                colors.surface.control_disabled,
+                colors.status.danger.surface,
+                colors.status.danger.surface,
+                colors.status.danger.surface,
+                colors.status.danger.surface,
+                colors.status.danger.surface,
+                colors.status.danger.surface,
+                colors.surface.application,
             ],
-            enabled_foreground: colors.content.on_accent,
-            border: colors.border.default,
+            foregrounds: [
+                colors.status.danger.foreground, // normal
+                colors.status.danger.foreground, // hovered
+                colors.status.danger.foreground, // chosen (not a DS concept; inert)
+                colors.content.on_accent,        // pressed
+                colors.status.danger.foreground, // chosen and hovered
+                colors.content.on_accent,        // pressed and hovered
+                colors.content.disabled,         // disabled
+            ],
+            borders: [
+                colors.status.danger.border,
+                colors.status.danger.strong,
+                colors.status.danger.border,
+                colors.status.danger.strong,
+                colors.status.danger.strong,
+                colors.status.danger.strong,
+                colors.border.disabled,
+            ],
         },
     ];
 
     for case in &cases {
-        assert_preserved_button_variant(&theme, case);
+        assert_button_variant_case(&theme, case);
     }
 }
 
@@ -611,6 +663,7 @@ fn assert_primary_button_state(
     state: ComponentState,
     expected_background: Color,
     expected_foreground: Color,
+    expected_border: Color,
 ) {
     let recipe = theme.button_variant(ButtonVariant::Primary, state);
     assert_eq!(
@@ -628,12 +681,17 @@ fn assert_primary_button_state(
         "wrong border width for {name}"
     );
     assert_eq!(
-        recipe.border.brush, baseline.border.brush,
+        recipe.border.brush,
+        Brush::Solid(expected_border),
         "wrong border brush for {name}"
     );
 }
 
-type PrimaryButtonCase = (&'static str, ComponentState, Color, Color);
+// name, state, expected background, expected foreground, expected border.
+// 01-buttons.md's Primary table: border is "none (transparent)" for every
+// enabled state, disabled falls back to S1 `surface.application` fill /
+// `border.disabled` (same disabled rule every variant shares).
+type PrimaryButtonCase = (&'static str, ComponentState, Color, Color, Color);
 
 fn primary_button_cases(colors: &ThemeColors) -> [PrimaryButtonCase; 8] {
     [
@@ -642,6 +700,7 @@ fn primary_button_cases(colors: &ThemeColors) -> [PrimaryButtonCase; 8] {
             ComponentState::default(),
             colors.accent.default,
             colors.content.on_accent,
+            Color::TRANSPARENT,
         ),
         (
             "hovered",
@@ -651,6 +710,7 @@ fn primary_button_cases(colors: &ThemeColors) -> [PrimaryButtonCase; 8] {
             },
             colors.accent.hover,
             colors.content.on_accent,
+            Color::TRANSPARENT,
         ),
         (
             "selected",
@@ -660,6 +720,7 @@ fn primary_button_cases(colors: &ThemeColors) -> [PrimaryButtonCase; 8] {
             },
             colors.accent.default,
             colors.content.on_accent,
+            Color::TRANSPARENT,
         ),
         (
             "pressed",
@@ -669,6 +730,7 @@ fn primary_button_cases(colors: &ThemeColors) -> [PrimaryButtonCase; 8] {
             },
             colors.accent.pressed,
             colors.content.on_accent,
+            Color::TRANSPARENT,
         ),
         (
             "disabled",
@@ -676,8 +738,9 @@ fn primary_button_cases(colors: &ThemeColors) -> [PrimaryButtonCase; 8] {
                 disabled: true,
                 ..ComponentState::default()
             },
-            colors.surface.control_disabled,
+            colors.surface.application,
             colors.content.disabled,
+            colors.border.disabled,
         ),
         (
             "selected and hovered",
@@ -688,6 +751,7 @@ fn primary_button_cases(colors: &ThemeColors) -> [PrimaryButtonCase; 8] {
             },
             colors.accent.default,
             colors.content.on_accent,
+            Color::TRANSPARENT,
         ),
         (
             "pressed, selected, and hovered",
@@ -699,6 +763,7 @@ fn primary_button_cases(colors: &ThemeColors) -> [PrimaryButtonCase; 8] {
             },
             colors.accent.pressed,
             colors.content.on_accent,
+            Color::TRANSPARENT,
         ),
         (
             "disabled with every active state",
@@ -709,8 +774,9 @@ fn primary_button_cases(colors: &ThemeColors) -> [PrimaryButtonCase; 8] {
                 hovered: true,
                 ..ComponentState::default()
             },
-            colors.surface.control_disabled,
+            colors.surface.application,
             colors.content.disabled,
+            colors.border.disabled,
         ),
     ]
 }
@@ -722,14 +788,16 @@ fn primary_button_uses_exact_accent_roles_and_bounded_state_precedence() {
     colors.accent.hover = Color::rgb8(4, 5, 6);
     colors.accent.pressed = Color::rgb8(7, 8, 9);
     colors.focus.ring = Color::rgb8(10, 11, 12);
-    colors.surface.control_disabled = Color::rgb8(13, 14, 15);
+    colors.surface.application = Color::rgb8(13, 14, 15);
     colors.content.on_accent = Color::rgb8(16, 17, 18);
     colors.content.disabled = Color::rgb8(19, 20, 21);
-    colors.border.default = Color::rgb8(22, 23, 24);
+    colors.border.disabled = Color::rgb8(22, 23, 24);
     let theme = default_dark_theme().with_colors(colors);
     let normal = theme.button_variant(ButtonVariant::Primary, ComponentState::default());
 
-    for (name, state, expected_background, expected_foreground) in primary_button_cases(&colors) {
+    for (name, state, expected_background, expected_foreground, expected_border) in
+        primary_button_cases(&colors)
+    {
         assert_primary_button_state(
             &theme,
             &normal,
@@ -737,6 +805,7 @@ fn primary_button_uses_exact_accent_roles_and_bounded_state_precedence() {
             state,
             expected_background,
             expected_foreground,
+            expected_border,
         );
     }
 
@@ -749,10 +818,7 @@ fn primary_button_uses_exact_accent_roles_and_bounded_state_precedence() {
         },
     );
     assert_eq!(focused_hover.background, Brush::Solid(colors.accent.hover));
-    assert_eq!(
-        focused_hover.border.brush,
-        Brush::Solid(colors.border.default)
-    );
+    assert_eq!(focused_hover.border.brush, Brush::Solid(Color::TRANSPARENT));
     assert_eq!(focused_hover.border.width, normal.border.width);
     assert_eq!(focused_hover.radius, normal.radius);
     assert_eq!(focused_hover.foreground, normal.foreground);
@@ -977,7 +1043,9 @@ fn recipe_lookups_follow_independently_overridden_semantic_paths() {
             .button_variant(ButtonVariant::Ghost, ComponentState::default())
             .border
             .brush,
-        Brush::Solid(colors.border.subtle)
+        // Ghost idle border is transparent (01-buttons.md §Quiet variant),
+        // independent of `border.subtle` even though it is overridden above.
+        Brush::Solid(Color::TRANSPARENT)
     );
     assert_eq!(
         theme

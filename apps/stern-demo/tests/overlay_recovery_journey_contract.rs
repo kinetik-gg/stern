@@ -8,7 +8,7 @@ use stern_demo::{DemoApp, DemoScenario, DemoWorkspace, demo_context};
 
 #[test]
 fn default_scenario_matches_pinned_base_frame_output() {
-    const BASE_FRAME_FINGERPRINT: u64 = 0x95d3_985e_c7b6_861e;
+    const BASE_FRAME_FINGERPRINT: u64 = 0xbf0d_0403_dea9_3af8;
     let mut maintained = DemoApp::new();
     let mut explicit = DemoApp::for_scenario(DemoScenario::Default);
 

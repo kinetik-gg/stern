@@ -263,3 +263,40 @@ doc drift.
     `crates/stern-widgets/src/inspector/row.rs`) where multi-selection
     property editing would need it most. Not built here per this issue's
     non-goals (no new contracts).
+
+## Visual conformance (Issue #910)
+
+Found while conforming button family recipes (`docs/visual-spec/01-buttons.md`)
+to `Theme::button_variant`. Not fixed here per that issue's non-goals (no
+behavior changes beyond the recipe's own fill/border/text values, no layout
+engine, no new components).
+
+22. **Icon-button call sites hardcode `size.icon.md` (16px) instead of
+    following D3's control-height-aware icon size.** `01-buttons.md` (D3):
+    icon size should be 12 in controls ≤24 and 16 in controls ≥28. The 24×24
+    icon button call sites — `static_icon_button`
+    (`crates/stern-widgets/src/components/icons.rs:181`),
+    `image_icon_button_sized`/`image_icon_selectable_button_sized`
+    (`icons.rs:41,119`), and the leading icon in `action_button`
+    (`crates/stern-widgets/src/components/basic.rs:113-118`, though there
+    `theme.sizes.icon.md` is at least clamped to the available rect) — all
+    request `theme.sizes.icon.md` unconditionally, not `theme.sizes.icon.sm`
+    for their 24px box. Fixing this needs a size-aware call at each site (or
+    a rect-height-driven default), not a recipe change, so it is out of scope
+    for the recipe-only fix in #910.
+23. **No "busy" button state.** `01-buttons.md`'s default-variant table
+    defines a `busy` row (muted `#999999` text, spinner icon rotating 1s
+    linear) distinct from `disabled`. `ComponentState`
+    (`crates/stern-core/src/theme/recipes.rs:7-21`) has no `busy` flag, and
+    no button call site renders a spinner; `Theme::button_variant` cannot
+    resolve a state that does not exist yet. Adding it is a new capability
+    (a state flag plus an animated icon primitive), not a recipe value fix.
+24. **No button-group/split-button composition.** `01-buttons.md`'s
+    "Button group / split button" section specifies a fused row (shared 1px
+    borders with collapsed adjacent edges, outer `radius.sm` only at the
+    group's ends, inner radii 0, `border.default` dividers). No widget in
+    `crates/stern-widgets` composes buttons into such a row — `ButtonRecipe`
+    (`crates/stern-core/src/theme/recipes.rs:360-371`) always returns a
+    uniform `CornerRadius`, and per-corner radius override is a layout
+    concern the caller would own, which does not exist yet. Out of scope for
+    a recipe-values-only issue.

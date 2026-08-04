@@ -173,15 +173,33 @@ impl Theme {
     }
 
     /// Resolves a button recipe for a visual variant and state.
+    ///
+    /// Values match `docs/visual-spec/01-buttons.md` (family issue #910),
+    /// authoritative over `../stern-design-system`. `state.selected` without
+    /// `state.pressed` is the "chosen" mode-choice state (selectable icon
+    /// button, 01-buttons.md §Icon button): NEUTRAL `surface.control` fill +
+    /// `border.strong` ring, not accent (00-language.md §Selection-vs-hover
+    /// doctrine). A transient `state.pressed` takes precedence over a
+    /// persistent chosen state for fill/text; both promote the border to
+    /// `border.strong` equally.
     #[must_use]
     pub fn button_variant(&self, variant: ButtonVariant, state: ComponentState) -> ButtonRecipe {
+        // Chosen (persistent "toggled on") vs. pressed (transient mouse-down):
+        // both ComponentState flags can be true at once, so pressed wins.
+        let chosen = state.selected && !state.pressed;
+
         let background = if state.disabled {
-            self.colors.surface.control_disabled
+            // 01-buttons.md: every variant's disabled fill is S1
+            // `surface.application`, not the `surface.control_disabled`
+            // tier other families use.
+            self.colors.surface.application
         } else {
             match variant {
                 ButtonVariant::Standard => {
-                    if state.selected || state.pressed {
+                    if state.pressed {
                         self.colors.surface.control_pressed
+                    } else if chosen {
+                        self.colors.surface.control
                     } else if state.hovered {
                         self.colors.surface.control_hover
                     } else {
@@ -200,21 +218,47 @@ impl Theme {
                     }
                 }
                 ButtonVariant::Ghost => {
-                    if state.selected || state.pressed {
+                    if state.pressed {
                         self.colors.surface.control_pressed
+                    } else if chosen {
+                        self.colors.surface.control
                     } else if state.hovered {
                         self.colors.surface.control_hover
                     } else {
                         Color::TRANSPARENT
                     }
                 }
-                ButtonVariant::Danger => {
-                    if state.selected || state.pressed {
-                        self.colors.status.danger.strong.with_alpha(0.86)
-                    } else if state.hovered {
-                        self.colors.status.danger.strong.with_alpha(0.92)
+                // Danger's fill is constant across idle/hover/pressed
+                // (`status.danger.surface`); only the border and pressed
+                // text promote.
+                ButtonVariant::Danger => self.colors.status.danger.surface,
+            }
+        };
+
+        let border_color = if state.disabled {
+            self.colors.border.disabled
+        } else {
+            match variant {
+                ButtonVariant::Standard => {
+                    if state.pressed || chosen || state.hovered {
+                        self.colors.border.strong
                     } else {
+                        self.colors.border.default
+                    }
+                }
+                ButtonVariant::Ghost => {
+                    if state.pressed || chosen || state.hovered {
+                        self.colors.border.strong
+                    } else {
+                        Color::TRANSPARENT
+                    }
+                }
+                ButtonVariant::Primary => Color::TRANSPARENT,
+                ButtonVariant::Danger => {
+                    if state.pressed || state.hovered {
                         self.colors.status.danger.strong
+                    } else {
+                        self.colors.status.danger.border
                     }
                 }
             }
@@ -222,15 +266,28 @@ impl Theme {
 
         let foreground = if state.disabled {
             self.colors.content.disabled
-        } else if matches!(variant, ButtonVariant::Primary | ButtonVariant::Danger) {
-            self.colors.content.on_accent
         } else {
-            self.colors.content.primary
-        };
-        let border_color = if matches!(variant, ButtonVariant::Ghost) {
-            self.colors.border.subtle
-        } else {
-            self.colors.border.default
+            match variant {
+                ButtonVariant::Primary => self.colors.content.on_accent,
+                ButtonVariant::Danger => {
+                    if state.pressed {
+                        self.colors.content.on_accent
+                    } else {
+                        self.colors.status.danger.foreground
+                    }
+                }
+                ButtonVariant::Standard | ButtonVariant::Ghost => {
+                    if state.pressed {
+                        self.colors.content.primary
+                    } else if chosen {
+                        self.colors.content.secondary
+                    } else if state.hovered {
+                        self.colors.content.primary
+                    } else {
+                        self.colors.content.secondary
+                    }
+                }
+            }
         };
 
         ButtonRecipe {
