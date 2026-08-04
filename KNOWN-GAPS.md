@@ -300,3 +300,69 @@ engine, no new components).
     uniform `CornerRadius`, and per-corner radius override is a layout
     concern the caller would own, which does not exist yet. Out of scope for
     a recipe-values-only issue.
+
+## Visual conformance (Issue #911)
+
+Found while conforming field family recipes (`docs/visual-spec/02-fields.md`)
+to `Theme::text_field`. Not fixed here per that issue's non-goals (no new
+`ComponentState` fields, no new widget capabilities, no layout engine).
+
+25. **`read-only` field state is not modeled.** `02-fields.md`'s state table
+    gives read-only fields a distinct S2 fill (`#141414`) and muted text
+    (`#999999`), but `ComponentState`
+    (`crates/stern-core/src/theme/recipes.rs:10-21`) has no `read_only`
+    field, and `TextFieldAccess::ReadOnly`
+    (`crates/stern-widgets/src/components/text_fields.rs:24-45`) is never
+    threaded into the `ComponentState` passed to `Theme::text_field` — only
+    `disabled` is. Read-only fields currently render identically to editable
+    ones. Adding this needs either a new `ComponentState` field (150+ call
+    sites across ~40 files construct this struct by naming every field, so
+    it is a wide-blast-radius change) or a field-specific state parameter —
+    a new capability, not a recipe value fix.
+26. **`invalid` field state is not modeled.** `02-fields.md` specifies
+    `border.invalid` plus a trailing 12px status icon (`status.danger.foreground`,
+    7px right inset, 28px reserved right padding) for invalid fields. No
+    `ComponentState` field, `TextFieldAccess` variant, or widget config
+    signals a validation failure anywhere in `crates/stern-widgets`, and
+    `text_geometry.rs`'s primitive list has no trailing-icon slot. Entirely
+    new capability.
+27. **No placeholder-text rendering for the canonical editable field.**
+    `02-fields.md`'s idle-state table includes placeholder styling
+    (`content.muted` `#999999`), but `text_field`/`multi_line_text_field`
+    (`crates/stern-widgets/src/components/text_fields.rs`) have no
+    placeholder-text concept at all — no config field, no muted fallback
+    rendering when `TextEditState.text` is empty. (The unrelated `placeholder`
+    field on `selector_fields.rs`/`overlays/dropdown.rs` is the Select/
+    dropdown trigger's fallback label, part of the choice family, not this
+    one.)
+28. **Unit affix / field group is unimplemented.** `02-fields.md`'s "Unit
+    affix / field group" section (affix cell fill/border/text, fused group
+    borders, axis-prefix styling) has no implementation anywhere in
+    `crates/stern-widgets` — no "affix" concept exists in the crate at all.
+29. **IME composition underline reuses the selection color instead of
+    `focus.ring`.** `02-fields.md`: "IME composition: 1px underline
+    `#4DB2FF`" (`focus.ring`, same as the caret). `text_geometry.rs`'s
+    composition-underline stroke
+    (`crates/stern-widgets/src/components/text_geometry.rs:394`) paints with
+    `self.recipe.selection` (`selection.background`, `#0C8CE9`) — the same
+    brush used for the selection-highlight fill — so the underline currently
+    renders in the wrong (selection) blue instead of the ring blue. Fixing
+    it is a one-line widget-layer color-source swap, not a recipe value, so
+    left alone here to keep this issue's changes scoped to
+    `crates/stern-core`.
+30. **Selected text is not repainted in `selection.foreground`.**
+    `00-language.md` §Selection-vs-hover doctrine: selection is
+    `selection.background` fill + `selection.foreground` (white) text.
+    `text_geometry.rs` always paints every glyph run in `self.recipe.foreground`
+    (lines 368, 382), never swapping to `selection.foreground` for the
+    selected sub-range. Fixing this needs new per-run color plumbing through
+    the text-shaping/paint pipeline — a new capability, not a value fix.
+31. **Numeric scrub never requests the `ew-resize` cursor.** `02-fields.md`:
+    "During scrub: ... cursor = ew-resize." `numeric_scrub_input`
+    (`crates/stern-widgets/src/components/numeric_inputs.rs`) always
+    inherits `CursorShape::Text` from the underlying canonical text field
+    (`crates/stern-widgets/src/components/text_fields.rs`'s
+    `with_hover_cursor(..., CursorShape::Text)`) — `CursorShape::ResizeHorizontal`
+    already exists (`crates/stern-core/src/runtime/types.rs`) but nothing
+    requests it during a scrub drag. A widget call-site change, not a
+    recipe value.

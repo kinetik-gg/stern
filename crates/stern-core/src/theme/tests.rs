@@ -656,6 +656,113 @@ fn button_variants_match_visual_spec_state_colors() {
     }
 }
 
+/// Pins `Theme::text_field` outputs to `docs/visual-spec/02-fields.md`'s
+/// single-line field state table (family issue #911). Fill never varies
+/// across idle/hovered/focused (only disabled diverges) — fields read as
+/// wells, buttons as raised. `focused` and `hovered` both resolve the border
+/// to `border.strong`; unlike buttons, `focused` alone (without hover) does
+/// change the border relative to idle, because 02-fields.md's own table
+/// specifies that promotion explicitly (the two-layer ring, asserted
+/// separately below, is still a purely additive layer on top of it — the
+/// border itself never becomes the ring color `border.focused`).
+/// `read-only` and `invalid` are in the spec's state table but are not
+/// resolved here; see `KNOWN-GAPS.md`.
+#[test]
+fn text_field_matches_visual_spec_state_colors() {
+    let mut colors = ThemeColors::default_dark();
+    colors.surface.control = Color::rgb8(1, 2, 3);
+    colors.surface.control_disabled = Color::rgb8(4, 5, 6);
+    colors.content.primary = Color::rgb8(7, 8, 9);
+    colors.content.disabled = Color::rgb8(10, 11, 12);
+    colors.border.default = Color::rgb8(13, 14, 15);
+    colors.border.strong = Color::rgb8(16, 17, 18);
+    colors.border.disabled = Color::rgb8(19, 20, 21);
+    colors.selection.background = Color::rgb8(22, 23, 24);
+    colors.focus.ring = Color::rgb8(25, 26, 27);
+    let theme = default_dark_theme().with_colors(colors);
+
+    let states = [
+        ("idle", ComponentState::default(), colors.border.default),
+        (
+            "hovered",
+            ComponentState {
+                hovered: true,
+                ..ComponentState::default()
+            },
+            colors.border.strong,
+        ),
+        (
+            "focused",
+            ComponentState {
+                focused: true,
+                ..ComponentState::default()
+            },
+            colors.border.strong,
+        ),
+        (
+            "focused and hovered",
+            ComponentState {
+                focused: true,
+                hovered: true,
+                ..ComponentState::default()
+            },
+            colors.border.strong,
+        ),
+        (
+            "disabled",
+            ComponentState {
+                disabled: true,
+                ..ComponentState::default()
+            },
+            colors.border.disabled,
+        ),
+    ];
+
+    for (name, state, expected_border) in states {
+        let recipe = theme.text_field(state);
+        let expected_background = if state.disabled {
+            colors.surface.control_disabled
+        } else {
+            colors.surface.control
+        };
+        let expected_foreground = if state.disabled {
+            colors.content.disabled
+        } else {
+            colors.content.primary
+        };
+        assert_eq!(
+            recipe.background,
+            Brush::Solid(expected_background),
+            "wrong {name} background"
+        );
+        assert_eq!(
+            recipe.border.brush,
+            Brush::Solid(expected_border),
+            "wrong {name} border"
+        );
+        assert_eq!(
+            recipe.foreground, expected_foreground,
+            "wrong {name} foreground"
+        );
+        // Caret and selection are constant across every state per
+        // 02-fields.md's Caret note and Selection-highlight sentence: caret
+        // is always `focus.ring`, selection highlight is always
+        // `selection.background` at full opacity (no alpha blend).
+        assert_eq!(recipe.caret, colors.focus.ring, "wrong {name} caret");
+        assert_eq!(
+            recipe.selection,
+            Brush::Solid(colors.selection.background),
+            "wrong {name} selection"
+        );
+        // "padding-inline 8": the field's per-side horizontal inset equals
+        // `controls.padding_x` directly (not halved).
+        assert_eq!(
+            recipe.padding_x, theme.controls.padding_x,
+            "wrong {name} padding_x"
+        );
+    }
+}
+
 fn assert_primary_button_state(
     theme: &super::Theme,
     baseline: &super::ButtonRecipe,
@@ -878,8 +985,11 @@ fn component_recipes_cover_common_states() {
         Brush::Solid(theme.colors.border.default)
     );
     assert_eq!(
+        // docs/visual-spec/02-fields.md: focused resolves to `border.strong`,
+        // the same tier as hovered — the ring is a separate additive layer,
+        // not a border-color change (00-language.md §Focus model).
         theme.text_field(focused).border.brush,
-        Brush::Solid(theme.colors.border.focused)
+        Brush::Solid(theme.colors.border.strong)
     );
     assert!(theme.panel().shadow.is_none());
 }
@@ -1089,7 +1199,10 @@ fn recipe_lookups_follow_independently_overridden_semantic_paths() {
             })
             .border
             .brush,
-        Brush::Solid(colors.border.focused)
+        // docs/visual-spec/02-fields.md: focused resolves to `border.strong`,
+        // independent of `border.focused` even though it is overridden above
+        // (the ring, not the border, carries the focus color).
+        Brush::Solid(colors.border.strong)
     );
 }
 

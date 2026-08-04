@@ -1164,8 +1164,23 @@ fn row_label_is_painted(run: &Run, target: ItemId, label: &str) -> bool {
         zones.label_rect.x + theme.controls.padding_x,
         zones.label_rect.y + extra + font.size,
     );
+    // Since issue #911 aligned the text-field recipe's inline padding with
+    // `theme.controls.padding_x` (docs/visual-spec/02-fields.md
+    // "padding-inline 8"), the rename text field's own draft text can land
+    // at this same origin as the static row label (both start from the same
+    // padded left edge). Matching on `line_height` too keeps this a real
+    // "static label" check: the row label paints with `TextRole::Label`
+    // (16px line height) while the rename field paints with `TextRole::Body`
+    // (17px, `Theme::text_field`'s font), so the two are still distinguishable
+    // even when their origins coincide.
     run.frame.primitives.iter().any(|primitive| {
-        matches!(primitive, Primitive::Text(text) if text.text == label && text.origin == origin)
+        matches!(
+            primitive,
+            Primitive::Text(text)
+                if text.text == label
+                    && text.origin == origin
+                    && text.line_height == font.line_height
+        )
     })
 }
 

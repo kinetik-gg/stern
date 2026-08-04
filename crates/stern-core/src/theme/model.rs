@@ -443,20 +443,37 @@ impl Theme {
     }
 
     /// Resolves a text field recipe for a state.
+    ///
+    /// Values match `docs/visual-spec/02-fields.md` (family issue #911),
+    /// authoritative over `../stern-design-system`. Per that file's single-
+    /// line field table, fill never changes across idle/hover/focused (only
+    /// `border.default`/`border.strong` and disabled diverge) — fields read
+    /// as wells, buttons as raised, per `00-language.md` §Selection-vs-hover
+    /// doctrine. `focused` resolves its border to `border.strong`, the same
+    /// tier as `hovered`, not `border.focused`: `00-language.md`'s universal
+    /// focus model draws the accent ring as a separate two-layer paint step
+    /// outside the control bounds ("focus never recolors the control body"),
+    /// so the border color itself never becomes the ring color. Caret and
+    /// IME composition both key off `focus.ring` per the same file's Caret
+    /// note; selection highlight is `selection.background` at full opacity
+    /// (no alpha — the previous `opacity.selection` blend had no basis in
+    /// the spec or a DS token). `read-only` and `invalid` are in the spec's
+    /// state table but are not resolved here: `ComponentState` has no field
+    /// for either (see `KNOWN-GAPS.md`).
     #[must_use]
     pub fn text_field(&self, state: ComponentState) -> TextFieldRecipe {
-        let border_color = if state.focused {
-            self.colors.border.focused
-        } else if state.hovered {
-            self.colors.border.hover
+        let border_color = if state.disabled {
+            self.colors.border.disabled
+        } else if state.focused || state.hovered {
+            self.colors.border.strong
         } else {
-            self.colors.border.subtle
+            self.colors.border.default
         };
         TextFieldRecipe {
             background: Brush::Solid(if state.disabled {
                 self.colors.surface.control_disabled
             } else {
-                self.colors.surface.sunken
+                self.colors.surface.control
             }),
             foreground: if state.disabled {
                 self.colors.content.disabled
@@ -465,18 +482,9 @@ impl Theme {
             },
             border: Stroke::new(self.strokes.default, Brush::Solid(border_color)),
             radius: self.radii.sm,
-            selection: Brush::Solid(
-                self.colors
-                    .selection
-                    .background
-                    .with_alpha(self.opacity.selection),
-            ),
-            caret: if state.disabled {
-                self.colors.content.disabled
-            } else {
-                self.colors.content.primary
-            },
-            padding_x: self.controls.padding_x * 0.5,
+            selection: Brush::Solid(self.colors.selection.background),
+            caret: self.colors.focus.ring,
+            padding_x: self.controls.padding_x,
             padding_y: self.controls.padding_y,
             font: self.typography.get(TextRole::Body),
         }
