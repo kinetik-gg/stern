@@ -64,6 +64,42 @@ fn is_bootstrap(path: &Path) -> bool {
     path.ends_with(Path::new("src/bin/native_shell.rs"))
 }
 
+/// The app-shell orchestrator (`src/lib.rs`, including `DemoApp::frame`,
+/// `DemoApp::compose`, and the shared `compose_demo` helper they both call)
+/// selects and drives one workspace composition per frame. It must not
+/// paint controls itself: every widget, including simple ones like a title
+/// label or a navigation button, belongs inside a workspace's own `compose`
+/// recipe (or a scene it builds), using bounds derived from the frame's
+/// viewport rather than screen-fixed constants. This is the mechanical
+/// guard for the class of presentation hack found in issue #917: a
+/// hand-assembled, non-adaptive navigation strip painted directly in the
+/// app shell, parallel to and bypassing the real
+/// `ChromeScene`/`Toolbar`/`TabStrip` recipe every workspace otherwise uses.
+fn is_app_shell(path: &Path) -> bool {
+    path.ends_with(Path::new("src/lib.rs"))
+}
+
+/// Calls the app shell may make directly on its `ui` binding: frame
+/// lifecycle, read-only context accessors, and action-queue plumbing.
+/// Everything else that paints or composes widgets must be reached through
+/// a workspace's own `compose` method.
+const APP_SHELL_UI_METHODS: [&str; 5] = [
+    "push_platform_request",
+    "finish_output",
+    "push_action",
+    "input",
+    "viewport",
+];
+
+fn expr_is_bare_ident(expr: &Expr, name: &str) -> bool {
+    matches!(
+        expr,
+        Expr::Path(path)
+            if path.path.segments.len() == 1
+                && ident_name(&path.path.segments[0].ident) == name
+    )
+}
+
 fn prohibited_declaration_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     "control widget primitive semantic theme renderer framework"
@@ -263,6 +299,14 @@ impl<'ast> Visit<'ast> for PurityVisitor<'_> {
                 || call.args.iter().any(expr_mentions_primitives))
         {
             self.reject("raw primitive extension");
+        }
+        if is_app_shell(self.source_path)
+            && expr_is_bare_ident(&call.receiver, "ui")
+            && !APP_SHELL_UI_METHODS.contains(&name.as_str())
+        {
+            self.reject(format!(
+                "app-shell orchestrator paints `{name}` directly instead of delegating to a workspace composition"
+            ));
         }
         visit::visit_expr_method_call(self, call);
     }
@@ -551,4 +595,43 @@ fn structural_checker_preserves_public_consumer_and_bootstrap_allowances() {
 
     let bootstrap = "use\nwinit::window::Window; use pollster::block_on; struct NativeShell; impl NativeShell {}";
     assert!(structural_violations(Path::new("src/bin/native_shell.rs"), bootstrap, &[]).is_empty());
+}
+
+#[test]
+fn structural_checker_rejects_app_shell_painting_outside_workspace_composition() {
+    let reject = |source: &str| {
+        let violations = structural_violations(Path::new("src/lib.rs"), source, &[]);
+        assert!(
+            !violations.is_empty(),
+            "accepted app-shell presentation hack: {source}"
+        );
+    };
+
+    // The exact shape of the issue #917 finding: a hand-assembled title label
+    // and navigation buttons painted directly in the frame orchestrator, at
+    // screen-fixed geometry, instead of being composed inside a workspace's
+    // own chrome recipe.
+    reject(
+        "fn frame(ui: &mut stern::widgets::Ui<'_>) { \
+         ui.label(stern::core::Rect::new(24.0, 20.0, 320.0, 24.0), \"Title\"); }",
+    );
+    reject(
+        "fn frame(ui: &mut stern::widgets::Ui<'_>, action: &stern::core::ActionDescriptor) { \
+         let _ = ui.action_button(\"id\", stern::core::Rect::new(24.0, 56.0, 112.0, 30.0), action, stern::core::ActionContext::Global); }",
+    );
+    reject(
+        "fn frame(ui: &mut stern::widgets::Ui<'_>) { \
+         let _ = ui.button(\"id\", stern::core::Rect::ZERO, \"Label\"); }",
+    );
+}
+
+#[test]
+fn structural_checker_permits_app_shell_frame_lifecycle_calls() {
+    let allowed = "fn compose_demo(ui: &mut stern::widgets::Ui<'_>) { \
+        let _keyboard = ui.input().keyboard.clone(); \
+        let _size = ui.viewport().logical_size; \
+        ui.push_platform_request(stern::core::PlatformRequest::SetWindowTitle(\"Title\".to_owned())); \
+        ui.push_action(todo!()); \
+        let _ = ui.finish_output(); }";
+    assert!(structural_violations(Path::new("src/lib.rs"), allowed, &[]).is_empty());
 }

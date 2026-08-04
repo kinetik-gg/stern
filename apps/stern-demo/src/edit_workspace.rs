@@ -740,7 +740,7 @@ fn shared_context_requested(ui: &mut Ui<'_>, bounds: Option<Rect>) -> bool {
     })
 }
 
-fn route_workspace_tabs(
+pub(crate) fn route_workspace_tabs(
     ui: &mut Ui<'_>,
     actions: &DemoActionRegistry,
     intents: &[ChromeSceneIntent],
@@ -823,7 +823,7 @@ fn chrome_config(layout: WorkspaceLayout, actions: &DemoActionRegistry) -> Chrom
     .with_widths(widths)
 }
 
-fn workspace_tab(panel: u64, title: &str, active: bool) -> FrameTab {
+pub(crate) fn workspace_tab(panel: u64, title: &str, active: bool) -> FrameTab {
     FrameTab {
         panel: PanelId::from_raw(panel),
         title: title.to_owned(),
