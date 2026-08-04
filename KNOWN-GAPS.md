@@ -381,7 +381,6 @@ to `Theme::text_field`. Not fixed here per that issue's non-goals (no new
 
 32. **Choice/slider/tab family (Issue #912)**: `Theme::tab` (also painted by dock/chrome document tab strips, family #914) was left unconformed to `03-choice-sliders-tabs.md`'s segmented/tab-strip table to avoid clobbering that concurrent family; no progress-bar widget/recipe exists yet; checkbox/radio glyphs and the slider thumb now resolve correct per-state colors (`CheckRecipe.mark`, new `SliderRecipe.thumb`) but have no paint primitive (`ComponentState` also has no `mixed` checkbox flag) — see PR body for the full before/after table.
 
-
 ## Visual conformance (Issue #913)
 
 Found while conforming overlay family recipes
@@ -489,3 +488,60 @@ closing that deferral.
     edge-to-edge via 1px splitters, so naive rounding would show
     gaps/overlaps at internal seams without per-seam corner suppression,
     which this recipe-only pass does not attempt.
+
+## Visual conformance (Issue #915)
+
+Found while conforming collection recipes (`docs/visual-spec/06-collections.md`)
+to `Theme::row`/`Theme::table_header_row`/`Theme::asset_card` and their
+`crates/stern-widgets/src/ui/{collections,outliner,virtual_table,virtual_tree,
+asset_browser}.rs` consumers. Not fixed here per that issue's non-goals (no new
+`ComponentState`/`TextRole` capabilities, no new render primitives beyond
+composing existing `Rect`/`Line` shapes).
+
+44. **No "meta" typography role.** `00-language.md`'s type scale documents a
+    `meta` step (9px/1, 500-700 weight, mono, UPPERCASE +0.06em tracking) for
+    "shortcuts, group headings, status bars, numeric readouts, badges" —
+    which is exactly what column headers ("UPPERCASE +0.06em muted") and row
+    meta/trailing text call for. `TextRole`
+    (`crates/stern-core/src/theme/tokens.rs:1362-1373`) only has
+    `Body`/`Label`/`Caption`/`Title`/`Monospace`, with no size/weight/
+    letter-spacing/case-transform fields on `TextRoleMetrics` at all. The
+    table header (`table_header_label`,
+    `crates/stern-widgets/src/ui/virtual_table.rs:698`) and the asset card's
+    kind line render with the closest existing roles (`Label`/`Monospace`)
+    instead. This is the same structural gap D5 in `00-language.md`'s
+    divergence table already names ("no size tokens exist... propose
+    upstreaming as tokens") — a typography-scale capability, not a
+    collection recipe value.
+45. **Table sort indicator is a text glyph, not the spec's icon.**
+    `06-collections.md`: "Sort indicator: caret icon 12 muted; active sort
+    column: text secondary + caret `focus.indicator`." The production header
+    instead appends a Unicode arrow (`↑`/`↓`) to the label string itself
+    (`table_header_label`, `crates/stern-widgets/src/ui/virtual_table.rs:698`)
+    and paints it as ordinary label text, so it never gets its own muted/
+    focus.indicator color or fixed 12px icon size independent of the label.
+    Fixing this needs a real icon primitive slot in the header paint path
+    (`crates/stern-icons-phosphor`/icon-atlas plumbing), a materially bigger
+    change than a recipe value.
+46. **Outliner visibility/lock toggle hover never promotes to
+    `content.primary`.** `06-collections.md` §Tree rows: "Inline visibility/
+    lock toggles: quiet icon buttons 16, muted → primary on hover; remain
+    visible on selected rows in white at 78%." The selected-row 78%-white
+    exception is implemented; the muted→primary hover promotion is not —
+    `paint_outliner_row`'s `toggle_foreground`
+    (`crates/stern-widgets/src/ui/outliner.rs:888-894`) only branches on
+    `disabled`/`selected`, never on each icon's own hover `Response` (already
+    captured earlier in the same function as `visibility`/`lock`, but not
+    threaded through). Needs new per-icon color parameters on
+    `paint_outliner_visibility`/`paint_outliner_lock`, deferred to avoid
+    guessing how it composes with their existing on/off alpha encoding (see
+    PR body).
+47. **No scrollbar recipe or paint primitive for virtualized collections.**
+    `06-collections.md` §Virtualized viewport: "Scrollbar: 6 wide thumb,
+    `border.strong` `#3D3D3D`, radius.full, track transparent, inset 2."
+    Nothing under `crates/stern-widgets/src/collections/` (e.g.
+    `virtualization.rs`, whose public surface is scroll-offset/window math
+    only — `crates/stern-widgets/src/collections/virtualization.rs:22-128`)
+    or the `ui/virtual_*`/`outliner`/`asset_browser` paint functions draws a
+    scrollbar at all; scrolling is input-driven with no visible thumb. A new
+    widget/recipe, not a fix to an existing one.
