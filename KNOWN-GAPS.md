@@ -162,8 +162,18 @@ reference looks stale, trust the code and send a correction PR.
     durations, elevation, and icon tables are not yet wired. Independently,
     the design system's 486-requirement parity index
     (`../stern-design-system/generated/parity-index.json`) remains 100%
-    `unverified`; wiring stern's behavioral coverage into that ledger is
-    future work (see `docs/catalogue-conformance-matrix.md`).
+    `unverified`. Stern-side, `conformance/claims.json` now carries the
+    first machine-validated claims against that requirement set: 63
+    requirements from the foundations/behaviors scope, each citing the
+    merged model-layer tests that exercise it, all capped at `partial`
+    (validator: `apps/stern-demo/tests/conformance_claims_contract.rs`;
+    rules: `conformance/README.md`). The remaining 423 requirements are
+    unclaimed — accessibility entirely (no OS bridge), everything outside
+    foundations/behaviors, and every requirement without a genuinely
+    matching merged test. Nothing is `verified` (no visual, platform, or
+    scale evidence exists), and syncing these claims back into the
+    design-system parity index is a later, owner-approved step (see
+    `docs/catalogue-conformance-matrix.md`).
 16. `docs/public-api-policy.md` describes a historical, now-retired
     conformance vocabulary (`ALPHA-00`, axes like `M`/`P`/`I`/`A11y`, and
     `Stable`/`Experimental`/`Planned` statuses removed elsewhere in this
