@@ -13,6 +13,7 @@ stern = { version = "=0.0.1-alpha.1", path = "../../crates/stern" }
 stern-icons-phosphor = { version = "=0.0.1-alpha.1", path = "../../crates/stern-icons-phosphor" }
 
 [dev-dependencies]
+serde_json = "1.0.145"
 syn = { version = "2.0.117", features = ["full", "visit"] }
 
 [lints]
