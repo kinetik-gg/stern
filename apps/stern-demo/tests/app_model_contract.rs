@@ -105,6 +105,7 @@ fn single_registry_owns_exact_existing_action_descriptors() {
         [
             ("workspace.edit", "Edit Workspace"),
             ("workspace.graph", "Graph Workspace"),
+            ("workspace.gallery", "Gallery Workspace"),
             ("shared.apply", "Apply Shared State"),
             ("color-style.save", "Save Color Style"),
         ]
@@ -113,7 +114,7 @@ fn single_registry_owns_exact_existing_action_descriptors() {
     let library = include_str!("../src/lib.rs");
     let model = include_str!("../src/app_model.rs");
     assert!(!library.contains("ActionDescriptor::new"));
-    assert_eq!(model.matches("ActionDescriptor::new").count(), 5);
+    assert_eq!(model.matches("ActionDescriptor::new").count(), 6);
     assert_eq!(
         registry.edit_workspace().icon,
         Some(stern_icons_phosphor::regular::PENCIL_SIMPLE.icon())
@@ -121,6 +122,10 @@ fn single_registry_owns_exact_existing_action_descriptors() {
     assert_eq!(
         registry.graph_workspace().icon,
         Some(stern_icons_phosphor::regular::GRAPH.icon())
+    );
+    assert_eq!(
+        registry.gallery_workspace().icon,
+        Some(stern_icons_phosphor::regular::SQUARES_FOUR.icon())
     );
     assert_eq!(
         registry.apply_shared_state().icon,

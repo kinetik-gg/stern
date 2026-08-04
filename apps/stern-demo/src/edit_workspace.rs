@@ -224,6 +224,11 @@ impl EditWorkspace {
         let tab_strip = TabStrip::from_tabs([
             workspace_tab(101, "Edit Workspace", workspace == DemoWorkspace::Edit),
             workspace_tab(102, "Graph Workspace", workspace == DemoWorkspace::Graph),
+            workspace_tab(
+                103,
+                "Gallery Workspace",
+                workspace == DemoWorkspace::Gallery,
+            ),
         ]);
         let mut status_items = vec![workspace_status(
             model.applied_revision(),
@@ -753,6 +758,8 @@ pub(crate) fn route_workspace_tabs(
             actions.edit_workspace()
         } else if target.panel == PanelId::from_raw(102) {
             actions.graph_workspace()
+        } else if target.panel == PanelId::from_raw(103) {
+            actions.gallery_workspace()
         } else {
             continue;
         };
@@ -799,6 +806,7 @@ fn chrome_config(layout: WorkspaceLayout, actions: &DemoActionRegistry) -> Chrom
         (ChromeSceneItemKey::Menu(MenuBarMenuId::from_raw(1)), 96.0),
         (ChromeSceneItemKey::Tab(PanelId::from_raw(101)), 132.0),
         (ChromeSceneItemKey::Tab(PanelId::from_raw(102)), 140.0),
+        (ChromeSceneItemKey::Tab(PanelId::from_raw(103)), 148.0),
         (ChromeSceneItemKey::Status(StatusItemId::from_raw(1)), 152.0),
         (ChromeSceneItemKey::Status(StatusItemId::from_raw(2)), 168.0),
         (ChromeSceneItemKey::Status(StatusItemId::from_raw(3)), 204.0),
