@@ -259,6 +259,32 @@ fn semantics_without_focus(frame: &stern_core::FrameOutput) -> Vec<SemanticNode>
         .collect()
 }
 
+/// Neutralizes the one primitive delta focus is now allowed to introduce:
+/// 06-collections.md §Rows tables "focused (kbd, not selected): S4 + inset
+/// focus ring" — an otherwise-idle row's fill legitimately promotes to
+/// `surface.hover` on keyboard focus (rows are a documented exception to
+/// 00-language.md's general "focus never recolors the body" rule). Row
+/// rects are the only primitives painted with `radii.none` in this widget,
+/// so that's a safe, narrow discriminator for pairing them up positionally.
+fn primitives_with_row_focus_fill_neutralized(
+    focused: &stern_core::FrameOutput,
+    unfocused: &stern_core::FrameOutput,
+) -> (Vec<Primitive>, Vec<Primitive>) {
+    let theme = default_dark_theme();
+    let mut focused_list = primitives_without_focus_paths(focused);
+    let unfocused_list = unfocused.primitives.clone();
+    for (f, u) in focused_list.iter_mut().zip(unfocused_list.iter()) {
+        if let (Primitive::Rect(fr), Primitive::Rect(ur)) = (f, u)
+            && fr.radius == theme.radii.none
+            && fr.rect == ur.rect
+            && fr.stroke == ur.stroke
+        {
+            fr.fill = ur.fill;
+        }
+    }
+    (focused_list, unfocused_list)
+}
+
 fn assert_focus_only_transition(focused: &Run, unfocused: &Run) {
     assert_eq!(focused.callbacks, unfocused.callbacks);
     assert_eq!(focused.frame.repaint, unfocused.frame.repaint);
@@ -266,10 +292,9 @@ fn assert_focus_only_transition(focused: &Run, unfocused: &Run) {
         output_without_focus(focused.output.clone()),
         unfocused.output
     );
-    assert_eq!(
-        primitives_without_focus_paths(&focused.frame),
-        unfocused.frame.primitives
-    );
+    let (focused_primitives, unfocused_primitives) =
+        primitives_with_row_focus_fill_neutralized(&focused.frame, &unfocused.frame);
+    assert_eq!(focused_primitives, unfocused_primitives);
     assert_eq!(
         semantics_without_focus(&focused.frame),
         unfocused.frame.semantics.nodes()
@@ -880,9 +905,16 @@ fn disclosure_identity_isolated_from_row_focus_selection_activation_and_cursor()
     assert_tree_row_focus(&selected.frame, Rect::new(0.0, 0.0, 160.0, 20.0), true);
 }
 
+// Renamed for family issue #915: 06-collections.md §Tree rows tables the
+// disclosure glyph as always `content.muted` ("caret-right icon 12 muted"),
+// with no selected-row exception — unlike the "named exception" this test
+// used to document, where the disclosure line inherited the row's selected
+// white text color. That was itself a pre-existing nonconformity, not a
+// sanctioned one; the label text keeps its own, separately-documented,
+// selected-row white-on-blue exception below.
 #[test]
 #[allow(clippy::too_many_lines)]
-fn selected_branch_states_inventory_the_exact_label_and_disclosure_exception() {
+fn selected_branch_states_inventory_the_exact_label_exception_with_muted_disclosure() {
     let theme = default_dark_theme();
     assert_eq!(
         theme.colors.selection.background,
@@ -1010,7 +1042,7 @@ fn selected_branch_states_inventory_the_exact_label_and_disclosure_exception() {
                 };
                 assert_eq!(
                     line.stroke.brush,
-                    Brush::Solid(theme.colors.selection.foreground),
+                    Brush::Solid(theme.colors.content.muted),
                     "{name}, expanded={expanded}"
                 );
             }
@@ -1128,10 +1160,10 @@ fn disabled_retained_row_focus_suppresses_annuli_and_remains_non_focusable() {
     let Primitive::Rect(base) = &disabled.frame.primitives[base_index] else {
         unreachable!()
     };
-    assert_eq!(
-        base.fill,
-        Some(Brush::Solid(theme.colors.surface.control_disabled))
-    );
+    // 06-collections.md §Rows: "disabled row: transparent" — disabled takes
+    // precedence over the row's own selected state, unlike the old
+    // `surface.control_disabled` tier this used to pin.
+    assert_eq!(base.fill, Some(Brush::Solid(Color::TRANSPARENT)));
     for primitive in &disabled.frame.primitives[base_index + 1..=base_index + 2] {
         let Primitive::Line(line) = primitive else {
             panic!("disabled branch disclosure line");

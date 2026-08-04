@@ -470,15 +470,18 @@ impl Ui<'_> {
         }
     }
 
+    // Collection container recipe (docs/visual-spec/06-collections.md
+    // §Collection container): fill S2 `surface.panel`, border 1px
+    // `border.default`, `radii.sm`, clipped.
     fn paint_virtual_table_surface(&mut self, rect: Rect) {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.panel)),
             stroke: Some(Stroke::new(
-                self.theme.strokes.hairline,
-                Brush::Solid(self.theme.colors.border.subtle),
+                self.theme.strokes.default,
+                Brush::Solid(self.theme.colors.border.default),
             )),
-            radius: self.theme.radii.none,
+            radius: self.theme.radii.sm,
         }));
     }
 
@@ -497,7 +500,7 @@ impl Ui<'_> {
             disabled: response.state.disabled,
             selected,
         };
-        let recipe = self.theme.row(state);
+        let recipe = self.theme.table_header_row(state);
         for primitive in row_surface_primitives(
             self.theme,
             &recipe,

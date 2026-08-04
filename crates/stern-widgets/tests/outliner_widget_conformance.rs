@@ -681,9 +681,12 @@ fn visibility_and_lock_controls_emit_typed_requests_without_mutating_app_flags()
             _ => None,
         })
         .expect("outliner structural surface");
+    // 06-collections.md §Collection container: the container border is
+    // `stroke.default` (panel/menu-outline tier), distinct from a row's own
+    // `stroke.hairline` divider border.
     assert_eq!(
         surface.stroke.map(|stroke| stroke.width),
-        Some(strokes.hairline)
+        Some(strokes.default)
     );
     let visibility_inset = zones
         .visibility_toggle_rect

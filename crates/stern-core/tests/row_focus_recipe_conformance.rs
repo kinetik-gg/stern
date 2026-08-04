@@ -1,4 +1,17 @@
-//! Exact focus-neutral row recipe and selected-color exception conformance.
+//! Exact row-recipe focus/selection precedence and selected-color exception
+//! conformance.
+//!
+//! `row_recipe_promotes_fill_on_focus_exactly_like_hover_and_never_elsewhere`
+//! was rewritten for family issue #915: `docs/visual-spec/06-collections.md`
+//! §Rows explicitly requires "focused (kbd, not selected): S4 + inset focus
+//! ring" — a keyboard-focused, otherwise-idle row DOES promote its fill to
+//! the hover tier, unlike buttons/tabs where focus never recolors the body.
+//! The prior version of this test asserted focus was a no-op recipe delta in
+//! every case; that premise contradicted the spec's explicit row-focus row
+//! and has been replaced with per-case expected backgrounds. Border, radius,
+//! and text color remain untouched by focus in all cases (the two-layer ring
+//! itself is a separate, additive paint step per `00-language.md` §Focus
+//! model, never baked into the recipe's border field).
 
 #![allow(clippy::float_cmp)]
 
@@ -30,14 +43,12 @@ fn contrast_ratio(foreground: Color, background: Color) -> f32 {
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn row_recipe_is_focus_neutral_and_preserves_exact_state_precedence() {
+fn row_recipe_promotes_fill_on_focus_exactly_like_hover_and_never_elsewhere() {
     let mut colors = ThemeColors::default_dark();
-    colors.surface.sunken = Color::rgb8(1, 2, 3);
     colors.surface.hover = Color::rgb8(4, 5, 6);
-    colors.surface.control_disabled = Color::rgb8(7, 8, 9);
     colors.selection.background = Color::rgb8(10, 11, 12);
     colors.selection.foreground = Color::rgb8(13, 14, 15);
-    colors.content.primary = Color::rgb8(16, 17, 18);
+    colors.content.secondary = Color::rgb8(16, 17, 18);
     colors.content.disabled = Color::rgb8(19, 20, 21);
     colors.border.subtle = Color::rgb8(22, 23, 24);
     colors.focus.ring = Color::rgb8(25, 26, 27);
@@ -46,12 +57,25 @@ fn row_recipe_is_focus_neutral_and_preserves_exact_state_precedence() {
     let theme = default_dark_theme()
         .with_colors(colors)
         .with_strokes(strokes);
+
+    // (name, state sans focus, unfocused background, focused background, foreground)
     let cases = [
         (
             "default",
             ComponentState::default(),
-            colors.surface.sunken,
-            colors.content.primary,
+            Color::TRANSPARENT,
+            colors.surface.hover,
+            colors.content.secondary,
+        ),
+        (
+            "pressed",
+            ComponentState {
+                pressed: true,
+                ..ComponentState::default()
+            },
+            Color::TRANSPARENT,
+            colors.surface.hover,
+            colors.content.secondary,
         ),
         (
             "hovered",
@@ -60,16 +84,8 @@ fn row_recipe_is_focus_neutral_and_preserves_exact_state_precedence() {
                 ..ComponentState::default()
             },
             colors.surface.hover,
-            colors.content.primary,
-        ),
-        (
-            "pressed",
-            ComponentState {
-                pressed: true,
-                ..ComponentState::default()
-            },
-            colors.surface.sunken,
-            colors.content.primary,
+            colors.surface.hover,
+            colors.content.secondary,
         ),
         (
             "selected",
@@ -77,6 +93,7 @@ fn row_recipe_is_focus_neutral_and_preserves_exact_state_precedence() {
                 selected: true,
                 ..ComponentState::default()
             },
+            colors.selection.background,
             colors.selection.background,
             colors.selection.foreground,
         ),
@@ -88,6 +105,7 @@ fn row_recipe_is_focus_neutral_and_preserves_exact_state_precedence() {
                 ..ComponentState::default()
             },
             colors.selection.background,
+            colors.selection.background,
             colors.selection.foreground,
         ),
         (
@@ -98,6 +116,7 @@ fn row_recipe_is_focus_neutral_and_preserves_exact_state_precedence() {
                 ..ComponentState::default()
             },
             colors.selection.background,
+            colors.selection.background,
             colors.selection.foreground,
         ),
         (
@@ -106,33 +125,56 @@ fn row_recipe_is_focus_neutral_and_preserves_exact_state_precedence() {
                 disabled: true,
                 ..ComponentState::default()
             },
-            colors.surface.control_disabled,
+            Color::TRANSPARENT,
+            Color::TRANSPARENT,
             colors.content.disabled,
         ),
         (
-            "disabled-focused-hovered-pressed-selected",
+            "disabled-hovered-pressed-selected",
             ComponentState {
                 hovered: true,
                 pressed: true,
-                focused: true,
                 disabled: true,
                 selected: true,
+                ..ComponentState::default()
             },
-            colors.surface.control_disabled,
+            Color::TRANSPARENT,
+            Color::TRANSPARENT,
             colors.content.disabled,
         ),
     ];
 
-    for (name, state, expected_background, expected_foreground) in cases {
+    for (
+        name,
+        state,
+        expected_unfocused_background,
+        expected_focused_background,
+        expected_foreground,
+    ) in cases
+    {
         let unfocused = theme.row(with_focus(state, false));
         let focused = theme.row(with_focus(state, true));
-        assert_eq!(focused, unfocused, "focus-only recipe delta for {name}");
+
+        assert_eq!(
+            unfocused.background,
+            Brush::Solid(expected_unfocused_background),
+            "{name} unfocused"
+        );
         assert_eq!(
             focused.background,
-            Brush::Solid(expected_background),
-            "{name}"
+            Brush::Solid(expected_focused_background),
+            "{name} focused"
         );
-        assert_eq!(focused.foreground, expected_foreground, "{name}");
+        assert_eq!(unfocused.foreground, expected_foreground, "{name}");
+        assert_eq!(
+            focused.foreground, expected_foreground,
+            "{name} focus never changes text"
+        );
+
+        // Focus never touches border or radius: the two-layer ring is a
+        // separate, additive paint step, not a recipe field.
+        assert_eq!(focused.border, unfocused.border, "{name}");
+        assert_eq!(focused.radius, unfocused.radius, "{name}");
         assert_eq!(focused.border.width, strokes.hairline, "{name}");
         assert_eq!(
             focused.border.brush,

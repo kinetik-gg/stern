@@ -22,7 +22,6 @@ use crate::{
     ItemId, Menu, MenuItem, MenuOverlay, OverlayDismissal, OverlayKind, OverlayScene,
     OverlaySceneIntent, OverlaySceneSurface, PopoverPlacement, Selection, TextFieldAccess,
     collection_context_actions,
-    components::{RowFocusPlacement, row_surface_primitives},
 };
 
 impl Ui<'_> {
@@ -833,41 +832,59 @@ impl Ui<'_> {
         }
     }
 
+    // Collection container recipe (docs/visual-spec/06-collections.md
+    // §Collection container): fill S2 `surface.panel`, border 1px
+    // `border.default`, `radii.sm`, clipped.
     fn paint_asset_browser_surface(&mut self, rect: Rect) {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.panel)),
             stroke: Some(Stroke::new(
-                self.theme.strokes.hairline,
-                Brush::Solid(self.theme.colors.border.subtle),
+                self.theme.strokes.default,
+                Brush::Solid(self.theme.colors.border.default),
             )),
-            radius: self.theme.radii.none,
+            radius: self.theme.radii.sm,
         }));
     }
 
+    /// Paints one asset card per `Theme::asset_card` (06-collections.md
+    /// §Asset grid) — a deliberate, documented exception to `Theme::row`'s
+    /// selection doctrine: cards use border+badge selection, never full
+    /// accent fill.
     fn paint_asset_browser_item(
         &mut self,
         item: &AssetBrowserItemRect,
         response: Response,
         paint_name: bool,
     ) {
+        let disabled = response.state.disabled;
+        let selected = response.state.selected;
         let state = ComponentState {
             hovered: response.state.hovered,
             pressed: response.state.pressed,
             focused: response.state.focused,
-            disabled: response.state.disabled,
-            selected: response.state.selected,
+            disabled,
+            selected,
         };
-        let recipe = self.theme.row(state);
-        for primitive in row_surface_primitives(
-            self.theme,
-            &recipe,
-            state,
-            item.rect,
-            recipe.radius,
-            RowFocusPlacement::Inward,
-        ) {
-            self.primitive(primitive);
+        let recipe = self.theme.asset_card(state);
+        self.primitive(Primitive::Rect(RectPrimitive {
+            rect: item.rect,
+            fill: Some(recipe.background),
+            stroke: Some(recipe.border),
+            radius: recipe.radius,
+        }));
+        if response.state.focused
+            && !disabled
+            && let Some(focus) = self.theme.focus_ring(true)
+        {
+            for primitive in
+                focus.inward_annulus_primitives(item.rect, recipe.radius, recipe.border.width)
+            {
+                self.primitive(primitive);
+            }
+        }
+        if selected {
+            self.paint_asset_browser_selection_badge(item.rect);
         }
         self.primitive(Primitive::Rect(RectPrimitive {
             rect: item.preview_rect,
@@ -882,10 +899,7 @@ impl Ui<'_> {
             self.primitive(Primitive::Image(ImagePrimitive {
                 image,
                 rect: item.preview_rect,
-                tint: response
-                    .state
-                    .disabled
-                    .then_some(self.theme.colors.content.disabled),
+                tint: disabled.then_some(self.theme.colors.content.disabled),
             }));
         } else {
             paint_asset_text(
@@ -893,7 +907,7 @@ impl Ui<'_> {
                 item.preview_rect,
                 &item.item.fallback.label,
                 TextRole::Label,
-                if response.state.disabled {
+                if disabled {
                     self.theme.colors.content.disabled
                 } else {
                     self.theme.colors.content.muted
@@ -913,13 +927,48 @@ impl Ui<'_> {
             self,
             item.kind_rect,
             &item.item.kind,
-            TextRole::Body,
-            if response.state.disabled {
+            TextRole::Monospace,
+            if disabled {
                 self.theme.colors.content.disabled
             } else {
                 self.theme.colors.content.muted
             },
         );
+    }
+
+    /// 06-collections.md §Asset grid: "plus 7px `accent.default` dot badge
+    /// top-right inset 6 with 2px S0 separator ring." Drawn as two circular
+    /// rects (`radii.full`), the same nested-circle technique
+    /// `RadiusScale::full` already documents for dots and circular handles.
+    fn paint_asset_browser_selection_badge(&mut self, card_rect: Rect) {
+        const DOT_DIAMETER: f32 = 7.0;
+        const RING_WIDTH: f32 = 2.0;
+        const INSET: f32 = 6.0;
+        let ring_diameter = DOT_DIAMETER + RING_WIDTH * 2.0;
+        let ring_rect = Rect::new(
+            card_rect.max_x() - INSET - ring_diameter,
+            card_rect.y + INSET,
+            ring_diameter,
+            ring_diameter,
+        );
+        let dot_rect = Rect::new(
+            ring_rect.x + RING_WIDTH,
+            ring_rect.y + RING_WIDTH,
+            DOT_DIAMETER,
+            DOT_DIAMETER,
+        );
+        self.primitive(Primitive::Rect(RectPrimitive {
+            rect: ring_rect,
+            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
+            stroke: None,
+            radius: self.theme.radii.full,
+        }));
+        self.primitive(Primitive::Rect(RectPrimitive {
+            rect: dot_rect,
+            fill: Some(Brush::Solid(self.theme.colors.accent.default)),
+            stroke: None,
+            radius: self.theme.radii.full,
+        }));
     }
 
     fn paint_asset_browser_drop_preview(

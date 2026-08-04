@@ -177,7 +177,7 @@ fn actual_table_header_focus_translates_with_fractional_scroll_at_release_scales
             selected: sort.is_some(),
             ..ComponentState::default()
         };
-        let recipe = theme.row(state);
+        let recipe = theme.table_header_row(state);
         assert_eq!(base.fill, Some(recipe.background));
         assert_eq!(base.stroke, Some(recipe.border));
         assert_eq!(base.radius, recipe.radius);

@@ -320,7 +320,7 @@ fn assert_item_focus(run: &Run, target: ItemId) -> [Primitive; 2] {
         disabled: response.state.disabled,
         selected: response.state.selected,
     };
-    let recipe = theme.row(state);
+    let recipe = theme.asset_card(state);
     let base_index = run
         .frame
         .primitives
@@ -362,11 +362,30 @@ fn assert_item_focus(run: &Run, target: ItemId) -> [Primitive; 2] {
         assert!(item.rect.contains_rect(bounds));
     }
 
+    // Selection paints an additional 2-primitive accent dot badge
+    // (06-collections.md §Asset grid) between the focus ring and the
+    // preview rect.
+    let content_start = if response.state.selected {
+        assert!(matches!(
+            run.frame.primitives[base_index + 3],
+            Primitive::Rect(ref badge) if badge.fill == Some(Brush::Solid(theme.colors.surface.sunken))
+                && badge.radius == theme.radii.full
+        ));
+        assert!(matches!(
+            run.frame.primitives[base_index + 4],
+            Primitive::Rect(ref badge) if badge.fill == Some(Brush::Solid(theme.colors.accent.default))
+                && badge.radius == theme.radii.full
+        ));
+        base_index + 5
+    } else {
+        base_index + 3
+    };
+
     assert!(matches!(
-        run.frame.primitives[base_index + 3],
+        run.frame.primitives[content_start],
         Primitive::Rect(preview) if preview.rect == item.preview_rect
     ));
-    let content_index = base_index + 4;
+    let content_index = content_start + 1;
     if item.item.thumbnail.is_some() {
         assert!(matches!(
             run.frame.primitives[content_index],
@@ -678,16 +697,24 @@ fn assert_only_item_content_while_editing(run: &Run, target: ItemId) {
         .iter()
         .position(|primitive| matches!(primitive, Primitive::Rect(base) if base.rect == item.rect))
         .expect("editing item base");
+    // Selection paints an additional 2-primitive accent dot badge
+    // (06-collections.md §Asset grid) between the card base and the preview
+    // rect; renaming an item is typically only reachable from a selected one.
+    let content_start = if item_response(run, target).state.selected {
+        base_index + 3
+    } else {
+        base_index + 1
+    };
     assert!(matches!(
-        run.frame.primitives[base_index + 1],
+        run.frame.primitives[content_start],
         Primitive::Rect(preview) if preview.rect == item.preview_rect
     ));
     assert!(matches!(
-        run.frame.primitives[base_index + 2],
+        run.frame.primitives[content_start + 1],
         Primitive::Text(ref text) if text.text == item.item.fallback.label
     ));
     assert!(matches!(
-        run.frame.primitives[base_index + 3],
+        run.frame.primitives[content_start + 2],
         Primitive::Text(ref text) if text.text == item.item.kind
     ));
     assert_eq!(
@@ -1868,9 +1895,17 @@ fn context_outside_press_and_focused_command_restore_asset_trigger_without_click
         );
     }
 }
+// Renamed for family issue #915: `Theme::asset_card` (06-collections.md
+// §Asset grid) replaced the old `Theme::row`-reused card recipe, which
+// painted a full `selection.background` accent fill under selected text —
+// a marginal, explicitly "named exception" contrast case this test used to
+// document. Cards now select via S2→S3 fill + border, never accent fill, so
+// both name (`content.primary`) and kind (`content.muted`) text sit on a
+// near-black background with ordinary, comfortably-AA contrast; there is no
+// longer a named exception to inventory.
 #[test]
 #[allow(clippy::too_many_lines)]
-fn selected_names_inventory_only_the_named_exception_while_muted_kind_remains_nonconforming() {
+fn selected_asset_card_text_uses_card_recipe_colors_with_ordinary_contrast() {
     let theme = default_dark_theme();
     let model = AssetBrowserModel::new(vec![asset(1, "Selected asset", "Selected kind")]);
 
@@ -1906,23 +1941,28 @@ fn selected_names_inventory_only_the_named_exception_while_muted_kind_remains_no
                 memory.focus(target_widget);
             }
             let run = run_frame(&model, config(view_mode), &mut state, &mut memory, input);
+            let response = item_response(&run, id(1));
+            let recipe = theme.asset_card(ComponentState {
+                hovered: response.state.hovered,
+                pressed: response.state.pressed,
+                focused: response.state.focused,
+                disabled: response.state.disabled,
+                selected: response.state.selected,
+            });
             let Primitive::Rect(base) = &run.frame.primitives[item_base_index(&run, id(1))] else {
                 unreachable!()
             };
-            assert_eq!(
-                base.fill,
-                Some(Brush::Solid(theme.colors.selection.background))
-            );
+            assert_eq!(base.fill, Some(recipe.background));
+            assert_eq!(base.fill, Some(Brush::Solid(theme.colors.surface.control)));
             let name = text_color(&run, "Selected asset");
             let kind = text_color(&run, "Selected kind");
-            assert_eq!(name, theme.colors.selection.foreground);
+            assert_eq!(name, recipe.foreground);
+            assert_eq!(name, theme.colors.content.primary);
             assert_eq!(kind, theme.colors.content.muted);
-            let name_ratio = contrast_ratio(name, theme.colors.selection.background);
-            let kind_ratio = contrast_ratio(kind, theme.colors.selection.background);
-            assert!((3.52..3.54).contains(&name_ratio));
-            assert!(name_ratio < 4.5);
-            assert!((1.23..1.25).contains(&kind_ratio));
-            assert!(kind_ratio < 3.0);
+            let name_ratio = contrast_ratio(name, theme.colors.surface.control);
+            let kind_ratio = contrast_ratio(kind, theme.colors.surface.control);
+            assert!(name_ratio >= 4.5, "name_ratio={name_ratio}");
+            assert!(kind_ratio >= 4.5, "kind_ratio={kind_ratio}");
             if focused {
                 assert_item_focus(&run, id(1));
             } else {
@@ -1960,7 +2000,7 @@ fn selected_names_inventory_only_the_named_exception_while_muted_kind_remains_no
         UiInput::default(),
     );
     let response = item_response(&disabled, id(1));
-    let recipe = theme.row(ComponentState {
+    let recipe = theme.asset_card(ComponentState {
         hovered: response.state.hovered,
         pressed: response.state.pressed,
         focused: response.state.focused,
@@ -1976,6 +2016,7 @@ fn selected_names_inventory_only_the_named_exception_while_muted_kind_remains_no
         text_color(&disabled, "Disabled selected"),
         recipe.foreground
     );
+    assert_eq!(recipe.foreground, theme.colors.content.disabled);
     assert_ne!(recipe.foreground, theme.colors.selection.foreground);
     assert_ne!(
         base.fill,

@@ -321,15 +321,18 @@ impl Ui<'_> {
         }
     }
 
+    // Collection container recipe (docs/visual-spec/06-collections.md
+    // §Collection container): fill S2 `surface.panel`, border 1px
+    // `border.default`, `radii.sm`, clipped.
     fn paint_virtual_tree_surface(&mut self, rect: Rect) {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.panel)),
             stroke: Some(Stroke::new(
-                self.theme.strokes.hairline,
-                Brush::Solid(self.theme.colors.border.subtle),
+                self.theme.strokes.default,
+                Brush::Solid(self.theme.colors.border.default),
             )),
-            radius: self.theme.radii.none,
+            radius: self.theme.radii.sm,
         }));
     }
 
@@ -366,7 +369,20 @@ impl Ui<'_> {
         }
 
         if row.has_children {
-            self.paint_virtual_tree_disclosure(disclosure_rect, row.expanded, recipe.foreground);
+            // 06-collections.md §Tree rows: "caret-right icon 12 muted" — the
+            // disclosure glyph is `content.muted` independent of the row's
+            // own state-driven foreground (unlike the label text), except
+            // disabled still overrides per 00-language.md's universal
+            // "disabled: content.disabled — Use: disabled anything" rule.
+            self.paint_virtual_tree_disclosure(
+                disclosure_rect,
+                row.expanded,
+                if disabled {
+                    self.theme.colors.content.disabled
+                } else {
+                    self.theme.colors.content.muted
+                },
+            );
         }
 
         let font = self.theme.font(TextRole::Label);

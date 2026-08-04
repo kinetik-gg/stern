@@ -812,15 +812,18 @@ impl Ui<'_> {
         }
     }
 
+    // Collection container recipe (docs/visual-spec/06-collections.md
+    // §Collection container): fill S2 `surface.panel`, border 1px
+    // `border.default`, `radii.sm`, clipped.
     fn paint_outliner_surface(&mut self, rect: Rect) {
         self.primitive(Primitive::Rect(RectPrimitive {
             rect,
-            fill: Some(Brush::Solid(self.theme.colors.surface.sunken)),
+            fill: Some(Brush::Solid(self.theme.colors.surface.panel)),
             stroke: Some(Stroke::new(
-                self.theme.strokes.hairline,
-                Brush::Solid(self.theme.colors.border.subtle),
+                self.theme.strokes.default,
+                Brush::Solid(self.theme.colors.border.default),
             )),
-            radius: self.theme.radii.none,
+            radius: self.theme.radii.sm,
         }));
     }
 
@@ -862,24 +865,45 @@ impl Ui<'_> {
         }
 
         if zones.row.has_children {
+            // 06-collections.md §Tree rows: "caret-right icon 12 muted" — the
+            // disclosure glyph is `content.muted` independent of the row's
+            // own state-driven foreground, except disabled still overrides
+            // per 00-language.md's universal "disabled: content.disabled —
+            // Use: disabled anything" rule.
             self.paint_outliner_disclosure(
                 zones.disclosure_rect,
                 zones.row.expanded,
-                recipe.foreground,
+                if state.disabled {
+                    self.theme.colors.content.disabled
+                } else {
+                    self.theme.colors.content.muted
+                },
             );
         }
+        // 06-collections.md §Tree rows: "Inline visibility/lock toggles: quiet
+        // icon buttons 16, muted ... ; remain visible on selected rows in
+        // white at 78%." (The hover promotion to `content.primary` needs
+        // per-icon hover plumbing this call site doesn't carry yet; logged
+        // to KNOWN-GAPS rather than guessed.)
+        let toggle_foreground = if state.disabled {
+            self.theme.colors.content.disabled
+        } else if state.selected {
+            self.theme.colors.selection.foreground.with_alpha(0.78)
+        } else {
+            self.theme.colors.content.muted
+        };
         if zones.row.flags.visibility_toggle_available {
             self.paint_outliner_visibility(
                 zones.visibility_toggle_rect,
                 zones.row.flags.visible,
-                recipe.foreground,
+                toggle_foreground,
             );
         }
         if zones.row.flags.lock_toggle_available {
             self.paint_outliner_lock(
                 zones.lock_toggle_rect,
                 zones.row.flags.locked,
-                recipe.foreground,
+                toggle_foreground,
             );
         }
         if paint_label {
