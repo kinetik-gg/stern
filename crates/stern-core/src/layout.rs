@@ -1,5 +1,7 @@
 //! Measurement-aware layout primitives.
 
+pub mod tree;
+
 use crate::{Rect, Size};
 
 /// Layout axis.
@@ -119,13 +121,28 @@ fn sanitize_insets(insets: Insets) -> Insets {
 pub struct Measurement {
     /// Desired logical size.
     pub desired: Size,
+    /// Distance from the top of the desired box to the text baseline.
+    ///
+    /// Reserved by RFC 0001 §8 (accepted default): measurers may report it,
+    /// but no alignment logic consumes it yet.
+    pub baseline: Option<f32>,
 }
 
 impl Measurement {
     /// Creates a measurement from a desired size.
     #[must_use]
     pub const fn new(desired: Size) -> Self {
-        Self { desired }
+        Self {
+            desired,
+            baseline: None,
+        }
+    }
+
+    /// Returns this measurement with a reported baseline.
+    #[must_use]
+    pub const fn with_baseline(mut self, baseline: f32) -> Self {
+        self.baseline = Some(baseline);
+        self
     }
 }
 

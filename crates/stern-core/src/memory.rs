@@ -7,6 +7,7 @@ use crate::{
     LivenessUpdateStatus, Modifiers, ObserverDelivery, ObserverDrain, ObserverNotification,
     ObserverNotificationId, ObserverPublishStatus, ObserverRegistry, ObserverSubscriptionHandle,
     ObserverSubscriptionId, Point, Response, UiInput, UiInputEvent, Vec2, WidgetId,
+    layout::tree::MeasureCache,
 };
 
 /// Frame-local routing decision for one pointer event class.
@@ -198,6 +199,9 @@ pub struct UiMemory {
     pending_text_input_stop: Option<WidgetId>,
     scroll_offsets: HashMap<WidgetId, Vec2>,
     pending_scroll_offsets: HashMap<WidgetId, Vec2>,
+    /// Retained layout measure cache (RFC 0001 L0), staged like scroll
+    /// offsets: solves stage fresh measurements, `end_frame` commits them.
+    measure_cache: MeasureCache,
     /// Pre-drag value snapshot retained for the widget currently owning a
     /// value-based pointer drag (e.g. a slider or numeric scrub input), so a
     /// cancelled or interrupted drag can restore the value it mutated.
@@ -245,6 +249,7 @@ impl UiMemory {
         self.domain_drag_responses.clear();
         self.scroll_offsets
             .extend(std::mem::take(&mut self.pending_scroll_offsets));
+        self.measure_cache.commit();
         self.liveness.end_frame();
     }
 
@@ -1099,6 +1104,20 @@ impl UiMemory {
     #[doc(hidden)]
     pub fn stage_scroll_offset(&mut self, id: WidgetId, offset: Vec2) {
         self.pending_scroll_offsets.insert(id, offset);
+    }
+
+    /// Returns the retained layout measure cache.
+    #[must_use]
+    pub const fn measure_cache(&self) -> &MeasureCache {
+        &self.measure_cache
+    }
+
+    /// Returns the retained layout measure cache for solving.
+    ///
+    /// Layout solves stage fresh measurements into the cache; staged entries
+    /// are committed at the end of the frame like pending scroll offsets.
+    pub const fn measure_cache_mut(&mut self) -> &mut MeasureCache {
+        &mut self.measure_cache
     }
 
     /// Returns the pre-drag value snapshot retained for a widget's active
