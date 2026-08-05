@@ -14,7 +14,9 @@
 pub mod contact_sheet;
 pub mod diff;
 pub mod frame;
+pub mod interactive;
 pub mod manifest;
+pub mod ops;
 pub mod raster;
 pub mod stories;
 pub mod story;
