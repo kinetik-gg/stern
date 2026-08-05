@@ -165,7 +165,13 @@ impl Executor<'_> {
                     }
                 }
             }
-            RenderCommandKind::Line { x0, y0, x1, y1, stroke } => {
+            RenderCommandKind::Line {
+                x0,
+                y0,
+                x1,
+                y1,
+                stroke,
+            } => {
                 let mut builder = PathBuilder::new();
                 builder.move_to(*x0, *y0);
                 builder.line_to(*x1, *y1);
@@ -347,7 +353,13 @@ impl Executor<'_> {
             },
             ..tiny_skia::Stroke::default()
         };
-        target.stroke_path(path, &paint, &skia_stroke, transform, self.clip_mask.as_ref());
+        target.stroke_path(
+            path,
+            &paint,
+            &skia_stroke,
+            transform,
+            self.clip_mask.as_ref(),
+        );
     }
 
     fn paint_text(
@@ -361,8 +373,7 @@ impl Executor<'_> {
         let paint = solid_paint(color, 1.0);
         for run in &layout.runs {
             let font_data = run.font.data.data();
-            let Some(font_ref) =
-                swash::FontRef::from_index(font_data, run.font.index as usize)
+            let Some(font_ref) = swash::FontRef::from_index(font_data, run.font.index as usize)
             else {
                 self.diagnostics
                     .push("text run font could not be parsed; run skipped".to_owned());
@@ -635,10 +646,7 @@ fn zeno_path(outline: &swash::scale::outline::Outline) -> Option<tiny_skia::Path
 }
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn render_image_pixmap(
-    image: &stern::render::RenderImage,
-    tint: Option<Color>,
-) -> Option<Pixmap> {
+fn render_image_pixmap(image: &stern::render::RenderImage, tint: Option<Color>) -> Option<Pixmap> {
     use stern::render::{RenderImageAlpha, RenderImageFormat};
 
     let mut pixmap = Pixmap::new(image.width.max(1), image.height.max(1))?;
@@ -702,7 +710,11 @@ fn box_blur(pixmap: &mut Pixmap, sigma: f32) {
     }
 }
 
-#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 fn blur_axis(data: &mut [u8], width: usize, height: usize, radius: usize, horizontal: bool) {
     let (major, minor) = if horizontal {
         (height, width)

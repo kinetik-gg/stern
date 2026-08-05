@@ -25,10 +25,13 @@ pub fn run_browser(filter: &str) -> Result<(), String> {
     if stories.is_empty() {
         return Err(format!("no stories match filter {filter:?}"));
     }
-    run(AppConfig::new("Stern Stories"), Browser {
-        stories,
-        selected: 0,
-    })
+    run(
+        AppConfig::new("Stern Stories"),
+        Browser {
+            stories,
+            selected: 0,
+        },
+    )
     .map_err(|error: AppError| error.to_string())
 }
 

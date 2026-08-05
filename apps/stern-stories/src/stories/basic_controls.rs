@@ -95,7 +95,25 @@ fn compose(ui: &mut Ui<'_>, rect: Rect) {
     ui.separator(row(1.0));
 
     ui.label(row(16.0), "List rows");
-    let _ = ui.list_row("list-row-selected", row(ROW_HEIGHT), "Selected row", true, false);
-    let _ = ui.list_row("list-row-default", row(ROW_HEIGHT), "Default row", false, false);
-    let _ = ui.list_row("list-row-disabled", row(ROW_HEIGHT), "Disabled row", false, true);
+    let _ = ui.list_row(
+        "list-row-selected",
+        row(ROW_HEIGHT),
+        "Selected row",
+        true,
+        false,
+    );
+    let _ = ui.list_row(
+        "list-row-default",
+        row(ROW_HEIGHT),
+        "Default row",
+        false,
+        false,
+    );
+    let _ = ui.list_row(
+        "list-row-disabled",
+        row(ROW_HEIGHT),
+        "Disabled row",
+        false,
+        true,
+    );
 }

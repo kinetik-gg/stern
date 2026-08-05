@@ -43,7 +43,9 @@ pub fn build_contact_sheet(cells: &[SheetCell]) -> Option<RasterFrame> {
     if cells.is_empty() {
         return None;
     }
-    let columns = COLUMNS.min(u32::try_from(cells.len()).unwrap_or(COLUMNS)).max(1);
+    let columns = COLUMNS
+        .min(u32::try_from(cells.len()).unwrap_or(COLUMNS))
+        .max(1);
     let rows = cells.len().div_ceil(columns as usize) as u32;
     let logical = Size::new(
         2.0f32.mul_add(MARGIN, columns as f32 * CELL_WIDTH),

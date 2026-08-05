@@ -38,9 +38,10 @@ fn story_dock() -> Dock {
 }
 
 fn frame(id: u64, panel: PanelId, title: &str) -> DockNode {
-    DockNode::Frame(Frame::new(FrameId::from_raw(id), vec![Panel::new(
-        panel, title,
-    )]))
+    DockNode::Frame(Frame::new(
+        FrameId::from_raw(id),
+        vec![Panel::new(panel, title)],
+    ))
 }
 
 fn split(axis: Axis, ratio: f32, first: DockNode, second: DockNode) -> DockNode {
@@ -81,7 +82,12 @@ fn assets_content(ui: &mut Ui<'_>, body: Rect) {
         "Night sky HDRI\n32-bit panorama",
     ];
     for (index, name) in names.iter().enumerate() {
-        let row = Rect::new(body.x, 24.0f32.mul_add(index_f32(index), body.y), body.width, 24.0);
+        let row = Rect::new(
+            body.x,
+            24.0f32.mul_add(index_f32(index), body.y),
+            body.width,
+            24.0,
+        );
         let _ = ui.list_row(("asset-row", index), row, *name, index == 1, false);
     }
 }

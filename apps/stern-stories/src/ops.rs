@@ -221,7 +221,10 @@ pub fn bless_directories(
 }
 
 fn file_matches_filter(file: &str, filter: &str) -> bool {
-    filter.is_empty() || file.to_ascii_lowercase().contains(&filter.to_ascii_lowercase())
+    filter.is_empty()
+        || file
+            .to_ascii_lowercase()
+            .contains(&filter.to_ascii_lowercase())
 }
 
 fn read_manifest(dir: &Path) -> Result<Vec<(String, u64)>, String> {
@@ -258,8 +261,7 @@ pub fn write_png(path: &Path, image: &RgbaImage) -> Result<(), String> {
 ///
 /// Returns an error when the file cannot be read or decoded.
 pub fn read_png(path: &Path) -> Result<RgbaImage, String> {
-    let bytes =
-        std::fs::read(path).map_err(|error| format!("read {}: {error}", path.display()))?;
+    let bytes = std::fs::read(path).map_err(|error| format!("read {}: {error}", path.display()))?;
     let pixmap = tiny_skia::Pixmap::decode_png(&bytes)
         .map_err(|error| format!("decode {}: {error}", path.display()))?;
     let pixels = pixmap

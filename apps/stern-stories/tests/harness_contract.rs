@@ -16,7 +16,11 @@ fn registry_ids_are_unique_kebab_case_and_titled() {
     let mut seen = std::collections::BTreeSet::new();
     for story in &stories {
         assert!(seen.insert(story.id), "duplicate story id {}", story.id);
-        assert!(!story.title.trim().is_empty(), "untitled story {}", story.id);
+        assert!(
+            !story.title.trim().is_empty(),
+            "untitled story {}",
+            story.id
+        );
         assert!(
             story
                 .id
@@ -52,7 +56,11 @@ fn registry_covers_component_composition_and_workspace_rungs() {
 fn variant_matrix_includes_required_scales_and_4k_workspace() {
     for story in registry() {
         let variants = story.variants();
-        let has_scale = |scale: f32| variants.iter().any(|v| (v.scale - scale).abs() < f32::EPSILON);
+        let has_scale = |scale: f32| {
+            variants
+                .iter()
+                .any(|v| (v.scale - scale).abs() < f32::EPSILON)
+        };
         assert!(has_scale(1.0), "{} missing 1.0 scale", story.id);
         assert!(has_scale(2.0), "{} missing 2.0 scale", story.id);
         if story.kind == StoryKind::Workspace {
@@ -117,10 +125,13 @@ fn manifest_roundtrip_preserves_files_and_hashes() {
     ];
     let json = manifest_json(&entries);
     let files = manifest_files(&json);
-    assert_eq!(files, vec![
-        ("a-b_10x10@1.00.png".to_owned(), 0xdead_beef),
-        ("c-d_20x20@2.00.png".to_owned(), 1),
-    ]);
+    assert_eq!(
+        files,
+        vec![
+            ("a-b_10x10@1.00.png".to_owned(), 0xdead_beef),
+            ("c-d_20x20@2.00.png".to_owned(), 1),
+        ]
+    );
 }
 
 fn solid_image(width: u32, height: u32, rgba: [u8; 4]) -> RgbaImage {
@@ -176,10 +187,8 @@ fn render_is_deterministic_and_bless_then_diff_is_clean() {
     let filter = "basic-controls";
     let first = scratch_dir("render-first");
     let second = scratch_dir("render-second");
-    let report_first =
-        render_stories(&stories, filter, &first).expect("first render succeeds");
-    let report_second =
-        render_stories(&stories, filter, &second).expect("second render succeeds");
+    let report_first = render_stories(&stories, filter, &first).expect("first render succeeds");
+    let report_second = render_stories(&stories, filter, &second).expect("second render succeeds");
     assert_eq!(report_first.files, report_second.files);
     assert!(!report_first.files.is_empty());
 
@@ -195,8 +204,8 @@ fn render_is_deterministic_and_bless_then_diff_is_clean() {
     // Without goldens, every file reports as missing a golden — never a match.
     let goldens = scratch_dir("goldens");
     let diff_out = scratch_dir("diff-out");
-    let statuses = diff_directories(&first, &goldens, &diff_out, "")
-        .expect("diff against empty goldens runs");
+    let statuses =
+        diff_directories(&first, &goldens, &diff_out, "").expect("diff against empty goldens runs");
     assert!(
         statuses
             .iter()

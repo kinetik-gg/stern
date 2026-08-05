@@ -19,7 +19,11 @@ impl RgbaImage {
     /// Creates an image buffer after validating dimensions.
     #[must_use]
     pub fn new(width: u32, height: u32, pixels: Vec<u8>) -> Option<Self> {
-        if pixels.len() == (width as usize).checked_mul(height as usize)?.checked_mul(4)? {
+        if pixels.len()
+            == (width as usize)
+                .checked_mul(height as usize)?
+                .checked_mul(4)?
+        {
             Some(Self {
                 width,
                 height,

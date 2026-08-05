@@ -101,7 +101,11 @@ fn render(options: &Options) -> Result<bool, String> {
     for file in &report.files {
         println!("rendered {}", out.join(file).display());
     }
-    println!("rendered {} files into {}", report.files.len(), out.display());
+    println!(
+        "rendered {} files into {}",
+        report.files.len(),
+        out.display()
+    );
     for (file, diagnostics) in &report.diagnostics {
         for diagnostic in diagnostics {
             println!("diagnostic {file}: {diagnostic}");
