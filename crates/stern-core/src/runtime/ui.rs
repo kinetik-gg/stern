@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::hash::Hash;
 
 use crate::input::{InputStreamConflict, UiInput, UiInputEvent};
@@ -44,6 +45,7 @@ pub struct Ui<'a> {
     pointer_plan_installed: bool,
     pointer_cancel_pending: bool,
     ordered_text_input_preview: Option<OrderedTextInputPreview>,
+    scoped_input: ScopedInputMemo,
     #[cfg(test)]
     ordered_text_input_materializations: usize,
 }
@@ -52,6 +54,55 @@ struct OrderedTextInputPreview {
     owner: WidgetId,
     owner_epoch: u64,
     events: Vec<OrderedTextInputEvent>,
+}
+
+/// Retained-memory inputs that feed spatial input localization.
+///
+/// Together with the frame-constant root input and the current spatial state,
+/// these three flags fully determine [`super::spatial::SpatialStack::localize_input`]'s
+/// result, so they form the non-spatial half of the scoped-input memo key.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
+struct ScopedInputFlags {
+    preserve_primary_release: bool,
+    preserve_secondary_release: bool,
+    root_input_conflict: bool,
+}
+
+/// Memo key: the spatial state identity token plus the retained-memory flags.
+type ScopedInputKey = (u64, ScopedInputFlags);
+
+/// One memoized scoped-input projection for a `(spatial state, flags)` pair.
+struct CachedScopedInput {
+    input: UiInput,
+    event_ordinals: Vec<usize>,
+    cleanup_event_indices: Vec<usize>,
+    primary_transaction_open: Vec<bool>,
+}
+
+/// Frame-local scoped-input refresh state: staleness tracking plus the
+/// per-`(spatial state, flags)` localization memo.
+struct ScopedInputMemo {
+    stale: bool,
+    flags: ScopedInputFlags,
+    cache: HashMap<ScopedInputKey, CachedScopedInput>,
+    #[cfg(test)]
+    localizations: usize,
+    #[cfg(test)]
+    disabled: bool,
+}
+
+impl ScopedInputMemo {
+    fn new() -> Self {
+        Self {
+            stale: true,
+            flags: ScopedInputFlags::default(),
+            cache: HashMap::new(),
+            #[cfg(test)]
+            localizations: 0,
+            #[cfg(test)]
+            disabled: false,
+        }
+    }
 }
 
 impl<'a> Ui<'a> {
@@ -122,6 +173,7 @@ impl<'a> Ui<'a> {
             pointer_plan_installed: false,
             pointer_cancel_pending,
             ordered_text_input_preview: None,
+            scoped_input: ScopedInputMemo::new(),
             #[cfg(test)]
             ordered_text_input_materializations: 0,
         }
@@ -549,7 +601,9 @@ impl<'a> Ui<'a> {
 
     /// Appends one render primitive and updates the matching spatial scope.
     pub fn push_primitive(&mut self, primitive: Primitive) {
-        self.spatial.observe_primitive(&primitive);
+        if self.spatial.observe_primitive(&primitive) {
+            self.scoped_input.stale = true;
+        }
         self.refresh_scoped_input();
         self.output.push_primitive(primitive);
     }
@@ -840,29 +894,105 @@ impl<'a> Ui<'a> {
         .then_some(owner)
     }
 
+    /// Reprojects `context.input` and the scoped memory event table for the
+    /// current spatial state, recomputing only when an input to localization
+    /// changed.
+    ///
+    /// Soundness of the early-out: within one frame,
+    /// [`super::spatial::SpatialStack::localize_input`] is a pure function of
+    /// the current spatial state, the frame-constant root input, and the three
+    /// [`ScopedInputFlags`] retained-memory bits, and
+    /// [`UiMemory::install_scoped_pointer_events`] is an idempotent overwrite
+    /// of the scoped event table. When neither the spatial state (tracked via
+    /// `scoped_input_stale`) nor the flags changed since the last refresh,
+    /// recomputation would reproduce the exact same scoped input and installs,
+    /// so skipping it is unobservable.
+    ///
+    /// Soundness of the memo: `SpatialStack::state_token` uniquely identifies
+    /// the effective clip/transform stack content for the whole frame (states
+    /// are never mutated after receiving a token), the root input and
+    /// `root_primary_transaction_open` are frame constants, and the flags are
+    /// part of the key, so every localization input is covered by the
+    /// `(token, flags)` key and a cached projection is exactly what a fresh
+    /// computation would produce.
     fn refresh_scoped_input(&mut self) {
+        let flags = ScopedInputFlags {
+            preserve_primary_release: self.memory.pointer_release_cleanup_required(),
+            preserve_secondary_release: self.memory.secondary_pressed().is_some(),
+            root_input_conflict: self.memory.root_input_conflict().is_some(),
+        };
+        #[cfg(test)]
+        let memo_enabled = !self.scoped_input.disabled;
+        #[cfg(not(test))]
+        let memo_enabled = true;
+        if memo_enabled && !self.scoped_input.stale && flags == self.scoped_input.flags {
+            return;
+        }
+
+        let key = (self.spatial.state_token(), flags);
+        if !memo_enabled || !self.scoped_input.cache.contains_key(&key) {
+            let entry = self.localize_scoped_input(flags);
+            self.scoped_input.cache.insert(key, entry);
+        }
+        let cached = &self.scoped_input.cache[&key];
+        self.memory.install_scoped_pointer_events(
+            cached.event_ordinals.iter().copied(),
+            cached.cleanup_event_indices.iter().copied(),
+            cached.primary_transaction_open.iter().copied(),
+        );
+        self.context.input = cached.input.clone();
+        self.input_event_ordinals = cached.event_ordinals.clone();
+        self.scoped_input.flags = flags;
+        self.scoped_input.stale = false;
+    }
+
+    fn localize_scoped_input(&mut self, flags: ScopedInputFlags) -> CachedScopedInput {
+        #[cfg(test)]
+        {
+            self.scoped_input.localizations += 1;
+        }
         let localized = self.spatial.localize_input(
             &self.root_input,
-            self.memory.pointer_release_cleanup_required(),
-            self.memory.secondary_pressed().is_some(),
-            self.memory.root_input_conflict().is_some(),
+            flags.preserve_primary_release,
+            flags.preserve_secondary_release,
+            flags.root_input_conflict,
         );
-        let scoped_primary_transaction_open = localized
+        let primary_transaction_open = localized
             .event_ordinals
             .iter()
             .map(|ordinal| self.root_primary_transaction_open[*ordinal])
-            .collect::<Vec<_>>();
-        self.memory.install_scoped_pointer_events(
-            localized.event_ordinals.iter().copied(),
-            localized
-                .cleanup_only
-                .iter()
-                .enumerate()
-                .filter_map(|(index, cleanup_only)| cleanup_only.then_some(index)),
-            scoped_primary_transaction_open,
-        );
-        self.context.input = localized.input;
-        self.input_event_ordinals = localized.event_ordinals;
+            .collect();
+        let cleanup_event_indices = localized
+            .cleanup_only
+            .iter()
+            .enumerate()
+            .filter_map(|(index, cleanup_only)| cleanup_only.then_some(index))
+            .collect();
+        CachedScopedInput {
+            input: localized.input,
+            event_ordinals: localized.event_ordinals,
+            cleanup_event_indices,
+            primary_transaction_open,
+        }
+    }
+
+    /// Disables the scoped-input early-out and memo, forcing the reference
+    /// recompute-per-primitive path.
+    #[cfg(test)]
+    pub(crate) fn disable_scoped_input_memo(&mut self) {
+        self.scoped_input.disabled = true;
+    }
+
+    /// Returns how many full input localizations this frame has computed.
+    #[cfg(test)]
+    pub(crate) const fn scoped_input_localization_count(&self) -> usize {
+        self.scoped_input.localizations
+    }
+
+    /// Returns the root ordinals of the current scope's localized events.
+    #[cfg(test)]
+    pub(crate) fn scoped_input_event_ordinals(&self) -> &[usize] {
+        &self.input_event_ordinals
     }
 }
 
