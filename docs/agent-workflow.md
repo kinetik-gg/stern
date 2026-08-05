@@ -44,6 +44,32 @@ cargo check --workspace --all-targets
 
 If the issue touches multiple crates, run clippy and test for each touched crate.
 
+### 5a. Visual Work Requires Rendered Images (AUDIT #941 §C)
+
+**No PR that changes anything visual merges without a rendered image (CPU
+raster dump or screenshot) attached to the PR, reviewed by a human.** Green
+tests are necessary, never sufficient, for visual work.
+
+Concretely, before opening a PR that touches widget painting, theme recipes,
+composition, or anything else a user can see:
+
+1. Render the relevant stories headlessly with the story harness:
+   ```bash
+   cargo run -p stern-stories -- render --filter <family-or-story-id>
+   ```
+   Output lands in `target/stern-stories/render/` (PNGs, a contact sheet,
+   and a deterministic manifest).
+2. **Look at the PNGs yourself.** Describe what you actually see in the PR
+   body — including defects you did not fix. Do not describe the images from
+   the code; open them.
+3. Attach the rendered images (at minimum the contact sheet) to the PR.
+4. If the change alters intended pixels, run
+   `cargo run -p stern-stories -- diff` against the goldens and include the
+   result. Only a human decides to run `bless`; agents never bless goldens,
+   and the harness never blesses automatically.
+5. New visual behavior needs a story. Add or extend one in
+   `apps/stern-stories/src/stories/` so the change stays reviewable.
+
 ### 6. Push and Create a PR
 ```bash
 git push -u origin <branch>
