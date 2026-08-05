@@ -68,6 +68,25 @@ fn gallery_journey_navigates_and_exercises_one_control_per_family() {
     let tab_point = center(&settled, &SemanticRole::Tab, "Tab B");
     let with_tab = click_and_settle(&mut app, tab_point);
     assert!(has_label(&with_tab, "Active Tab B"));
+
+    // Layout-engine seam (RFC 0001 L1): the "Layout engine" strip is
+    // composed through `ui.layout` with content-sized builders, and its
+    // pointer targets are declared from solved geometry. Clicking the real
+    // toggle at its solved rect flips real state; clicking the real button
+    // increments a real counter shown through a real label.
+    let snap_before = node(&with_tab, &SemanticRole::Toggle, "Snap to grid");
+    assert_eq!(snap_before.state.checked, Some(false));
+    let after_snap = click_and_settle(&mut app, snap_before.bounds.center());
+    assert_eq!(
+        node(&after_snap, &SemanticRole::Toggle, "Snap to grid")
+            .state
+            .checked,
+        Some(true)
+    );
+    assert!(has_label(&after_snap, "Created 0"));
+    let new_point = center(&after_snap, &SemanticRole::Button, "New");
+    let after_new = click_and_settle(&mut app, new_point);
+    assert!(has_label(&after_new, "Created 1"));
 }
 
 fn center(output: &FrameOutput, role: &SemanticRole, label: &str) -> Point {
