@@ -1,0 +1,17 @@
+[package]
+name = "stern-stories"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Story harness for Stern: render, diff, bless, and browse widget stories"
+
+[dependencies]
+stern = { version = "=0.0.1-alpha.1", path = "../../crates/stern" }
+swash = "0.2.8"
+tiny-skia = "0.11.4"
+
+[lints]
+workspace = true

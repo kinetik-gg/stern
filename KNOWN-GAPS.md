@@ -545,3 +545,29 @@ composing existing `Rect`/`Line` shapes).
     or the `ui/virtual_*`/`outliner`/`asset_browser` paint functions draws a
     scrollbar at all; scrolling is input-driven with no visible thumb. A new
     widget/recipe, not a fix to an existing one.
+
+## Story harness (Issue #943)
+
+48. **Choice-control labels are never painted.** `checkbox_with_label`,
+    `radio_button_with_label`, and `toggle_with_label` put the label into
+    semantics only; `check_control_with_label_target`
+    (`crates/stern-widgets/src/components/choice.rs:90-150`) emits the box
+    rect primitive and no text primitive, so labeled checkboxes/radios/
+    toggles render as bare boxes. Found by the first
+    `basic-controls/sheet` story render — invisible to all model tests
+    because the semantics carry the label. Fix belongs to the layout-era
+    family re-pass (EPIC #948 Phase 4).
+49. **Story CPU raster path is its own baseline, not GPU-parity.**
+    `apps/stern-stories/src/raster.rs` executes the sanitized
+    `stern-vello` command stream with tiny-skia + swash. It approximates
+    shadows with a triple box blur, ignores non-uniform command-transform
+    scale on stroke widths, and skips textures without CPU snapshots.
+    Goldens produced by it regress the CPU path only; GPU output review
+    still needs a human looking at a live window (EPIC #948 owner pass).
+50. **Stories live in the harness crate, not next to widget source.**
+    `apps/stern-stories/src/stories/` mirrors widget families, but
+    `crates/stern-widgets` does not yet declare stories beside each
+    widget's implementation (the #943 ideal). Moving declarations into the
+    widget crate needs a dependency-clean story-registration seam; deferred
+    until the L1 builder work (#942) settles what a widget-owned story
+    signature looks like.

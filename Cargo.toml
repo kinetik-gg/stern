@@ -12,6 +12,7 @@ members = [
     "crates/stern-widgets",
     "crates/stern-winit",
     "apps/stern-demo",
+    "apps/stern-stories",
     "conformance",
 ]
 exclude = ["tools/*"]
