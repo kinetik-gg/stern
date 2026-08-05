@@ -11,6 +11,7 @@ use stern_core::{
 };
 use stern_text::{TextEditState, TextLayoutKey, TextLayoutStore, TextStyle};
 
+mod builders;
 mod core;
 mod core_accessibility;
 mod core_behavior;

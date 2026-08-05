@@ -229,7 +229,11 @@ pub use timeline::{
     timeline_snap_time, timeline_timecode_label, transport_control_semantics,
     transport_control_widget_id, transport_controls_semantics,
 };
-pub use ui::{RadioGroupChoice, RadioGroupOutput, ScrollAreaOutput, Ui};
+pub use ui::{
+    Button, Checkbox, ComposedLayout, IconButton, Label, LayoutScope, LayoutSlot, MeasureContext,
+    RadioButton, RadioGroupChoice, RadioGroupOutput, ScrollAreaOutput, Slider, Toggle, Ui,
+    UiLayout, Widget,
+};
 pub use viewport::{
     Crosshair, Guide, PanZoom, ViewportActionDescriptor, ViewportActionKind, ViewportActionRequest,
     ViewportActionTarget, ViewportComposition, ViewportCursorMetadata, ViewportCursorRequest,
