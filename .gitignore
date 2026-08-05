@@ -38,3 +38,10 @@ Desktop.ini
 /outputs/
 /snapshots/generated/
 /test-results/
+
+# Story-harness render/diff output (review artifacts, never committed;
+# only human-blessed goldens under apps/stern-stories/goldens belong in git)
+/apps/stern-stories/render/
+/apps/stern-stories/diff/
+/apps/stern-stories/out/
+/stories-out/
