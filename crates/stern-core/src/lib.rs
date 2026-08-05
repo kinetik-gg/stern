@@ -55,6 +55,10 @@ pub use interaction::{
     scrollable_transformed, selectable, selectable_transformed, tooltip_trigger,
     tooltip_trigger_transformed,
 };
+pub use layout::tree::{
+    FixedMeasure, LayoutNodeId, LayoutSolution, LayoutTree, LeafMeasure, MeasureCache,
+    MeasureIdentity,
+};
 pub use layout::{
     Alignment, Axis, Insets, LayoutItem, Measurement, SeparatorKind, SizeRule, column_layout,
     fit_box, grid_layout, pad_rect, rect_from_size, row_layout, split_leading, split_trailing,
