@@ -49,11 +49,19 @@ reference looks stale, trust the code and send a correction PR.
 
 ## Performance (contradicts docs/specs/05 §32)
 
-5. `Ui::push_primitive` calls `refresh_scoped_input` on every primitive
-   (`crates/stern-core/src/runtime/ui.rs:551-555`), which calls
-   `SpatialScope::localize_input`, which clones the full `UiInput` per call
-   (`crates/stern-core/src/runtime/spatial.rs:45`, `let mut input =
-   root.clone();`). That is an `O(primitives × events)` clone per frame.
+5. Largely closed by #945: `Ui::push_primitive` input localization was
+   `O(primitives × events)` per frame and is now `O(scope transitions ×
+   events)` — draw primitives and layer markers skip re-localization
+   entirely, and clip/transform scope changes are served from a per-frame
+   memo keyed by (spatial state token, retained localization flags)
+   (`crates/stern-core/src/runtime/ui.rs`, `refresh_scoped_input`;
+   `crates/stern-core/src/runtime/spatial.rs`, `state_token`). Residual
+   costs: every scope transition still clones the cached `UiInput`
+   (including its event vector) into `FrameContext`, and state identity is
+   instance-based (push/pop), not content-hashed, so re-entering a
+   content-identical scope via a fresh push recomputes instead of hitting
+   the memo. RFC 0001 §6's layout-node scope table remains the long-term
+   home for content-level scope identity.
 6. Vello translation clones the clip stack into a fresh `Vec` for every
    render command (`crates/stern-vello/src/translation.rs:493-511`,
    `render_command`) and clones the text and font-family `String`s per text

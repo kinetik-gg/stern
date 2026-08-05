@@ -7,6 +7,7 @@ use crate::{
 pub(crate) struct SpatialStack {
     state: SpatialState,
     scopes: Vec<SpatialScope>,
+    next_token: u64,
 }
 
 pub(crate) struct LocalizedInput {
@@ -16,13 +17,30 @@ pub(crate) struct LocalizedInput {
 }
 
 impl SpatialStack {
-    pub(crate) fn observe_primitive(&mut self, primitive: &Primitive) {
+    /// Observes one primitive and reports whether the effective spatial state
+    /// (transform/clip stack) changed.
+    ///
+    /// Draw primitives and layer markers never touch the spatial state, so the
+    /// caller can skip input re-localization for them entirely.
+    pub(crate) fn observe_primitive(&mut self, primitive: &Primitive) -> bool {
         match primitive {
-            Primitive::ClipBegin { id, rect } => self.push_clip(*id, *rect),
+            Primitive::ClipBegin { id, rect } => {
+                self.push_clip(*id, *rect);
+                true
+            }
             Primitive::ClipEnd { id } => self.pop_clip(*id),
-            Primitive::LayerBegin { id } => self.scopes.push(SpatialScope::Layer(*id)),
-            Primitive::LayerEnd { id } => self.pop_layer(*id),
-            Primitive::TransformBegin(transform) => self.push_transform(*transform),
+            Primitive::LayerBegin { id } => {
+                self.scopes.push(SpatialScope::Layer(*id));
+                false
+            }
+            Primitive::LayerEnd { id } => {
+                self.pop_layer(*id);
+                false
+            }
+            Primitive::TransformBegin(transform) => {
+                self.push_transform(*transform);
+                true
+            }
             Primitive::TransformEnd => self.pop_transform(),
             Primitive::Rect(_)
             | Primitive::Line(_)
@@ -31,8 +49,19 @@ impl SpatialStack {
             | Primitive::Icon(_)
             | Primitive::Text(_)
             | Primitive::Image(_)
-            | Primitive::Texture(_) => {}
+            | Primitive::Texture(_) => false,
         }
+    }
+
+    /// Returns the identity token of the current spatial state.
+    ///
+    /// Tokens uniquely identify spatial state *content* for the lifetime of
+    /// this stack: every state mutation (`push_clip`/`push_transform`) assigns
+    /// a fresh token, and pops restore the saved previous state together with
+    /// its original token. A state instance is never mutated after receiving a
+    /// token, so equal tokens imply identical transform and clip content.
+    pub(crate) const fn state_token(&self) -> u64 {
+        self.state.token
     }
 
     pub(crate) fn localize_input(
@@ -370,15 +399,18 @@ impl SpatialStack {
         self.scopes.push(SpatialScope::Transform(previous));
         self.state.local_to_screen = Transform::compose(self.state.local_to_screen, transform);
         self.state.screen_to_local = self.state.local_to_screen.try_inverse();
+        self.assign_state_token();
     }
 
-    pub(crate) fn pop_transform(&mut self) {
+    pub(crate) fn pop_transform(&mut self) -> bool {
         if matches!(self.scopes.last(), Some(SpatialScope::Transform(_))) {
             let Some(SpatialScope::Transform(previous)) = self.scopes.pop() else {
-                return;
+                return false;
             };
             self.state = previous;
+            return true;
         }
+        false
     }
 
     pub(crate) fn push_clip(&mut self, id: ClipId, rect: Rect) {
@@ -396,16 +428,23 @@ impl SpatialStack {
             rect,
             screen_to_local: self.state.screen_to_local,
         });
+        self.assign_state_token();
     }
 
-    pub(crate) fn pop_clip(&mut self, id: ClipId) {
+    pub(crate) fn pop_clip(&mut self, id: ClipId) -> bool {
         if !matches!(self.scopes.last(), Some(SpatialScope::Clip { id: open, .. }) if *open == id) {
-            return;
+            return false;
         }
         let Some(SpatialScope::Clip { previous, .. }) = self.scopes.pop() else {
-            return;
+            return false;
         };
         self.state = previous;
+        true
+    }
+
+    fn assign_state_token(&mut self) {
+        self.next_token += 1;
+        self.state.token = self.next_token;
     }
 
     fn pop_layer(&mut self, id: LayerId) {
@@ -443,6 +482,9 @@ struct SpatialState {
     screen_to_local: Option<Transform>,
     clips: Vec<TransformedClip>,
     effective_clip: Option<Vec<Point>>,
+    /// Frame-local identity of this state's content; see
+    /// [`SpatialStack::state_token`].
+    token: u64,
 }
 
 impl Default for SpatialState {
@@ -452,6 +494,7 @@ impl Default for SpatialState {
             screen_to_local: Some(Transform::IDENTITY),
             clips: Vec::new(),
             effective_clip: None,
+            token: 0,
         }
     }
 }

@@ -1079,3 +1079,306 @@ fn legacy_retained_selection_release_reports_none_provenance() {
     assert!(gesture.response.double_clicked);
     assert_eq!(provenance, [None]);
 }
+
+#[derive(Debug)]
+struct ScopedInputTrace {
+    output: FrameOutput,
+    sampled_inputs: Vec<UiInput>,
+    sampled_ordinals: Vec<Vec<usize>>,
+    gesture: crate::CapturedSelectionGesture,
+    localizations: usize,
+}
+
+/// Composes one deterministic scene with nested clip/transform/layer scopes,
+/// scope re-entry, and mid-frame retained-memory flag changes, sampling the
+/// scoped input after every primitive.
+fn compose_scoped_input_equivalence_scene(input: UiInput, disable_memo: bool) -> ScopedInputTrace {
+    fn sample(ui: &Ui<'_>, inputs: &mut Vec<UiInput>, ordinals: &mut Vec<Vec<usize>>) {
+        inputs.push(ui.input().clone());
+        ordinals.push(ui.scoped_input_event_ordinals().to_vec());
+    }
+    fn rect(x: f32, y: f32) -> Primitive {
+        Primitive::Rect(RectPrimitive {
+            rect: Rect::new(x, y, 8.0, 6.0),
+            fill: Some(Brush::Solid(Color::WHITE)),
+            stroke: None,
+            radius: CornerRadius::all(1.0),
+        })
+    }
+
+    let widget = WidgetId::from_key("scoped-equivalence-widget");
+    let clip_a = ClipId::from_raw(11);
+    let clip_b = ClipId::from_raw(12);
+    let layer = LayerId::from_raw(13);
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(input), &mut memory);
+    if disable_memo {
+        ui.disable_scoped_input_memo();
+    }
+    ui.register_id(widget);
+    let mut sampled_inputs = Vec::new();
+    let mut sampled_ordinals = Vec::new();
+
+    ui.push_primitive(rect(0.0, 0.0));
+    sample(&ui, &mut sampled_inputs, &mut sampled_ordinals);
+    ui.push_primitive(Primitive::ClipBegin {
+        id: clip_a,
+        rect: Rect::new(0.0, 0.0, 60.0, 40.0),
+    });
+    ui.push_primitive(rect(1.0, 1.0));
+    sample(&ui, &mut sampled_inputs, &mut sampled_ordinals);
+    ui.push_primitive(Primitive::TransformBegin(Transform::translation(
+        Vec2::new(10.0, 5.0),
+    )));
+    ui.push_primitive(rect(2.0, 2.0));
+    sample(&ui, &mut sampled_inputs, &mut sampled_ordinals);
+    ui.push_primitive(Primitive::ClipBegin {
+        id: clip_b,
+        rect: Rect::new(45.0, 30.0, 4.0, 4.0),
+    });
+    ui.push_primitive(rect(46.0, 31.0));
+    sample(&ui, &mut sampled_inputs, &mut sampled_ordinals);
+    ui.push_primitive(Primitive::ClipEnd { id: clip_b });
+    sample(&ui, &mut sampled_inputs, &mut sampled_ordinals);
+    ui.push_primitive(Primitive::TransformEnd);
+    ui.push_primitive(rect(3.0, 3.0));
+    sample(&ui, &mut sampled_inputs, &mut sampled_ordinals);
+    ui.push_primitive(Primitive::LayerBegin { id: layer });
+    ui.push_primitive(rect(4.0, 4.0));
+    sample(&ui, &mut sampled_inputs, &mut sampled_ordinals);
+    ui.push_primitive(Primitive::LayerEnd { id: layer });
+
+    ui.memory_mut().capture_pointer(widget);
+    ui.memory_mut().press_secondary(widget);
+    ui.push_primitive(rect(5.0, 5.0));
+    sample(&ui, &mut sampled_inputs, &mut sampled_ordinals);
+    let gesture = ui.captured_selection_gesture(widget, Rect::new(0.0, 0.0, 60.0, 40.0), false);
+
+    ui.push_primitive(Primitive::ClipEnd { id: clip_a });
+    ui.push_primitive(rect(6.0, 6.0));
+    sample(&ui, &mut sampled_inputs, &mut sampled_ordinals);
+    ui.push_semantic_node(
+        SemanticNode::new(
+            widget,
+            SemanticRole::Button,
+            Rect::new(0.0, 0.0, 60.0, 40.0),
+        )
+        .focusable(true)
+        .with_label("Equivalence"),
+    );
+    let localizations = ui.scoped_input_localization_count();
+    let output = ui.end_frame();
+    ScopedInputTrace {
+        output,
+        sampled_inputs,
+        sampled_ordinals,
+        gesture,
+        localizations,
+    }
+}
+
+fn scoped_input_equivalence_inputs() -> Vec<(&'static str, UiInput)> {
+    let mut canonical = UiInput::default();
+    canonical.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(4.0, 4.0),
+        delta: Vec2::new(2.0, 1.0),
+    });
+    canonical.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 1,
+        position: Some(Point::new(5.0, 5.0)),
+    });
+    canonical.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(6.0, 6.0),
+        delta: Vec2::new(1.0, 1.0),
+    });
+    canonical.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: false,
+        click_count: 1,
+        position: Some(Point::new(6.0, 6.0)),
+    });
+    canonical.push_event(UiInputEvent::Wheel {
+        delta: InputWheelDelta::Pixels(Vec2::new(0.0, -8.0)),
+        position: Some(Point::new(6.0, 6.0)),
+    });
+    canonical.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Secondary,
+        down: true,
+        click_count: 1,
+        position: Some(Point::new(6.0, 6.0)),
+    });
+
+    let mut release_all = UiInput::default();
+    release_all.push_event(UiInputEvent::PointerButton {
+        button: MouseButton::Primary,
+        down: true,
+        click_count: 1,
+        position: Some(Point::new(5.0, 5.0)),
+    });
+    release_all.push_event(UiInputEvent::PointerReleaseAll {
+        position: Some(Point::new(5.0, 5.0)),
+    });
+
+    let mut conflicted = UiInput::default();
+    conflicted.push_event(UiInputEvent::Text(TextInputEvent::Commit("x".to_owned())));
+    conflicted.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(5.0, 5.0),
+        delta: Vec2::new(1.0, 1.0),
+    });
+    conflicted.text_events.clear();
+
+    vec![
+        ("canonical", canonical),
+        ("release-all", release_all),
+        ("conflicted", conflicted),
+        ("empty", UiInput::default()),
+    ]
+}
+
+#[test]
+fn scoped_input_memo_matches_reference_localization_per_primitive() {
+    for (name, input) in scoped_input_equivalence_inputs() {
+        let memoized = compose_scoped_input_equivalence_scene(input.clone(), false);
+        let reference = compose_scoped_input_equivalence_scene(input, true);
+
+        assert!(
+            memoized.output == reference.output,
+            "{name}: frame output must be identical with and without the memo"
+        );
+        assert_eq!(
+            memoized.sampled_inputs, reference.sampled_inputs,
+            "{name}: scoped inputs must be identical after every primitive"
+        );
+        assert_eq!(
+            memoized.sampled_ordinals, reference.sampled_ordinals,
+            "{name}: localized event ordinals must be identical"
+        );
+        assert_eq!(
+            memoized.gesture, reference.gesture,
+            "{name}: behavior responses must be identical"
+        );
+        assert!(
+            memoized.localizations < reference.localizations,
+            "{name}: the memo must compute fewer localizations ({} vs {})",
+            memoized.localizations,
+            reference.localizations
+        );
+    }
+}
+
+#[test]
+fn scoped_input_memo_localizes_per_scope_state_not_per_primitive() {
+    let widget = WidgetId::from_key("scoped-count-widget");
+    let clip = ClipId::from_raw(21);
+    let clip_rect = Rect::new(0.0, 0.0, 40.0, 30.0);
+    let rect = Primitive::Rect(RectPrimitive {
+        rect: Rect::new(1.0, 1.0, 4.0, 3.0),
+        fill: Some(Brush::Solid(Color::WHITE)),
+        stroke: None,
+        radius: CornerRadius::all(0.0),
+    });
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(5.0, 5.0),
+        delta: Vec2::new(1.0, 1.0),
+    });
+
+    let compose = |ui: &mut Ui<'_>| {
+        // Root state: first refresh localizes once.
+        ui.push_primitive(rect.clone());
+        // New clip state: one localization; the 50 rects inside reuse it.
+        ui.push_primitive(Primitive::ClipBegin {
+            id: clip,
+            rect: clip_rect,
+        });
+        for _ in 0..50 {
+            ui.push_primitive(rect.clone());
+        }
+        // Pop restores the cached root state: zero localizations.
+        ui.push_primitive(Primitive::ClipEnd { id: clip });
+        for _ in 0..50 {
+            ui.push_primitive(rect.clone());
+        }
+        // Re-entering an identical clip is a fresh state instance: one more.
+        ui.push_primitive(Primitive::ClipBegin {
+            id: clip,
+            rect: clip_rect,
+        });
+        ui.push_primitive(Primitive::ClipEnd { id: clip });
+        // Retained-memory flag change at the cached root state: one more.
+        ui.memory_mut().capture_pointer(widget);
+        ui.push_primitive(rect.clone());
+        ui.push_primitive(rect.clone());
+    };
+    let total_pushes = 1 + 1 + 50 + 1 + 50 + 1 + 1 + 2;
+
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(input.clone()), &mut memory);
+    compose(&mut ui);
+    assert_eq!(ui.scoped_input_localization_count(), 4);
+    let _ = ui.end_frame();
+
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(input), &mut memory);
+    ui.disable_scoped_input_memo();
+    compose(&mut ui);
+    assert_eq!(ui.scoped_input_localization_count(), total_pushes);
+    let _ = ui.end_frame();
+}
+
+#[test]
+fn scoped_input_memo_preserves_localized_coordinates_across_scope_reentry() {
+    let mut input = UiInput::default();
+    input.push_event(UiInputEvent::PointerMoved {
+        position: Point::new(30.0, 20.0),
+        delta: Vec2::new(2.0, 3.0),
+    });
+    let mut memory = UiMemory::new();
+    let mut ui = Ui::begin_frame(runtime_test_context(input), &mut memory);
+    let clip = ClipId::from_raw(31);
+    let rect = Primitive::Rect(RectPrimitive {
+        rect: Rect::new(0.0, 0.0, 2.0, 2.0),
+        fill: Some(Brush::Solid(Color::WHITE)),
+        stroke: None,
+        radius: CornerRadius::all(0.0),
+    });
+
+    ui.push_primitive(rect.clone());
+    assert_eq!(ui.input().pointer.position, Some(Point::new(30.0, 20.0)));
+    assert_eq!(ui.input().pointer.delta, Vec2::new(2.0, 3.0));
+
+    ui.push_primitive(Primitive::TransformBegin(Transform::translation(
+        Vec2::new(10.0, 5.0),
+    )));
+    ui.push_primitive(rect.clone());
+    assert_eq!(ui.input().pointer.position, Some(Point::new(20.0, 15.0)));
+    assert_eq!(ui.input().pointer.delta, Vec2::new(2.0, 3.0));
+    assert_eq!(
+        ui.input().events,
+        vec![UiInputEvent::PointerMoved {
+            position: Point::new(20.0, 15.0),
+            delta: Vec2::new(2.0, 3.0),
+        }]
+    );
+
+    ui.push_primitive(Primitive::ClipBegin {
+        id: clip,
+        rect: Rect::new(0.0, 0.0, 5.0, 5.0),
+    });
+    ui.push_primitive(rect.clone());
+    assert_eq!(ui.input().pointer.position, None);
+    assert_eq!(ui.input().pointer.delta, Vec2::ZERO);
+    assert!(ui.input().events.is_empty());
+
+    ui.push_primitive(Primitive::ClipEnd { id: clip });
+    ui.push_primitive(rect.clone());
+    assert_eq!(ui.input().pointer.position, Some(Point::new(20.0, 15.0)));
+
+    ui.push_primitive(Primitive::TransformEnd);
+    ui.push_primitive(rect);
+    assert_eq!(ui.input().pointer.position, Some(Point::new(30.0, 20.0)));
+    assert_eq!(ui.input().pointer.delta, Vec2::new(2.0, 3.0));
+    let _ = ui.end_frame();
+}
