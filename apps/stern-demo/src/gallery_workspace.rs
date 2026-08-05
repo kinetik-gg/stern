@@ -39,7 +39,7 @@
 
 use stern::core::{
     ActionContext, ActionDescriptor, ActionInvocation, ActionSource, PointerOrder, PointerTarget,
-    Rect, Response, Size, SpacingRole, WidgetId, default_dark_theme,
+    Rect, Response, Size, SizeRule, SpacingRole, WidgetId, default_dark_theme,
 };
 use stern::text::TextEditState;
 use stern::widgets::chrome::{
@@ -50,15 +50,16 @@ use stern::widgets::chrome::{
 use stern::widgets::dock::PanelId;
 use stern::widgets::inspector::{InspectorPickerCommit, InspectorPickerState};
 use stern::widgets::{
-    CollectionCursor, CollectionProjection, DiagnosticStrip, DropdownItem, DropdownItemId,
-    DropdownModel, FeedbackId, FeedbackItem, FeedbackKind, FeedbackStack, ItemId, JobList,
-    JobPhase, JobProgress, JobRow, JobRowId, Menu, MenuOverlay, ModalAction, ModalActionRole,
-    ModalDialog, ModalDialogOverlay, ModalFocusContainment, OverlayDismissal, OverlayEntry,
-    OverlayId, OverlayKind, OverlayScene, OverlaySceneIntent, OverlaySceneSurface,
-    PopoverPlacement, SelectFieldConfig, Selection, TableColumn, TableLayout, TreeExpansion,
-    TreeItem, TreeModel, Ui, VirtualListConfig, VirtualListRow, VirtualListSelectionMode,
-    VirtualTableConfig, VirtualTableRow, VirtualTableSelection, VirtualTableSelectionMode,
-    VirtualTreeConfig, VirtualTreeRow, VirtualTreeSelectionMode,
+    Button as ButtonBuilder, CollectionCursor, CollectionProjection, DiagnosticStrip, DropdownItem,
+    DropdownItemId, DropdownModel, FeedbackId, FeedbackItem, FeedbackKind, FeedbackStack, ItemId,
+    JobList, JobPhase, JobProgress, JobRow, JobRowId, Menu, MenuOverlay, ModalAction,
+    ModalActionRole, ModalDialog, ModalDialogOverlay, ModalFocusContainment, OverlayDismissal,
+    OverlayEntry, OverlayId, OverlayKind, OverlayScene, OverlaySceneIntent, OverlaySceneSurface,
+    PopoverPlacement, SelectFieldConfig, Selection, TableColumn, TableLayout,
+    Toggle as ToggleBuilder, TreeExpansion, TreeItem, TreeModel, Ui, VirtualListConfig,
+    VirtualListRow, VirtualListSelectionMode, VirtualTableConfig, VirtualTableRow,
+    VirtualTableSelection, VirtualTableSelectionMode, VirtualTreeConfig, VirtualTreeRow,
+    VirtualTreeSelectionMode,
 };
 use stern_icons_phosphor as phosphor;
 
@@ -132,6 +133,11 @@ pub(crate) struct GalleryWorkspace {
     // Chrome specimens (docs/visual-spec/05-chrome-dock.md).
     specimen_tab: PanelId,
     specimen_refresh_count: u32,
+
+    // Layout-engine seam (RFC 0001 L1): real state behind the content-sized
+    // strip composed through `Ui::layout`.
+    l1_snap: bool,
+    l1_created: u32,
 
     // Collections (docs/visual-spec/06-collections.md).
     list_cursor: CollectionCursor,
@@ -353,6 +359,8 @@ impl GalleryWorkspace {
 
             specimen_tab: SPECIMEN_TAB_A,
             specimen_refresh_count: 0,
+            l1_snap: false,
+            l1_created: 0,
 
             list_cursor: CollectionCursor::new(),
             list_selection: Selection::new(),
@@ -564,6 +572,34 @@ impl GalleryWorkspace {
         cursor += 16.0;
         let specimen_rects = slots(row(content.x, cursor, width, 108.0), 3, slot_gap);
         cursor += 108.0 + section_gap;
+
+        cursor = section_header(
+            ui,
+            content.x,
+            cursor,
+            width,
+            "Layout engine \u{2014} content-sized (L1)",
+        );
+        // Geometry through the RFC 0001 L1 seam: builders measure their own
+        // content (shaped label + theme metrics) and the solved rects exist
+        // before the declare pass, exactly like every hand-computed rect
+        // above. No painting happens here.
+        let l1_bounds = row(content.x, cursor, width, slot_block);
+        let mut l1_new = None;
+        let mut l1_snap_slot = None;
+        let l1_layout = ui.layout(l1_bounds, |l| {
+            l.row(SizeRule::Fill, SizeRule::Fit, slot_gap, |l| {
+                l1_new = Some(l.add(ButtonBuilder::new("gallery.l1.new", "New")));
+                l1_snap_slot = Some(l.add(ToggleBuilder::new(
+                    "gallery.l1.snap",
+                    "Snap to grid",
+                    self.l1_snap,
+                )));
+            });
+        });
+        let l1_new = l1_new.expect("l1 layout added the button");
+        let l1_snap_slot = l1_snap_slot.expect("l1 layout added the toggle");
+        cursor += slot_block + section_gap;
 
         cursor = section_header(ui, content.x, cursor, width, "Status & feedback");
         let feedback_height = 76.0_f32.min((content.max_y() - cursor).max(0.0));
@@ -804,6 +840,9 @@ impl GalleryWorkspace {
             let control = Rect::new(slot.x, slot.y, slot.width, row_height);
             targets.push((ui.make_id(("gallery.collections.row", caption)), control));
         }
+        // L1 seam targets come from solved layout geometry, not hand rects.
+        targets.push((ui.make_id("gallery.l1.new"), l1_layout.rect(l1_new)));
+        targets.push((ui.make_id("gallery.l1.snap"), l1_layout.rect(l1_snap_slot)));
 
         ui.resolve_pointer_targets(|plan| {
             let mut next = PointerOrder::new(0);
@@ -1055,6 +1094,18 @@ impl GalleryWorkspace {
             );
             label_below(ui, control, caption);
         }
+
+        let l1_new_rect = l1_layout.rect(l1_new);
+        let l1_snap_rect = l1_layout.rect(l1_snap_slot);
+        let l1 = l1_layout.compose(ui);
+        if l1.response(l1_new).is_some_and(|r| r.clicked) {
+            self.l1_created += 1;
+        }
+        if l1.response(l1_snap_slot).is_some_and(|r| r.clicked) {
+            self.l1_snap = !self.l1_snap;
+        }
+        label_below(ui, l1_new_rect, &format!("Created {}", self.l1_created));
+        label_below(ui, l1_snap_rect, "Sized by ui.layout");
 
         let _ = ui.system_feedback(&feedback_scene);
         if let Some(list) = list_widget.as_ref() {

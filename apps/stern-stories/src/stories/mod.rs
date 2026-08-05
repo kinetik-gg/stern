@@ -10,6 +10,7 @@ mod basic_controls;
 mod dock;
 mod fields;
 mod inspector;
+mod layout_seam;
 
 use crate::story::Story;
 
@@ -18,6 +19,7 @@ use crate::story::Story;
 pub fn all() -> Vec<Story> {
     vec![
         basic_controls::sheet(),
+        layout_seam::sheet(),
         fields::sheet(),
         inspector::with_rows(),
         dock::with_seams(),
