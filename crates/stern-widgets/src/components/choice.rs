@@ -26,7 +26,7 @@ const CHOICE_LABEL_GAP: f32 = 6.0;
 ///
 /// An explicit non-empty `label_rect` wins. Otherwise the label paints to the
 /// right of the control box inside the caller's control rect (KNOWN-GAPS #48:
-/// the *_with_label APIs take a single rect, so the box-adjacent remainder is
+/// the `*_with_label` APIs take a single rect, so the box-adjacent remainder is
 /// the only deterministic label region without a layout engine). Returns
 /// `None` when no room remains — notably for toggles without an explicit
 /// label rect, whose track consumes the whole control rect.

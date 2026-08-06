@@ -585,7 +585,7 @@ fn choice_controls_paint_labels_in_control_type() {
     let font = theme.font(TextRole::Label);
     assert_eq!(text.text, "Snap to grid");
     assert!((text.origin.x - (rect.x + 14.0 + 6.0)).abs() < f32::EPSILON);
-    assert_eq!(text.size, font.size);
+    assert_approx(text.size, font.size);
     assert_eq!(text.brush, Brush::Solid(theme.colors.content.secondary));
 
     // Disabled labels resolve content.disabled.

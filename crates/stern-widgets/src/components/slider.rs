@@ -177,10 +177,38 @@ pub fn slider_with_label_and_step(
         disabled,
         selected: false,
     });
-    // `docs/visual-spec/03-choice-sliders-tabs.md` §Slider (AUDIT #941
-    // defect 5 / issue #946 item 3): a 3px vertically-centered track with a
-    // 12×12 circular thumb at the value position — never a full-height bar.
-    // The caller rect stays the interaction/focus hit area only.
+    let mut primitives = Vec::with_capacity(5);
+    push_focus_ring(
+        &mut primitives,
+        theme,
+        response_reported_focus(&response),
+        rect,
+        recipe.radius,
+    );
+    push_slider_paint(&mut primitives, rect, t, &recipe, theme);
+
+    with_hover_cursor(
+        WidgetOutput::new(Some(response), primitives).with_semantic(with_response_state(
+            slider_semantics(id, rect, label, display_value, semantic_range, disabled),
+            &response,
+        )),
+        &response,
+        CursorShape::ResizeHorizontal,
+    )
+}
+
+/// Paints the spec slider anatomy from `docs/visual-spec/03-choice-sliders-tabs.md`
+/// §Slider (AUDIT #941 defect 5 / issue #946 item 3): a 3px vertically
+/// centered track with the filled span to the value fraction and a 12×12
+/// circular thumb at the value position — never a full-height bar. The
+/// caller rect stays the interaction/focus hit area only.
+fn push_slider_paint(
+    primitives: &mut Vec<Primitive>,
+    rect: Rect,
+    t: f32,
+    recipe: &stern_core::SliderRecipe,
+    theme: &Theme,
+) {
     let track_height = SLIDER_TRACK_HEIGHT.min(rect.height.max(0.0));
     let track_rect = Rect::new(
         rect.x,
@@ -201,14 +229,6 @@ pub fn slider_with_label_and_step(
         rect.y + (rect.height - thumb_size) * 0.5,
         thumb_size,
         thumb_size,
-    );
-    let mut primitives = Vec::with_capacity(5);
-    push_focus_ring(
-        &mut primitives,
-        theme,
-        response_reported_focus(&response),
-        rect,
-        recipe.radius,
     );
     primitives.extend([
         Primitive::Rect(RectPrimitive {
@@ -237,15 +257,6 @@ pub fn slider_with_label_and_step(
             radius: CornerRadius::all(thumb_size * 0.5),
         }),
     ]);
-
-    with_hover_cursor(
-        WidgetOutput::new(Some(response), primitives).with_semantic(with_response_state(
-            slider_semantics(id, rect, label, display_value, semantic_range, disabled),
-            &response,
-        )),
-        &response,
-        CursorShape::ResizeHorizontal,
-    )
 }
 
 fn slider_keyboard_adjusted_value(

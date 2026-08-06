@@ -19,6 +19,10 @@
 //! caches, and a unit test in `components/tests` pins each vendored graphic
 //! against the `stern-icons-phosphor` dev-dependency to catch drift.
 
+// Path data is copied verbatim from the generated phosphor shards, which
+// carry the same lint expectation.
+#![allow(clippy::unreadable_literal)]
+
 use stern_core::{
     FillRule, IconGraphic, IconId, IconLayer, IconPath, PathElement, Point, Rect, StaticIcon,
 };

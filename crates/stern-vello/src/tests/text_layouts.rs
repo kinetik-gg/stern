@@ -832,7 +832,7 @@ fn retained_select_widget_encodes_registered_ellipsis_without_arrow_fallback() {
         .expect("separate disclosure caret icon");
     assert_eq!(
         disclosure.icon.id(),
-        stern_core::IconId::from_raw(0x62991a44406198db)
+        stern_core::IconId::from_raw(0x6299_1a44_4061_98db)
     );
     let value = store
         .stored_layout(value_id)
