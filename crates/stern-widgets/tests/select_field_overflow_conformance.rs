@@ -105,10 +105,13 @@ fn final_value_layout(frame: &FrameOutput, source: &str) -> Option<TextLayoutId>
 }
 
 fn final_disclosure_icon(frame: &FrameOutput) -> Option<&IconPrimitive> {
-    frame.primitives.iter().find_map(|primitive| match primitive {
-        Primitive::Icon(icon) => Some(icon),
-        _ => None,
-    })
+    frame
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Icon(icon) => Some(icon),
+            _ => None,
+        })
 }
 
 #[test]
@@ -177,7 +180,10 @@ fn long_selected_value_uses_exact_retained_end_ellipsis_without_changing_source(
     assert_eq!(caret.tint, theme.colors.content.muted);
     // 12x12 caret centered in the trailing 16px disclosure column
     // (docs/visual-spec/04-overlays.md "trailing caret-down 12 muted").
-    assert_eq!(caret.rect, Rect::new(FIELD.max_x() - 14.0, 17.0, 12.0, 12.0));
+    assert_eq!(
+        caret.rect,
+        Rect::new(FIELD.max_x() - 14.0, 17.0, 12.0, 12.0)
+    );
     assert!(frame.warnings.is_empty());
 }
 

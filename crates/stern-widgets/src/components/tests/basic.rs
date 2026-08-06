@@ -553,10 +553,13 @@ fn choice_indicator_rect(output: &crate::WidgetOutput) -> Rect {
 }
 
 fn label_text(output: &crate::WidgetOutput) -> Option<&stern_core::TextPrimitive> {
-    output.primitives.iter().find_map(|primitive| match primitive {
-        Primitive::Text(text) => Some(text),
-        _ => None,
-    })
+    output
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) => Some(text),
+            _ => None,
+        })
 }
 
 #[test]
@@ -673,7 +676,10 @@ fn checked_choice_controls_paint_check_glyph_and_radio_dot() {
         .expect("checked checkbox paints the check glyph");
     // Phosphor bold check, inset 2 inside the 14x14 box, recipe mark color
     // (visual-spec 03 §Checkbox checked row).
-    assert_eq!(glyph.icon.id(), stern_icons_phosphor::bold::CHECK.icon().id());
+    assert_eq!(
+        glyph.icon.id(),
+        stern_icons_phosphor::bold::CHECK.icon().id()
+    );
     assert_eq!(glyph.rect, Rect::new(12.0, 22.0, 10.0, 10.0));
     let checkbox_recipe = theme.checkbox(stern_core::ComponentState {
         selected: true,

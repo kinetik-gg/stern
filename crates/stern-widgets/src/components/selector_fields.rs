@@ -1,3 +1,4 @@
+use super::vendored_icons::{CARET_DOWN_ICON, CARET_UP_ICON};
 use super::{
     ComponentState, CursorShape, DropTargetResponse, DropdownModel, DropdownTriggerPresentation,
     IconPrimitive, Primitive, Rect, RectPrimitive, Response, SemanticAction, SemanticActionKind,
@@ -8,7 +9,6 @@ use super::{
     text_field_with_access_runtime_metadata_and_fence,
     text_field_with_text_layouts_and_caret_visibility, with_hover_cursor, with_response_state,
 };
-use super::vendored_icons::{CARET_DOWN_ICON, CARET_UP_ICON};
 use stern_core::Ui as CoreUi;
 
 /// Trigger caret side length per `docs/visual-spec/04-overlays.md` ("caret-down 12 muted").
@@ -370,9 +370,7 @@ pub(crate) fn select_field_with_text_layouts(
         // `docs/visual-spec/04-overlays.md` §Dropdown (select) trigger:
         // "trailing caret-down 12 muted" — a caret ICON, not placeholder text
         // (AUDIT #941 defect 4). Open triggers flip to caret-up.
-        let caret_side = SELECT_CARET_SIZE
-            .min(arrow_width)
-            .min(rect.height.max(0.0));
+        let caret_side = SELECT_CARET_SIZE.min(arrow_width).min(rect.height.max(0.0));
         let caret_rect = fit_box(
             Rect::new(rect.max_x() - arrow_width, rect.y, arrow_width, rect.height),
             stern_core::Size::new(caret_side, caret_side),

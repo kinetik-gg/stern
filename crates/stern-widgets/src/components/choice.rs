@@ -30,7 +30,11 @@ const CHOICE_LABEL_GAP: f32 = 6.0;
 /// the only deterministic label region without a layout engine). Returns
 /// `None` when no room remains — notably for toggles without an explicit
 /// label rect, whose track consumes the whole control rect.
-fn choice_label_paint_region(control_rect: Rect, control_max_x: f32, label_rect: Rect) -> Option<Rect> {
+fn choice_label_paint_region(
+    control_rect: Rect,
+    control_max_x: f32,
+    label_rect: Rect,
+) -> Option<Rect> {
     if !label_rect.is_empty() {
         return Some(label_rect);
     }
