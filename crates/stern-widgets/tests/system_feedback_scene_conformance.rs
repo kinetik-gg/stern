@@ -767,3 +767,46 @@ fn feedback_surfaces_block_pointer_input_from_lower_content() {
     assert!(!released.lower.expect("lower response").clicked);
     assert!(released.output.requests.is_empty());
 }
+
+#[test]
+fn default_row_heights_conform_to_visual_spec_07() {
+    // docs/visual-spec/07-status-feedback-inspector.md: job rows are 28
+    // ("Row 28"), status banners/toasts are min-height 38 — and with fixed
+    // row heights the minimum IS the height, never a hardcoded excess
+    // (AUDIT #941 defect 8).
+    let config = SystemFeedbackSceneConfig::new(
+        WidgetId::from_key("system-feedback-defaults"),
+        Rect::new(0.0, 0.0, 240.0, 64.0),
+        Rect::new(0.0, 70.0, 240.0, 64.0),
+        Rect::new(0.0, 140.0, 240.0, 64.0),
+    );
+    assert!((config.job_row_height - 28.0).abs() < f32::EPSILON);
+    assert!((config.diagnostic_row_height - 28.0).abs() < f32::EPSILON);
+    assert!((config.feedback_row_height - 38.0).abs() < f32::EPSILON);
+
+    let (jobs, diagnostics, feedback) = actionable_models();
+    let scene = prepared_scene(config.clone(), &jobs, &diagnostics, &feedback).expect("scene");
+    let mut memory = UiMemory::new();
+    let run = run_frame(
+        config,
+        &jobs,
+        &diagnostics,
+        &feedback,
+        &mut memory,
+        UiInput::default(),
+        FRAME_NOW,
+        false,
+    );
+
+    let job_widget = scene.target_widget_id(SystemFeedbackTarget::Job(job_id(7)));
+    let job = run.frame.semantics.get(job_widget).expect("job semantics");
+    assert!((job.bounds.height - 28.0).abs() < f32::EPSILON);
+
+    let toast_widget = scene.target_widget_id(SystemFeedbackTarget::Feedback(feedback_id(7)));
+    let toast = run
+        .frame
+        .semantics
+        .get(toast_widget)
+        .expect("toast semantics");
+    assert!((toast.bounds.height - 38.0).abs() < f32::EPSILON);
+}
