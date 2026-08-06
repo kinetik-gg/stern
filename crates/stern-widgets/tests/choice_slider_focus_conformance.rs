@@ -360,7 +360,8 @@ fn disabled_choice_and_slider_controls_suppress_retained_focus_rings() {
         &theme,
         true,
     );
-    assert_eq!(slider.primitives.len(), 2);
+    // Track, filled span, and thumb (visual-spec 03 §Slider) with no ring.
+    assert_eq!(slider.primitives.len(), 3);
 }
 
 #[test]

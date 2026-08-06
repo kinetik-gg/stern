@@ -1,11 +1,19 @@
 use super::common::push_focus_ring;
 use super::{
-    ComponentState, CursorShape, DEFAULT_SLIDER_PAGE_DIVISIONS, DEFAULT_SLIDER_STEP_DIVISIONS, Key,
-    KeyState, Primitive, Rect, RectPrimitive, Theme, UiInput, UiMemory, WidgetId, WidgetOutput,
-    draggable, escape_pressed, resolve_drag_value_cancellation, response_reported_focus,
-    response_reported_pressed, slider_semantics, suppress_disabled_interaction_reporting,
-    with_hover_cursor, with_response_state,
+    Brush, ComponentState, CornerRadius, CursorShape, DEFAULT_SLIDER_PAGE_DIVISIONS,
+    DEFAULT_SLIDER_STEP_DIVISIONS, Key, KeyState, Primitive, Rect, RectPrimitive, Stroke, Theme,
+    UiInput, UiMemory, WidgetId, WidgetOutput, draggable, escape_pressed,
+    resolve_drag_value_cancellation, response_reported_focus, response_reported_pressed,
+    slider_semantics, suppress_disabled_interaction_reporting, with_hover_cursor,
+    with_response_state,
 };
+
+/// Track height per `docs/visual-spec/03-choice-sliders-tabs.md` §Slider ("Track: height 3").
+const SLIDER_TRACK_HEIGHT: f32 = 3.0;
+/// Thumb side length per the same section ("Thumb: 12×12 circle").
+const SLIDER_THUMB_SIZE: f32 = 12.0;
+/// Thumb ring width per the same section ("ring 2px in surrounding surface color").
+const SLIDER_THUMB_RING_WIDTH: f32 = 2.0;
 
 /// Keyboard adjustment contract for sliders.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -162,7 +170,6 @@ pub fn slider_with_label_and_step(
     let display_value = slider_clamped_value(*value, start, end);
     let t = slider_value_fraction(display_value, start, end);
     let semantic_range = start.min(end)..=start.max(end);
-    let fill_rect = Rect::new(rect.x, rect.y, rect.width * t, rect.height);
     let recipe = theme.slider(ComponentState {
         hovered: response.state.hovered,
         pressed: response_reported_pressed(&response),
@@ -170,7 +177,32 @@ pub fn slider_with_label_and_step(
         disabled,
         selected: false,
     });
-    let mut primitives = Vec::with_capacity(4);
+    // `docs/visual-spec/03-choice-sliders-tabs.md` §Slider (AUDIT #941
+    // defect 5 / issue #946 item 3): a 3px vertically-centered track with a
+    // 12×12 circular thumb at the value position — never a full-height bar.
+    // The caller rect stays the interaction/focus hit area only.
+    let track_height = SLIDER_TRACK_HEIGHT.min(rect.height.max(0.0));
+    let track_rect = Rect::new(
+        rect.x,
+        rect.y + (rect.height - track_height).max(0.0) * 0.5,
+        rect.width,
+        track_height,
+    );
+    let fill_rect = Rect::new(
+        track_rect.x,
+        track_rect.y,
+        track_rect.width * t,
+        track_rect.height,
+    );
+    let thumb_size = SLIDER_THUMB_SIZE.min(rect.width.max(0.0));
+    let thumb_rect = Rect::new(
+        (rect.x + rect.width * t - thumb_size * 0.5)
+            .clamp(rect.x, (rect.max_x() - thumb_size).max(rect.x)),
+        rect.y + (rect.height - thumb_size) * 0.5,
+        thumb_size,
+        thumb_size,
+    );
+    let mut primitives = Vec::with_capacity(5);
     push_focus_ring(
         &mut primitives,
         theme,
@@ -180,7 +212,7 @@ pub fn slider_with_label_and_step(
     );
     primitives.extend([
         Primitive::Rect(RectPrimitive {
-            rect,
+            rect: track_rect,
             fill: Some(recipe.track),
             stroke: Some(recipe.border),
             radius: recipe.radius,
@@ -190,6 +222,19 @@ pub fn slider_with_label_and_step(
             fill: Some(recipe.fill),
             stroke: None,
             radius: recipe.radius,
+        }),
+        // Thumb ring in the surrounding surface color separates the thumb
+        // from the track (panel is the canonical host surface; the spec's
+        // `shadow.low` on the thumb is not yet paintable — no widget emits
+        // shadow primitives today).
+        Primitive::Rect(RectPrimitive {
+            rect: thumb_rect,
+            fill: Some(recipe.thumb),
+            stroke: Some(Stroke::new(
+                SLIDER_THUMB_RING_WIDTH,
+                Brush::Solid(theme.colors.surface.panel),
+            )),
+            radius: CornerRadius::all(thumb_size * 0.5),
         }),
     ]);
 

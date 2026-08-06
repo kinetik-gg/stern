@@ -892,10 +892,10 @@ fn focused_slider_keyboard_activation_does_not_write_from_stale_pointer() {
     assert!(response.clicked);
     assert!(response.keyboard_activated);
     assert!((value - 2.0).abs() < f32::EPSILON);
-    assert_approx(
-        rect_width(output.primitives.last().expect("slider fill primitive")),
-        rect.width,
-    );
+    // Paint order ends with [track, fill, thumb]; the filled span is the
+    // second-to-last primitive and spans the full track at max value.
+    let fill_index = output.primitives.len() - 2;
+    assert_approx(rect_width(&output.primitives[fill_index]), rect.width);
     assert!(matches!(
         output.semantics[0].state.value,
         Some(SemanticValue::Number { current, min, max })
@@ -903,6 +903,51 @@ fn focused_slider_keyboard_activation_does_not_write_from_stale_pointer() {
                 && min.abs() < f32::EPSILON
                 && (max - 1.0).abs() < f32::EPSILON
     ));
+}
+
+#[test]
+fn slider_paints_centered_track_and_circular_thumb_per_spec() {
+    use stern_core::{Brush, CornerRadius};
+
+    let theme = default_dark_theme();
+    let rect = Rect::new(10.0, 20.0, 100.0, 24.0);
+    let mut value = 0.25;
+    let output = slider(
+        WidgetId::from_key("slider"),
+        rect,
+        &mut value,
+        0.0..=1.0,
+        &UiInput::default(),
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+
+    let Primitive::Rect(track) = &output.primitives[0] else {
+        panic!("expected track rect primitive");
+    };
+    let Primitive::Rect(fill) = &output.primitives[1] else {
+        panic!("expected fill rect primitive");
+    };
+    let Primitive::Rect(thumb) = &output.primitives[2] else {
+        panic!("expected thumb rect primitive");
+    };
+
+    // docs/visual-spec/03-choice-sliders-tabs.md §Slider: 3px track
+    // vertically centered in the row, filled span to the value fraction,
+    // 12×12 circular thumb centered on the value position with a 2px ring
+    // in the surrounding surface color.
+    assert_eq!(track.rect, Rect::new(10.0, 30.5, 100.0, 3.0));
+    assert_eq!(fill.rect, Rect::new(10.0, 30.5, 25.0, 3.0));
+    assert_eq!(thumb.rect, Rect::new(29.0, 26.0, 12.0, 12.0));
+    assert_eq!(thumb.radius, CornerRadius::all(6.0));
+    let ring = thumb.stroke.expect("thumb ring stroke");
+    assert!((ring.width - 2.0).abs() < f32::EPSILON);
+    assert_eq!(ring.brush, Brush::Solid(theme.colors.surface.panel));
+    let recipe = theme.slider(ComponentState::default());
+    assert_eq!(track.fill, Some(recipe.track));
+    assert_eq!(fill.fill, Some(recipe.fill));
+    assert_eq!(thumb.fill, Some(recipe.thumb));
 }
 
 #[test]

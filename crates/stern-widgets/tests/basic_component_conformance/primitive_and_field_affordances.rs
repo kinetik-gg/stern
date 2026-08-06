@@ -79,9 +79,10 @@ fn stage9_basic_components_emit_stable_primitive_categories() {
         &theme,
         false,
     );
+    // Track, filled span, and thumb per visual-spec 03 §Slider.
     assert!(matches!(
         slider.primitives.as_slice(),
-        [Primitive::Rect(_), Primitive::Rect(_)]
+        [Primitive::Rect(_), Primitive::Rect(_), Primitive::Rect(_)]
     ));
 
     let panel = panel(rect, &theme);
