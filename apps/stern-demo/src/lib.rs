@@ -10,8 +10,8 @@ mod timeline_workspace;
 use stern::UiState;
 use stern::core::{
     ActionInvocation, ActionRoutingContext, FrameContext, FrameOutput, PhysicalSize,
-    PlatformRequest, Rect, ScaleFactor, SemanticRole, Size, TimeInfo, UiInput, ViewportInfo,
-    WidgetId, default_dark_theme,
+    PlatformRequest, ScaleFactor, SemanticRole, Size, TimeInfo, UiInput, ViewportInfo, WidgetId,
+    default_dark_theme,
 };
 use stern::render::RenderResources;
 use stern::widgets::Ui;
@@ -331,15 +331,7 @@ fn compose_demo(
         DemoWorkspace::Edit => {
             edit_workspace.compose(ui, actions, workspace, model, overlays, bounds)
         }
-        DemoWorkspace::Graph => {
-            let graph_bounds = Rect::new(
-                24.0,
-                202.0,
-                (logical_size.width - 48.0).max(0.0),
-                (logical_size.height - 226.0).max(0.0),
-            );
-            graph_workspace.compose(ui, graph_bounds, bounds, actions, model, overlays)
-        }
+        DemoWorkspace::Graph => graph_workspace.compose(ui, actions, model, overlays, bounds),
         DemoWorkspace::Gallery => {
             gallery_workspace.compose(ui, actions, workspace, overlays, bounds)
         }

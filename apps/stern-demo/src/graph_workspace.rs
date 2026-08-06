@@ -26,7 +26,9 @@ use stern::widgets::{
     ViewportToolSceneConfig, ViewportTransformHandleSet, ViewportWidget, ViewportWidgetConfig,
 };
 
-use crate::edit_workspace::{VIEWPORT_TEXTURE, route_workspace_tabs, workspace_tab};
+use crate::edit_workspace::{
+    VIEWPORT_TEXTURE, route_workspace_tabs, workspace_bands, workspace_tab,
+};
 use crate::overlay_workspace::SharedOverlayRoute;
 use crate::timeline_workspace::{
     compose_tool_actions, declare_tool_actions, viewport_actions, viewport_content_rect,
@@ -284,24 +286,24 @@ impl GraphWorkspaceState {
         false
     }
 
-    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn compose(
         &mut self,
         ui: &mut Ui<'_>,
-        bounds: Rect,
-        viewport_size: Size,
         actions: &DemoActionRegistry,
         model: &mut DemoApplicationModel,
         overlays: &mut SharedOverlayRoute,
+        bounds: Size,
     ) -> Option<WidgetId> {
         self.sync_chrome_models(actions);
-        let [
-            menu_rect,
-            toolbar_rect,
-            tab_strip_rect,
-            dock_rect,
-            status_bar_rect,
-        ] = chrome_layout(bounds);
+        let layout = workspace_bands(ui, bounds);
+        let (menu_rect, toolbar_rect, tab_strip_rect, dock_rect, status_bar_rect) = (
+            layout.menu_bar,
+            layout.toolbar,
+            layout.tab_strip,
+            layout.content,
+            layout.status_bar,
+        );
         let dock = self.dock.clone();
         let mut menu_bar = MenuBar::from_menus([MenuBarMenu::from_actions(
             APPLICATION_MENU,
@@ -335,7 +337,7 @@ impl GraphWorkspaceState {
         let viewport_scene = viewport
             .as_ref()
             .map(|viewport| graph_viewport_scene(ui, viewport, model.viewport_tool()));
-        overlays.open_palette_if_requested(ui, actions, viewport_size);
+        overlays.open_palette_if_requested(ui, actions, bounds);
         let mut chrome_config = ChromeSceneConfig::new(
             CHROME_ROOT,
             menu_rect,
@@ -434,7 +436,7 @@ impl GraphWorkspaceState {
             &mut menu_bar,
             &chrome_output.intents,
             false,
-            viewport_size,
+            bounds,
         )
     }
 
@@ -659,44 +661,6 @@ fn connection_status(feedback: GraphConnectionFeedback, selected: u32) -> Status
         ),
     };
     StatusItem::new(SELECTION_STATUS, label, message, kind).with_count(selected)
-}
-
-fn chrome_layout(bounds: Rect) -> [Rect; 5] {
-    let menu_height = 28.0_f32.min(bounds.height);
-    let remaining = (bounds.height - menu_height).max(0.0);
-    let toolbar_height = 28.0_f32.min(bounds.height);
-    let remaining = (remaining - toolbar_height).max(0.0);
-    let tab_height = 28.0_f32.min(remaining);
-    let remaining = (remaining - tab_height).max(0.0);
-    let status_height = 28.0_f32.min(remaining);
-    let dock_height = (remaining - status_height).max(0.0);
-    [
-        Rect::new(bounds.x, bounds.y, bounds.width, menu_height),
-        Rect::new(
-            bounds.x,
-            bounds.y + menu_height,
-            bounds.width,
-            toolbar_height,
-        ),
-        Rect::new(
-            bounds.x,
-            bounds.y + menu_height + toolbar_height,
-            bounds.width,
-            tab_height,
-        ),
-        Rect::new(
-            bounds.x,
-            bounds.y + menu_height + toolbar_height + tab_height,
-            bounds.width,
-            dock_height,
-        ),
-        Rect::new(
-            bounds.x,
-            bounds.max_y() - status_height,
-            bounds.width,
-            status_height,
-        ),
-    ]
 }
 
 impl Default for GraphWorkspaceState {
