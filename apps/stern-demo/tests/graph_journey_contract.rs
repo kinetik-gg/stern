@@ -41,7 +41,10 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
     let expected_counts: BTreeMap<&'static str, usize> = BTreeMap::from([
         ("clip_begin", 25),
         ("clip_end", 25),
-        ("icon", 7),
+        // Two select-trigger disclosures paint caret icons instead of the
+        // literal "v" text since #946 (their former text primitives are now
+        // painted choice-control labels, keeping the text census stable).
+        ("icon", 9),
         ("line", 1),
         ("rect", 123),
         ("text", 81),

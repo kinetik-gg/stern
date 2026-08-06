@@ -53,18 +53,18 @@ fn stage9_basic_components_emit_stable_primitive_categories() {
         [Primitive::Rect(_), Primitive::Icon(_)]
     ));
 
-    // Checked box + check glyph (visual-spec 03 §Checkbox).
+    // Checked box + check glyph + painted label (visual-spec 03 §Checkbox).
     let checkbox = checkbox_with_label(id, rect, "Snap", true, &input, &mut memory, &theme, false);
     assert!(matches!(
         checkbox.primitives.as_slice(),
-        [Primitive::Rect(_), Primitive::Icon(_)]
+        [Primitive::Rect(_), Primitive::Icon(_), Primitive::Text(_)]
     ));
 
-    // Circle + selected inner dot (visual-spec 03 §Radio).
+    // Circle + selected inner dot + painted label (visual-spec 03 §Radio).
     let radio = radio_button_with_label(id, rect, "Mode", true, &input, &mut memory, &theme, false);
     assert!(matches!(
         radio.primitives.as_slice(),
-        [Primitive::Rect(_), Primitive::Rect(_)]
+        [Primitive::Rect(_), Primitive::Rect(_), Primitive::Text(_)]
     ));
 
     let toggle = toggle_with_label(id, rect, "Loop", true, &input, &mut memory, &theme, false);

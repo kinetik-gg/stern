@@ -315,9 +315,9 @@ fn disabled_choice_and_slider_controls_suppress_retained_focus_rings() {
         &theme,
         true,
     );
-    // Box + check glyph, no ring: the disabled checked glyph still paints
-    // at 100% per visual-spec 03 §Checkbox.
-    assert_eq!(check.primitives.len(), 2);
+    // Box + check glyph + label, no ring: the disabled checked glyph still
+    // paints at 100% per visual-spec 03 §Checkbox.
+    assert_eq!(check.primitives.len(), 3);
 
     let radio_id = WidgetId::from_key("disabled-radio");
     let mut memory = focused_memory(radio_id);
@@ -332,8 +332,8 @@ fn disabled_choice_and_slider_controls_suppress_retained_focus_rings() {
         &theme,
         true,
     );
-    // Circle + inner dot, no ring.
-    assert_eq!(radio.primitives.len(), 2);
+    // Circle + inner dot + label, no ring.
+    assert_eq!(radio.primitives.len(), 3);
 
     let toggle_id = WidgetId::from_key("disabled-toggle");
     let mut memory = focused_memory(toggle_id);

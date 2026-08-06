@@ -552,6 +552,100 @@ fn choice_indicator_rect(output: &crate::WidgetOutput) -> Rect {
         .expect("choice output must contain its 14x14 indicator rectangle")
 }
 
+fn label_text(output: &crate::WidgetOutput) -> Option<&stern_core::TextPrimitive> {
+    output.primitives.iter().find_map(|primitive| match primitive {
+        Primitive::Text(text) => Some(text),
+        _ => None,
+    })
+}
+
+#[test]
+fn choice_controls_paint_labels_in_control_type() {
+    use stern_core::{Brush, TextRole};
+
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let rect = Rect::new(10.0, 20.0, 120.0, 24.0);
+
+    // Derived region: to the right of the 14px box, gap 6 (visual-spec 03).
+    let checkbox = checkbox_with_label(
+        WidgetId::from_key("checkbox"),
+        rect,
+        "Snap to grid",
+        false,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let text = label_text(&checkbox).expect("checkbox label painted");
+    let font = theme.font(TextRole::Label);
+    assert_eq!(text.text, "Snap to grid");
+    assert!((text.origin.x - (rect.x + 14.0 + 6.0)).abs() < f32::EPSILON);
+    assert_eq!(text.size, font.size);
+    assert_eq!(text.brush, Brush::Solid(theme.colors.content.secondary));
+
+    // Disabled labels resolve content.disabled.
+    let disabled = radio_button_with_label(
+        WidgetId::from_key("radio"),
+        rect,
+        "Mode",
+        false,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        true,
+    );
+    let text = label_text(&disabled).expect("radio label painted");
+    assert_eq!(text.brush, Brush::Solid(theme.colors.content.disabled));
+
+    // An explicit label rect wins over the derived region.
+    let explicit = Rect::new(60.0, 20.0, 80.0, 24.0);
+    let targeted = crate::checkbox_with_label_target(
+        WidgetId::from_key("targeted"),
+        Rect::new(10.0, 20.0, 14.0, 14.0),
+        explicit,
+        "Explicit",
+        false,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let text = label_text(&targeted).expect("targeted label painted");
+    assert!((text.origin.x - explicit.x).abs() < f32::EPSILON);
+
+    // A toggle's track fills its control rect, so without an explicit label
+    // rect there is no label region (KNOWN-GAPS #48)...
+    let bare_toggle = toggle_with_label(
+        WidgetId::from_key("toggle"),
+        Rect::new(10.0, 20.0, 26.0, 14.0),
+        "Loop",
+        true,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    assert!(label_text(&bare_toggle).is_none());
+
+    // ...while an explicit label rect paints the toggle label.
+    let labeled_toggle = crate::toggle_with_label_target(
+        WidgetId::from_key("toggle-labeled"),
+        Rect::new(10.0, 20.0, 26.0, 14.0),
+        Rect::new(42.0, 20.0, 60.0, 14.0),
+        "Loop",
+        true,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let text = label_text(&labeled_toggle).expect("toggle label painted");
+    assert_eq!(text.text, "Loop");
+    assert!((text.origin.x - 42.0).abs() < f32::EPSILON);
+}
+
 #[test]
 fn checked_choice_controls_paint_check_glyph_and_radio_dot() {
     use stern_core::{Brush, CornerRadius};
