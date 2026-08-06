@@ -59,15 +59,27 @@ composition, or anything else a user can see:
    ```
    Output lands in `target/stern-stories/render/` (PNGs, a contact sheet,
    and a deterministic manifest).
-2. **Look at the PNGs yourself.** Describe what you actually see in the PR
+2. **All render evidence lives under `target/stern-stories/` — never a
+   system temp directory or agent scratchpad.** Those are wiped between
+   sessions and are invisible to the human reviewer. For before/after
+   burn-down evidence use the per-issue review convention:
+   ```bash
+   # on origin/main (or the pre-change commit):
+   cargo run -p stern-stories -- render --out target/stern-stories/review-<NNN>/before
+   # on the feature branch:
+   cargo run -p stern-stories -- render --out target/stern-stories/review-<NNN>/after
+   ```
+3. **Look at the PNGs yourself.** Describe what you actually see in the PR
    body — including defects you did not fix. Do not describe the images from
    the code; open them.
-3. Attach the rendered images (at minimum the contact sheet) to the PR.
-4. If the change alters intended pixels, run
+4. Attach the rendered images (at minimum the contact sheet) to the PR, and
+   name the exact `target/stern-stories/` paths in the PR body so the
+   reviewer can regenerate them deterministically.
+5. If the change alters intended pixels, run
    `cargo run -p stern-stories -- diff` against the goldens and include the
    result. Only a human decides to run `bless`; agents never bless goldens,
    and the harness never blesses automatically.
-5. New visual behavior needs a story. Add or extend one in
+6. New visual behavior needs a story. Add or extend one in
    `apps/stern-stories/src/stories/` so the change stays reviewable.
 
 ### 6. Push and Create a PR
