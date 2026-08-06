@@ -11,6 +11,7 @@ mod dock;
 mod fields;
 mod inspector;
 mod layout_seam;
+mod workspace_chrome;
 
 use crate::story::Story;
 
@@ -23,5 +24,6 @@ pub fn all() -> Vec<Story> {
         fields::sheet(),
         inspector::with_rows(),
         dock::with_seams(),
+        workspace_chrome::with_bands(),
     ]
 }
