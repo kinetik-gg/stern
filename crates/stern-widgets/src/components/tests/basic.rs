@@ -534,14 +534,101 @@ fn checkbox_and_toggle_reflect_selection() {
 }
 
 fn choice_indicator_rect(output: &crate::WidgetOutput) -> Rect {
-    let Primitive::Rect(indicator) = output
+    // The indicator box is the recipe-sized (14x14) rectangle; focus rings
+    // are outset beyond it and the checked glyph/dot primitives that follow
+    // it are smaller.
+    output
         .primitives
-        .last()
-        .expect("choice output must end with its indicator")
-    else {
-        panic!("choice indicator must be a rectangle");
-    };
-    indicator.rect
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rect(rect)
+                if (rect.rect.width - 14.0).abs() < f32::EPSILON
+                    && (rect.rect.height - 14.0).abs() < f32::EPSILON =>
+            {
+                Some(rect.rect)
+            }
+            _ => None,
+        })
+        .expect("choice output must contain its 14x14 indicator rectangle")
+}
+
+#[test]
+fn checked_choice_controls_paint_check_glyph_and_radio_dot() {
+    use stern_core::{Brush, CornerRadius};
+
+    let theme = default_dark_theme();
+    let rect = Rect::new(10.0, 20.0, 120.0, 24.0);
+    let input = UiInput::default();
+
+    let checked = checkbox(
+        WidgetId::from_key("checked"),
+        rect,
+        true,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let glyph = checked
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Icon(icon) => Some(icon),
+            _ => None,
+        })
+        .expect("checked checkbox paints the check glyph");
+    // Phosphor bold check, inset 2 inside the 14x14 box, recipe mark color
+    // (visual-spec 03 §Checkbox checked row).
+    assert_eq!(glyph.icon.id(), stern_icons_phosphor::bold::CHECK.icon().id());
+    assert_eq!(glyph.rect, Rect::new(12.0, 22.0, 10.0, 10.0));
+    let checkbox_recipe = theme.checkbox(stern_core::ComponentState {
+        selected: true,
+        ..stern_core::ComponentState::default()
+    });
+    assert_eq!(glyph.tint, checkbox_recipe.mark);
+
+    let unchecked = checkbox(
+        WidgetId::from_key("unchecked"),
+        rect,
+        false,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    assert!(
+        unchecked
+            .primitives
+            .iter()
+            .all(|primitive| !matches!(primitive, Primitive::Icon(_)))
+    );
+
+    let selected_radio = radio_button_with_label(
+        WidgetId::from_key("radio"),
+        rect,
+        "Radio",
+        true,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let dot = selected_radio
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rect(rect) if (rect.rect.width - 8.0).abs() < f32::EPSILON => Some(rect),
+            _ => None,
+        })
+        .expect("selected radio paints its 8px inner dot");
+    // Neutral 8px dot inset 3 in the 14x14 circle (visual-spec 03 §Radio).
+    assert_eq!(dot.rect, Rect::new(13.0, 23.0, 8.0, 8.0));
+    assert_eq!(dot.radius, CornerRadius::all(4.0));
+    let radio_recipe = theme.radio_button(stern_core::ComponentState {
+        selected: true,
+        ..stern_core::ComponentState::default()
+    });
+    assert_eq!(dot.fill, Some(Brush::Solid(radio_recipe.mark)));
 }
 
 #[test]

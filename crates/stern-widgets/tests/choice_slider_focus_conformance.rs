@@ -315,7 +315,9 @@ fn disabled_choice_and_slider_controls_suppress_retained_focus_rings() {
         &theme,
         true,
     );
-    assert_eq!(check.primitives.len(), 1);
+    // Box + check glyph, no ring: the disabled checked glyph still paints
+    // at 100% per visual-spec 03 §Checkbox.
+    assert_eq!(check.primitives.len(), 2);
 
     let radio_id = WidgetId::from_key("disabled-radio");
     let mut memory = focused_memory(radio_id);
@@ -330,7 +332,8 @@ fn disabled_choice_and_slider_controls_suppress_retained_focus_rings() {
         &theme,
         true,
     );
-    assert_eq!(radio.primitives.len(), 1);
+    // Circle + inner dot, no ring.
+    assert_eq!(radio.primitives.len(), 2);
 
     let toggle_id = WidgetId::from_key("disabled-toggle");
     let mut memory = focused_memory(toggle_id);
@@ -393,16 +396,19 @@ fn focused_radio_group_normalization_preserves_ring_layers_and_radio_shape() {
 
     assert_eq!(group.selected, 3);
     assert_eq!(group.selected_index, Some(2));
-    assert_eq!(output.primitives.len(), 5);
+    // First radio still paints this frame's pre-keyboard selection (circle +
+    // inner dot), the second paints its bare circle, and the newly selected
+    // third paints ring pair + circle + inner dot.
+    assert_eq!(output.primitives.len(), 7);
     let radio_size = theme.radio_button(ComponentState::default()).size;
     let base_rect = Rect::new(choices[2].rect.x, choices[2].rect.y, radio_size, radio_size);
     let expected = theme
         .focus_ring(true)
         .expect("visible focus recipe")
         .primitives(base_rect, theme.radii.full);
-    assert_eq!(output.primitives[2], expected[0]);
-    assert_eq!(output.primitives[3], expected[1]);
-    let base = rect_primitive(&output.primitives[4]);
+    assert_eq!(output.primitives[3], expected[0]);
+    assert_eq!(output.primitives[4], expected[1]);
+    let base = rect_primitive(&output.primitives[5]);
     assert_eq!(base.rect, base_rect);
     assert_eq!(base.radius, theme.radii.full);
     assert!(base.fill.is_some());

@@ -1,11 +1,20 @@
 use super::common::push_focus_ring;
+use super::vendored_icons::CHECK_ICON;
 use super::{
-    ComponentState, CornerRadius, CursorShape, Primitive, Rect, RectPrimitive, Theme, UiInput,
-    UiMemory, WidgetId, WidgetOutput, checkbox_semantics, clicked_select_state,
-    clicked_toggle_state, radio_button_semantics, response_reported_focus,
+    Brush, ComponentState, CornerRadius, CursorShape, IconPrimitive, Primitive, Rect,
+    RectPrimitive, Theme, UiInput, UiMemory, WidgetId, WidgetOutput, checkbox_semantics,
+    clicked_select_state, clicked_toggle_state, radio_button_semantics, response_reported_focus,
     response_reported_pressed, selectable, suppress_disabled_interaction_reporting,
     toggle_semantics, with_hover_cursor, with_response_state,
 };
+
+/// Inset from the 14x14 checkbox box to the painted check glyph, sized so the
+/// Phosphor bold check reads as the spec's white 2px-stroke mark
+/// (`docs/visual-spec/03-choice-sliders-tabs.md` §Checkbox checked row).
+const CHECKBOX_GLYPH_INSET: f32 = 2.0;
+/// Inset from the 14x14 radio circle to the checked dot: the spec's "inner
+/// dot inset 3 (8px dot)" (`docs/visual-spec/03-choice-sliders-tabs.md` §Radio).
+const RADIO_DOT_INSET: f32 = 3.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CheckControlKind {
@@ -133,6 +142,33 @@ fn check_control_with_label_target(
         stroke: Some(recipe.border),
         radius: recipe.radius,
     }));
+    if display_selected {
+        match kind {
+            // Checked checkbox paints the check glyph in the recipe mark
+            // color (white on accent; content.disabled when disabled) per
+            // visual-spec 03 §Checkbox. The spec's mixed-state 6x2 bar is
+            // not painted because no public mixed/indeterminate state
+            // exists on this API yet.
+            CheckControlKind::Checkbox => {
+                primitives.push(Primitive::Icon(IconPrimitive::new(
+                    CHECK_ICON,
+                    box_rect.inset(CHECKBOX_GLYPH_INSET),
+                    recipe.mark,
+                )));
+            }
+            // Checked radio paints the neutral 8px inner dot per
+            // visual-spec 03 §Radio.
+            CheckControlKind::Radio => {
+                let dot_rect = box_rect.inset(RADIO_DOT_INSET);
+                primitives.push(Primitive::Rect(RectPrimitive {
+                    rect: dot_rect,
+                    fill: Some(Brush::Solid(recipe.mark)),
+                    stroke: None,
+                    radius: CornerRadius::all(dot_rect.width * 0.5),
+                }));
+            }
+        }
+    }
     let semantics = match kind {
         CheckControlKind::Checkbox => {
             checkbox_semantics(id, target_rect, label, display_selected, disabled)
