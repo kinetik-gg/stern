@@ -10,11 +10,16 @@ use stern::widgets::node_graph::{
 };
 use stern_demo::{DemoApp, DemoViewportTool, DemoWorkspace, GraphConnectionFeedback, demo_context};
 
-const SOURCE_POINT: Point = Point::new(100.0, 370.0);
-const SOURCE_PORT_POINT: Point = Point::new(216.0, 390.0);
-const VIEWER_POINT: Point = Point::new(440.0, 350.0);
-const CANVAS_POINT: Point = Point::new(300.0, 350.0);
-const CLEAR_SELECTION_POINT: Point = Point::new(70.0, 244.0);
+// Screen positions in the 720x480 `demo_context` viewport. The Graph
+// workspace fills the whole viewport with token-derived chrome bands
+// (menu 28 + toolbar 32 + tabs 28, dock content, status 24 at the bottom),
+// so the dock band spans y 88..456 and the graph panel starts below its
+// 28px frame tab strip at y 116 with the retained (2, 2) pan.
+const SOURCE_POINT: Point = Point::new(100.0, 200.0);
+const SOURCE_PORT_POINT: Point = Point::new(194.0, 194.0);
+const VIEWER_POINT: Point = Point::new(420.0, 200.0);
+const CANVAS_POINT: Point = Point::new(270.0, 300.0);
+const CLEAR_SELECTION_POINT: Point = Point::new(66.0, 44.0);
 
 #[test]
 fn graph_workspace_composes_public_retained_node_graph() {

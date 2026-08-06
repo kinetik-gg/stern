@@ -579,3 +579,24 @@ composing existing `Rect`/`Line` shapes).
     widget crate needs a dependency-clean story-registration seam; deferred
     until the L1 builder work (#942) settles what a widget-owned story
     signature looks like.
+
+## Platform surface (Issue #944)
+
+51. **Surface extent is never clamped to the device texture limit
+    (theoretical above 8K-UHD; found by the #944 4K investigation).** The
+    resize path (`crates/stern-vello-winit/src/presenter.rs`,
+    `configure_existing_surface` -> vello `RenderContext::resize_surface`)
+    forwards the raw window physical extent to surface configuration and
+    render-target creation without clamping against
+    `max_texture_dimension_2d`. Vello's `RenderContext` requests
+    `wgpu::Limits::default()` (8192), so every 4K/5K/8K-UHD monitor is
+    fine; a window spanning more than 8192 physical pixels in one dimension
+    (e.g. one window stretched across two 5K monitors) would fail surface
+    configuration instead of presenting a clamped image. The rest of the
+    resize -> reconfigure -> present ordering was verified sound during the
+    same investigation: `present` preflights `resize` from the live
+    `window.inner_size()` before acquiring, and `drive_present` rejects
+    frames whose viewport or acquired texture extent mismatches the
+    configured extent (`FrameExtentOutdated`/`AcquiredExtentOutdated`),
+    reconfiguring and requesting the next frame rather than presenting
+    stale geometry.
