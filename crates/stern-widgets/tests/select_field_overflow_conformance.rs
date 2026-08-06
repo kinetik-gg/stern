@@ -1,8 +1,9 @@
 //! Windowless conformance for retained select-trigger end ellipsis.
 
 use stern_core::{
-    ComponentState, FrameOutput, Point, PointerButtonState, PointerInput, Primitive, Rect,
-    SemanticValue, TextLayoutId, TextPrimitive, UiInput, UiMemory, WidgetId, default_dark_theme,
+    ComponentState, FrameOutput, IconPrimitive, Point, PointerButtonState, PointerInput, Primitive,
+    Rect, SemanticValue, TextLayoutId, TextPrimitive, UiInput, UiMemory, WidgetId,
+    default_dark_theme,
 };
 use stern_text::{TextLayoutStore, TextOverflow};
 use stern_widgets::{
@@ -25,22 +26,30 @@ fn value_text(output: &SelectFieldOutput) -> &TextPrimitive {
         .primitives
         .iter()
         .find_map(|primitive| match primitive {
-            Primitive::Text(text) if text.text != "v" && text.text != "^" => Some(text),
+            Primitive::Text(text) => Some(text),
             _ => None,
         })
         .expect("select value text")
 }
 
-fn disclosure_text(output: &SelectFieldOutput) -> &TextPrimitive {
+fn disclosure_icon(output: &SelectFieldOutput) -> &IconPrimitive {
     output
         .widget
         .primitives
         .iter()
         .find_map(|primitive| match primitive {
-            Primitive::Text(text) if text.text == "v" || text.text == "^" => Some(text),
+            Primitive::Icon(icon) => Some(icon),
             _ => None,
         })
-        .expect("separate disclosure text")
+        .expect("separate disclosure caret icon")
+}
+
+fn caret_down_id() -> stern_core::IconId {
+    stern_icons_phosphor::bold::CARET_DOWN.icon().id()
+}
+
+fn caret_up_id() -> stern_core::IconId {
+    stern_icons_phosphor::bold::CARET_UP.icon().id()
 }
 
 fn expected_text_width(rect: Rect, padding_x: f32) -> f32 {
@@ -95,12 +104,12 @@ fn final_value_layout(frame: &FrameOutput, source: &str) -> Option<TextLayoutId>
         })
 }
 
-fn final_disclosure_layout(frame: &FrameOutput, disclosure: &str) -> Option<TextLayoutId> {
+fn final_disclosure_icon(frame: &FrameOutput) -> Option<&IconPrimitive> {
     frame
         .primitives
         .iter()
         .find_map(|primitive| match primitive {
-            Primitive::Text(text) if text.text == disclosure => text.layout,
+            Primitive::Icon(icon) => Some(icon),
             _ => None,
         })
 }
@@ -166,8 +175,15 @@ fn long_selected_value_uses_exact_retained_end_ellipsis_without_changing_source(
         Some(SemanticValue::Text(source.to_owned()))
     );
     assert!(output.widget.semantics[0].state.selected);
-    assert_eq!(disclosure_text(&output).text, "v");
-    assert_eq!(disclosure_text(&output).layout, None);
+    let caret = disclosure_icon(&output);
+    assert_eq!(caret.icon.id(), caret_down_id());
+    assert_eq!(caret.tint, theme.colors.content.muted);
+    // 12x12 caret centered in the trailing 16px disclosure column
+    // (docs/visual-spec/04-overlays.md "trailing caret-down 12 muted").
+    assert_eq!(
+        caret.rect,
+        Rect::new(FIELD.max_x() - 14.0, 17.0, 12.0, 12.0)
+    );
     assert!(frame.warnings.is_empty());
 }
 
@@ -238,7 +254,7 @@ fn public_low_level_select_field_remains_layoutless_and_complete_source() {
         output.widget.semantics[0].state.value,
         Some(SemanticValue::Text(source.to_owned()))
     );
-    assert_eq!(disclosure_text(&output).layout, None);
+    assert_eq!(disclosure_icon(&output).icon.id(), caret_down_id());
 }
 
 #[test]
@@ -341,8 +357,19 @@ fn open_disabled_and_read_only_states_preserve_value_identity_and_disclosure_iso
         assert!(semantic.state.selected);
         assert_eq!(semantic.state.disabled, disabled);
         assert_eq!(semantic.state.expanded, Some(open));
-        assert_eq!(disclosure_text(&output).text, if open { "^" } else { "v" });
-        assert_eq!(disclosure_text(&output).layout, None);
+        let caret = disclosure_icon(&output);
+        assert_eq!(
+            caret.icon.id(),
+            if open { caret_up_id() } else { caret_down_id() }
+        );
+        assert_eq!(
+            caret.tint,
+            if disabled {
+                theme.colors.content.disabled
+            } else {
+                theme.colors.content.muted
+            }
+        );
     }
 }
 
@@ -473,8 +500,7 @@ fn source_and_width_change_value_identity_while_open_only_changes_disclosure() {
     let closed_id = value_text(&closed)
         .layout
         .expect("closed retained value ID");
-    let closed_disclosure_id =
-        final_disclosure_layout(&closed_frame, "v").expect("closed disclosure layout");
+    let closed_disclosure = *final_disclosure_icon(&closed_frame).expect("closed disclosure icon");
 
     let (open, open_frame) = retained_frame(
         &mut store,
@@ -484,18 +510,19 @@ fn source_and_width_change_value_identity_while_open_only_changes_disclosure() {
         SelectFieldConfig::new("Choose").open(true),
     );
     let open_id = value_text(&open).layout.expect("open retained value ID");
-    let open_disclosure_id =
-        final_disclosure_layout(&open_frame, "^").expect("open disclosure layout");
+    let open_disclosure = *final_disclosure_icon(&open_frame).expect("open disclosure icon");
     assert_eq!(open_id, closed_id);
     assert_eq!(final_value_layout(&open_frame, source), Some(closed_id));
-    assert_ne!(open_disclosure_id, closed_disclosure_id);
-    let expected_disclosure_x = (FIELD.max_x() - 16.0).to_bits();
+    assert_eq!(closed_disclosure.icon.id(), caret_down_id());
+    assert_eq!(open_disclosure.icon.id(), caret_up_id());
+    // 12x12 caret centered inside the trailing 16px disclosure column.
+    let expected_disclosure_x = (FIELD.max_x() - 14.0).to_bits();
     assert_eq!(
-        disclosure_text(&closed).origin.x.to_bits(),
+        disclosure_icon(&closed).rect.x.to_bits(),
         expected_disclosure_x
     );
     assert_eq!(
-        disclosure_text(&open).origin.x.to_bits(),
+        disclosure_icon(&open).rect.x.to_bits(),
         expected_disclosure_x
     );
 

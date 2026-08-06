@@ -556,15 +556,19 @@ composing existing `Rect`/`Line` shapes).
 
 ## Story harness (Issue #943)
 
-48. **Choice-control labels are never painted.** `checkbox_with_label`,
-    `radio_button_with_label`, and `toggle_with_label` put the label into
-    semantics only; `check_control_with_label_target`
-    (`crates/stern-widgets/src/components/choice.rs:90-150`) emits the box
-    rect primitive and no text primitive, so labeled checkboxes/radios/
-    toggles render as bare boxes. Found by the first
-    `basic-controls/sheet` story render — invisible to all model tests
-    because the semantics carry the label. Fix belongs to the layout-era
-    family re-pass (EPIC #948 Phase 4).
+48. **Choice-control labels: toggles still need an explicit label rect.**
+    RESOLVED for checkboxes/radios by issue #946: `checkbox_with_label` and
+    `radio_button_with_label` now paint the label (control type, secondary,
+    gap 6 per visual-spec 03) to the right of the box inside the caller's
+    control rect, and every `*_with_label_target` variant paints into its
+    explicit label rect (`crates/stern-widgets/src/components/choice.rs`,
+    `choice_label_paint_region`/`push_choice_label`). REMAINING: the toggle
+    track fills its whole control rect, so `toggle_with_label` without an
+    explicit label rect has no label region and paints no text — callers
+    must use `toggle_with_label_target` until the toggle track is
+    content-sized (26x14 per visual-spec 03 §Switch) in the layout-era
+    family re-pass (EPIC #948 Phase 4). The checkbox mixed-state 6x2 bar
+    also remains unpainted: the API has no public mixed state.
 49. **Story CPU raster path is its own baseline, not GPU-parity.**
     `apps/stern-stories/src/raster.rs` executes the sanitized
     `stern-vello` command stream with tiny-skia + swash. It approximates
