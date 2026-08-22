@@ -24,6 +24,21 @@ fn drop_targets_distinguish_center_merge_from_edge_split() {
             new_frame,
         ))
     );
+
+    // The generic geometry resolver keeps its pre-existing vocabulary:
+    // precise tab-strip insertion is a separate targeting layer.
+    for point in [
+        Point::new(650.0, 150.0),
+        Point::new(998.0, 250.0),
+        Point::new(650.0, 498.0),
+    ] {
+        match resolve_dock_drop_target(&layout, point, new_frame) {
+            Some(DockDropTarget::Tab { .. } | DockDropTarget::Split { .. }) => {}
+            Some(DockDropTarget::Insert { .. }) | None => {
+                panic!("generic resolver must not emit insertion targets")
+            }
+        }
+    }
 }
 
 #[test]
@@ -418,7 +433,9 @@ fn panel_remains_passive_metadata_when_frame_and_dock_policy_changes() {
             assert_eq!(frame, FrameId::from_raw(1));
             assert_eq!(placement, DockPlacement::Bottom);
         }
-        DockDropTarget::Tab { .. } => panic!("expected split target"),
+        DockDropTarget::Tab { .. } | DockDropTarget::Insert { .. } => {
+            panic!("expected split target")
+        }
     }
     assert!(dock.drop_tab(drag, target));
 

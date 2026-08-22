@@ -11,6 +11,17 @@ specification's document version (commit 4b37e2f); no rc.1 or 1.0 ever existed.
 This codebase is pre-alpha, and nothing has been released or accepted.
 Further restated to 0.0.1-alpha.1 on the owner's decision: no release of any version has ever been published, and the first release target should read accordingly.
 
+### Added
+
+- Deterministic Dock tab-strip insertion and local reordering (#875): the
+  pure `resolve_dock_tab_strip_target` resolver, `dock_tab_slot_anchor`
+  slot mapping, `dock_tab_strip_contains_point` fall-through gate, and the
+  pure `Dock::tab_insertion_is_current` validation query shared by preview
+  resolution and release-commit. `DockDropTarget::Insert { frame, anchor }`
+  and `DockScenePreviewKind::Insert` are prerelease breaking enum
+  additions; exhaustive matches must add those arms or a wildcard (see
+  `docs/docking-interactions.md`).
+
 ### Changed
 
 - Added the `stern-app` application shell/runner crate: `run(AppConfig, impl

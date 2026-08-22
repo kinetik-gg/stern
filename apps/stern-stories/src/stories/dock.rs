@@ -1,7 +1,7 @@
 //! Dock workspace story: frames, tab strips, seams, and overflowing rows.
 
 use stern::core::{Axis, Rect, WidgetId};
-use stern::widgets::dock::{DockScene, DockSceneConfig};
+use stern::widgets::dock::{DockDropTarget, DockScene, DockSceneConfig};
 use stern::widgets::{Dock, DockNode, Frame, FrameId, Panel, PanelId, Ui};
 
 use crate::story::{Story, StoryKind};
@@ -22,6 +22,19 @@ pub fn with_seams() -> Story {
         title: "Dock workspace with frames and seams",
         kind: StoryKind::Workspace,
         compose,
+    }
+}
+
+/// Tab-strip insertion preview: the same workspace dock as `with_seams` but
+/// with a two-tab target frame and the accepted `DockDropTarget::Insert`
+/// preview painted, so the #875 contained insertion line stays reviewable.
+#[must_use]
+pub fn with_tab_insertion_preview() -> Story {
+    Story {
+        id: "workspace/dock-tab-insertion-preview",
+        title: "Dock tab-strip insertion line",
+        kind: StoryKind::Workspace,
+        compose: compose_tab_insertion_preview,
     }
 }
 
@@ -59,6 +72,43 @@ fn compose(ui: &mut Ui<'_>, rect: Rect) {
     let dock = story_dock();
     let scene = DockScene::new(
         DockSceneConfig::new(WidgetId::from_key("story-dock"), rect),
+        &dock,
+    );
+    let _ = ui.dock_scene(&scene, |ui, panel| {
+        let body = panel.rect.inset(8.0);
+        match panel.panel {
+            ASSETS_PANEL => assets_content(ui, body),
+            INSPECTOR_PANEL => inspector_content(ui, body),
+            TIMELINE_PANEL => timeline_content(ui, body),
+            _ => viewport_content(ui, body),
+        }
+    });
+}
+
+fn compose_tab_insertion_preview(ui: &mut Ui<'_>, rect: Rect) {
+    // Two stacked frames; the right frame holds two tabs so the anchored
+    // insertion line lands between them.
+    let assets = frame(1, ASSETS_PANEL, "Assets");
+    let right = split(
+        Axis::Horizontal,
+        0.5,
+        DockNode::Frame(Frame::new(
+            FrameId::from_raw(2),
+            vec![
+                Panel::new(VIEWPORT_PANEL, "Viewport"),
+                Panel::new(TIMELINE_PANEL, "Timeline"),
+            ],
+        )),
+        frame(3, INSPECTOR_PANEL, "Inspector"),
+    );
+    let mut dock = Dock::new(split(Axis::Vertical, 0.35, assets, right));
+    let _ = dock.set_active_frame(FrameId::from_raw(2));
+    let scene = DockScene::new(
+        DockSceneConfig::new(WidgetId::from_key("story-dock-tab-insertion"), rect)
+            .with_drop_preview(Some(DockDropTarget::Insert {
+                frame: FrameId::from_raw(2),
+                anchor: Some(TIMELINE_PANEL),
+            })),
         &dock,
     );
     let _ = ui.dock_scene(&scene, |ui, panel| {

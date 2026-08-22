@@ -697,6 +697,78 @@ fn merge_and_edge_previews_have_distinct_geometry_and_theme_paint() {
 }
 
 #[test]
+fn insertion_previews_derive_contained_lines_from_the_accepted_target() {
+    let dock = two_frame_dock();
+    let root = WidgetId::from_key("dock-scene-insertion");
+    // two_frame_dock at BOUNDS with the default splitter gutter: frame 1
+    // spans x 0..297, frame 2 spans x 303..600; frame 2's single tab 21
+    // occupies x 303..463 inside a 28px strip.
+    let anchored = DockScene::new(
+        DockSceneConfig::new(root, BOUNDS).with_drop_preview(Some(DockDropTarget::Insert {
+            frame: FrameId::from_raw(2),
+            anchor: Some(PanelId::from_raw(21)),
+        })),
+        &dock,
+    );
+    let append = DockScene::new(
+        DockSceneConfig::new(root, BOUNDS).with_drop_preview(Some(DockDropTarget::Insert {
+            frame: FrameId::from_raw(2),
+            anchor: None,
+        })),
+        &dock,
+    );
+
+    let anchored_preview = anchored.layout().preview.expect("anchored line");
+    let append_preview = append.layout().preview.expect("append line");
+    assert_eq!(anchored_preview.kind, DockScenePreviewKind::Insert);
+    assert_eq!(append_preview.kind, DockScenePreviewKind::Insert);
+
+    // The anchored line sits on the leading edge of the anchor tab, clamped
+    // into the strip; the append line sits just past the last tab.
+    assert_eq!(anchored_preview.rect, Rect::new(303.0, 0.0, 2.0, 28.0));
+    assert_eq!(append_preview.rect, Rect::new(462.0, 0.0, 2.0, 28.0));
+    for preview in [anchored_preview, append_preview] {
+        let strip = anchored
+            .layout()
+            .frames
+            .iter()
+            .find(|frame| frame.frame == preview.frame)
+            .expect("target frame")
+            .tab_list_rect;
+        assert!(preview.rect.x >= strip.x && preview.rect.max_x() <= strip.max_x());
+        assert!(preview.rect.y >= strip.y && preview.rect.max_y() <= strip.max_y());
+    }
+    assert_ne!(anchored_preview.rect, append_preview.rect);
+
+    // The painted line is a full-accent strokeless rect.
+    let theme = default_dark_theme();
+    let output = paint(&anchored);
+    let paint = rect_primitive_at(&output.primitives, anchored_preview.rect);
+    assert_eq!(paint.fill, Some(Brush::Solid(theme.colors.accent.default)));
+    assert_eq!(paint.stroke, None);
+    assert_eq!(paint.radius, theme.radii.none);
+
+    // Targets that reference missing state resolve to no affirmative
+    // preview at all.
+    for target in [
+        DockDropTarget::Insert {
+            frame: FrameId::from_raw(9),
+            anchor: Some(PanelId::from_raw(21)),
+        },
+        DockDropTarget::Insert {
+            frame: FrameId::from_raw(2),
+            anchor: Some(PanelId::from_raw(99)),
+        },
+    ] {
+        let invalid = DockScene::new(
+            DockSceneConfig::new(root, BOUNDS).with_drop_preview(Some(target)),
+            &dock,
+        );
+        assert!(invalid.layout().preview.is_none());
+    }
+}
+
+#[test]
 fn identity_derived_ids_survive_tab_reorder_and_topology_changes() {
     let root = WidgetId::from_key("dock-scene-stable-ids");
     let panel_a = PanelId::from_raw(11);
