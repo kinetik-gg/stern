@@ -78,7 +78,7 @@ pub(crate) fn viewport_size_device_scale(viewport: ViewportInfo) -> Option<f64> 
         return None;
     }
 
-    Some((scale_x + scale_y) * 0.5)
+    Some(scale_x.midpoint(scale_y))
 }
 
 pub(crate) fn root_transform(device_scale: f64) -> Affine {
