@@ -80,7 +80,7 @@ impl DeviceRecoveryBuild for RecordingBuild {
         Ok(())
     }
 
-    #[allow(clippy::unused_async)] // signature mandated by the recovery trait
+    #[allow(clippy::unused_async_trait_impl)] // signature mandated by the recovery trait
     async fn select_device_queue<'a>(
         &'a mut self,
         _context: &'a mut Self::Context,
@@ -109,7 +109,7 @@ impl DeviceRecoveryBuild for RecordingBuild {
         Ok(())
     }
 
-    #[allow(clippy::unused_async)] // signature mandated by the recovery trait
+    #[allow(clippy::unused_async_trait_impl)] // signature mandated by the recovery trait
     async fn create_configured_surface<'a>(
         &'a mut self,
         _context: &'a mut Self::Context,
