@@ -17,6 +17,7 @@ const APPLY_ACTION: &str = "shared.apply";
 const VIEWPORT_SELECT_ACTION: &str = "viewport.tool.select";
 const VIEWPORT_TRANSFORM_ACTION: &str = "viewport.tool.transform";
 const SAVE_COLOR_STYLE_ACTION: &str = "color-style.save";
+const HELP_ABOUT_ACTION: &str = "help.about";
 const PLAY_PAUSE_ACTION: &str = TransportControlIntent::PlayPause.default_action_id();
 const STOP_ACTION: &str = TransportControlIntent::Stop.default_action_id();
 
@@ -699,6 +700,7 @@ impl DemoApplicationModel {
             VIEWPORT_SELECT_ACTION => self.viewport_tool = DemoViewportTool::Select,
             VIEWPORT_TRANSFORM_ACTION => self.viewport_tool = DemoViewportTool::Transform,
             SAVE_COLOR_STYLE_ACTION => self.save_color_style(),
+            HELP_ABOUT_ACTION => {}
             PLAY_PAUSE_ACTION if self.scenario.has_timeline_journey() => {
                 self.timeline.transport = match self.timeline.transport {
                     DemoTransportState::Playing => DemoTransportState::Paused,
@@ -737,7 +739,7 @@ impl Default for DemoApplicationModel {
 /// Single descriptor registry for the demo's existing application actions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DemoActionRegistry {
-    descriptors: [ActionDescriptor; 5],
+    descriptors: [ActionDescriptor; 6],
     viewport_tools: [ActionDescriptor; 2],
     transport: [ActionDescriptor; 2],
 }
@@ -771,6 +773,7 @@ impl DemoActionRegistry {
                 apply_descriptor(),
                 ActionDescriptor::new(SAVE_COLOR_STYLE_ACTION, "Save Color Style")
                     .with_icon(phosphor::regular::FLOPPY_DISK),
+                ActionDescriptor::new(HELP_ABOUT_ACTION, "About Stern Integration Demo"),
             ],
             viewport_tools: [
                 checkable_descriptor(
@@ -818,6 +821,12 @@ impl DemoActionRegistry {
     #[must_use]
     pub const fn save_color_style(&self) -> &ActionDescriptor {
         &self.descriptors[4]
+    }
+
+    /// Returns the application-owned Help menu about action descriptor.
+    #[must_use]
+    pub const fn about(&self) -> &ActionDescriptor {
+        &self.descriptors[5]
     }
 
     /// Projects application-owned availability to every shared action surface.
