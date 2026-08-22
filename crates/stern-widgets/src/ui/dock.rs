@@ -255,8 +255,7 @@ impl Ui<'_> {
                 .any(|event| event.state == KeyState::Pressed && event.key == Key::Escape);
 
         if drag_cancelled || escape_pressed {
-            controller.drag = None;
-            controller.preview = None;
+            self.clear_dock_tab_drag(scene, controller);
         } else if let Some(drag) = controller.drag {
             let strips = dock_tab_strip_geometries(&scene.layout().frames);
             let resolved = drag_position

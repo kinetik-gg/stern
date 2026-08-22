@@ -10,10 +10,10 @@ use stern_core::{
 };
 use stern_widgets::Ui;
 use stern_widgets::dock::{
-    Dock, DockController, DockControllerConfig, DockControllerOutput, DockNode, DockScene,
-    DockSceneConfig, DockSnapshotNode, DockSplitterContextActionKind, Frame, FrameId, Panel,
-    PanelId, PanelInstanceId, PanelInstanceLocation, PanelInstanceSnapshot, PanelTypeDescriptor,
-    PanelTypeId,
+    Dock, DockController, DockControllerConfig, DockControllerOutput, DockDropTarget, DockNode,
+    DockScene, DockSceneConfig, DockSnapshotNode, DockSplitterContextActionKind, Frame, FrameId,
+    Panel, PanelId, PanelInstanceId, PanelInstanceLocation, PanelInstanceSnapshot,
+    PanelTypeDescriptor, PanelTypeId,
 };
 
 const BOUNDS: Rect = Rect::new(0.0, 0.0, 600.0, 400.0);
@@ -1127,4 +1127,305 @@ fn dock_and_validated_workspace_snapshots_round_trip() {
         restored_workspace.workspace_snapshot(workspace.panel_instances.clone()),
         workspace
     );
+}
+
+fn panel_order(dock: &Dock, frame: FrameId) -> Vec<u64> {
+    dock.frame(frame)
+        .expect("frame")
+        .panels
+        .iter()
+        .map(|panel| panel.id.raw())
+        .collect()
+}
+
+#[test]
+fn strip_release_inserts_before_anchor_and_reorders_within_the_source_frame() {
+    // Cross-frame: dropping on the target strip's first tab inserts before
+    // it instead of appending or splitting.
+    let mut dock = split_dock();
+    let prepared = scene(&dock);
+    let source = center(prepared.layout().frames[0].tabs[0].rect);
+    let anchor = center(prepared.layout().frames[1].tabs[0].rect);
+    let mut controller = DockController::new();
+    let mut memory = UiMemory::new();
+    let (moved, released) = drag(
+        source,
+        anchor,
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        FrameId::from_raw(90),
+    );
+    assert_eq!(
+        moved.drop_preview,
+        Some(DockDropTarget::Insert {
+            frame: FrameId::from_raw(2),
+            anchor: Some(PanelId::from_raw(21)),
+        })
+    );
+    assert!(released.changed);
+    assert_eq!(
+        panel_order(&dock, FrameId::from_raw(2)),
+        vec![11, 21],
+        "the dragged tab lands before the anchor"
+    );
+    assert!(dock.frame(FrameId::from_raw(90)).is_none());
+
+    // Same-frame: dragging the first tab past the last tab's center appends
+    // it to the end of its own strip.
+    let mut local = split_dock();
+    let local_scene = scene(&local);
+    let from = center(local_scene.layout().frames[0].tabs[0].rect);
+    let frame1 = &local_scene.layout().frames[0];
+    let to = Point::new(frame1.rect.max_x() - 10.0, 14.0);
+    let mut local_controller = DockController::new();
+    let mut local_memory = UiMemory::new();
+    let (moved, released) = drag(
+        from,
+        to,
+        &mut local,
+        &mut local_controller,
+        &mut local_memory,
+        FrameId::from_raw(90),
+    );
+    assert_eq!(
+        moved.drop_preview,
+        Some(DockDropTarget::Insert {
+            frame: FrameId::from_raw(1),
+            anchor: None,
+        })
+    );
+    assert!(released.changed);
+    assert_eq!(panel_order(&local, FrameId::from_raw(1)), vec![12, 13, 11]);
+    assert_eq!(local.active_frame(), Some(FrameId::from_raw(1)));
+}
+
+#[test]
+fn strip_hits_block_split_fallthrough_and_idle_slots_show_no_preview() {
+    // The dragged tab hovered over its own slot inside the left edge zone:
+    // generic targeting would read a split there, but a strip no-op must
+    // show no preview and never fall through.
+    let mut dock = split_dock();
+    let prepared = scene(&dock);
+    let tab11 = center(prepared.layout().frames[0].tabs[0].rect);
+    assert!(tab11.x < 75.0, "tab center sits inside the left edge zone");
+    let before = dock.snapshot();
+    let mut controller = DockController::new();
+    let mut memory = UiMemory::new();
+    let _ = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_button(tab11, MouseButton::Primary, true),
+        FrameId::from_raw(90),
+    );
+    let idle_point = Point::new(tab11.x + 15.0, tab11.y);
+    let (idle, _) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_move(idle_point, Vec2::new(15.0, 0.0)),
+        FrameId::from_raw(90),
+    );
+    assert!(controller.tab_drag().is_some());
+    assert!(idle.drop_preview.is_none());
+    let (released, _) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_button(idle_point, MouseButton::Primary, false),
+        FrameId::from_raw(90),
+    );
+    assert!(!released.changed);
+    assert_eq!(dock.snapshot(), before);
+
+    // A strip point inside the right frame's left edge zone resolves as a
+    // precise insertion, never as an edge split.
+    let mut edged = split_dock();
+    let edge_scene = scene(&edged);
+    let source = center(edge_scene.layout().frames[0].tabs[0].rect);
+    let strip_corner = Point::new(edge_scene.layout().frames[1].rect.min_x() + 2.0, 14.0);
+    let mut edge_controller = DockController::new();
+    let mut edge_memory = UiMemory::new();
+    let (moved, released) = drag(
+        source,
+        strip_corner,
+        &mut edged,
+        &mut edge_controller,
+        &mut edge_memory,
+        FrameId::from_raw(90),
+    );
+    assert_eq!(
+        moved.drop_preview,
+        Some(DockDropTarget::Insert {
+            frame: FrameId::from_raw(2),
+            anchor: Some(PanelId::from_raw(21)),
+        })
+    );
+    assert!(released.changed);
+    assert_eq!(edged.frames().len(), 2);
+    assert!(edged.frame(FrameId::from_raw(90)).is_none());
+}
+
+#[test]
+fn escape_cancels_tab_drag_and_preserves_the_committed_snapshot() {
+    let mut dock = split_dock();
+    let prepared = scene(&dock);
+    let source = center(prepared.layout().frames[0].tabs[0].rect);
+    let target = center(prepared.layout().frames[1].tabs[0].rect);
+    let initial = dock.snapshot();
+    let mut controller = DockController::new();
+    let mut memory = UiMemory::new();
+
+    let _ = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_button(source, MouseButton::Primary, true),
+        FrameId::from_raw(90),
+    );
+    let (moved, _) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_move(target, Vec2::new(target.x - source.x, target.y - source.y)),
+        FrameId::from_raw(90),
+    );
+    assert!(moved.drop_preview.is_some());
+
+    let (cancelled, _) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        key_input(Key::Escape, false),
+        FrameId::from_raw(90),
+    );
+    assert_eq!(dock.snapshot(), initial);
+    assert!(controller.tab_drag().is_none());
+    assert!(controller.drop_preview().is_none());
+    assert!(cancelled.close_requests.is_empty());
+    assert!(cancelled.splitter_context_requests.is_empty());
+    assert!(cancelled.drop_preview.is_none());
+
+    // Releasing afterwards is a plain click on the hovered tab, not a stale
+    // docking commit: tab order stays untouched.
+    let (released, _) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_button(target, MouseButton::Primary, false),
+        FrameId::from_raw(90),
+    );
+    assert_eq!(
+        panel_order(&dock, FrameId::from_raw(1)),
+        vec![11, 12, 13],
+    );
+    assert_eq!(panel_order(&dock, FrameId::from_raw(2)), vec![21]);
+    assert!(released.close_requests.is_empty());
+}
+
+#[test]
+fn focus_loss_and_disablement_clear_transient_tab_drag_state() {
+    for case in ["focus-loss", "disabled"] {
+        let mut dock = split_dock();
+        let prepared = scene(&dock);
+        let source = center(prepared.layout().frames[0].tabs[0].rect);
+        let target = center(prepared.layout().frames[1].tabs[0].rect);
+        let initial = dock.snapshot();
+        let mut controller = DockController::new();
+        let mut memory = UiMemory::new();
+
+        let _ = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_button(source, MouseButton::Primary, true),
+            FrameId::from_raw(90),
+        );
+        let (moved, _) = run_frame(
+            &mut dock,
+            &mut controller,
+            &mut memory,
+            pointer_move(target, Vec2::new(target.x - source.x, target.y - source.y)),
+            FrameId::from_raw(90),
+        );
+        assert!(moved.drop_preview.is_some(), "{case}");
+
+        let (cleared, _) = match case {
+            "focus-loss" => run_frame(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                window_focus_lost(),
+                FrameId::from_raw(90),
+            ),
+            "disabled" => run_frame_with_disabled(
+                &mut dock,
+                &mut controller,
+                &mut memory,
+                UiInput::default(),
+                FrameId::from_raw(90),
+                true,
+            ),
+            _ => unreachable!(),
+        };
+        assert_eq!(dock.snapshot(), initial, "{case}");
+        assert!(controller.tab_drag().is_none(), "{case}");
+        assert!(controller.drop_preview().is_none(), "{case}");
+        assert!(cleared.drop_preview.is_none(), "{case}");
+        assert!(cleared.close_requests.is_empty(), "{case}");
+        assert!(cleared.splitter_context_requests.is_empty(), "{case}");
+    }
+}
+
+#[test]
+fn stale_target_state_never_commits_into_a_replaced_dock() {
+    let mut dock = split_dock();
+    let prepared = scene(&dock);
+    let source = center(prepared.layout().frames[0].tabs[0].rect);
+    let target = center(prepared.layout().frames[1].tabs[0].rect);
+    let mut controller = DockController::new();
+    let mut memory = UiMemory::new();
+
+    let _ = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_button(source, MouseButton::Primary, true),
+        FrameId::from_raw(90),
+    );
+    let _ = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_move(target, Vec2::new(target.x - source.x, target.y - source.y)),
+        FrameId::from_raw(90),
+    );
+    assert!(controller.drop_preview().is_some());
+
+    // The application replaces the tree mid-drag; the retained drag now
+    // points at state that no longer exists.
+    dock = replacement_split_dock();
+    let replacement = dock.snapshot();
+    let (stale, _) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        UiInput::default(),
+        FrameId::from_raw(90),
+    );
+    assert_eq!(dock.snapshot(), replacement);
+    assert!(controller.tab_drag().is_none());
+    assert!(stale.drop_preview.is_none());
+    assert!(!stale.changed);
+
+    let (released, _) = run_frame(
+        &mut dock,
+        &mut controller,
+        &mut memory,
+        pointer_button(target, MouseButton::Primary, false),
+        FrameId::from_raw(90),
+    );
+    assert!(!released.changed);
+    assert_eq!(dock.snapshot(), replacement);
 }
