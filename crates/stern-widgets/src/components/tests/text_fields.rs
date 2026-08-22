@@ -1517,6 +1517,53 @@ fn preedit_model_selection_keeps_insertion_leading_affinity() {
 }
 
 #[test]
+fn ime_composition_underline_paints_focus_ring_not_selection() {
+    use crate::components::text_geometry::{TextFieldGeometry, TextFieldKind};
+    use stern_core::{ComponentState, LinePrimitive};
+    use stern_text::TextComposition;
+
+    let theme = default_dark_theme();
+    let recipe = theme.text_field(ComponentState {
+        hovered: false,
+        pressed: false,
+        focused: true,
+        disabled: false,
+        selected: false,
+    });
+    let rect = Rect::new(0.0, 0.0, 160.0, 24.0);
+    let mut state = TextEditState::new("ab");
+    state.set_selection(TextSelection::new(2, 0));
+    state.composition = Some(TextComposition::new("XY", None));
+    let primitives = TextFieldGeometry::build(
+        rect,
+        &state,
+        &recipe,
+        TextFieldKind::SingleLine,
+        stern_core::Vec2::ZERO,
+        None,
+    )
+    .primitives(WidgetId::from_key("field"), true, true, true);
+
+    let underlines = primitives
+        .into_iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Line(line) => Some(line),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !underlines.is_empty(),
+        "an active composition must paint an underline"
+    );
+    // 02-fields.md: IME composition underline is the focus.ring blue (the
+    // caret's color source), never the selection fill.
+    for LinePrimitive { stroke, .. } in underlines {
+        assert_eq!(stroke.brush, stern_core::Brush::Solid(theme.colors.focus.ring));
+        assert_ne!(stroke.brush, recipe.selection);
+    }
+}
+
+#[test]
 fn vector_runtime_final_press_is_independent_of_component_helper_order() {
     use crate::{
         VectorComponentLayout, VectorScrubInputConfig, vector_scrub_input_with_runtime,
