@@ -395,7 +395,7 @@ fn shaped_text_layout_clamps_geometry_offsets_to_utf8_boundaries() {
     let first_caret = layout.caret_rect(0);
     let second_caret = layout.caret_rect(after_first_character);
     let hit = layout.hit_test_point(
-        (first_caret.x + second_caret.x) * 0.5,
+        first_caret.x.midpoint(second_caret.x),
         first_caret.y + first_caret.height * 0.5,
     );
 

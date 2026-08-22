@@ -43,9 +43,10 @@ use stern::core::{
 };
 use stern::text::TextEditState;
 use stern::widgets::chrome::{
-    ChromeScene, ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey, MenuBar, MenuBarMenu,
-    MenuBarMenuId, StatusBar, StatusItem, StatusItemId, StatusItemKind, SystemFeedbackScene,
-    SystemFeedbackSceneConfig, TabStrip, Toolbar, ToolbarGroup, ToolbarGroupId,
+    ChromeBandLayout, ChromeScene, ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey,
+    MenuBar, MenuBarMenu, MenuBarMenuId, StatusBar, StatusItem, StatusItemId, StatusItemKind,
+    SystemFeedbackScene, SystemFeedbackSceneConfig, TabStrip, Toolbar, ToolbarGroup,
+    ToolbarGroupId,
 };
 use stern::widgets::dock::PanelId;
 use stern::widgets::inspector::{InspectorPickerCommit, InspectorPickerState};
@@ -63,7 +64,7 @@ use stern::widgets::{
 };
 use stern_icons_phosphor as phosphor;
 
-use crate::edit_workspace::workspace_tab;
+use crate::edit_workspace::{workspace_bands, workspace_tab};
 use crate::overlay_workspace::SharedOverlayRoute;
 use crate::{DemoActionRegistry, DemoWorkspace};
 
@@ -399,18 +400,14 @@ impl GalleryWorkspace {
         let row_gap = theme.spacing.resolve(SpacingRole::GroupGap);
         let section_gap = theme.spacing.resolve(SpacingRole::SectionGap);
         let slot_block = row_height + CAPTION_GAP + CAPTION_HEIGHT;
-        let [
-            menu_rect,
-            toolbar_rect,
-            tab_strip_rect,
-            content_rect,
-            status_rect,
-        ] = chrome_layout(Rect::new(
-            0.0,
-            0.0,
-            bounds.width.max(0.0),
-            bounds.height.max(0.0),
-        ));
+        let layout = workspace_bands(ui, bounds);
+        let (menu_rect, toolbar_rect, tab_strip_rect, content_rect, status_rect) = (
+            layout.menu_bar,
+            layout.toolbar,
+            layout.tab_strip,
+            layout.content,
+            layout.status_bar,
+        );
 
         let menu_bar = MenuBar::from_menus([MenuBarMenu::from_actions(
             APPLICATION_MENU,
@@ -551,16 +548,23 @@ impl GalleryWorkspace {
             width,
             "Chrome specimens (in a panel)",
         );
-        let specimen_panel = Rect::new(content.x, cursor, width, 96.0);
+        // The specimen panel is exactly tall enough for the token-derived
+        // chrome band ladder (menu + toolbar + tabs + status) plus its inset.
+        let specimen_height = theme.sizes.control.md
+            + theme.sizes.control.lg
+            + theme.sizes.tab
+            + theme.sizes.control.sm
+            + 8.0;
+        let specimen_panel = Rect::new(content.x, cursor, width, specimen_height);
         let specimen_inset = specimen_panel.inset(4.0);
-        let [
-            specimen_menu_rect,
-            specimen_toolbar_rect,
-            specimen_tabs_rect,
-            _specimen_content,
-            specimen_status_rect,
-        ] = chrome_layout(specimen_inset);
-        cursor += 96.0 + section_gap;
+        let specimen_bands = ChromeBandLayout::from_viewport(specimen_inset, ui.theme());
+        let (specimen_menu_rect, specimen_toolbar_rect, specimen_tabs_rect, specimen_status_rect) = (
+            specimen_bands.menu_bar,
+            specimen_bands.toolbar,
+            specimen_bands.tab_strip,
+            specimen_bands.status_bar,
+        );
+        cursor += specimen_height + section_gap;
 
         cursor = section_header(ui, content.x, cursor, width, "Collections — row states");
         let row_state_labels = ["Rest", "Hover", "Selected", "Focused", "Disabled"];
@@ -1253,42 +1257,4 @@ fn label_below(ui: &mut Ui<'_>, control: Rect, text: &str) {
         CAPTION_HEIGHT,
     );
     ui.label(rect, text.to_owned());
-}
-
-fn chrome_layout(bounds: Rect) -> [Rect; 5] {
-    let menu_height = 28.0_f32.min(bounds.height.max(0.0));
-    let remaining = (bounds.height - menu_height).max(0.0);
-    let toolbar_height = 28.0_f32.min(remaining);
-    let remaining = (remaining - toolbar_height).max(0.0);
-    let tab_height = 28.0_f32.min(remaining);
-    let remaining = (remaining - tab_height).max(0.0);
-    let status_height = 22.0_f32.min(remaining);
-    let content_height = (remaining - status_height).max(0.0);
-    [
-        Rect::new(bounds.x, bounds.y, bounds.width, menu_height),
-        Rect::new(
-            bounds.x,
-            bounds.y + menu_height,
-            bounds.width,
-            toolbar_height,
-        ),
-        Rect::new(
-            bounds.x,
-            bounds.y + menu_height + toolbar_height,
-            bounds.width,
-            tab_height,
-        ),
-        Rect::new(
-            bounds.x,
-            bounds.y + menu_height + toolbar_height + tab_height,
-            bounds.width,
-            content_height,
-        ),
-        Rect::new(
-            bounds.x,
-            bounds.y + menu_height + toolbar_height + tab_height + content_height,
-            bounds.width,
-            status_height,
-        ),
-    ]
 }

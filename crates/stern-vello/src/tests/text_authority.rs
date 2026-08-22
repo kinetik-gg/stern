@@ -553,8 +553,8 @@ fn encoded_fill_rect_device_bounds(rect: Rect, scale: f64, command_transform: Tr
     let transform = encoding.transforms[0];
     let mut min = Point::new(f32::INFINITY, f32::INFINITY);
     let mut max = Point::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
-    let mut words = encoding.path_data.chunks_exact(2);
-    for point_words in &mut words {
+    let (points, remainder) = encoding.path_data.as_chunks::<2>();
+    for point_words in points {
         let x = f32::from_bits(point_words[0]);
         let y = f32::from_bits(point_words[1]);
         let point = Point::new(
@@ -568,7 +568,7 @@ fn encoded_fill_rect_device_bounds(rect: Rect, scale: f64, command_transform: Tr
         max.x = max.x.max(point.x);
         max.y = max.y.max(point.y);
     }
-    assert!(words.remainder().is_empty());
+    assert!(remainder.is_empty());
     assert!(min.x.is_finite() && min.y.is_finite());
     assert!(max.x.is_finite() && max.y.is_finite());
     Rect::from_min_max(min, max)
@@ -688,7 +688,7 @@ fn text_authority_navigation_rects_and_hits_share_fractional_device_edges() {
 
         let left = *first_stop;
         let right = *second_stop;
-        let threshold = (left_bounds.min_x() + right_bounds.min_x()) * 0.5;
+        let threshold = left_bounds.min_x().midpoint(right_bounds.min_x());
         let delta = (right_bounds.min_x() - left_bounds.min_x()) * 0.25;
         assert!(delta * 4.0 >= 4.0);
         let physical_y = selection_bounds.center().y;

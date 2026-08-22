@@ -118,8 +118,8 @@ fn encoded_fill_device_bounds(
     let transform = encoding.transforms[0];
     let mut min = Point::new(f32::INFINITY, f32::INFINITY);
     let mut max = Point::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
-    let mut words = first_path_data.chunks_exact(2);
-    for point_words in &mut words {
+    let (points, remainder) = first_path_data.as_chunks::<2>();
+    for point_words in points {
         let x = f32::from_bits(point_words[0]);
         let y = f32::from_bits(point_words[1]);
         let point = Point::new(
@@ -133,7 +133,7 @@ fn encoded_fill_device_bounds(
         max.x = max.x.max(point.x);
         max.y = max.y.max(point.y);
     }
-    assert!(words.remainder().is_empty());
+    assert!(remainder.is_empty());
     assert!(min.x.is_finite() && min.y.is_finite());
     assert!(max.x.is_finite() && max.y.is_finite());
     Rect::from_min_max(min, max)
