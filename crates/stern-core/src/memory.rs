@@ -999,14 +999,18 @@ impl UiMemory {
     /// tests. Runtime code should prefer mode-aware preparation followed by an
     /// accepted caret rectangle.
     ///
-    /// # Panics
-    ///
-    /// Panics if the internal owner-identity epoch is exhausted.
+    /// If the internal owner-identity epoch is exhausted, the request is
+    /// refused: a [`FrameWarning::TextInputOwnerEpochExhausted`] is queued and
+    /// retained text-input ownership state is left unchanged.
     pub fn set_text_input_owner(&mut self, id: WidgetId) {
         if self.text_input_owner == Some(id)
             && self.text_input_owner_mode == Some(TextInputOwnerMode::Editable)
             && self.platform_text_input_state == PlatformTextInputState::Active
         {
+            return;
+        }
+
+        if self.text_input_owner != Some(id) && !self.advance_text_input_owner_epoch(id) {
             return;
         }
 
@@ -1016,13 +1020,6 @@ impl UiMemory {
 
         if self.pending_text_input_stop == Some(id) {
             self.pending_text_input_stop = None;
-        }
-        if self.text_input_owner != Some(id) {
-            self.text_input_owner_epoch.0 = self
-                .text_input_owner_epoch
-                .0
-                .checked_add(1)
-                .expect("text-input owner epoch overflowed");
         }
         self.text_input_owner = Some(id);
         self.text_input_owner_mode = Some(TextInputOwnerMode::Editable);
@@ -1034,21 +1031,22 @@ impl UiMemory {
     }
 
     /// Records a logical text-input owner without activating platform IME.
+    ///
+    /// If the internal owner-identity epoch is exhausted, the request is
+    /// refused: a [`FrameWarning::TextInputOwnerEpochExhausted`] is queued and
+    /// retained text-input ownership state is left unchanged.
     #[doc(hidden)]
     pub fn set_text_input_owner_mode(&mut self, id: WidgetId, mode: TextInputOwnerMode) {
         if self.text_input_owner == Some(id) && self.text_input_owner_mode == Some(mode) {
             return;
         }
 
+        if self.text_input_owner != Some(id) && !self.advance_text_input_owner_epoch(id) {
+            return;
+        }
+
         if self.platform_text_input_state == PlatformTextInputState::Active {
             self.retire_active_platform_text_input();
-        }
-        if self.text_input_owner != Some(id) {
-            self.text_input_owner_epoch.0 = self
-                .text_input_owner_epoch
-                .0
-                .checked_add(1)
-                .expect("text-input owner epoch overflowed");
         }
         self.text_input_owner = Some(id);
         self.text_input_owner_mode = Some(mode);
@@ -1057,21 +1055,30 @@ impl UiMemory {
 
     /// Clears the logical text-input owner and retires platform IME when active.
     ///
-    /// # Panics
-    ///
-    /// Panics if the internal owner-identity epoch is exhausted.
+    /// If the internal owner-identity epoch is exhausted, the clear is
+    /// refused: a [`FrameWarning::TextInputOwnerEpochExhausted`] is queued and
+    /// the current owner keeps text input.
     pub fn clear_text_input_owner(&mut self) {
-        if self.text_input_owner.is_none() {
+        let Some(owner) = self.text_input_owner else {
+            return;
+        };
+        if !self.advance_text_input_owner_epoch(owner) {
             return;
         }
         self.retire_active_platform_text_input();
         self.text_input_owner = None;
         self.text_input_owner_mode = None;
-        self.text_input_owner_epoch.0 = self
-            .text_input_owner_epoch
-            .0
-            .checked_add(1)
-            .expect("text-input owner epoch overflowed");
+    }
+
+    /// Bumps the owner-identity epoch, or queues a warning and returns `false`
+    /// when the counter is exhausted.
+    fn advance_text_input_owner_epoch(&mut self, requested: WidgetId) -> bool {
+        let Some(next) = self.text_input_owner_epoch.0.checked_add(1) else {
+            self.push_warning(FrameWarning::TextInputOwnerEpochExhausted { id: requested });
+            return false;
+        };
+        self.text_input_owner_epoch.0 = next;
+        true
     }
 
     /// Takes the text input owner waiting for a platform stop request.
@@ -1297,8 +1304,8 @@ mod tests {
     use super::{PointerGestureKind, TextInputOwnerMode, UiMemory};
     use crate::interaction::captured_selection_gesture_with_ordinals;
     use crate::{
-        MouseButton, Point, PointerRoute, PointerRoutes, Rect, UiInput, UiInputEvent, Vec2,
-        WidgetId,
+        FrameWarning, MouseButton, Point, PointerRoute, PointerRoutes, Rect, UiInput, UiInputEvent,
+        Vec2, WidgetId,
     };
 
     fn selection_gesture_memory(owner: WidgetId) -> UiMemory {
@@ -1696,14 +1703,71 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "text-input owner epoch overflowed")]
-    fn text_input_owner_epoch_never_wraps() {
+    fn text_input_owner_epoch_overflow_never_wraps_and_refuses_owner_changes() {
+        let current = WidgetId::from_key("current");
+        let incoming = WidgetId::from_key("incoming");
         let mut memory = UiMemory::new();
+        memory.set_text_input_owner(current);
+        assert_eq!(memory.text_input_owner_epoch(), 1);
         memory.text_input_owner_epoch.0 = u64::MAX;
-        memory.set_text_input_owner_mode(
-            WidgetId::from_key("overflow"),
-            TextInputOwnerMode::Editable,
+
+        memory.set_text_input_owner(incoming);
+
+        assert_eq!(
+            memory.take_pending_warnings(),
+            vec![FrameWarning::TextInputOwnerEpochExhausted { id: incoming }]
         );
+        assert_eq!(memory.text_input_owner(), Some(current));
+        assert_eq!(
+            memory.text_input_owner_mode(),
+            Some(TextInputOwnerMode::Editable)
+        );
+        assert!(memory.platform_text_input_is_active_for(current));
+        assert_eq!(memory.text_input_owner_epoch(), u64::MAX);
+    }
+
+    #[test]
+    fn text_input_owner_epoch_overflow_refuses_mode_changes() {
+        let current = WidgetId::from_key("current");
+        let incoming = WidgetId::from_key("incoming");
+        let mut memory = UiMemory::new();
+        memory.set_text_input_owner_mode(current, TextInputOwnerMode::Editable);
+        memory.text_input_owner_epoch.0 = u64::MAX;
+
+        memory.set_text_input_owner_mode(incoming, TextInputOwnerMode::ReadOnly);
+
+        assert_eq!(
+            memory.take_pending_warnings(),
+            vec![FrameWarning::TextInputOwnerEpochExhausted { id: incoming }]
+        );
+        assert_eq!(memory.text_input_owner(), Some(current));
+        assert_eq!(
+            memory.text_input_owner_mode(),
+            Some(TextInputOwnerMode::Editable)
+        );
+        assert!(!memory.platform_text_input_is_active_for(current));
+        assert_eq!(memory.text_input_owner_epoch(), u64::MAX);
+    }
+
+    #[test]
+    fn text_input_owner_epoch_overflow_refuses_clearing() {
+        let current = WidgetId::from_key("current");
+        let mut memory = UiMemory::new();
+        memory.set_text_input_owner_mode(current, TextInputOwnerMode::ReadOnly);
+        memory.text_input_owner_epoch.0 = u64::MAX;
+
+        memory.clear_text_input_owner();
+
+        assert_eq!(
+            memory.take_pending_warnings(),
+            vec![FrameWarning::TextInputOwnerEpochExhausted { id: current }]
+        );
+        assert_eq!(memory.text_input_owner(), Some(current));
+        assert_eq!(
+            memory.text_input_owner_mode(),
+            Some(TextInputOwnerMode::ReadOnly)
+        );
+        assert_eq!(memory.text_input_owner_epoch(), u64::MAX);
     }
 
     #[test]
