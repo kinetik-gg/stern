@@ -26,6 +26,7 @@ pub fn all() -> Vec<Story> {
         feedback::sheet(),
         inspector::with_rows(),
         dock::with_seams(),
+        dock::with_tab_insertion_preview(),
         workspace_chrome::with_bands(),
     ]
 }
