@@ -259,8 +259,8 @@ impl Ui<'_> {
         } else if let Some(drag) = controller.drag {
             let strips = dock_tab_strip_geometries(&scene.layout().frames);
             let resolved = drag_position
-                .and_then(|position| {
-                    match resolve_dock_tab_strip_target(&strips, position, drag) {
+                .and_then(
+                    |position| match resolve_dock_tab_strip_target(&strips, position, drag) {
                         Some(target) => dock_tab_strip_drop_target(dock, drag, &strips, target),
                         None if dock_tab_strip_contains_point(&strips, position) => None,
                         None => resolve_dock_drop_target_with_policy(
@@ -269,8 +269,8 @@ impl Ui<'_> {
                             config.new_frame,
                             config.policy,
                         ),
-                    }
-                })
+                    },
+                )
                 .filter(|target| dock_drop_target_is_current(dock, *target))
                 .filter(|target| {
                     hovered_frame.is_some_and(|frame| dock_drop_target_frame(*target) == frame)

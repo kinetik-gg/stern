@@ -485,9 +485,7 @@ fn prepare_preview(
 ) -> Option<DockScenePreview> {
     let (frame, kind, rect) = match target {
         DockDropTarget::Tab { frame } => {
-            let rect = merge_preview_rect(
-                frames.iter().find(|item| item.frame == frame)?.rect,
-            );
+            let rect = merge_preview_rect(frames.iter().find(|item| item.frame == frame)?.rect);
             (frame, DockScenePreviewKind::Merge, rect)
         }
         DockDropTarget::Insert { frame, anchor } => {
@@ -575,8 +573,7 @@ fn insertion_line_rect(strip: &DockSceneFrame, anchor: Option<PanelId>) -> Optio
     let x = match anchor {
         Some(anchor) => {
             let tab = strip.tabs.iter().find(|tab| tab.panel == anchor)?.rect;
-            if !valid_rect(tab) || tab.y + tab.height < strip_rect.y || tab.y > strip_rect.max_y()
-            {
+            if !valid_rect(tab) || tab.y + tab.height < strip_rect.y || tab.y > strip_rect.max_y() {
                 return None;
             }
             tab.x
@@ -586,7 +583,8 @@ fn insertion_line_rect(strip: &DockSceneFrame, anchor: Option<PanelId>) -> Optio
             .last()
             .map_or(strip_rect.x, |tab| tab.rect.max_x()),
     };
-    let x = (x - INSERTION_LINE_WIDTH * 0.5).clamp(strip_rect.x, strip_rect.max_x() - INSERTION_LINE_WIDTH);
+    let x = (x - INSERTION_LINE_WIDTH * 0.5)
+        .clamp(strip_rect.x, strip_rect.max_x() - INSERTION_LINE_WIDTH);
     let rect = Rect::new(x, strip_rect.y, INSERTION_LINE_WIDTH, strip_rect.height);
     valid_rect(rect).then_some(rect)
 }

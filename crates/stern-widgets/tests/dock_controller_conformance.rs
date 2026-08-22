@@ -1316,10 +1316,7 @@ fn escape_cancels_tab_drag_and_preserves_the_committed_snapshot() {
         pointer_button(target, MouseButton::Primary, false),
         FrameId::from_raw(90),
     );
-    assert_eq!(
-        panel_order(&dock, FrameId::from_raw(1)),
-        vec![11, 12, 13],
-    );
+    assert_eq!(panel_order(&dock, FrameId::from_raw(1)), vec![11, 12, 13],);
     assert_eq!(panel_order(&dock, FrameId::from_raw(2)), vec![21]);
     assert!(released.close_requests.is_empty());
 }

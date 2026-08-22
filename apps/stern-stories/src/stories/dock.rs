@@ -104,12 +104,11 @@ fn compose_tab_insertion_preview(ui: &mut Ui<'_>, rect: Rect) {
     let mut dock = Dock::new(split(Axis::Vertical, 0.35, assets, right));
     let _ = dock.set_active_frame(FrameId::from_raw(2));
     let scene = DockScene::new(
-        DockSceneConfig::new(WidgetId::from_key("story-dock-tab-insertion"), rect).with_drop_preview(
-            Some(DockDropTarget::Insert {
+        DockSceneConfig::new(WidgetId::from_key("story-dock-tab-insertion"), rect)
+            .with_drop_preview(Some(DockDropTarget::Insert {
                 frame: FrameId::from_raw(2),
                 anchor: Some(TIMELINE_PANEL),
-            }),
-        ),
+            })),
         &dock,
     );
     let _ = ui.dock_scene(&scene, |ui, panel| {

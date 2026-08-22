@@ -47,7 +47,9 @@ fn dock_tab_insertion_targets_are_reachable_and_exhaustively_matchable() {
             assert_eq!(frame, FrameId::from_raw(7));
             assert_eq!(anchor, Some(PanelId::from_raw(70)));
         }
-        DockDropTarget::Split { frame, placement, .. } => {
+        DockDropTarget::Split {
+            frame, placement, ..
+        } => {
             assert_eq!(frame, FrameId::from_raw(7));
             assert_eq!(placement, DockPlacement::Left);
         }

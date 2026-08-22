@@ -744,10 +744,7 @@ fn insertion_previews_derive_contained_lines_from_the_accepted_target() {
     let theme = default_dark_theme();
     let output = paint(&anchored);
     let paint = rect_primitive_at(&output.primitives, anchored_preview.rect);
-    assert_eq!(
-        paint.fill,
-        Some(Brush::Solid(theme.colors.accent.default))
-    );
+    assert_eq!(paint.fill, Some(Brush::Solid(theme.colors.accent.default)));
     assert_eq!(paint.stroke, None);
     assert_eq!(paint.radius, theme.radii.none);
 

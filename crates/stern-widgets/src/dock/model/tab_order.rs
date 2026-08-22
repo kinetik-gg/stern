@@ -122,9 +122,9 @@ pub fn resolve_dock_tab_strip_target(
         return None;
     }
 
-    let strip = strips
-        .iter()
-        .find(|strip| valid_rect(strip.tab_list_rect) && strip.tab_list_rect.contains_point(pointer))?;
+    let strip = strips.iter().find(|strip| {
+        valid_rect(strip.tab_list_rect) && strip.tab_list_rect.contains_point(pointer)
+    })?;
 
     if strip.frame == drag.source_frame {
         if !strip.tabs.iter().any(|slot| slot.panel == drag.panel) {
@@ -139,9 +139,7 @@ pub fn resolve_dock_tab_strip_target(
             .tabs
             .iter()
             .filter(|candidate| candidate.panel != drag.panel)
-            .filter(|candidate| {
-                valid_rect(candidate.rect) && tab_center_x(candidate) <= pointer.x
-            })
+            .filter(|candidate| valid_rect(candidate.rect) && tab_center_x(candidate) <= pointer.x)
             .count();
         (slot != original_index).then_some(DockTabStripTarget::Reorder {
             frame: strip.frame,
@@ -166,10 +164,7 @@ pub fn resolve_dock_tab_strip_target(
 /// no preview and must not fall through to split targeting — from "outside
 /// every strip", which may fall through.
 #[must_use]
-pub fn dock_tab_strip_contains_point(
-    strips: &[DockTabStripGeometry],
-    pointer: Point,
-) -> bool {
+pub fn dock_tab_strip_contains_point(strips: &[DockTabStripGeometry], pointer: Point) -> bool {
     valid_pointer(pointer)
         && strips.iter().any(|strip| {
             valid_rect(strip.tab_list_rect) && strip.tab_list_rect.contains_point(pointer)
@@ -209,7 +204,11 @@ impl Dock {
         let Some(source) = self.frame(drag.source_frame) else {
             return false;
         };
-        let Some(position) = source.panels.iter().position(|panel| panel.id == drag.panel) else {
+        let Some(position) = source
+            .panels
+            .iter()
+            .position(|panel| panel.id == drag.panel)
+        else {
             return false;
         };
         let Some(target) = self.frame(frame) else {
@@ -219,9 +218,8 @@ impl Dock {
             return false;
         }
         if frame != drag.source_frame {
-            return anchor.is_none_or(|anchor| {
-                target.panels.iter().any(|panel| panel.id == anchor)
-            });
+            return anchor
+                .is_none_or(|anchor| target.panels.iter().any(|panel| panel.id == anchor));
         }
 
         // Same-frame placement is only current when it moves the tab: the
@@ -229,7 +227,10 @@ impl Dock {
         // appending is only meaningful when the dragged tab is not last.
         match anchor {
             None => position + 1 < source.panels.len(),
-            Some(anchor) => source.panels.get(position + 1).is_some_and(|next| next.id != anchor),
+            Some(anchor) => source
+                .panels
+                .get(position + 1)
+                .is_some_and(|next| next.id != anchor),
         }
     }
 
@@ -272,8 +273,10 @@ impl Dock {
 
         if frame == drag.source_frame {
             if let Some(active_before) = active_before
-                && let Some(active_index) =
-                    target.panels.iter().position(|item| item.id == active_before)
+                && let Some(active_index) = target
+                    .panels
+                    .iter()
+                    .position(|item| item.id == active_before)
             {
                 target.active = active_index;
             }

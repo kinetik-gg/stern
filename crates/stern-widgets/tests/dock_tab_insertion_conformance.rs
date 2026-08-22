@@ -70,12 +70,7 @@ fn strip(id: u64, x: f32, panels: &[u64]) -> DockTabStripGeometry {
             .enumerate()
             .map(|(index, panel)| DockTabSlotGeometry {
                 panel: PanelId::from_raw(*panel),
-                rect: Rect::new(
-                    x + TAB_WIDTH * index as f32,
-                    0.0,
-                    TAB_WIDTH,
-                    STRIP_HEIGHT,
-                ),
+                rect: Rect::new(x + TAB_WIDTH * index as f32, 0.0, TAB_WIDTH, STRIP_HEIGHT),
             })
             .collect(),
     }
@@ -287,13 +282,7 @@ fn validation_rejects_empty_target_frames() {
         second: Box::new(DockNode::Frame(frame(2, Vec::new()))),
     });
 
-    assert!(
-        !area.tab_insertion_is_current(
-            drag(1, 11),
-            FrameId::from_raw(2),
-            None,
-        )
-    );
+    assert!(!area.tab_insertion_is_current(drag(1, 11), FrameId::from_raw(2), None,));
     assert_eq!(order(&area, 1), vec![11]);
 }
 
@@ -326,7 +315,11 @@ fn cross_frame_insert_commits_exact_anchor_positions_and_prunes_empty_sources() 
     let mut area = two_frame_dock();
 
     // Insert before the second target tab.
-    assert!(area.apply_tab_insertion(drag(1, 12), FrameId::from_raw(2), Some(PanelId::from_raw(22))));
+    assert!(area.apply_tab_insertion(
+        drag(1, 12),
+        FrameId::from_raw(2),
+        Some(PanelId::from_raw(22))
+    ));
     assert_eq!(order(&area, 1), vec![11, 13]);
     assert_eq!(order(&area, 2), vec![21, 12, 22]);
     assert_eq!(area.active_frame(), Some(FrameId::from_raw(2)));
@@ -351,7 +344,11 @@ fn cross_frame_insert_commits_exact_anchor_positions_and_prunes_empty_sources() 
             vec![panel(21, "Viewport"), panel(22, "Timeline")],
         ))),
     });
-    assert!(single.apply_tab_insertion(drag(1, 11), FrameId::from_raw(2), Some(PanelId::from_raw(22))));
+    assert!(single.apply_tab_insertion(
+        drag(1, 11),
+        FrameId::from_raw(2),
+        Some(PanelId::from_raw(22))
+    ));
     assert!(single.frame(FrameId::from_raw(1)).is_none());
     assert_eq!(single.frames().len(), 1);
     assert_eq!(order(&single, 2), vec![21, 11, 22]);
@@ -371,7 +368,11 @@ fn dismissal_policy_survives_reorders_and_cross_frame_insertions() {
         .panel_dismissible(PanelId::from_raw(12));
 
     // Local reorder keeps the per-panel policy.
-    assert!(area.apply_tab_insertion(drag(1, 12), FrameId::from_raw(1), Some(PanelId::from_raw(11))));
+    assert!(area.apply_tab_insertion(
+        drag(1, 12),
+        FrameId::from_raw(1),
+        Some(PanelId::from_raw(11))
+    ));
     assert_eq!(
         area.frame(FrameId::from_raw(1))
             .expect("frame")
@@ -386,7 +387,11 @@ fn dismissal_policy_survives_reorders_and_cross_frame_insertions() {
             .expect("source")
             .set_panel_dismissible(PanelId::from_raw(12), false)
     );
-    assert!(area.apply_tab_insertion(drag(1, 12), FrameId::from_raw(2), Some(PanelId::from_raw(22))));
+    assert!(area.apply_tab_insertion(
+        drag(1, 12),
+        FrameId::from_raw(2),
+        Some(PanelId::from_raw(22))
+    ));
     assert!(
         !area
             .frame(FrameId::from_raw(2))
@@ -398,15 +403,10 @@ fn dismissal_policy_survives_reorders_and_cross_frame_insertions() {
 #[test]
 fn anchors_stay_stable_when_the_target_order_shifts_between_preview_and_commit() {
     let mut area = two_frame_dock();
-    let target = (
-        FrameId::from_raw(2),
-        Some(PanelId::from_raw(22)),
-    );
+    let target = (FrameId::from_raw(2), Some(PanelId::from_raw(22)));
 
     // Preview time: the anchor-keyed target validates against the live tree.
-    assert!(
-        area.tab_insertion_is_current(drag(1, 12), target.0, target.1)
-    );
+    assert!(area.tab_insertion_is_current(drag(1, 12), target.0, target.1));
 
     // A concurrent edit inserts another panel before the anchor.
     area.frame_mut(FrameId::from_raw(2))
@@ -425,7 +425,11 @@ fn invalid_and_stale_commit_attempts_never_mutate_the_snapshot() {
     let before = area.snapshot();
 
     // No-op same-frame placement.
-    assert!(!area.apply_tab_insertion(drag(1, 12), FrameId::from_raw(1), Some(PanelId::from_raw(13))));
+    assert!(!area.apply_tab_insertion(
+        drag(1, 12),
+        FrameId::from_raw(1),
+        Some(PanelId::from_raw(13))
+    ));
     assert_eq!(area.snapshot(), before);
 
     // Missing target frame.
@@ -456,15 +460,13 @@ fn drop_tab_routes_insert_targets_through_the_same_validation() {
 
     // A drag whose source frame does not own the panel is refused.
     let committed = area.snapshot();
-    assert!(
-        !area.drop_tab(
-            drag(1, 12),
-            DockDropTarget::Insert {
-                frame: FrameId::from_raw(2),
-                anchor: None,
-            },
-        )
-    );
+    assert!(!area.drop_tab(
+        drag(1, 12),
+        DockDropTarget::Insert {
+            frame: FrameId::from_raw(2),
+            anchor: None,
+        },
+    ));
     assert_eq!(area.snapshot(), committed);
 }
 
@@ -495,8 +497,16 @@ fn tab_strip_targeting_wins_over_generic_edge_split_resolution() {
 #[test]
 fn inserted_orders_round_trip_through_snapshots() {
     let mut area = two_frame_dock();
-    assert!(area.apply_tab_insertion(drag(1, 12), FrameId::from_raw(1), Some(PanelId::from_raw(11))));
-    assert!(area.apply_tab_insertion(drag(1, 13), FrameId::from_raw(2), Some(PanelId::from_raw(21))));
+    assert!(area.apply_tab_insertion(
+        drag(1, 12),
+        FrameId::from_raw(1),
+        Some(PanelId::from_raw(11))
+    ));
+    assert!(area.apply_tab_insertion(
+        drag(1, 13),
+        FrameId::from_raw(2),
+        Some(PanelId::from_raw(21))
+    ));
     let snapshot = area.snapshot();
 
     let restored = Dock::restore(snapshot.clone()).expect("valid snapshot");
