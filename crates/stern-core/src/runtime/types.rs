@@ -274,6 +274,26 @@ pub enum FrameWarning {
         /// Structural validation error.
         error: SemanticTreeError,
     },
+    /// A captured selection gesture was invoked without root event ordinals.
+    SelectionGestureOrdinalsMissing {
+        /// Widget that requested the selection gesture.
+        id: WidgetId,
+    },
+    /// A captured-gesture ordinal sidecar did not match localized input.
+    GestureOrdinalSidecarMismatch {
+        /// Widget that requested the captured gesture.
+        id: WidgetId,
+        /// Number of ordinals in the sidecar.
+        ordinals: usize,
+        /// Number of events in the localized input.
+        events: usize,
+    },
+    /// The text-input owner epoch exhausted; the ownership transition was
+    /// refused and retained owner state was left unchanged.
+    TextInputOwnerEpochExhausted {
+        /// Owner whose retirement or adoption required an epoch bump.
+        id: WidgetId,
+    },
 }
 
 impl FrameWarning {
@@ -334,6 +354,24 @@ impl FrameWarning {
                 severity: DiagnosticSeverity::Warning,
                 category: DiagnosticCategory::SemanticTree,
                 location: DiagnosticLocation::SemanticTree,
+            },
+            Self::SelectionGestureOrdinalsMissing { id } => FrameDiagnostic {
+                code: "input.selection_gesture_ordinals_missing",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::Input,
+                location: DiagnosticLocation::Widget(id),
+            },
+            Self::GestureOrdinalSidecarMismatch { id, .. } => FrameDiagnostic {
+                code: "input.gesture_ordinal_sidecar_mismatch",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::Input,
+                location: DiagnosticLocation::Widget(id),
+            },
+            Self::TextInputOwnerEpochExhausted { id } => FrameDiagnostic {
+                code: "identity.text_input_owner_epoch_exhausted",
+                severity: DiagnosticSeverity::Warning,
+                category: DiagnosticCategory::Identity,
+                location: DiagnosticLocation::Widget(id),
             },
         }
     }

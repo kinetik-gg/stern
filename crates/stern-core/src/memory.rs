@@ -3,11 +3,11 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    InputStreamConflict, LivenessRegistry, LivenessRemovalStatus, LivenessTargetId, LivenessToken,
-    LivenessUpdateStatus, Modifiers, ObserverDelivery, ObserverDrain, ObserverNotification,
-    ObserverNotificationId, ObserverPublishStatus, ObserverRegistry, ObserverSubscriptionHandle,
-    ObserverSubscriptionId, Point, Response, UiInput, UiInputEvent, Vec2, WidgetId,
-    layout::tree::MeasureCache,
+    FrameWarning, InputStreamConflict, LivenessRegistry, LivenessRemovalStatus, LivenessTargetId,
+    LivenessToken, LivenessUpdateStatus, Modifiers, ObserverDelivery, ObserverDrain,
+    ObserverNotification, ObserverNotificationId, ObserverPublishStatus, ObserverRegistry,
+    ObserverSubscriptionHandle, ObserverSubscriptionId, Point, Response, UiInput, UiInputEvent,
+    Vec2, WidgetId, layout::tree::MeasureCache,
 };
 
 /// Frame-local routing decision for one pointer event class.
@@ -128,6 +128,27 @@ impl PartialEq for TextInputOwnerEpoch {
     }
 }
 
+/// Transient frame warnings raised by retained-memory mutations.
+///
+/// Interaction and memory code has no direct access to the frame output
+/// accumulator, so recoverable invariant failures queue here and `Ui`
+/// drains them into [`FrameOutput`](crate::FrameOutput) at frame
+/// finalization. They are diagnostics, not logical state: equality ignores
+/// them for the same reason it ignores [`TextInputOwnerEpoch`].
+#[derive(Debug, Default)]
+struct PendingWarnings(Vec<FrameWarning>);
+
+impl PartialEq for PendingWarnings {
+    /// Always returns `true`.
+    ///
+    /// Queued warnings are per-frame diagnostics; two retained memories with
+    /// identical logical state stay equal regardless of what either has
+    /// queued for delivery. See the struct docs above.
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
 /// Retained interaction and widget state owned by the UI runtime.
 ///
 /// Memory is deliberately non-cloneable because it contains authority-scoped
@@ -183,6 +204,9 @@ pub struct UiMemory {
     text_input_owner: Option<WidgetId>,
     /// Monotonic generation of logical text-owner identity changes.
     text_input_owner_epoch: TextInputOwnerEpoch,
+    /// Warnings queued by retained-memory mutations for delivery at frame
+    /// finalization.
+    pending_warnings: PendingWarnings,
     /// Logical access mode for the ordered text-input owner.
     text_input_owner_mode: Option<TextInputOwnerMode>,
     /// Whether platform text input is active for the logical Editable owner.
@@ -499,6 +523,16 @@ impl UiMemory {
 
     pub(crate) const fn text_input_owner_epoch(&self) -> u64 {
         self.text_input_owner_epoch.0
+    }
+
+    /// Queues a frame warning for delivery at frame finalization.
+    pub(crate) fn push_warning(&mut self, warning: FrameWarning) {
+        self.pending_warnings.0.push(warning);
+    }
+
+    /// Takes all queued warnings in emission order.
+    pub(crate) fn take_pending_warnings(&mut self) -> Vec<FrameWarning> {
+        std::mem::take(&mut self.pending_warnings.0)
     }
 
     /// Resolves ordered text events using the validation authority for this frame.
