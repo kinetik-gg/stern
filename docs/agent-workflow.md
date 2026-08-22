@@ -47,8 +47,17 @@ If the issue touches multiple crates, run clippy and test for each touched crate
 ### 5a. Visual Work Requires Rendered Images (AUDIT #941 §C)
 
 **No PR that changes anything visual merges without a rendered image (CPU
-raster dump or screenshot) attached to the PR, reviewed by a human.** Green
-tests are necessary, never sufficient, for visual work.
+raster dump or screenshot) attached to the PR and reviewed.** Green tests are
+necessary, never sufficient, for visual work.
+
+**Visual authority (owner delegation, 2026-08-23).** For the
+v0.0.1-alpha.1 cycle the owner has delegated pixel acceptance to the
+supervising agent: the supervisor performs the render → inspect → diff loop
+itself — opening the PNGs, comparing them against the spec tables, and
+describing what it sees in the PR body — and may run `bless` after confirming
+the rendered pixels match intent. Executor agents still never bless goldens,
+and the harness still never blesses automatically. If this delegation is
+revoked, revert to human review of every image.
 
 Concretely, before opening a PR that touches widget painting, theme recipes,
 composition, or anything else a user can see:
@@ -65,8 +74,9 @@ composition, or anything else a user can see:
 3. Attach the rendered images (at minimum the contact sheet) to the PR.
 4. If the change alters intended pixels, run
    `cargo run -p stern-stories -- diff` against the goldens and include the
-   result. Only a human decides to run `bless`; agents never bless goldens,
-   and the harness never blesses automatically.
+   result. Only the supervisor (holding delegated visual authority, see
+   above) decides to run `bless`; executor agents never bless goldens, and
+   the harness never blesses automatically.
 5. New visual behavior needs a story. Add or extend one in
    `apps/stern-stories/src/stories/` so the change stays reviewable.
 
@@ -114,6 +124,14 @@ The model assigned to an issue influences the approach:
 - **Opus**: Design-sensitive work (new APIs, RFCs, architecture)
 - **Sonnet**: Deterministic, well-specified implementation and refactors
 - **Haiku**: Mechanical find-replace and doc-sync tasks
+
+## Workspace Isolation
+
+Every task runs in its own git worktree (`.worktrees/<NNN>-<slug>`) with a
+private `CARGO_TARGET_DIR`. Never point two concurrent agents at one shared
+target directory — parallel waves corrupted shared target dirs repeatedly
+(#907). Prefer per-agent directories and accept cold builds, or serialize
+agents that would share one.
 
 ## House Rules
 
