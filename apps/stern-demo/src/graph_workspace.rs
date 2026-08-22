@@ -1,15 +1,14 @@
 use stern::core::{
     ActionContext, ActionDescriptor, ActionInvocation, Axis, PointerOrder, PointerTarget, Rect,
-    Size, WidgetId,
+    Size, WidgetId, default_dark_theme,
 };
 use stern::text::TextEditState;
 use stern::widgets::chrome::{
-    ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, MenuBar, MenuBarMenu, MenuBarMenuId,
-    StatusBar, StatusItem, StatusItemId, StatusItemKind, TabStrip, Toolbar, ToolbarGroup,
-    ToolbarGroupId,
+    ChromeScene, ChromeSceneConfig, ChromeSceneItemKey, StatusBar, StatusItem, StatusItemId,
+    StatusItemKind, TabStrip, Toolbar, ToolbarGroup, ToolbarGroupId,
 };
 use stern::widgets::dock::{
-    Dock, DockNode, DockScene, DockSceneConfig, Frame, FrameId, FrameTab, Panel, PanelId,
+    Dock, DockNode, DockScene, DockSceneConfig, Frame, FrameId, Panel, PanelId,
 };
 use stern::widgets::inspector::{PropertyGridConfig, PropertyGridRow};
 use stern::widgets::node_graph::{
@@ -19,6 +18,7 @@ use stern::widgets::node_graph::{
     NodeGraphSelectionTarget, NodeGraphStaticView, NodeGraphViewport, NodeGraphWidgetConfig,
     NodeGraphWidgetIntent, NodeId, PortDescriptor, PortDirection, PortEndpoint, PortId, PortTypeId,
 };
+use stern::widgets::{ApplicationBar, MenuBar};
 use stern::widgets::{
     ItemId, PanZoom, TextFieldAccess, Ui, ViewportCursorMetadata, ViewportCursorShape,
     ViewportSelectionTargetDescriptor, ViewportSelectionTargetId, ViewportSurface,
@@ -26,9 +26,7 @@ use stern::widgets::{
     ViewportToolSceneConfig, ViewportTransformHandleSet, ViewportWidget, ViewportWidgetConfig,
 };
 
-use crate::edit_workspace::{
-    VIEWPORT_TEXTURE, route_workspace_tabs, workspace_bands, workspace_tab,
-};
+use crate::edit_workspace::{VIEWPORT_TEXTURE, content_bands, route_application_bar_intents};
 use crate::overlay_workspace::SharedOverlayRoute;
 use crate::timeline_workspace::{
     compose_tool_actions, declare_tool_actions, viewport_actions, viewport_content_rect,
@@ -36,14 +34,11 @@ use crate::timeline_workspace::{
 };
 use crate::{DemoActionRegistry, DemoApplicationModel, DemoScenario, DemoViewportTool};
 
-const EDIT_WORKSPACE_TAB: PanelId = PanelId::from_raw(101);
-const GALLERY_WORKSPACE_TAB: PanelId = PanelId::from_raw(103);
 const GRAPH_ROOT: WidgetId = WidgetId::from_raw(0x0047_5241_5048);
 const CHROME_ROOT: WidgetId = WidgetId::from_raw(0x4348_524f_4d45);
 const CLEAR_SELECTION_ACTION: &str = "graph.clear-selection";
 const REVERSE_NODE_ORDER_ACTION: &str = "graph.reverse-node-order";
 const TOOLBAR_GROUP: ToolbarGroupId = ToolbarGroupId::from_raw(1);
-const APPLICATION_MENU: MenuBarMenuId = MenuBarMenuId::from_raw(1);
 const SELECTION_STATUS: StatusItemId = StatusItemId::from_raw(1);
 const SOURCE_NODE: NodeId = NodeId::from_raw(1);
 const OUTPUT_NODE: NodeId = NodeId::from_raw(2);
@@ -107,7 +102,6 @@ pub struct GraphWorkspaceState {
     viewport_pan_zoom: PanZoom,
     viewport_tools: ViewportToolController,
     toolbar: Toolbar,
-    tab_strip: TabStrip,
     status_bar: StatusBar,
 }
 
@@ -200,17 +194,6 @@ impl GraphWorkspaceState {
                 "Graph selection",
                 [clear_selection],
             )]),
-            tab_strip: TabStrip::from_tabs([
-                workspace_tab(EDIT_WORKSPACE_TAB.raw(), "Edit Workspace", false),
-                FrameTab {
-                    panel: GRAPH_PANEL,
-                    title: "Graph".to_owned(),
-                    active: true,
-                    close_visible: false,
-                    draggable: false,
-                },
-                workspace_tab(GALLERY_WORKSPACE_TAB.raw(), "Gallery Workspace", false),
-            ]),
             status_bar: StatusBar::from_items([connection_status(
                 GraphConnectionFeedback::Ready,
                 0,
@@ -293,25 +276,16 @@ impl GraphWorkspaceState {
         actions: &DemoActionRegistry,
         model: &mut DemoApplicationModel,
         overlays: &mut SharedOverlayRoute,
+        app_bar: &mut ApplicationBar,
         bounds: Size,
     ) -> Option<WidgetId> {
         self.sync_chrome_models(actions);
-        let layout = workspace_bands(ui, bounds);
-        let (menu_rect, toolbar_rect, tab_strip_rect, dock_rect, status_bar_rect) = (
-            layout.menu_bar,
-            layout.toolbar,
-            layout.tab_strip,
-            layout.content,
-            layout.status_bar,
-        );
+        let layout = content_bands(ui, bounds);
+        let (toolbar_rect, dock_rect, status_bar_rect) =
+            (layout.toolbar, layout.content, layout.status_bar);
+        let bar_prepared = app_bar.prepare(ui.theme());
         let dock = self.dock.clone();
-        let mut menu_bar = MenuBar::from_menus([MenuBarMenu::from_actions(
-            APPLICATION_MENU,
-            "Workspace",
-            actions.iter().cloned(),
-        )]);
         let toolbar = self.toolbar.clone();
-        let tab_strip = self.tab_strip.clone();
         let status_bar = self.status_bar.clone();
         let dock_scene = DockScene::new(DockSceneConfig::new(DOCK_ROOT, dock_rect), &dock);
         let viewport_bounds = panel_bounds(&dock_scene, VIEWPORT_PANEL).map(|rect| rect.inset(4.0));
@@ -340,14 +314,13 @@ impl GraphWorkspaceState {
         overlays.open_palette_if_requested(ui, actions, bounds);
         let mut chrome_config = ChromeSceneConfig::new(
             CHROME_ROOT,
-            menu_rect,
+            Rect::ZERO,
             toolbar_rect,
-            tab_strip_rect,
+            Rect::ZERO,
             status_bar_rect,
             ActionContext::Editor,
         )
         .with_widths([
-            (ChromeSceneItemKey::Menu(APPLICATION_MENU), 96.0),
             (
                 ChromeSceneItemKey::Toolbar {
                     group: TOOLBAR_GROUP,
@@ -355,9 +328,6 @@ impl GraphWorkspaceState {
                 },
                 132.0,
             ),
-            (ChromeSceneItemKey::Tab(EDIT_WORKSPACE_TAB), 132.0),
-            (ChromeSceneItemKey::Tab(GRAPH_PANEL), 120.0),
-            (ChromeSceneItemKey::Tab(GALLERY_WORKSPACE_TAB), 148.0),
             (ChromeSceneItemKey::Status(SELECTION_STATUS), 160.0),
             (
                 ChromeSceneItemKey::Toolbar {
@@ -376,12 +346,25 @@ impl GraphWorkspaceState {
                 168.0,
             );
         }
-        let chrome_scene =
-            ChromeScene::new(chrome_config, &menu_bar, &toolbar, &tab_strip, &status_bar);
+        let empty_menu_bar = MenuBar::new();
+        let tab_strip = TabStrip::new();
+        let chrome_scene = ChromeScene::new(
+            chrome_config,
+            &empty_menu_bar,
+            &toolbar,
+            &tab_strip,
+            &status_bar,
+        );
         ui.resolve_pointer_targets(|plan| {
+            let theme = default_dark_theme();
+            let bar_next = bar_prepared
+                .as_ref()
+                .map_or(PointerOrder::new(10), |prepared| {
+                    prepared.declare_pointer_targets(app_bar, &theme, plan, PointerOrder::new(10))
+                });
             let mut next = dock_scene.declare_pointer_targets_with_content(
                 plan,
-                PointerOrder::new(10),
+                bar_next,
                 |plan, mut order| {
                     if let Some(panel) = dock_scene
                         .layout()
@@ -428,16 +411,13 @@ impl GraphWorkspaceState {
             INSPECTOR_PANEL => self.compose_inspector(ui, panel.rect),
             _ => unreachable!("demo Dock contains only Graph, Viewport, and Inspector panels"),
         });
-        let chrome_output = ui.chrome_scene(&chrome_scene);
-        route_workspace_tabs(ui, actions, &chrome_output.intents);
-        overlays.reconcile(
-            ui,
-            actions,
-            &mut menu_bar,
-            &chrome_output.intents,
-            false,
-            bounds,
-        )
+        let bar_output = bar_prepared
+            .as_ref()
+            .map(|prepared| ui.application_bar(app_bar, prepared))
+            .unwrap_or_default();
+        let _chrome_output = ui.chrome_scene(&chrome_scene);
+        route_application_bar_intents(ui, actions, &bar_output.intents);
+        overlays.reconcile_application_bar(ui, actions, app_bar, &bar_output.intents, false, bounds)
     }
 
     fn sync_chrome_models(&mut self, actions: &DemoActionRegistry) {

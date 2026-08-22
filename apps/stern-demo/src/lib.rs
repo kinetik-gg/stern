@@ -10,11 +10,15 @@ mod timeline_workspace;
 use stern::UiState;
 use stern::core::{
     ActionInvocation, ActionRoutingContext, FrameContext, FrameOutput, PhysicalSize,
-    PlatformRequest, ScaleFactor, SemanticRole, Size, TimeInfo, UiInput, ViewportInfo, WidgetId,
-    default_dark_theme,
+    PlatformRequest, Rect, ScaleFactor, SemanticRole, Size, TimeInfo, UiInput, ViewportInfo,
+    WidgetId, default_dark_theme,
 };
 use stern::render::RenderResources;
 use stern::widgets::Ui;
+use stern::widgets::{
+    ApplicationBar, ApplicationBarConfig, MenuBar, MenuBarMenu, MenuBarMenuId, WorkspaceTab,
+    WorkspaceTabId,
+};
 
 pub use edit_workspace::DemoSelectedAssetSnapshot;
 use edit_workspace::EditWorkspace;
@@ -31,11 +35,100 @@ pub use graph_workspace::{GraphConnectionFeedback, GraphWorkspaceState};
 /// Canonical integration-demo title.
 pub const DEMO_TITLE: &str = "Stern Integration Demo";
 
+const FILE_MENU: MenuBarMenuId = MenuBarMenuId::from_raw(201);
+const EDIT_MENU: MenuBarMenuId = MenuBarMenuId::from_raw(202);
+const VIEW_MENU: MenuBarMenuId = MenuBarMenuId::from_raw(203);
+const WINDOW_MENU: MenuBarMenuId = MenuBarMenuId::from_raw(204);
+const HELP_MENU: MenuBarMenuId = MenuBarMenuId::from_raw(205);
+
+/// Stable application-bar identity for the Edit workspace tab.
+pub(crate) const EDIT_WORKSPACE_TAB: WorkspaceTabId = WorkspaceTabId::from_raw(101);
+/// Stable application-bar identity for the Graph workspace tab.
+pub(crate) const GRAPH_WORKSPACE_TAB: WorkspaceTabId = WorkspaceTabId::from_raw(102);
+
+/// Stable root identity of the retained public application bar.
+#[must_use]
+pub fn application_bar_root() -> WidgetId {
+    WidgetId::from_key("demo-application-bar")
+}
+
+/// Creates the demo's one retained public application bar: the shared
+/// File/Edit/View/Window/Help menu headings and the stable Edit and Graph
+/// workspace tabs shared by every adopting workspace.
+#[must_use]
+pub fn new_application_bar() -> ApplicationBar {
+    ApplicationBar::new(
+        ApplicationBarConfig::new(application_bar_root(), Rect::ZERO),
+        MenuBar::new(),
+        [
+            WorkspaceTab::new(EDIT_WORKSPACE_TAB, "Edit", true),
+            WorkspaceTab::new(GRAPH_WORKSPACE_TAB, "Graph", false),
+        ],
+    )
+}
+
+/// Refreshes the retained bar from current application state.
+///
+/// Menus are rebuilt from the live action registry through
+/// `MenuBar::replace_menus`, which keeps the expanded-menu state whenever
+/// the active menu stays visible, and workspace tabs reproject only their
+/// application-owned active presentation. Bar geometry spans the top
+/// `Theme::sizes.workspace_bar` band of the frame viewport.
+pub(crate) fn refresh_application_bar(
+    bar: &mut ApplicationBar,
+    actions: &DemoActionRegistry,
+    workspace: DemoWorkspace,
+    bounds: Rect,
+) {
+    bar.menu_bar.replace_menus(shell_menus(actions));
+    bar.workspaces = [
+        WorkspaceTab::new(EDIT_WORKSPACE_TAB, "Edit", workspace == DemoWorkspace::Edit),
+        WorkspaceTab::new(
+            GRAPH_WORKSPACE_TAB,
+            "Graph",
+            workspace == DemoWorkspace::Graph,
+        ),
+    ]
+    .into_iter()
+    .collect();
+    let height = default_dark_theme()
+        .sizes
+        .workspace_bar
+        .min(bounds.height.max(0.0));
+    bar.config.bounds = Rect::new(bounds.x, bounds.y, bounds.width, height);
+}
+
+fn shell_menus(actions: &DemoActionRegistry) -> Vec<MenuBarMenu> {
+    vec![
+        MenuBarMenu::from_actions(FILE_MENU, "File", [actions.save_color_style().clone()]),
+        MenuBarMenu::from_actions(EDIT_MENU, "Edit", [actions.apply_shared_state().clone()]),
+        MenuBarMenu::from_actions(
+            VIEW_MENU,
+            "View",
+            [
+                actions.viewport_select().clone(),
+                actions.viewport_transform().clone(),
+            ],
+        ),
+        MenuBarMenu::from_actions(
+            WINDOW_MENU,
+            "Window",
+            [
+                actions.edit_workspace().clone(),
+                actions.graph_workspace().clone(),
+                actions.gallery_workspace().clone(),
+            ],
+        ),
+        MenuBarMenu::from_actions(HELP_MENU, "Help", [actions.about().clone()]),
+    ]
+}
+
 /// Application-owned state composed exclusively through the public `stern` facade.
 pub struct DemoApp {
     ui_state: UiState,
     model: DemoApplicationModel,
     actions: DemoActionRegistry,
+    app_bar: ApplicationBar,
     edit_workspace: EditWorkspace,
     graph_workspace: GraphWorkspaceState,
     gallery_workspace: GalleryWorkspace,
@@ -58,6 +151,7 @@ impl DemoApp {
             ui_state: UiState::new(),
             model,
             actions: DemoActionRegistry::for_scenario(scenario),
+            app_bar: new_application_bar(),
             edit_workspace,
             graph_workspace: GraphWorkspaceState::for_scenario(scenario),
             gallery_workspace: GalleryWorkspace::new(),
@@ -221,6 +315,7 @@ impl DemoApp {
             ui_state,
             model,
             actions,
+            app_bar,
             edit_workspace,
             graph_workspace,
             gallery_workspace,
@@ -233,6 +328,7 @@ impl DemoApp {
                 &mut ui,
                 actions,
                 model,
+                app_bar,
                 edit_workspace,
                 graph_workspace,
                 gallery_workspace,
@@ -259,14 +355,25 @@ impl DemoApp {
     /// retained-focus request after the frame is finished. Emitted action
     /// invocations must then be executed through [`Self::apply_action`].
     pub fn compose(&mut self, ui: &mut Ui<'_>) -> Option<WidgetId> {
+        let Self {
+            ui_state: _,
+            model,
+            actions,
+            app_bar,
+            edit_workspace,
+            graph_workspace,
+            gallery_workspace,
+            overlays,
+        } = self;
         compose_demo(
             ui,
-            &mut self.actions,
-            &mut self.model,
-            &mut self.edit_workspace,
-            &mut self.graph_workspace,
-            &mut self.gallery_workspace,
-            &mut self.overlays,
+            actions,
+            model,
+            app_bar,
+            edit_workspace,
+            graph_workspace,
+            gallery_workspace,
+            overlays,
         )
     }
 
@@ -309,10 +416,18 @@ impl DemoApp {
 }
 
 /// Composes the maintained demo frame and resolves application shortcuts.
+///
+/// The shell owns exactly one retained public application bar. It refreshes
+/// the bar from the action registry and active workspace, splits the frame
+/// viewport into the bar band and the workspace content band, and hands the
+/// retained bar to the adopting workspace composition, which declares its
+/// pointer targets, evaluates it, and routes its intents.
+#[allow(clippy::too_many_arguments)]
 fn compose_demo(
     ui: &mut Ui<'_>,
     actions: &mut DemoActionRegistry,
     model: &mut DemoApplicationModel,
+    app_bar: &mut ApplicationBar,
     edit_workspace: &mut EditWorkspace,
     graph_workspace: &mut GraphWorkspaceState,
     gallery_workspace: &mut GalleryWorkspace,
@@ -327,11 +442,19 @@ fn compose_demo(
     actions.project_transport_state(model.transport_state());
     let shortcut_enabled = !overlays.is_open();
     ui.push_platform_request(PlatformRequest::SetWindowTitle(DEMO_TITLE.to_owned()));
+    refresh_application_bar(
+        app_bar,
+        actions,
+        workspace,
+        Rect::new(0.0, 0.0, bounds.width.max(0.0), bounds.height.max(0.0)),
+    );
     let focus_return = match workspace {
         DemoWorkspace::Edit => {
-            edit_workspace.compose(ui, actions, workspace, model, overlays, bounds)
+            edit_workspace.compose(ui, actions, model, overlays, app_bar, bounds)
         }
-        DemoWorkspace::Graph => graph_workspace.compose(ui, actions, model, overlays, bounds),
+        DemoWorkspace::Graph => {
+            graph_workspace.compose(ui, actions, model, overlays, app_bar, bounds)
+        }
         DemoWorkspace::Gallery => {
             gallery_workspace.compose(ui, actions, workspace, overlays, bounds)
         }
