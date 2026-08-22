@@ -13,6 +13,9 @@ Stern vendors that file verbatim as
 modified from stern, and stern never reads it at build time; adoption flows
 one way, through re-vendoring.
 
+The vendored artifacts correspond to `stern-design-system` commit
+`fbc14f9` (pin recorded 2026-08-23).
+
 ## Vendoring contract
 
 - The vendored file is the upstream file with a provenance comment block and
