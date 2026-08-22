@@ -108,13 +108,14 @@ fn single_registry_owns_exact_existing_action_descriptors() {
             ("workspace.gallery", "Gallery Workspace"),
             ("shared.apply", "Apply Shared State"),
             ("color-style.save", "Save Color Style"),
+            ("help.about", "About Stern Integration Demo"),
         ]
     );
 
     let library = include_str!("../src/lib.rs");
     let model = include_str!("../src/app_model.rs");
     assert!(!library.contains("ActionDescriptor::new"));
-    assert_eq!(model.matches("ActionDescriptor::new").count(), 6);
+    assert_eq!(model.matches("ActionDescriptor::new").count(), 7);
     assert_eq!(
         registry.edit_workspace().icon,
         Some(stern_icons_phosphor::regular::PENCIL_SIMPLE.icon())
@@ -159,6 +160,8 @@ fn single_registry_owns_exact_existing_action_descriptors() {
             "forbidden model API: {forbidden}"
         );
     }
+    let mut model = DemoApplicationModel::new();
+    assert!(model.execute(&invocation(registry.about())));
 }
 
 #[test]

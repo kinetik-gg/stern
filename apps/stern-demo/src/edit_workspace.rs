@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use stern::core::{
     ActionContext, ActionInvocation, ActionSource, Axis, MouseButton, PointerOrder, PointerTarget,
-    PointerTargetPlan, Rect, Size, TextureId, UiInput, UiInputEvent, WidgetId,
+    PointerTargetPlan, Rect, Size, TextureId, UiInput, UiInputEvent, WidgetId, default_dark_theme,
 };
 use stern::render::{RenderImage, RenderImageSampling, RenderResources, TextureResource};
 use stern::text::TextEditState;
@@ -17,14 +17,15 @@ use stern::widgets::inspector::{
     property_grid_row_affordance_rects, property_grid_row_widget_id, property_grid_value_widget_id,
 };
 use stern::widgets::{
-    ChromeBandLayout, ChromeScene, ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey,
-    ColorFieldConfig, Dock, DockNode, DropdownItem, DropdownItemId, DropdownModel, Frame, FrameId,
-    FrameTab, GridColumns, GridLayout, InlineEditDraftDisposition, InlineEditDraftPolicy,
-    InlineEditFocusLossPolicy, InlineEditRequest, ItemId, ListLayout, MenuBar, MenuBarMenu,
-    MenuBarMenuId, NumericInputDraft, NumericScrubInputConfig, OverlayId, OverlayScene, Panel,
-    PanelId, PropertyGridRow, SelectFieldConfig, StatusBar, StatusItem, StatusItemId,
-    StatusItemKind, TabStrip, TextFieldAccess, Toolbar, ToolbarGroup, ToolbarGroupId, Ui,
-    ViewportSurface, ViewportWidget, ViewportWidgetConfig,
+    ApplicationBar, ApplicationBarIntent, ChromeBandLayout, ChromeScene, ChromeSceneConfig,
+    ChromeSceneIntent, ChromeSceneItemKey, ColorFieldConfig, Dock, DockNode, DropdownItem,
+    DropdownItemId, DropdownModel, Frame, FrameId, FrameTab, GridColumns, GridLayout,
+    InlineEditDraftDisposition, InlineEditDraftPolicy, InlineEditFocusLossPolicy,
+    InlineEditRequest, ItemId, ListLayout, MenuBar, NumericInputDraft, NumericScrubInputConfig,
+    OverlayId, OverlayScene, Panel, PanelId, PreparedApplicationBar, PropertyGridRow,
+    SelectFieldConfig, StatusBar, StatusItem, StatusItemId, StatusItemKind, TabStrip,
+    TextFieldAccess, Toolbar, ToolbarGroup, ToolbarGroupId, Ui, ViewportSurface, ViewportWidget,
+    ViewportWidgetConfig,
 };
 
 use crate::overlay_workspace::SharedOverlayRoute;
@@ -34,7 +35,7 @@ use crate::timeline_workspace::{
     timeline_feedback_rects, timeline_transport_layout, viewport_actions, viewport_content_rect,
     viewport_tool_rects,
 };
-use crate::{DemoActionRegistry, DemoApplicationModel, DemoWorkspace};
+use crate::{DemoActionRegistry, DemoApplicationModel};
 
 const ASSETS_PANEL: PanelId = PanelId::from_raw(11);
 const VIEWPORT_PANEL: PanelId = PanelId::from_raw(21);
@@ -42,7 +43,6 @@ const INSPECTOR_PANEL: PanelId = PanelId::from_raw(31);
 const TIMELINE_PANEL: PanelId = PanelId::from_raw(41);
 pub(crate) const VIEWPORT_TEXTURE: TextureId = TextureId::from_raw(1);
 const TOOLBAR_GROUP: ToolbarGroupId = ToolbarGroupId::from_raw(1);
-const APPLICATION_MENU: MenuBarMenuId = MenuBarMenuId::from_raw(1);
 const KIND_PICKER_OVERLAY: OverlayId = OverlayId::from_raw(4);
 const COLOR_PICKER_OVERLAY: OverlayId = OverlayId::from_raw(5);
 const INSPECTOR_SECTION: ItemId = ItemId::from_raw(100);
@@ -204,32 +204,25 @@ impl EditWorkspace {
         &mut self,
         ui: &mut Ui<'_>,
         actions: &DemoActionRegistry,
-        workspace: DemoWorkspace,
         model: &mut DemoApplicationModel,
         overlays: &mut SharedOverlayRoute,
+        app_bar: &mut ApplicationBar,
         bounds: Size,
     ) -> Option<WidgetId> {
         self.timeline.project(model);
-        let layout = workspace_bands(ui, bounds);
-        let mut menu_bar = MenuBar::from_menus([MenuBarMenu::from_actions(
-            APPLICATION_MENU,
-            "Workspace",
-            actions.iter().cloned(),
-        )]);
+        let layout = content_bands(ui, bounds);
+        let bar_prepared = app_bar.prepare(ui.theme());
         let toolbar = Toolbar::from_groups([ToolbarGroup::from_actions(
             TOOLBAR_GROUP,
             "Workspace actions",
-            actions.iter().cloned(),
+            [
+                actions.edit_workspace().clone(),
+                actions.graph_workspace().clone(),
+                actions.gallery_workspace().clone(),
+                actions.apply_shared_state().clone(),
+                actions.save_color_style().clone(),
+            ],
         )]);
-        let tab_strip = TabStrip::from_tabs([
-            workspace_tab(101, "Edit Workspace", workspace == DemoWorkspace::Edit),
-            workspace_tab(102, "Graph Workspace", workspace == DemoWorkspace::Graph),
-            workspace_tab(
-                103,
-                "Gallery Workspace",
-                workspace == DemoWorkspace::Gallery,
-            ),
-        ]);
         let mut status_items = vec![workspace_status(
             model.applied_revision(),
             self.asset_browser
@@ -238,11 +231,13 @@ impl EditWorkspace {
         )];
         status_items.extend(TimelineWorkspace::status_items(model));
         let status_bar = StatusBar::from_items(status_items);
+        let empty_menu_bar = MenuBar::new();
+        let empty_tab_strip = TabStrip::new();
         let chrome = ChromeScene::new(
             chrome_config(layout, actions),
-            &menu_bar,
+            &empty_menu_bar,
             &toolbar,
-            &tab_strip,
+            &empty_tab_strip,
             &status_bar,
         );
         let dock_scene = DockScene::new(
@@ -338,6 +333,8 @@ impl EditWorkspace {
         declare_workspace_targets(
             ui,
             &dock_scene,
+            app_bar,
+            bar_prepared.as_ref(),
             asset_browser.as_ref(),
             &self.asset_browser,
             viewport.as_ref(),
@@ -394,13 +391,17 @@ impl EditWorkspace {
             overlays.sync_tooltip(trigger, bounds);
         }
         let context_requested = shared_context_requested(ui, viewport_bounds);
-        let chrome_output = ui.chrome_scene(&chrome);
-        route_workspace_tabs(ui, actions, &chrome_output.intents);
-        overlays.reconcile(
+        let bar_output = bar_prepared
+            .as_ref()
+            .map(|prepared| ui.application_bar(app_bar, prepared))
+            .unwrap_or_default();
+        let _chrome_output = ui.chrome_scene(&chrome);
+        route_application_bar_intents(ui, actions, &bar_output.intents);
+        overlays.reconcile_application_bar(
             ui,
             actions,
-            &mut menu_bar,
-            &chrome_output.intents,
+            app_bar,
+            &bar_output.intents,
             context_requested,
             bounds,
         )
@@ -458,6 +459,8 @@ fn workspace_context_route(
 fn declare_workspace_targets(
     ui: &mut Ui<'_>,
     dock_scene: &DockScene,
+    app_bar: &ApplicationBar,
+    bar_prepared: Option<&PreparedApplicationBar>,
     asset_browser: Option<&stern::widgets::asset_browser::AssetBrowserScene<'_>>,
     asset_state: &AssetBrowserState,
     viewport: Option<&ViewportWidget>,
@@ -481,11 +484,13 @@ fn declare_workspace_targets(
     overlay_help: Option<(WidgetId, Rect)>,
 ) {
     let gradient_reverse_id = ui.make_id(("gradient-reverse", gradient_id.raw()));
+    let theme = default_dark_theme();
     ui.resolve_pointer_targets(|plan| {
-        let mut next = dock_scene.declare_pointer_targets_with_content(
-            plan,
-            PointerOrder::new(0),
-            |plan, mut next| {
+        let bar_next = bar_prepared.map_or(PointerOrder::new(0), |prepared| {
+            prepared.declare_pointer_targets(app_bar, &theme, plan, PointerOrder::new(0))
+        });
+        let mut next =
+            dock_scene.declare_pointer_targets_with_content(plan, bar_next, |plan, mut next| {
                 if let Some(asset_browser) = asset_browser {
                     next = asset_browser.declare_pointer_targets(plan, next, asset_state);
                 }
@@ -521,8 +526,7 @@ fn declare_workspace_targets(
                     next = PointerOrder::new(next.raw() + 1);
                 }
                 next
-            },
-        );
+            });
         if let Some((target, Some(rect))) = context {
             plan.target(PointerTarget::new(target, rect, next));
             next = PointerOrder::new(next.raw() + 1);
@@ -771,6 +775,33 @@ pub(crate) fn route_workspace_tabs(
     }
 }
 
+/// Routes retained application-bar workspace activations onto the existing
+/// application-owned workspace actions, exactly once per activation.
+///
+/// Menu open/dismiss intents are intentionally ignored here: they are
+/// consumed by the shared overlay route.
+pub(crate) fn route_application_bar_intents(
+    ui: &mut Ui<'_>,
+    actions: &DemoActionRegistry,
+    intents: &[ApplicationBarIntent],
+) {
+    for intent in intents {
+        let ApplicationBarIntent::ActivateWorkspace(target) = intent else {
+            continue;
+        };
+        let action = match target.id {
+            crate::EDIT_WORKSPACE_TAB => actions.edit_workspace(),
+            crate::GRAPH_WORKSPACE_TAB => actions.graph_workspace(),
+            _ => continue,
+        };
+        ui.push_action(ActionInvocation::new(
+            action.id.clone(),
+            ActionSource::Button,
+            ActionContext::Editor,
+        ));
+    }
+}
+
 fn secondary_route_active(input: &UiInput) -> bool {
     let secondary = input.pointer.secondary;
     secondary.down || secondary.pressed || secondary.released
@@ -785,25 +816,62 @@ pub(crate) fn workspace_bands(ui: &Ui<'_>, bounds: Size) -> ChromeBandLayout {
     )
 }
 
+/// Workspace-local chrome bands below the retained public application bar.
+///
+/// The application bar owns the menu and workspace-tab surfaces, so the
+/// workspace-local ladder keeps only the contextual toolbar, the dock
+/// content band, and the status presentation: the menu and tab-strip bands
+/// collapse to zero and the toolbar starts directly under the bar's
+/// `Theme::sizes.workspace_bar` band.
+pub(crate) fn content_bands(ui: &Ui<'_>, bounds: Size) -> ChromeBandLayout {
+    let theme = ui.theme();
+    let width = bounds.width.max(0.0);
+    let height = bounds.height.max(0.0);
+    let top = theme.sizes.workspace_bar.clamp(0.0, height);
+    let below_bar = height - top;
+    let toolbar_height = theme.sizes.control.lg.clamp(0.0, below_bar);
+    let after_toolbar = below_bar - toolbar_height;
+    let status_height = theme.sizes.control.sm.clamp(0.0, after_toolbar);
+    let content_height = after_toolbar - status_height;
+    ChromeBandLayout {
+        menu_bar: Rect::ZERO,
+        tab_strip: Rect::ZERO,
+        toolbar: Rect::new(0.0, top, width, toolbar_height),
+        content: Rect::new(0.0, top + toolbar_height, width, content_height),
+        status_bar: Rect::new(
+            0.0,
+            top + toolbar_height + content_height,
+            width,
+            status_height,
+        ),
+    }
+}
+
 fn chrome_config(layout: ChromeBandLayout, actions: &DemoActionRegistry) -> ChromeSceneConfig {
     let mut widths = vec![
-        (ChromeSceneItemKey::Menu(MenuBarMenuId::from_raw(1)), 96.0),
-        (ChromeSceneItemKey::Tab(PanelId::from_raw(101)), 132.0),
-        (ChromeSceneItemKey::Tab(PanelId::from_raw(102)), 140.0),
-        (ChromeSceneItemKey::Tab(PanelId::from_raw(103)), 148.0),
         (ChromeSceneItemKey::Status(StatusItemId::from_raw(1)), 152.0),
         (ChromeSceneItemKey::Status(StatusItemId::from_raw(2)), 168.0),
         (ChromeSceneItemKey::Status(StatusItemId::from_raw(3)), 204.0),
     ];
-    widths.extend(actions.iter().map(|action| {
-        (
-            ChromeSceneItemKey::Toolbar {
-                group: TOOLBAR_GROUP,
-                action: action.id.clone(),
-            },
-            144.0,
-        )
-    }));
+    widths.extend(
+        [
+            actions.edit_workspace(),
+            actions.graph_workspace(),
+            actions.gallery_workspace(),
+            actions.apply_shared_state(),
+            actions.save_color_style(),
+        ]
+        .into_iter()
+        .map(|action| {
+            (
+                ChromeSceneItemKey::Toolbar {
+                    group: TOOLBAR_GROUP,
+                    action: action.id.clone(),
+                },
+                144.0,
+            )
+        }),
+    );
     ChromeSceneConfig::new(
         WidgetId::from_key("edit-workspace.chrome"),
         layout.menu_bar,

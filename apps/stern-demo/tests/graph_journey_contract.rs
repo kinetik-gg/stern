@@ -39,15 +39,18 @@ fn default_scenario_omits_reorder_action_and_preserves_pinned_output() {
 #[allow(clippy::too_many_lines)] // structural inventory reads better linear
 fn assert_default_base_frame_structure(output: &FrameOutput) {
     let expected_counts: BTreeMap<&'static str, usize> = BTreeMap::from([
-        ("clip_begin", 25),
-        ("clip_end", 25),
+        ("clip_begin", 24),
+        ("clip_end", 24),
         // Two select-trigger disclosures paint caret icons instead of the
         // literal "v" text since #946 (their former text primitives are now
         // painted choice-control labels, keeping the text census stable).
+        // Since #876 the shared public application bar replaces the
+        // per-workspace menu/tab chrome surfaces (one clip pair and four
+        // row surfaces traded for the bar's own rows).
         ("icon", 9),
         ("line", 1),
-        ("rect", 123),
-        ("text", 81),
+        ("rect", 127),
+        ("text", 87),
         ("texture", 1),
         ("transform_begin", 2),
         ("transform_end", 2),
@@ -55,6 +58,7 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
     assert_eq!(primitive_counts(output), expected_counts);
 
     let expected_labels: Vec<&'static str> = vec![
+        "Application bar",
         "Application menu",
         "Application status",
         "Application toolbar",
@@ -71,11 +75,12 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
         "Clouds",
         "Color",
         "Credits",
-        "Document tabs",
-        "Edit Workspace",
+        "Edit",
+        "Edit",
         "Edit Workspace",
         "Editor dock",
         "Effects",
+        "File",
         "Fill color",
         "Foreground",
         "Frame tabs",
@@ -83,13 +88,13 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
         "Frame tabs",
         "Frame tabs",
         "Gallery Workspace",
-        "Gallery Workspace",
         "Grade",
         "Gradient editor",
         "Gradient stop 1",
         "Gradient stop 2",
+        "Graph",
         "Graph Workspace",
-        "Graph Workspace",
+        "Help",
         "Hero clip",
         "Inspector",
         "Inspector",
@@ -112,6 +117,7 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
         "Select Tool",
         "Select Tool",
         "Selection",
+        "Sky",
         "Subtitle",
         "Text field",
         "Text field",
@@ -123,13 +129,15 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
         "Transform Tool",
         "Transform Tool",
         "Video",
+        "View",
         "Viewport",
         "Viewport",
         "Viewport",
         "Viewport",
         "Visible",
         "Visible",
-        "Workspace",
+        "Window",
+        "Workspaces",
         "sRGB · Reverse",
     ];
     assert_eq!(

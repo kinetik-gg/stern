@@ -82,36 +82,51 @@ fn overlap_area(a: Rect, b: Rect) -> f32 {
 }
 
 /// Asserts the composed frame's workspace layout tracks `logical` exactly.
+///
+/// Since #876 the shell's top band is the shared public application bar at
+/// the `sizes.workspace_bar` token height: five 64px menu headings anchored
+/// left and two 96px workspace tabs anchored right. The workspace-local
+/// chrome below it keeps only the contextual toolbar, the dock content
+/// band, and the status presentation.
+#[allow(clippy::too_many_lines)]
 fn assert_layout_tracks_viewport(output: &FrameOutput, logical: Size) {
     let theme = default_dark_theme();
-    let menu = surface(output, "Application menu").bounds;
+    let bar = theme.sizes.workspace_bar;
+    let menus = surface(output, "Application menu").bounds;
+    let workspaces = surface(output, "Workspaces").bounds;
+    let bar_root = output
+        .semantics
+        .nodes()
+        .iter()
+        .find(|node| node.label.as_deref() == Some("Application bar"))
+        .expect("application bar root")
+        .bounds;
     let toolbar = surface(output, "Application toolbar").bounds;
-    let tabs = surface(output, "Document tabs").bounds;
     let status = surface(output, "Application status").bounds;
     let dock = dock(output).bounds;
 
-    // Band heights come from theme size tokens, never hardcoded constants.
+    // The bar spans the full width at the workspace_bar token height; its
+    // menu headings anchor left and the workspace tabs anchor right.
+    assert_eq!(bar_root, Rect::new(0.0, 0.0, logical.width, bar));
+    assert_eq!(menus, Rect::new(0.0, 0.0, 5.0 * 64.0, bar));
     assert_eq!(
-        menu,
-        Rect::new(0.0, 0.0, logical.width, theme.sizes.control.md)
+        workspaces,
+        Rect::new(logical.width - 2.0 * 96.0, 0.0, 2.0 * 96.0, bar)
     );
+    // The contextual toolbar sits directly under the bar, and the dock band
+    // absorbs everything between the toolbar and the status bar pinned to
+    // the bottom edge: panels fill the viewport.
     assert_eq!(
         toolbar,
-        Rect::new(0.0, menu.max_y(), logical.width, theme.sizes.control.lg)
+        Rect::new(0.0, bar, logical.width, theme.sizes.control.lg)
     );
-    assert_eq!(
-        tabs,
-        Rect::new(0.0, toolbar.max_y(), logical.width, theme.sizes.tab)
-    );
-    // The dock band absorbs everything between the tab strip and the
-    // status bar pinned to the bottom edge: panels fill the viewport.
     assert_eq!(
         dock,
         Rect::new(
             0.0,
-            tabs.max_y(),
+            toolbar.max_y(),
             logical.width,
-            logical.height - tabs.max_y() - theme.sizes.control.sm
+            logical.height - toolbar.max_y() - theme.sizes.control.sm
         )
     );
     assert_eq!(
@@ -163,16 +178,27 @@ fn pointer(point: Point, down: bool, pressed: bool, released: bool) -> UiInput {
 
 fn activate_tab(app: &mut DemoApp, logical: Size, label: &str, expected: DemoWorkspace) {
     let output = app.frame(context_at(logical, 1.0, UiInput::default()));
-    let tab = output
+    let control = output
         .semantics
         .nodes()
         .iter()
-        .find(|node| node.role == SemanticRole::Tab && node.label.as_deref() == Some(label))
-        .unwrap_or_else(|| panic!("workspace tab: {label}"))
+        .find(|node| {
+            node.label.as_deref() == Some(label)
+                && matches!(node.role, SemanticRole::Tab | SemanticRole::IconButton)
+        })
+        .unwrap_or_else(|| panic!("workspace switch control: {label}"))
         .bounds
         .center();
-    let _ = app.frame(context_at(logical, 1.0, pointer(tab, true, true, false)));
-    let _ = app.frame(context_at(logical, 1.0, pointer(tab, false, false, true)));
+    let _ = app.frame(context_at(
+        logical,
+        1.0,
+        pointer(control, true, true, false),
+    ));
+    let _ = app.frame(context_at(
+        logical,
+        1.0,
+        pointer(control, false, false, true),
+    ));
     assert_eq!(app.workspace(), expected);
 }
 

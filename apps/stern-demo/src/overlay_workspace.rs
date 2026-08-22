@@ -2,10 +2,10 @@ use stern::core::{
     ActionContext, ActionSource, Key, KeyState, Rect, Response, Size, UiInput, WidgetId,
 };
 use stern::widgets::{
-    ChromeSceneIntent, CommandPaletteOverlay, Menu, MenuBar, MenuBarOverlayRequest, MenuOverlay,
-    ModalDialog, ModalDialogOverlay, ModalFocusContainment, OverlayDismissal, OverlayEntry,
-    OverlayId, OverlayKind, OverlayScene, OverlaySceneIntent, OverlaySceneSurface,
-    PopoverPlacement, Ui,
+    ApplicationBar, ApplicationBarIntent, ChromeSceneIntent, CommandPaletteOverlay, Menu, MenuBar,
+    MenuBarOverlayRequest, MenuOverlay, ModalDialog, ModalDialogOverlay, ModalFocusContainment,
+    OverlayDismissal, OverlayEntry, OverlayId, OverlayKind, OverlayScene, OverlaySceneIntent,
+    OverlaySceneSurface, PopoverPlacement, Ui,
 };
 
 use crate::app_model::DemoColorOverlayNotice;
@@ -22,6 +22,9 @@ const OVERLAY_HELP_TOOLTIP: OverlayId = OverlayId::from_raw(8);
 pub(crate) struct SharedOverlayRoute {
     scene: Option<OverlayScene>,
     focus_return: Option<WidgetId>,
+    /// The application-menu surface currently mirrored into `scene`, with
+    /// its anchored heading rect. Presence means the route owns the menu.
+    app_menu: Option<(stern::widgets::MenuBarMenuId, Rect)>,
 }
 
 impl SharedOverlayRoute {
@@ -29,6 +32,7 @@ impl SharedOverlayRoute {
         Self {
             scene: None,
             focus_return: None,
+            app_menu: None,
         }
     }
 
@@ -92,6 +96,132 @@ impl SharedOverlayRoute {
         context_requested: bool,
         bounds: Size,
     ) -> Option<WidgetId> {
+        let (_, focus_return) = self.evaluate(ui);
+        if self.scene.is_none()
+            && let Some((menu, anchor)) = chrome_intents.iter().find_map(|intent| {
+                let ChromeSceneIntent::OpenMenu { menu, anchor } = intent else {
+                    return None;
+                };
+                Some((*menu, *anchor))
+            })
+        {
+            let _ = menu_bar.open(menu);
+            if let Some(scene) = application_menu_scene(menu_bar, anchor, bounds) {
+                self.focus_return = ui.memory().focused();
+                self.scene = Some(scene);
+            }
+        } else if self.scene.is_none() && context_requested {
+            let anchor = ui
+                .input()
+                .pointer
+                .position
+                .map_or(Rect::new(0.0, 0.0, 1.0, 1.0), |point| {
+                    Rect::new(point.x, point.y, 1.0, 1.0)
+                });
+            self.scene = Some(context_menu_scene(actions, anchor, bounds));
+            self.focus_return = ui.memory().focused();
+        }
+        focus_return
+    }
+
+    /// Evaluates the retained bar route for one frame.
+    ///
+    /// Every application-menu surface — F10 entry, top-level Left/Right
+    /// traversal, pointer opening, adjacent replacement, and Escape — flows
+    /// through this one shared overlay route. The retained bar owns the
+    /// expanded-menu state; the route mirrors it into the single overlay
+    /// scene, rebuilds the open menu from the live registry-backed models
+    /// each frame so item presentation stays current without replacing
+    /// which menu is expanded, and resynchronizes the bar whenever the
+    /// scene closes itself.
+    pub(crate) fn reconcile_application_bar(
+        &mut self,
+        ui: &mut Ui<'_>,
+        actions: &DemoActionRegistry,
+        bar: &mut ApplicationBar,
+        bar_intents: &[ApplicationBarIntent],
+        context_requested: bool,
+        bounds: Size,
+    ) -> Option<WidgetId> {
+        // Adjacent heading replacement: the retained bar already resolved
+        // this frame's heading interaction into an OpenMenu intent, so the
+        // same physical press must not also be interpreted by the stale
+        // surface as an outside-click dismissal. Repaint it one last time,
+        // ignore its intents, and let the intent loop install the new menu.
+        let menu_replacement = self.app_menu.is_some()
+            && bar_intents
+                .iter()
+                .any(|intent| matches!(intent, ApplicationBarIntent::OpenMenu { .. }));
+        let (closed, mut focus_return) = if menu_replacement {
+            if let Some(scene) = self.scene.as_mut() {
+                let _ = ui.overlay_scene(scene);
+            }
+            (false, None)
+        } else {
+            self.evaluate(ui)
+        };
+        if closed {
+            bar.menu_bar.close();
+            self.app_menu = None;
+        }
+        for intent in bar_intents {
+            match intent {
+                ApplicationBarIntent::OpenMenu { menu, anchor } => {
+                    let _ = bar.menu_bar.open(*menu);
+                    if self.scene.is_none() {
+                        self.focus_return = ui.memory().focused();
+                    }
+                    self.app_menu = Some((*menu, *anchor));
+                }
+                ApplicationBarIntent::DismissMenu { .. } => {
+                    bar.menu_bar.close();
+                    self.app_menu = None;
+                    if self.scene.take().is_some() {
+                        focus_return = focus_return.or(self.focus_return.take());
+                    }
+                }
+                ApplicationBarIntent::ActivateWorkspace(_) => {}
+            }
+        }
+        match (bar.menu_bar.active_id(), self.app_menu) {
+            (Some(active), Some((menu, anchor))) if active == menu => {
+                if let Some(scene) = application_menu_scene(&bar.menu_bar, anchor, bounds) {
+                    self.scene = Some(scene);
+                } else {
+                    // The expanded menu can no longer build a surface; close.
+                    bar.menu_bar.close();
+                    self.app_menu = None;
+                    self.scene = None;
+                    focus_return = focus_return.or(self.focus_return.take());
+                }
+            }
+            (None, Some(_)) => {
+                // The expanded menu is no longer visible; close its surface.
+                self.app_menu = None;
+                if self.scene.take().is_some() {
+                    focus_return = focus_return.or(self.focus_return.take());
+                }
+            }
+            _ => {}
+        }
+        if self.scene.is_none() && context_requested {
+            let anchor = ui
+                .input()
+                .pointer
+                .position
+                .map_or(Rect::new(0.0, 0.0, 1.0, 1.0), |point| {
+                    Rect::new(point.x, point.y, 1.0, 1.0)
+                });
+            self.scene = Some(context_menu_scene(actions, anchor, bounds));
+            self.focus_return = ui.memory().focused();
+        }
+        focus_return
+    }
+
+    /// Evaluates the open overlay scene, closing it on the first action or
+    /// dismissal intent. Returns whether the scene closed and the captured
+    /// focus-return request.
+    fn evaluate(&mut self, ui: &mut Ui<'_>) -> (bool, Option<WidgetId>) {
         let mut focus_return = None;
         let close_overlay = self.scene.as_mut().is_some_and(|scene| {
             ui.overlay_scene(scene)
@@ -115,29 +245,7 @@ impl SharedOverlayRoute {
             self.scene = None;
             self.focus_return = None;
         }
-        if self.scene.is_none() {
-            if let Some((menu, anchor)) = chrome_intents.iter().find_map(|intent| {
-                let ChromeSceneIntent::OpenMenu { menu, anchor } = intent else {
-                    return None;
-                };
-                Some((*menu, *anchor))
-            }) {
-                let _ = menu_bar.open(menu);
-                self.scene = application_menu_scene(menu_bar, anchor, bounds);
-                self.focus_return = ui.memory().focused();
-            } else if context_requested {
-                let anchor = ui
-                    .input()
-                    .pointer
-                    .position
-                    .map_or(Rect::new(0.0, 0.0, 1.0, 1.0), |point| {
-                        Rect::new(point.x, point.y, 1.0, 1.0)
-                    });
-                self.scene = Some(context_menu_scene(actions, anchor, bounds));
-                self.focus_return = ui.memory().focused();
-            }
-        }
-        focus_return
+        (close_overlay, focus_return)
     }
 }
 
@@ -170,7 +278,11 @@ fn application_menu_scene(menu_bar: &MenuBar, anchor: Rect, bounds: Size) -> Opt
         context: ActionContext::Editor,
     })?;
     let mut scene = OverlayScene::new();
-    scene.push(OverlaySceneSurface::menu("Workspace commands", overlay));
+    let title = menu_bar
+        .active_menu()
+        .map_or("Application", |menu| menu.title.as_str())
+        .to_owned();
+    scene.push(OverlaySceneSurface::menu(format!("{title} menu"), overlay));
     Some(scene)
 }
 

@@ -34,13 +34,15 @@ fn default_scenario_matches_pinned_base_frame_output() {
 #[allow(clippy::too_many_lines)] // structural inventory reads better linear
 fn assert_default_base_frame_structure(output: &FrameOutput) {
     let expected_counts: BTreeMap<&'static str, usize> = BTreeMap::from([
-        ("clip_begin", 25),
-        ("clip_end", 25),
-        // Select-trigger disclosures paint caret icons since #946.
+        ("clip_begin", 24),
+        ("clip_end", 24),
+        // Select-trigger disclosures paint caret icons since #946. Since
+        // #876 the shared public application bar replaces the per-workspace
+        // menu/tab chrome surfaces.
         ("icon", 9),
         ("line", 1),
-        ("rect", 123),
-        ("text", 81),
+        ("rect", 127),
+        ("text", 87),
         ("texture", 1),
         ("transform_begin", 2),
         ("transform_end", 2),
@@ -48,6 +50,7 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
     assert_eq!(primitive_counts(output), expected_counts);
 
     let expected_labels: Vec<&'static str> = vec![
+        "Application bar",
         "Application menu",
         "Application status",
         "Application toolbar",
@@ -64,11 +67,12 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
         "Clouds",
         "Color",
         "Credits",
-        "Document tabs",
-        "Edit Workspace",
+        "Edit",
+        "Edit",
         "Edit Workspace",
         "Editor dock",
         "Effects",
+        "File",
         "Fill color",
         "Foreground",
         "Frame tabs",
@@ -76,13 +80,13 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
         "Frame tabs",
         "Frame tabs",
         "Gallery Workspace",
-        "Gallery Workspace",
         "Grade",
         "Gradient editor",
         "Gradient stop 1",
         "Gradient stop 2",
+        "Graph",
         "Graph Workspace",
-        "Graph Workspace",
+        "Help",
         "Hero clip",
         "Inspector",
         "Inspector",
@@ -105,6 +109,7 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
         "Select Tool",
         "Select Tool",
         "Selection",
+        "Sky",
         "Subtitle",
         "Text field",
         "Text field",
@@ -116,13 +121,15 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
         "Transform Tool",
         "Transform Tool",
         "Video",
+        "View",
         "Viewport",
         "Viewport",
         "Viewport",
         "Viewport",
         "Visible",
         "Visible",
-        "Workspace",
+        "Window",
+        "Workspaces",
         "sRGB · Reverse",
     ];
     assert_eq!(
@@ -288,7 +295,7 @@ enum OverlayExpectation {
 fn assert_only_overlay(output: &FrameOutput, expected: OverlayExpectation) {
     let observed = [
         has_label(output, "Overlay help tooltip"),
-        has_label(output, "Workspace commands"),
+        has_label(output, "Window menu"),
         has_role(output, &SemanticRole::SearchField),
         has_label(output, "Color recovery hint"),
         has_label(output, "Color style recovered"),
@@ -305,7 +312,7 @@ fn assert_only_overlay(output: &FrameOutput, expected: OverlayExpectation) {
 }
 
 fn open_workspace_menu(app: &mut DemoApp, current: &FrameOutput) -> FrameOutput {
-    let _ = click(app, current, &SemanticRole::MenuItem, "Workspace");
+    let _ = click(app, current, &SemanticRole::MenuItem, "Window");
     app.frame(demo_context(UiInput::default()))
 }
 
@@ -314,7 +321,13 @@ fn invoke_workspace_action_from(
     current: &FrameOutput,
     label: &str,
 ) -> FrameOutput {
-    let menu = open_workspace_menu(app, current);
+    let heading = if label == "Save Color Style" {
+        "File"
+    } else {
+        "Window"
+    };
+    let _ = click(app, current, &SemanticRole::MenuItem, heading);
+    let menu = app.frame(demo_context(UiInput::default()));
     click(app, &menu, &SemanticRole::MenuItem, label)
 }
 
