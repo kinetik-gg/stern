@@ -229,7 +229,7 @@ fn emoji_combining_and_zwj_clusters_have_only_egc_stops() {
         let second = navigation.caret_stops()[1];
         assert_eq!(
             navigation.hit_test_caret(
-                (first.x + second.x) * 0.5,
+                first.x.midpoint(second.x),
                 navigation.caret_rect(first.caret).y
             ),
             first.caret,
@@ -354,7 +354,9 @@ fn real_and_synthetic_multi_grapheme_clusters_use_grapheme_counts() {
     );
     assert_near(
         navigation.caret_stops()[1].x,
-        (navigation.caret_stops()[0].x + navigation.caret_stops()[2].x) * 0.5,
+        navigation.caret_stops()[0]
+            .x
+            .midpoint(navigation.caret_stops()[2].x),
     );
     let first = caret(0, TextAffinity::After);
     let middle_before = caret(1, TextAffinity::Before);

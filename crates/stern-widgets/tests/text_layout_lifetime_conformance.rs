@@ -279,7 +279,7 @@ fn retained_numeric_pointer_geometry_uses_the_tabular_navigation_authority() {
         .caret_stops()
         .windows(2)
         .chain(tabular_navigation.caret_stops().windows(2))
-        .map(|stops| (stops[0].x + stops[1].x) * 0.5)
+        .map(|stops| stops[0].x.midpoint(stops[1].x))
         .collect::<Vec<_>>();
     decision_boundaries.sort_by(f32::total_cmp);
     decision_boundaries.dedup_by(|left, right| left.to_bits() == right.to_bits());
@@ -293,7 +293,7 @@ fn retained_numeric_pointer_geometry_uses_the_tabular_navigation_authority() {
     let (model_x, tabular_hit, proportional_hit) = decision_boundaries
         .windows(2)
         .find_map(|bounds| {
-            let x = (bounds[0] + bounds[1]) * 0.5;
+            let x = bounds[0].midpoint(bounds[1]);
             let tabular = tabular_navigation.hit_test_caret(x, model_y);
             let proportional = proportional_navigation.hit_test_caret(x, model_y);
             (tabular.offset != proportional.offset).then_some((x, tabular, proportional))

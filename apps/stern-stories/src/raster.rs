@@ -664,7 +664,7 @@ fn render_image_pixmap(image: &stern::render::RenderImage, tint: Option<Color>) 
         ]
     });
     let data = pixmap.data_mut();
-    for (index, chunk) in source.chunks_exact(4).enumerate() {
+    for (index, chunk) in source.as_chunks::<4>().0.iter().enumerate() {
         let (red, green, blue, alpha) = match image.format {
             RenderImageFormat::Rgba8 => (chunk[0], chunk[1], chunk[2], chunk[3]),
             RenderImageFormat::Bgra8 => (chunk[2], chunk[1], chunk[0], chunk[3]),

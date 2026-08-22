@@ -80,8 +80,10 @@ pub fn diff_images(current: &RgbaImage, golden: &RgbaImage) -> DiffOutcome {
     let mut diff_pixels = vec![0_u8; current.pixels.len()];
     for (index, (current_px, golden_px)) in current
         .pixels
-        .chunks_exact(4)
-        .zip(golden.pixels.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(golden.pixels.as_chunks::<4>().0)
         .enumerate()
     {
         let mut delta = 0_u8;
