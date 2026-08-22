@@ -56,8 +56,8 @@ fn dock_tab_insertion_targets_are_reachable_and_exhaustively_matchable() {
     }
 
     match DockScenePreviewKind::Insert {
-        DockScenePreviewKind::Merge => {}
-        DockScenePreviewKind::Split(_) => {}
-        DockScenePreviewKind::Insert => {}
+        DockScenePreviewKind::Merge
+        | DockScenePreviewKind::Split(_)
+        | DockScenePreviewKind::Insert => {}
     }
 }

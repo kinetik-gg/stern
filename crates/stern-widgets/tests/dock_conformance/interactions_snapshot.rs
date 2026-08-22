@@ -33,7 +33,7 @@ fn drop_targets_distinguish_center_merge_from_edge_split() {
         Point::new(650.0, 498.0),
     ] {
         match resolve_dock_drop_target(&layout, point, new_frame) {
-            Some(DockDropTarget::Tab { .. }) | Some(DockDropTarget::Split { .. }) => {}
+            Some(DockDropTarget::Tab { .. } | DockDropTarget::Split { .. }) => {}
             Some(DockDropTarget::Insert { .. }) | None => {
                 panic!("generic resolver must not emit insertion targets")
             }
