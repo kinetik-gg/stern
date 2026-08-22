@@ -11,21 +11,27 @@ scrubbing a TODO or leaving it undocumented elsewhere. Entries link to a
 GitHub issue when one exists; entries without a linked issue are still real
 and still tracked here.
 
-Content below reflects the 2026-08-03 audit, re-verified against the tree
-after Issues 01-04 landed. File and line references were checked with
-`grep`/`Read` as of that verification and may drift as the code moves; if a
-reference looks stale, trust the code and send a correction PR.
+Content below reflects the 2026-08-03 audit. Items 1, 5, and 8 were
+re-verified 2026-08-23 against `main` after PRs #950–#953 landed (layout L0,
+story harness, layout L1 builder seam, input-localization memo). File and
+line references may drift as the code moves; if a reference looks stale,
+trust the code and send a correction PR.
 
 ## Framework pillars — not started
 
-1. **Layout engine.** `crates/stern-core/src/layout.rs` is single-pass rect
-   splitting: `row_layout`/`column_layout`/`grid_layout` consume
-   caller-supplied `Measurement` values, they do not run a measurement pass
-   themselves. There is no top-down/bottom-up measure-then-arrange system, no
-   content-driven sizing derived from a widget's own render output, no text
-   wrapping integration, no baseline alignment, and no layout result cache.
-   Every widget still takes a caller-computed `Rect`. Spec phase 5
-   ("Measurement") in `docs/specs.md` is unbuilt.
+1. **Layout engine — partially landed (RFC 0001 Phase L0/L1).**
+   `crates/stern-core/src/layout/tree.rs` now provides the frame-local
+   measure→arrange solver with a retained `MeasureCache` (#950), and
+   `crates/stern-widgets/src/ui/builders.rs` is the L1 seam: content-sized
+   builders measure shaped text through the frame's `TextLayoutStore` plus
+   theme metrics, then delegate to the existing rect-first methods (#952).
+   Still missing: the legacy flat widget surface has not migrated to
+   builders (family re-pass work), no wrap-aware multi-line measurement in
+   the solver path beyond single-line extents, baseline alignment is carried
+   in `Measurement` but consumed by nothing, `retain_widgets` eviction is not
+   wired to owner reconciliation ("Phase L1" note in `tree.rs`), content-level
+   scope identity for localization memos is deferred to RFC 0001 §6, and the
+   story families still compose rect-based dock/workspace layouts.
 2. **Application shell.** First slice delivered: `crates/stern-app` owns the
    winit event loop, window, input adaptation, platform requests, repaint
    scheduling, retained UI state, and automatic GPU recovery behind an
@@ -49,7 +55,8 @@ reference looks stale, trust the code and send a correction PR.
 
 ## Performance (contradicts docs/specs/05 §32)
 
-5. Largely closed by #945: `Ui::push_primitive` input localization was
+5. Closed in practice (#945, merged as PR #953): `Ui::push_primitive` input
+   localization was
    `O(primitives × events)` per frame and is now `O(scope transitions ×
    events)` — draw primitives and layer markers skip re-localization
    entirely, and clip/transform scope changes are served from a per-frame
@@ -79,7 +86,10 @@ reference looks stale, trust the code and send a correction PR.
    across `crates/stern-widgets/src/ui/*.rs` (plus a few more in
    `ui/chrome/`, `ui.rs`, and per-domain files), with separate positional
    variants per checkbox/radio/toggle state and trailing positional bools
-   instead of builders. Needs a builder API before any 1.0 talk.
+   instead of builders. Needs a builder API before any 1.0 talk. The RFC
+   0001 Phase L1 seam (`crates/stern-widgets/src/ui/builders.rs`, #952)
+   starts the migration with content-sized builders over the layout tree;
+   the flat surface remains canonical until the family re-passes adopt it.
 9. Default pointer routing has no occlusion: `PointerRoute::allows` returns
    `true` for `PointerRoute::Unplanned` unconditionally
    (`crates/stern-core/src/memory.rs:24-31`), so every widget under a point
