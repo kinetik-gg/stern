@@ -10,25 +10,72 @@ use crate::dock::DockSplitterResizeTransaction;
 use crate::dock::{
     Dock, DockController, DockControllerConfig, DockControllerFocus, DockControllerOutput,
     DockDropTarget, DockNeighborDirection, DockScene, DockSceneFrame, DockScenePanel,
-    DockScenePreviewKind, DockSceneTab, DockSplitterContextRequest, FrameId, FrameLayout, PanelId,
-    PanelInstanceLocation, frame_neighbor, resolve_dock_drop_target_with_policy,
-    resolve_dock_splitter_context_actions_with_policy, solve_dock_layout,
-    solve_dock_splitters_with_style,
+    DockScenePreviewKind, DockSceneTab, DockSplitterContextRequest, DockTabDrag,
+    DockTabSlotGeometry, DockTabStripGeometry, DockTabStripTarget, FrameId, FrameLayout, PanelId,
+    PanelInstanceLocation, dock_tab_strip_contains_point, frame_neighbor,
+    resolve_dock_drop_target_with_policy, resolve_dock_splitter_context_actions_with_policy,
+    resolve_dock_tab_strip_target, solve_dock_layout, solve_dock_splitters_with_style,
 };
 
 fn dock_drop_target_frame(target: DockDropTarget) -> FrameId {
     match target {
-        DockDropTarget::Tab { frame } | DockDropTarget::Split { frame, .. } => frame,
+        DockDropTarget::Tab { frame }
+        | DockDropTarget::Insert { frame, .. }
+        | DockDropTarget::Split { frame, .. } => frame,
     }
 }
 
 fn dock_drop_target_is_current(dock: &Dock, target: DockDropTarget) -> bool {
     match target {
         DockDropTarget::Tab { frame } => dock.frame(frame).is_some(),
+        DockDropTarget::Insert { frame, anchor } => {
+            dock.frame(frame)
+                .is_some_and(|frame| !frame.panels.is_empty())
+                && anchor.is_none_or(|anchor| {
+                    dock.frame(frame)
+                        .is_some_and(|frame| frame.panels.iter().any(|panel| panel.id == anchor))
+                })
+        }
         DockDropTarget::Split {
             frame, new_frame, ..
         } => dock.frame(frame).is_some() && dock.frame(new_frame).is_none(),
     }
+}
+
+/// Builds deterministic tab-strip geometry from the prepared scene frames.
+fn dock_tab_strip_geometries(frames: &[DockSceneFrame]) -> Vec<DockTabStripGeometry> {
+    frames
+        .iter()
+        .map(|frame| DockTabStripGeometry {
+            frame: frame.frame,
+            rect: frame.rect,
+            tab_list_rect: frame.tab_list_rect,
+            tabs: frame
+                .tabs
+                .iter()
+                .map(|tab| DockTabSlotGeometry {
+                    panel: tab.panel,
+                    rect: tab.rect,
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+/// Converts a pure strip target into an anchor-keyed drop candidate.
+///
+/// The model's current-dock validation query is the single authority here:
+/// the same predicate runs during preview resolution and again inside
+/// [`Dock::drop_tab`] at release-commit time.
+fn dock_tab_strip_drop_target(
+    dock: &Dock,
+    drag: DockTabDrag,
+    strips: &[DockTabStripGeometry],
+    target: DockTabStripTarget,
+) -> Option<DockDropTarget> {
+    let (frame, anchor) = target.to_anchor_target(strips, drag)?;
+    dock.tab_insertion_is_current(drag, frame, anchor)
+        .then_some(DockDropTarget::Insert { frame, anchor })
 }
 
 fn active_dock_focus(scene: &DockScene, dock: &Dock) -> Option<DockControllerFocus> {
@@ -199,18 +246,31 @@ impl Ui<'_> {
             }
         }
 
-        if drag_cancelled {
+        let escape_pressed = !disabled
+            && self
+                .input()
+                .keyboard
+                .events
+                .iter()
+                .any(|event| event.state == KeyState::Pressed && event.key == Key::Escape);
+
+        if drag_cancelled || escape_pressed {
             controller.drag = None;
             controller.preview = None;
         } else if let Some(drag) = controller.drag {
+            let strips = dock_tab_strip_geometries(&scene.layout().frames);
             let resolved = drag_position
                 .and_then(|position| {
-                    resolve_dock_drop_target_with_policy(
-                        &frozen_layout,
-                        position,
-                        config.new_frame,
-                        config.policy,
-                    )
+                    match resolve_dock_tab_strip_target(&strips, position, drag) {
+                        Some(target) => dock_tab_strip_drop_target(dock, drag, &strips, target),
+                        None if dock_tab_strip_contains_point(&strips, position) => None,
+                        None => resolve_dock_drop_target_with_policy(
+                            &frozen_layout,
+                            position,
+                            config.new_frame,
+                            config.policy,
+                        ),
+                    }
                 })
                 .filter(|target| dock_drop_target_is_current(dock, *target))
                 .filter(|target| {
@@ -384,19 +444,16 @@ impl Ui<'_> {
             dock.set_active_frame(frame);
         }
 
+        if scene.config().disabled && controller.drag.is_some() {
+            self.clear_dock_tab_drag(scene, controller);
+        }
+
         if let Some(drag) = controller.drag
             && dock
                 .frame(drag.source_frame)
                 .is_none_or(|frame| !frame.panels.iter().any(|panel| panel.id == drag.panel))
         {
-            let widget = scene.tab_widget_id(drag.panel);
-            if self.memory().drag_source() == Some(widget)
-                || self.memory().released_drag_source() == Some(widget)
-            {
-                self.runtime.memory_mut().clear_drag();
-            }
-            controller.drag = None;
-            controller.preview = None;
+            self.clear_dock_tab_drag(scene, controller);
         }
 
         if controller
@@ -435,6 +492,26 @@ impl Ui<'_> {
         if let Some(focus) = scene_focus_for_widget(scene, self.memory().focused()) {
             controller.focus = Some(focus);
         }
+    }
+
+    /// Clears transient tab-drag state without touching the last committed
+    /// dock snapshot.
+    ///
+    /// Used by source removal, disablement, Escape, capture loss, focus loss,
+    /// and stale-target reconciliation.
+    fn clear_dock_tab_drag(&mut self, scene: &DockScene, controller: &mut DockController) {
+        let Some(drag) = controller.drag else {
+            controller.preview = None;
+            return;
+        };
+        let widget = scene.tab_widget_id(drag.panel);
+        if self.memory().drag_source() == Some(widget)
+            || self.memory().released_drag_source() == Some(widget)
+        {
+            self.runtime.memory_mut().clear_drag();
+        }
+        controller.drag = None;
+        controller.preview = None;
     }
 
     fn reconcile_dock_splitter_resize(
@@ -615,16 +692,25 @@ impl Ui<'_> {
             let (alpha, radius) = match preview.kind {
                 DockScenePreviewKind::Merge => (0.20, self.theme.radii.sm),
                 DockScenePreviewKind::Split(_) => (0.32, self.theme.radii.none),
+                DockScenePreviewKind::Insert => (1.0, self.theme.radii.none),
             };
-            self.primitive(Primitive::Rect(RectPrimitive {
-                rect: preview.rect,
-                fill: Some(Brush::Solid(
-                    self.theme.colors.accent.default.with_alpha(alpha),
-                )),
-                stroke: Some(Stroke::new(
+            let fill = match preview.kind {
+                DockScenePreviewKind::Insert => self.theme.colors.accent.default,
+                DockScenePreviewKind::Merge | DockScenePreviewKind::Split(_) => {
+                    self.theme.colors.accent.default.with_alpha(alpha)
+                }
+            };
+            let stroke = match preview.kind {
+                DockScenePreviewKind::Insert => None,
+                DockScenePreviewKind::Merge | DockScenePreviewKind::Split(_) => Some(Stroke::new(
                     self.theme.strokes.default,
                     Brush::Solid(self.theme.colors.accent.default),
                 )),
+            };
+            self.primitive(Primitive::Rect(RectPrimitive {
+                rect: preview.rect,
+                fill: Some(Brush::Solid(fill)),
+                stroke,
                 radius,
             }));
         }

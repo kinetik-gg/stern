@@ -418,7 +418,9 @@ fn panel_remains_passive_metadata_when_frame_and_dock_policy_changes() {
             assert_eq!(frame, FrameId::from_raw(1));
             assert_eq!(placement, DockPlacement::Bottom);
         }
-        DockDropTarget::Tab { .. } => panic!("expected split target"),
+        DockDropTarget::Tab { .. } | DockDropTarget::Insert { .. } => {
+            panic!("expected split target")
+        }
     }
     assert!(dock.drop_tab(drag, target));
 

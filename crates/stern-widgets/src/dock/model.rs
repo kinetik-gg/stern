@@ -1,7 +1,12 @@
 mod split;
+mod tab_order;
 mod tree;
 
 pub use split::DockSplitInsertion;
+pub use tab_order::{
+    DockTabSlotGeometry, DockTabStripGeometry, DockTabStripTarget, dock_tab_slot_anchor,
+    dock_tab_strip_contains_point, resolve_dock_tab_strip_target,
+};
 pub(crate) use tree::{
     DockSplitTopologyFingerprint, collect_frame_ids, frame_is_valid, split_children_at_path,
 };
@@ -58,12 +63,27 @@ pub struct DockTabDrag {
 }
 
 /// Explicit target for dropping a dragged frame tab.
+///
+/// Pre-alpha exhaustive-match migration: this enum gained
+/// [`DockDropTarget::Insert`] while tab-strip insertion landed (#875).
+/// Exhaustive matches must add that arm or a wildcard.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DockDropTarget {
     /// Merge the panel into an existing frame tab group.
     Tab {
         /// Target frame.
         frame: FrameId,
+    },
+    /// Insert the panel at a precise tab-strip position.
+    ///
+    /// The panel lands in `frame` immediately before the stable `anchor`
+    /// panel; `anchor: None` appends after the last tab. Dropping into the
+    /// source frame reorders its tabs locally.
+    Insert {
+        /// Target frame.
+        frame: FrameId,
+        /// Anchor panel the dropped tab is placed before; `None` appends.
+        anchor: Option<PanelId>,
     },
     /// Insert the panel as a new frame split adjacent to an existing frame.
     Split {
@@ -532,6 +552,9 @@ impl Dock {
                     return self.select_panel(frame, drag.panel);
                 }
                 self.move_panel(drag.source_frame, frame, drag.panel)
+            }
+            DockDropTarget::Insert { frame, anchor } => {
+                self.apply_tab_insertion(drag, frame, anchor)
             }
             DockDropTarget::Split {
                 frame,

@@ -12,6 +12,7 @@ const PREFERRED_TAB_WIDTH: f32 = 160.0;
 const TAB_CLOSE_WIDTH: f32 = 22.0;
 const DROP_PREVIEW_EDGE_FRACTION: f32 = 0.35;
 const DROP_PREVIEW_INSET_FRACTION: f32 = 0.12;
+const INSERTION_LINE_WIDTH: f32 = 2.0;
 
 /// Caller-owned configuration for one prepared dock scene.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -175,12 +176,18 @@ impl DockSceneSplitter {
 }
 
 /// Visual kind for a prepared drop preview.
+///
+/// Pre-alpha exhaustive-match migration: this enum gained
+/// [`DockScenePreviewKind::Insert`] while tab-strip insertion landed (#875).
+/// Exhaustive matches must add that arm or a wildcard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DockScenePreviewKind {
     /// Center tab merge.
     Merge,
     /// Edge split insertion.
     Split(DockPlacement),
+    /// Tab-strip insertion line between tabs.
+    Insert,
 }
 
 /// One prepared drop-preview surface.
@@ -476,31 +483,59 @@ fn prepare_preview(
     frames: &[DockSceneFrame],
     target: DockDropTarget,
 ) -> Option<DockScenePreview> {
-    let (frame, kind) = match target {
-        DockDropTarget::Tab { frame } => (frame, DockScenePreviewKind::Merge),
-        DockDropTarget::Split {
-            frame, placement, ..
-        } => (frame, DockScenePreviewKind::Split(placement)),
-    };
-    let target_rect = frames.iter().find(|item| item.frame == frame)?.rect;
-    let rect = match kind {
-        DockScenePreviewKind::Merge => {
-            let inset_x = target_rect.width * DROP_PREVIEW_INSET_FRACTION;
-            let inset_y = target_rect.height * DROP_PREVIEW_INSET_FRACTION;
-            Rect::new(
-                target_rect.x + inset_x,
-                target_rect.y + inset_y,
-                (target_rect.width - inset_x * 2.0).max(0.0),
-                (target_rect.height - inset_y * 2.0).max(0.0),
+    let (frame, kind, rect) = match target {
+        DockDropTarget::Tab { frame } => {
+            let rect = merge_preview_rect(
+                frames.iter().find(|item| item.frame == frame)?.rect,
+            );
+            (frame, DockScenePreviewKind::Merge, rect)
+        }
+        DockDropTarget::Insert { frame, anchor } => {
+            let strip = frames.iter().find(|item| item.frame == frame)?;
+            (
+                frame,
+                DockScenePreviewKind::Insert,
+                insertion_line_rect(strip, anchor)?,
             )
         }
-        DockScenePreviewKind::Split(DockPlacement::Left) => Rect::new(
+        DockDropTarget::Split {
+            frame, placement, ..
+        } => {
+            let rect = split_preview_rect(
+                frames.iter().find(|item| item.frame == frame)?.rect,
+                placement,
+            );
+            (frame, DockScenePreviewKind::Split(placement), rect)
+        }
+    };
+    valid_rect(rect).then_some(DockScenePreview {
+        id: root.child("drop-preview"),
+        frame,
+        rect,
+        kind,
+    })
+}
+
+fn merge_preview_rect(target_rect: Rect) -> Rect {
+    let inset_x = target_rect.width * DROP_PREVIEW_INSET_FRACTION;
+    let inset_y = target_rect.height * DROP_PREVIEW_INSET_FRACTION;
+    Rect::new(
+        target_rect.x + inset_x,
+        target_rect.y + inset_y,
+        (target_rect.width - inset_x * 2.0).max(0.0),
+        (target_rect.height - inset_y * 2.0).max(0.0),
+    )
+}
+
+fn split_preview_rect(target_rect: Rect, placement: DockPlacement) -> Rect {
+    match placement {
+        DockPlacement::Left => Rect::new(
             target_rect.x,
             target_rect.y,
             target_rect.width * DROP_PREVIEW_EDGE_FRACTION,
             target_rect.height,
         ),
-        DockScenePreviewKind::Split(DockPlacement::Right) => {
+        DockPlacement::Right => {
             let width = target_rect.width * DROP_PREVIEW_EDGE_FRACTION;
             Rect::new(
                 target_rect.max_x() - width,
@@ -509,13 +544,13 @@ fn prepare_preview(
                 target_rect.height,
             )
         }
-        DockScenePreviewKind::Split(DockPlacement::Top) => Rect::new(
+        DockPlacement::Top => Rect::new(
             target_rect.x,
             target_rect.y,
             target_rect.width,
             target_rect.height * DROP_PREVIEW_EDGE_FRACTION,
         ),
-        DockScenePreviewKind::Split(DockPlacement::Bottom) => {
+        DockPlacement::Bottom => {
             let height = target_rect.height * DROP_PREVIEW_EDGE_FRACTION;
             Rect::new(
                 target_rect.x,
@@ -524,13 +559,36 @@ fn prepare_preview(
                 height,
             )
         }
+    }
+}
+
+/// Derives the contained insertion line for one accepted tab-strip target.
+///
+/// The line always stays inside the prepared tab strip. An anchor draws at
+/// the leading edge of the anchor tab; appending draws just past the last
+/// tab (or at the strip origin when no tabs are prepared).
+fn insertion_line_rect(strip: &DockSceneFrame, anchor: Option<PanelId>) -> Option<Rect> {
+    let strip_rect = strip.tab_list_rect;
+    if !valid_rect(strip_rect) {
+        return None;
+    }
+    let x = match anchor {
+        Some(anchor) => {
+            let tab = strip.tabs.iter().find(|tab| tab.panel == anchor)?.rect;
+            if !valid_rect(tab) || tab.y + tab.height < strip_rect.y || tab.y > strip_rect.max_y()
+            {
+                return None;
+            }
+            tab.x
+        }
+        None => strip
+            .tabs
+            .last()
+            .map_or(strip_rect.x, |tab| tab.rect.max_x()),
     };
-    valid_rect(rect).then(|| DockScenePreview {
-        id: root.child("drop-preview"),
-        frame,
-        rect,
-        kind,
-    })
+    let x = (x - INSERTION_LINE_WIDTH * 0.5).clamp(strip_rect.x, strip_rect.max_x() - INSERTION_LINE_WIDTH);
+    let rect = Rect::new(x, strip_rect.y, INSERTION_LINE_WIDTH, strip_rect.height);
+    valid_rect(rect).then_some(rect)
 }
 
 fn frame_widget_id(root: WidgetId, frame: FrameId) -> WidgetId {

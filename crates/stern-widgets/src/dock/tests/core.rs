@@ -546,6 +546,8 @@ fn dock_drop_target_resolution_rejects_invalid_geometry() {
             assert!(min_first.is_finite());
             assert!(min_second.is_finite());
         }
-        DockDropTarget::Tab { .. } => panic!("expected split target"),
+        DockDropTarget::Tab { .. } | DockDropTarget::Insert { .. } => {
+            panic!("expected split target")
+        }
     }
 }
