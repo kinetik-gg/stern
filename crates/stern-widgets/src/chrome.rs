@@ -1,6 +1,7 @@
 //! Data-only editor chrome contracts.
 
 mod application_bar;
+mod bands;
 mod diagnostics;
 mod feedback;
 mod jobs;
@@ -18,6 +19,7 @@ pub use application_bar::{
     PreparedApplicationBar, WorkspaceTab, WorkspaceTabId, WorkspaceTabTarget,
 };
 pub(crate) use application_bar::{ApplicationBarRow, ApplicationBarRowKind};
+pub use bands::ChromeBandLayout;
 pub use diagnostics::{
     DiagnosticField, DiagnosticFieldValue, DiagnosticSource, DiagnosticStrip, DiagnosticStripItem,
     DiagnosticStripItemId, DiagnosticStripSeverity, DiagnosticStripSummary,

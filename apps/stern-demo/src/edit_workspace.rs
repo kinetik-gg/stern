@@ -17,14 +17,14 @@ use stern::widgets::inspector::{
     property_grid_row_affordance_rects, property_grid_row_widget_id, property_grid_value_widget_id,
 };
 use stern::widgets::{
-    ChromeScene, ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey, ColorFieldConfig, Dock,
-    DockNode, DropdownItem, DropdownItemId, DropdownModel, Frame, FrameId, FrameTab, GridColumns,
-    GridLayout, InlineEditDraftDisposition, InlineEditDraftPolicy, InlineEditFocusLossPolicy,
-    InlineEditRequest, ItemId, ListLayout, MenuBar, MenuBarMenu, MenuBarMenuId, NumericInputDraft,
-    NumericScrubInputConfig, OverlayId, OverlayScene, Panel, PanelId, PropertyGridRow,
-    SelectFieldConfig, StatusBar, StatusItem, StatusItemId, StatusItemKind, TabStrip,
-    TextFieldAccess, Toolbar, ToolbarGroup, ToolbarGroupId, Ui, ViewportSurface, ViewportWidget,
-    ViewportWidgetConfig,
+    ChromeBandLayout, ChromeScene, ChromeSceneConfig, ChromeSceneIntent, ChromeSceneItemKey,
+    ColorFieldConfig, Dock, DockNode, DropdownItem, DropdownItemId, DropdownModel, Frame, FrameId,
+    FrameTab, GridColumns, GridLayout, InlineEditDraftDisposition, InlineEditDraftPolicy,
+    InlineEditFocusLossPolicy, InlineEditRequest, ItemId, ListLayout, MenuBar, MenuBarMenu,
+    MenuBarMenuId, NumericInputDraft, NumericScrubInputConfig, OverlayId, OverlayScene, Panel,
+    PanelId, PropertyGridRow, SelectFieldConfig, StatusBar, StatusItem, StatusItemId,
+    StatusItemKind, TabStrip, TextFieldAccess, Toolbar, ToolbarGroup, ToolbarGroupId, Ui,
+    ViewportSurface, ViewportWidget, ViewportWidgetConfig,
 };
 
 use crate::overlay_workspace::SharedOverlayRoute;
@@ -210,7 +210,7 @@ impl EditWorkspace {
         bounds: Size,
     ) -> Option<WidgetId> {
         self.timeline.project(model);
-        let layout = WorkspaceLayout::new(bounds);
+        let layout = workspace_bands(ui, bounds);
         let mut menu_bar = MenuBar::from_menus([MenuBarMenu::from_actions(
             APPLICATION_MENU,
             "Workspace",
@@ -246,7 +246,7 @@ impl EditWorkspace {
             &status_bar,
         );
         let dock_scene = DockScene::new(
-            DockSceneConfig::new(WidgetId::from_key("edit-workspace.dock"), layout.dock),
+            DockSceneConfig::new(WidgetId::from_key("edit-workspace.dock"), layout.content),
             &self.dock,
         );
         overlays.open_color_notice(ui, model, bounds);
@@ -776,32 +776,16 @@ fn secondary_route_active(input: &UiInput) -> bool {
     secondary.down || secondary.pressed || secondary.released
 }
 
-#[derive(Debug, Clone, Copy)]
-struct WorkspaceLayout {
-    menu: Rect,
-    toolbar: Rect,
-    tabs: Rect,
-    dock: Rect,
-    status: Rect,
+/// Viewport-driven chrome bands recomputed from the current frame's logical
+/// size on every compose; band heights come from theme size tokens.
+pub(crate) fn workspace_bands(ui: &Ui<'_>, bounds: Size) -> ChromeBandLayout {
+    ChromeBandLayout::from_viewport(
+        Rect::new(0.0, 0.0, bounds.width.max(0.0), bounds.height.max(0.0)),
+        ui.theme(),
+    )
 }
 
-impl WorkspaceLayout {
-    fn new(size: Size) -> Self {
-        let width = size.width.max(0.0);
-        let height = size.height.max(0.0);
-        let dock_y = 88.0_f32.min(height);
-        let status_y = (height - 24.0).max(dock_y);
-        Self {
-            menu: Rect::new(0.0, 0.0, width, 28.0_f32.min(height)),
-            toolbar: Rect::new(0.0, 28.0, width, 32.0_f32.min((height - 28.0).max(0.0))),
-            tabs: Rect::new(0.0, 60.0, width, 28.0_f32.min((height - 60.0).max(0.0))),
-            dock: Rect::new(0.0, dock_y, width, (status_y - dock_y).max(0.0)),
-            status: Rect::new(0.0, status_y, width, (height - status_y).max(0.0)),
-        }
-    }
-}
-
-fn chrome_config(layout: WorkspaceLayout, actions: &DemoActionRegistry) -> ChromeSceneConfig {
+fn chrome_config(layout: ChromeBandLayout, actions: &DemoActionRegistry) -> ChromeSceneConfig {
     let mut widths = vec![
         (ChromeSceneItemKey::Menu(MenuBarMenuId::from_raw(1)), 96.0),
         (ChromeSceneItemKey::Tab(PanelId::from_raw(101)), 132.0),
@@ -822,10 +806,10 @@ fn chrome_config(layout: WorkspaceLayout, actions: &DemoActionRegistry) -> Chrom
     }));
     ChromeSceneConfig::new(
         WidgetId::from_key("edit-workspace.chrome"),
-        layout.menu,
+        layout.menu_bar,
         layout.toolbar,
-        layout.tabs,
-        layout.status,
+        layout.tab_strip,
+        layout.status_bar,
         ActionContext::Editor,
     )
     .with_widths(widths)
