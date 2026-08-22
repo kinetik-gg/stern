@@ -8,6 +8,7 @@
 
 mod basic_controls;
 mod dock;
+mod feedback;
 mod fields;
 mod inspector;
 mod layout_seam;
@@ -22,6 +23,7 @@ pub fn all() -> Vec<Story> {
         basic_controls::sheet(),
         layout_seam::sheet(),
         fields::sheet(),
+        feedback::sheet(),
         inspector::with_rows(),
         dock::with_seams(),
         workspace_chrome::with_bands(),

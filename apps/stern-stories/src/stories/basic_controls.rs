@@ -84,9 +84,20 @@ fn compose(ui: &mut Ui<'_>, rect: Rect) {
         true,
         false,
     );
-    let _ = ui.toggle_with_label(
+    // The toggle track paints the whole control rect, so give it the spec's
+    // 26x14 track (visual-spec 03 §Switch) and an explicit label rect —
+    // `toggle_with_label` without a label rect has no label region
+    // (KNOWN-GAPS #48).
+    let toggle_x = radios.x + half + 16.0;
+    let _ = ui.toggle_with_label_target(
         "toggle-on",
-        Rect::new(radios.x + half + 16.0, radios.y, half, radios.height),
+        Rect::new(toggle_x, radios.y + 5.0, 26.0, 14.0),
+        Rect::new(
+            toggle_x + 32.0,
+            radios.y,
+            (half - 32.0).max(0.0),
+            radios.height,
+        ),
         "Toggle on",
         true,
         false,

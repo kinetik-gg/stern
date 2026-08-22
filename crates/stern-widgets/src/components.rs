@@ -43,6 +43,7 @@ mod text_geometry;
 mod text_interaction;
 mod text_support;
 mod vector_color_fields;
+mod vendored_icons;
 
 #[cfg(test)]
 mod tests;

@@ -50,3 +50,4 @@ fn assert_approx(actual: f32, expected: f32) {
 
 mod basic;
 mod text_fields;
+mod vendored_icons;

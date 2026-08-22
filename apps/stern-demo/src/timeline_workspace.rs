@@ -216,6 +216,11 @@ pub(crate) fn prepare_feedback<'a>(
     diagnostics: &'a DiagnosticStrip,
     feedback: &'a FeedbackStack,
 ) -> SystemFeedbackScene<'a> {
+    // Band split only — row heights stay at the scene's spec defaults
+    // (jobs 28, toast/banner min-height 38 per visual-spec 07). The previous
+    // `.with_row_height(half)` stretched a single toast to half the timeline
+    // band: the exact hardcoded-excess-height toast AUDIT #941 defect 8
+    // recorded (first rejected 2026-07-19).
     let half = bounds.height * 0.5;
     ui.prepare_system_feedback(
         SystemFeedbackSceneConfig::new(
@@ -228,8 +233,7 @@ pub(crate) fn prepare_feedback<'a>(
                 bounds.width,
                 bounds.height - half,
             ),
-        )
-        .with_row_height(half.max(1.0)),
+        ),
         jobs,
         diagnostics,
         feedback,

@@ -227,8 +227,20 @@ pub struct SystemFeedbackSceneConfig {
     pub diagnostics_rect: Rect,
     /// Bounds for active feedback rows.
     pub feedback_rect: Rect,
-    /// Fixed row height for this compact MVP surface.
-    pub row_height: f32,
+    /// Fixed height for background-job rows. Defaults to the spec's job row
+    /// height (`docs/visual-spec/07-status-feedback-inspector.md` §Job list
+    /// rows: "Row 28").
+    pub job_row_height: f32,
+    /// Fixed height for diagnostic rows. Defaults to the standard 28px row
+    /// (diagnostics have no dedicated height in visual-spec 07).
+    pub diagnostic_row_height: f32,
+    /// Fixed height for toast/status-banner rows. Defaults to the spec's
+    /// banner minimum (`docs/visual-spec/07-status-feedback-inspector.md`
+    /// §Status banner: "Min-height 38"). Rows stay at this fixed height —
+    /// content-driven growth needs the layout engine (KNOWN-GAPS #1) — so
+    /// the minimum IS the height, never a hardcoded excess (AUDIT #941
+    /// defect 8).
+    pub feedback_row_height: f32,
     /// Fixed width for each visible action affordance.
     pub action_width: f32,
     /// Gap between adjacent action affordances.
@@ -251,17 +263,22 @@ impl SystemFeedbackSceneConfig {
             jobs_rect,
             diagnostics_rect,
             feedback_rect,
-            row_height: 32.0,
+            job_row_height: 28.0,
+            diagnostic_row_height: 28.0,
+            feedback_row_height: 38.0,
             action_width: 72.0,
             action_gap: 4.0,
             diagnostic_actions: Vec::new(),
         }
     }
 
-    /// Sets the fixed row height.
+    /// Sets one fixed row height for every surface, overriding the
+    /// per-surface spec defaults.
     #[must_use]
     pub const fn with_row_height(mut self, row_height: f32) -> Self {
-        self.row_height = row_height;
+        self.job_row_height = row_height;
+        self.diagnostic_row_height = row_height;
+        self.feedback_row_height = row_height;
         self
     }
 
@@ -295,7 +312,7 @@ impl SystemFeedbackSceneConfig {
 pub enum SystemFeedbackSceneError {
     /// One surface has non-finite or negative geometry.
     InvalidBounds(SystemFeedbackSurface),
-    /// The fixed row height is non-finite or non-positive.
+    /// A fixed per-surface row height is non-finite or non-positive.
     InvalidRowHeight,
     /// The action width is non-finite or non-positive.
     InvalidActionWidth,
@@ -566,12 +583,17 @@ impl<'a> SystemFeedbackScene<'a> {
         if rect.is_empty() {
             return None;
         }
+        let row_height = match kind {
+            SystemFeedbackSurface::Jobs => self.config.job_row_height,
+            SystemFeedbackSurface::Diagnostics => self.config.diagnostic_row_height,
+            SystemFeedbackSurface::Feedback => self.config.feedback_row_height,
+        };
         let mut y = rect.y;
         let rows = rows
             .into_iter()
             .filter_map(|row| {
-                let row_rect = Rect::new(rect.x, y, rect.width, self.config.row_height);
-                y += self.config.row_height;
+                let row_rect = Rect::new(rect.x, y, rect.width, row_height);
+                y += row_height;
                 row_rect.intersection(rect).map(|visible_rect| {
                     layout_row(
                         self.config.root,
@@ -733,8 +755,14 @@ fn validate_config(config: &SystemFeedbackSceneConfig) -> Result<(), SystemFeedb
             return Err(SystemFeedbackSceneError::InvalidBounds(surface));
         }
     }
-    if !config.row_height.is_finite() || config.row_height <= 0.0 {
-        return Err(SystemFeedbackSceneError::InvalidRowHeight);
+    for row_height in [
+        config.job_row_height,
+        config.diagnostic_row_height,
+        config.feedback_row_height,
+    ] {
+        if !row_height.is_finite() || row_height <= 0.0 {
+            return Err(SystemFeedbackSceneError::InvalidRowHeight);
+        }
     }
     if !config.action_width.is_finite() || config.action_width <= 0.0 {
         return Err(SystemFeedbackSceneError::InvalidActionWidth);

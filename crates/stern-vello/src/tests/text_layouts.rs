@@ -820,33 +820,27 @@ fn retained_select_widget_encodes_registered_ellipsis_without_arrow_fallback() {
             _ => None,
         })
         .expect("registered retained select value");
-    let arrow_id = frame
+    // Since #946 the trigger disclosure is a caret icon primitive (vendored
+    // Phosphor bold caret-down), not registered disclosure text.
+    let disclosure = frame
         .primitives
         .iter()
         .find_map(|primitive| match primitive {
-            Primitive::Text(text) if text.text == "v" => text.layout,
+            Primitive::Icon(icon) => Some(icon),
             _ => None,
         })
-        .expect("separate registered disclosure");
-    assert_ne!(value_id, arrow_id);
+        .expect("separate disclosure caret icon");
+    assert_eq!(
+        disclosure.icon.id(),
+        stern_core::IconId::from_raw(0x6299_1a44_4061_98db)
+    );
     let value = store
         .stored_layout(value_id)
         .expect("retained select value entry");
-    let arrow = store
-        .stored_layout(arrow_id)
-        .expect("retained select disclosure entry");
     assert_eq!(value.key.text, source);
     assert_eq!(value.key.overflow, TextOverflow::EndEllipsis);
     assert!(value.layout.is_elided());
-    assert_eq!(arrow.key.text, "v");
-    assert_eq!(arrow.key.overflow, TextOverflow::Visible);
     let value_ids = value
-        .layout
-        .runs
-        .iter()
-        .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.id))
-        .collect::<Vec<_>>();
-    let arrow_ids = arrow
         .layout
         .runs
         .iter()
@@ -866,8 +860,8 @@ fn retained_select_widget_encodes_registered_ellipsis_without_arrow_fallback() {
     let mut resources = RenderResources::new();
     let mut sync = TextLayoutResourceSync::new();
     let report = resources.reconcile_text_layouts(&store, &mut sync);
-    assert_eq!(report.added, 2);
-    assert_eq!(report.retained, 2);
+    assert_eq!(report.added, 1);
+    assert_eq!(report.retained, 1);
     assert_eq!(
         resources
             .text_layout_resource(value_id)
@@ -891,11 +885,8 @@ fn retained_select_widget_encodes_registered_ellipsis_without_arrow_fallback() {
             .iter()
             .map(|glyph| glyph.id)
             .collect::<Vec<_>>();
-        let split = value_ids.len();
-
         assert!(output.diagnostics.is_empty());
-        assert_eq!(&encoded_ids[..split], value_ids.as_slice());
-        assert_eq!(&encoded_ids[split..], arrow_ids.as_slice());
+        assert_eq!(encoded_ids, value_ids);
         assert_eq!(encoded_ids[marker_index[0]], value_ids[marker_index[0]]);
         assert!(
             encoding

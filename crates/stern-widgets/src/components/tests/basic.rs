@@ -534,14 +534,201 @@ fn checkbox_and_toggle_reflect_selection() {
 }
 
 fn choice_indicator_rect(output: &crate::WidgetOutput) -> Rect {
-    let Primitive::Rect(indicator) = output
+    // The indicator box is the recipe-sized (14x14) rectangle; focus rings
+    // are outset beyond it and the checked glyph/dot primitives that follow
+    // it are smaller.
+    output
         .primitives
-        .last()
-        .expect("choice output must end with its indicator")
-    else {
-        panic!("choice indicator must be a rectangle");
-    };
-    indicator.rect
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rect(rect)
+                if (rect.rect.width - 14.0).abs() < f32::EPSILON
+                    && (rect.rect.height - 14.0).abs() < f32::EPSILON =>
+            {
+                Some(rect.rect)
+            }
+            _ => None,
+        })
+        .expect("choice output must contain its 14x14 indicator rectangle")
+}
+
+fn label_text(output: &crate::WidgetOutput) -> Option<&stern_core::TextPrimitive> {
+    output
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text(text) => Some(text),
+            _ => None,
+        })
+}
+
+#[test]
+fn choice_controls_paint_labels_in_control_type() {
+    use stern_core::{Brush, TextRole};
+
+    let theme = default_dark_theme();
+    let input = UiInput::default();
+    let rect = Rect::new(10.0, 20.0, 120.0, 24.0);
+
+    // Derived region: to the right of the 14px box, gap 6 (visual-spec 03).
+    let checkbox = checkbox_with_label(
+        WidgetId::from_key("checkbox"),
+        rect,
+        "Snap to grid",
+        false,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let text = label_text(&checkbox).expect("checkbox label painted");
+    let font = theme.font(TextRole::Label);
+    assert_eq!(text.text, "Snap to grid");
+    assert!((text.origin.x - (rect.x + 14.0 + 6.0)).abs() < f32::EPSILON);
+    assert_approx(text.size, font.size);
+    assert_eq!(text.brush, Brush::Solid(theme.colors.content.secondary));
+
+    // Disabled labels resolve content.disabled.
+    let disabled = radio_button_with_label(
+        WidgetId::from_key("radio"),
+        rect,
+        "Mode",
+        false,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        true,
+    );
+    let text = label_text(&disabled).expect("radio label painted");
+    assert_eq!(text.brush, Brush::Solid(theme.colors.content.disabled));
+
+    // An explicit label rect wins over the derived region.
+    let explicit = Rect::new(60.0, 20.0, 80.0, 24.0);
+    let targeted = crate::checkbox_with_label_target(
+        WidgetId::from_key("targeted"),
+        Rect::new(10.0, 20.0, 14.0, 14.0),
+        explicit,
+        "Explicit",
+        false,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let text = label_text(&targeted).expect("targeted label painted");
+    assert!((text.origin.x - explicit.x).abs() < f32::EPSILON);
+
+    // A toggle's track fills its control rect, so without an explicit label
+    // rect there is no label region (KNOWN-GAPS #48)...
+    let bare_toggle = toggle_with_label(
+        WidgetId::from_key("toggle"),
+        Rect::new(10.0, 20.0, 26.0, 14.0),
+        "Loop",
+        true,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    assert!(label_text(&bare_toggle).is_none());
+
+    // ...while an explicit label rect paints the toggle label.
+    let labeled_toggle = crate::toggle_with_label_target(
+        WidgetId::from_key("toggle-labeled"),
+        Rect::new(10.0, 20.0, 26.0, 14.0),
+        Rect::new(42.0, 20.0, 60.0, 14.0),
+        "Loop",
+        true,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let text = label_text(&labeled_toggle).expect("toggle label painted");
+    assert_eq!(text.text, "Loop");
+    assert!((text.origin.x - 42.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn checked_choice_controls_paint_check_glyph_and_radio_dot() {
+    use stern_core::{Brush, CornerRadius};
+
+    let theme = default_dark_theme();
+    let rect = Rect::new(10.0, 20.0, 120.0, 24.0);
+    let input = UiInput::default();
+
+    let checked = checkbox(
+        WidgetId::from_key("checked"),
+        rect,
+        true,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let glyph = checked
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Icon(icon) => Some(icon),
+            _ => None,
+        })
+        .expect("checked checkbox paints the check glyph");
+    // Phosphor bold check, inset 2 inside the 14x14 box, recipe mark color
+    // (visual-spec 03 §Checkbox checked row).
+    assert_eq!(
+        glyph.icon.id(),
+        stern_icons_phosphor::bold::CHECK.icon().id()
+    );
+    assert_eq!(glyph.rect, Rect::new(12.0, 22.0, 10.0, 10.0));
+    let checkbox_recipe = theme.checkbox(stern_core::ComponentState {
+        selected: true,
+        ..stern_core::ComponentState::default()
+    });
+    assert_eq!(glyph.tint, checkbox_recipe.mark);
+
+    let unchecked = checkbox(
+        WidgetId::from_key("unchecked"),
+        rect,
+        false,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    assert!(
+        unchecked
+            .primitives
+            .iter()
+            .all(|primitive| !matches!(primitive, Primitive::Icon(_)))
+    );
+
+    let selected_radio = radio_button_with_label(
+        WidgetId::from_key("radio"),
+        rect,
+        "Radio",
+        true,
+        &input,
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let dot = selected_radio
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rect(rect) if (rect.rect.width - 8.0).abs() < f32::EPSILON => Some(rect),
+            _ => None,
+        })
+        .expect("selected radio paints its 8px inner dot");
+    // Neutral 8px dot inset 3 in the 14x14 circle (visual-spec 03 §Radio).
+    assert_eq!(dot.rect, Rect::new(13.0, 23.0, 8.0, 8.0));
+    assert_eq!(dot.radius, CornerRadius::all(4.0));
+    let radio_recipe = theme.radio_button(stern_core::ComponentState {
+        selected: true,
+        ..stern_core::ComponentState::default()
+    });
+    assert_eq!(dot.fill, Some(Brush::Solid(radio_recipe.mark)));
 }
 
 #[test]
@@ -892,10 +1079,10 @@ fn focused_slider_keyboard_activation_does_not_write_from_stale_pointer() {
     assert!(response.clicked);
     assert!(response.keyboard_activated);
     assert!((value - 2.0).abs() < f32::EPSILON);
-    assert_approx(
-        rect_width(output.primitives.last().expect("slider fill primitive")),
-        rect.width,
-    );
+    // Paint order ends with [track, fill, thumb]; the filled span is the
+    // second-to-last primitive and spans the full track at max value.
+    let fill_index = output.primitives.len() - 2;
+    assert_approx(rect_width(&output.primitives[fill_index]), rect.width);
     assert!(matches!(
         output.semantics[0].state.value,
         Some(SemanticValue::Number { current, min, max })
@@ -903,6 +1090,51 @@ fn focused_slider_keyboard_activation_does_not_write_from_stale_pointer() {
                 && min.abs() < f32::EPSILON
                 && (max - 1.0).abs() < f32::EPSILON
     ));
+}
+
+#[test]
+fn slider_paints_centered_track_and_circular_thumb_per_spec() {
+    use stern_core::{Brush, CornerRadius};
+
+    let theme = default_dark_theme();
+    let rect = Rect::new(10.0, 20.0, 100.0, 24.0);
+    let mut value = 0.25;
+    let output = slider(
+        WidgetId::from_key("slider"),
+        rect,
+        &mut value,
+        0.0..=1.0,
+        &UiInput::default(),
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+
+    let Primitive::Rect(track) = &output.primitives[0] else {
+        panic!("expected track rect primitive");
+    };
+    let Primitive::Rect(fill) = &output.primitives[1] else {
+        panic!("expected fill rect primitive");
+    };
+    let Primitive::Rect(thumb) = &output.primitives[2] else {
+        panic!("expected thumb rect primitive");
+    };
+
+    // docs/visual-spec/03-choice-sliders-tabs.md §Slider: 3px track
+    // vertically centered in the row, filled span to the value fraction,
+    // 12×12 circular thumb centered on the value position with a 2px ring
+    // in the surrounding surface color.
+    assert_eq!(track.rect, Rect::new(10.0, 30.5, 100.0, 3.0));
+    assert_eq!(fill.rect, Rect::new(10.0, 30.5, 25.0, 3.0));
+    assert_eq!(thumb.rect, Rect::new(29.0, 26.0, 12.0, 12.0));
+    assert_eq!(thumb.radius, CornerRadius::all(6.0));
+    let ring = thumb.stroke.expect("thumb ring stroke");
+    assert!((ring.width - 2.0).abs() < f32::EPSILON);
+    assert_eq!(ring.brush, Brush::Solid(theme.colors.surface.panel));
+    let recipe = theme.slider(ComponentState::default());
+    assert_eq!(track.fill, Some(recipe.track));
+    assert_eq!(fill.fill, Some(recipe.fill));
+    assert_eq!(thumb.fill, Some(recipe.thumb));
 }
 
 #[test]

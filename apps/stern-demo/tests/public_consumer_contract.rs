@@ -37,6 +37,12 @@ fn public_consumer_contract_emits_components_semantics_focus_and_platform_eviden
             stern_icons_phosphor::regular::ARROWS_OUT_CARDINAL
                 .icon()
                 .id(),
+            // Since #946: the inspector select trigger paints its caret-down
+            // disclosure and the checked Visible checkbox paints its check
+            // glyph (both vendored Phosphor bold definitions in
+            // stern-widgets sharing these IconIds).
+            stern_icons_phosphor::bold::CARET_DOWN.icon().id(),
+            stern_icons_phosphor::bold::CHECK.icon().id(),
             stern_icons_phosphor::regular::PENCIL_SIMPLE.icon().id(),
             stern_icons_phosphor::regular::GRAPH.icon().id(),
             stern_icons_phosphor::regular::SQUARES_FOUR.icon().id(),
