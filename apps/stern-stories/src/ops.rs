@@ -245,7 +245,7 @@ pub fn write_png(path: &Path, image: &RgbaImage) -> Result<(), String> {
     for (pixel, source) in pixmap
         .pixels_mut()
         .iter_mut()
-        .zip(image.pixels.chunks_exact(4))
+        .zip(image.pixels.as_chunks::<4>().0)
     {
         *pixel = premultiply(source);
     }

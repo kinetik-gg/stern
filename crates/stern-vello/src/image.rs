@@ -224,7 +224,7 @@ pub(crate) fn tinted_image_data_from_render_image(
     let [red, green, blue, alpha] = tint.channels();
     let premultiplied = image.alpha == RenderImageAlpha::Premultiplied;
     let mut data = image.data.to_vec();
-    for pixel in data.chunks_exact_mut(4) {
+    for pixel in data.as_chunks_mut::<4>().0 {
         match image.format {
             RenderImageFormat::Rgba8 => {
                 pixel[0] = multiply_color_channel(pixel[0], red, alpha, premultiplied);
