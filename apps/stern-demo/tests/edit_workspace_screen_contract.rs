@@ -231,21 +231,21 @@ fn shared_menu_escape_and_outside_press_preserve_focus_owner() {
     let focused = click(&mut app, &initial, &SemanticRole::ListItem, "Backdrop");
     let owner = app.focused().expect("declared focus owner");
 
-    let _ = click(&mut app, &focused, &SemanticRole::MenuItem, "Workspace");
+    let _ = click(&mut app, &focused, &SemanticRole::MenuItem, "File");
     let shown = app.frame(demo_context(UiInput::default()));
-    assert!(has_label(&shown, "Workspace commands"));
+    assert!(has_label(&shown, "File menu"));
     let _ = app.frame(demo_context(key(Key::Escape)));
     let closed = app.frame(demo_context(UiInput::default()));
-    assert!(!has_label(&closed, "Workspace commands"));
+    assert!(!has_label(&closed, "File menu"));
     assert_eq!(app.focused(), Some(owner));
 
-    let _ = click(&mut app, &closed, &SemanticRole::MenuItem, "Workspace");
+    let _ = click(&mut app, &closed, &SemanticRole::MenuItem, "File");
     let shown = app.frame(demo_context(UiInput::default()));
-    assert!(has_label(&shown, "Workspace commands"));
+    assert!(has_label(&shown, "File menu"));
     let outside = Point::new(8.0, 440.0);
     let _ = app.frame(demo_context(pointer(outside, true, true, false)));
     let closed = app.frame(demo_context(pointer(outside, false, false, true)));
-    assert!(!has_label(&closed, "Workspace commands"));
+    assert!(!has_label(&closed, "File menu"));
     assert_eq!(app.focused(), Some(owner));
 }
 
@@ -892,13 +892,26 @@ fn invoke_workspace_action(app: &mut DemoApp, label: &str) -> FrameOutput {
     invoke_workspace_action_from(app, &current, label)
 }
 
+/// Opens the shared application-bar menu that owns `label` and invokes it.
+fn shell_menu_heading(label: &str) -> &'static str {
+    match label {
+        "Save Color Style" => "File",
+        "Apply Shared State" => "Edit",
+        _ => "Window",
+    }
+}
+
+fn open_shell_menu(app: &mut DemoApp, current: &FrameOutput, heading: &str) -> FrameOutput {
+    let _ = click(app, current, &SemanticRole::MenuItem, heading);
+    app.frame(demo_context(UiInput::default()))
+}
+
 fn invoke_workspace_action_from(
     app: &mut DemoApp,
     current: &FrameOutput,
     label: &str,
 ) -> FrameOutput {
-    let _ = click(app, current, &SemanticRole::MenuItem, "Workspace");
-    let menu = app.frame(demo_context(UiInput::default()));
+    let menu = open_shell_menu(app, current, shell_menu_heading(label));
     click(app, &menu, &SemanticRole::MenuItem, label)
 }
 
@@ -1025,8 +1038,7 @@ fn shared_action_evidence() -> SharedActionEvidence {
     let toolbar_exact = exact_action(&toolbar, ActionSource::Button) && app.applied_revision() == 1;
 
     let base = app.frame(demo_context(UiInput::default()));
-    let _ = click(&mut app, &base, &SemanticRole::MenuItem, "Workspace");
-    let menu = app.frame(demo_context(UiInput::default()));
+    let menu = open_shell_menu(&mut app, &base, "Edit");
     let menu_projected = !node(&menu, &SemanticRole::MenuItem, "Apply Shared State")
         .state
         .disabled;
@@ -1106,8 +1118,7 @@ fn unavailable_projection_evidence() -> bool {
     );
 
     let base = app.frame(demo_context(UiInput::default()));
-    let _ = click(&mut app, &base, &SemanticRole::MenuItem, "Workspace");
-    let menu = app.frame(demo_context(UiInput::default()));
+    let menu = open_shell_menu(&mut app, &base, "Edit");
     let menu_disabled = node(&menu, &SemanticRole::MenuItem, "Apply Shared State")
         .state
         .disabled;
@@ -1169,9 +1180,13 @@ fn hidden_projection_evidence() -> bool {
     let initial = app.frame(demo_context(UiInput::default()));
     let toolbar_hidden = !has_node(&initial, &SemanticRole::IconButton, "Apply Shared State");
 
-    let _ = click(&mut app, &initial, &SemanticRole::MenuItem, "Workspace");
-    let menu = app.frame(demo_context(UiInput::default()));
-    let menu_hidden = !has_node(&menu, &SemanticRole::MenuItem, "Apply Shared State");
+    // Hidden actions are omitted from every presentation surface: with no
+    // visible items left, the Edit heading itself drops out of the shared
+    // application bar while the remaining headings stay reachable.
+    let edit_heading_hidden = !has_node(&initial, &SemanticRole::MenuItem, "Edit");
+    let menu = open_shell_menu(&mut app, &initial, "File");
+    let menu_hidden = has_label(&menu, "File menu")
+        && !has_node(&menu, &SemanticRole::MenuItem, "Apply Shared State");
     let _ = app.frame(demo_context(key(Key::Escape)));
 
     let context_base = app.frame(demo_context(UiInput::default()));
@@ -1198,6 +1213,7 @@ fn hidden_projection_evidence() -> bool {
     )));
 
     toolbar_hidden
+        && edit_heading_hidden
         && menu_hidden
         && context_hidden
         && palette_hidden
@@ -1236,10 +1252,14 @@ fn observed_component_ids(trace: &EditWorkspaceTrace) -> BTreeSet<&'static str> 
         &trace.initial,
         "Editor dock|Assets|Viewport|Inspector|Timeline",
     );
-    let chrome = has_labels(
-        &trace.initial,
-        "Application menu|Application toolbar|Document tabs|Application status",
-    );
+    let chrome =
+        has_labels(
+            &trace.initial,
+            "Application bar|Application menu|Workspaces|Application toolbar|Application status",
+        ) && has_labels(&trace.initial, "File|Edit|View|Window|Help")
+            && trace.initial.semantics.nodes().iter().any(|node| {
+                node.role == SemanticRole::Tab && node.label.as_deref() == Some("Edit")
+            });
     let navigation = has_role(&trace.initial, &SemanticRole::TabList)
         && has_role(&trace.initial, &SemanticRole::Tab);
     let structure = dock

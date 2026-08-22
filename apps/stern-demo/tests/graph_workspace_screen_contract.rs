@@ -11,20 +11,21 @@ use stern::widgets::node_graph::{
 use stern_demo::{DemoApp, DemoViewportTool, DemoWorkspace, GraphConnectionFeedback, demo_context};
 
 // Screen positions in the 720x480 `demo_context` viewport. The Graph
-// workspace fills the whole viewport with token-derived chrome bands
-// (menu 28 + toolbar 32 + tabs 28, dock content, status 24 at the bottom),
-// so the dock band spans y 88..456 and the graph panel starts below its
-// 28px frame tab strip at y 116 with the retained (2, 2) pan.
-const SOURCE_POINT: Point = Point::new(100.0, 200.0);
-const SOURCE_PORT_POINT: Point = Point::new(194.0, 194.0);
-const VIEWER_POINT: Point = Point::new(420.0, 200.0);
-const CANVAS_POINT: Point = Point::new(270.0, 300.0);
-const CLEAR_SELECTION_POINT: Point = Point::new(66.0, 44.0);
+// workspace fills the whole viewport with the shared application bar on top
+// (`workspace_bar` 40), the contextual toolbar below it (32), then the dock
+// content band and status bar (24) pinned to the bottom, so the dock band
+// spans y 72..456 and the graph panel starts below its 28px frame tab strip
+// at y 100 with the retained (2, 2) pan.
+const SOURCE_POINT: Point = Point::new(100.0, 184.0);
+const SOURCE_PORT_POINT: Point = Point::new(194.0, 178.0);
+const VIEWER_POINT: Point = Point::new(420.0, 184.0);
+const CANVAS_POINT: Point = Point::new(270.0, 284.0);
+const CLEAR_SELECTION_POINT: Point = Point::new(66.0, 56.0);
 
 #[test]
 fn graph_workspace_composes_public_retained_node_graph() {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     let output = app.frame(demo_context(UiInput::default()));
 
     for role in ["node-graph", "node", "port", "edge"] {
@@ -45,7 +46,7 @@ fn graph_workspace_composes_public_retained_node_graph() {
 #[test]
 fn graph_workspace_composes_public_dock_panels() {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     let output = app.frame(demo_context(graph_click(
         SOURCE_POINT,
         Modifiers::default(),
@@ -97,7 +98,7 @@ fn graph_workspace_composes_public_dock_panels() {
 #[test]
 fn graph_viewport_projects_tool_action_and_retained_non_default_transform() {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     let initial = app.frame(demo_context(UiInput::default()));
 
     let transform = app.graph_workspace().pan_zoom();
@@ -135,11 +136,11 @@ fn graph_menu_routes_once_and_escape_or_outside_press_restore_focus() {
     let mut app = focused_graph_app();
     let owner = app.focused();
     let initial = app.frame(demo_context(UiInput::default()));
-    let trigger = semantic_center(&initial, &SemanticRole::MenuItem, "Workspace");
+    let trigger = semantic_center(&initial, &SemanticRole::MenuItem, "Edit");
 
     let _ = click_point(&mut app, trigger);
     let shown = app.frame(demo_context(UiInput::default()));
-    assert!(has_label(&shown, "Workspace commands"));
+    assert!(has_label(&shown, "Edit menu"));
     let revision = app.applied_revision();
     let action = click_point(
         &mut app,
@@ -152,25 +153,25 @@ fn graph_menu_routes_once_and_escape_or_outside_press_restore_focus() {
     let closed = app.frame(demo_context(UiInput::default()));
     let _ = click_point(
         &mut app,
-        semantic_center(&closed, &SemanticRole::MenuItem, "Workspace"),
+        semantic_center(&closed, &SemanticRole::MenuItem, "Edit"),
     );
     let shown = app.frame(demo_context(UiInput::default()));
-    assert!(has_label(&shown, "Workspace commands"));
+    assert!(has_label(&shown, "Edit menu"));
     let _ = app.frame(demo_context(key_input(Key::Escape, Modifiers::default())));
     let closed = app.frame(demo_context(UiInput::default()));
-    assert!(!has_label(&closed, "Workspace commands"));
+    assert!(!has_label(&closed, "Edit menu"));
     assert_eq!(app.focused(), owner);
 
     let _ = click_point(
         &mut app,
-        semantic_center(&closed, &SemanticRole::MenuItem, "Workspace"),
+        semantic_center(&closed, &SemanticRole::MenuItem, "Edit"),
     );
     let shown = app.frame(demo_context(UiInput::default()));
-    assert!(has_label(&shown, "Workspace commands"));
+    assert!(has_label(&shown, "Edit menu"));
     let outside = Point::new(700.0, 190.0);
     let _ = app.frame(demo_context(pointer_input(outside, true, true, false)));
     let closed = app.frame(demo_context(pointer_input(outside, false, false, true)));
-    assert!(!has_label(&closed, "Workspace commands"));
+    assert!(!has_label(&closed, "Edit menu"));
     assert_eq!(app.focused(), owner);
 }
 
@@ -209,7 +210,7 @@ fn graph_command_palette_routes_once_and_escape_restores_focus() {
 #[test]
 fn graph_pointer_selection_updates_application_owned_state() {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     select(&mut app, SOURCE_POINT, Modifiers::default());
     assert_eq!(
         app.graph_workspace().selection().selected_nodes(),
@@ -241,7 +242,7 @@ fn graph_pointer_selection_updates_application_owned_state() {
 #[test]
 fn graph_inspector_values_follow_public_node_selection() {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
 
     let source = app.frame(demo_context(graph_click(
         SOURCE_POINT,
@@ -380,7 +381,7 @@ fn graph_connection_escape_and_capture_loss_restore_focus_and_ownership() {
 #[test]
 fn graph_inspector_empty_selection_is_an_empty_public_grid() {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     let output = app.frame(demo_context(UiInput::default()));
 
     assert!(app.graph_workspace().selection().is_empty());
@@ -394,7 +395,7 @@ fn graph_inspector_empty_selection_is_an_empty_public_grid() {
 #[test]
 fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     let first = app.frame(demo_context(graph_click(
         SOURCE_POINT,
         Modifiers::default(),
@@ -405,13 +406,13 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
     let expected_chrome_ids = chrome_ids(&first);
     assert_eq!(app.focused(), Some(app.graph_workspace().root_id()));
 
-    let edit_tab = semantic_center(&first, &SemanticRole::Tab, "Edit Workspace");
+    let edit_tab = semantic_center(&first, &SemanticRole::Tab, "Edit");
     activate_workspace(&mut app, edit_tab, DemoWorkspace::Edit);
     assert_eq!(
         app.focused(),
         Some(WidgetId::from_key("root").child("workspace.edit"))
     );
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     let graph_action = WidgetId::from_key("root").child("workspace.graph");
     assert_eq!(app.focused(), Some(graph_action));
     // The activation focus target is synthetic (set directly by `DemoApp::dispatch`)
@@ -434,15 +435,15 @@ fn graph_selection_and_semantic_ids_survive_workspace_round_trip() {
 #[test]
 fn graph_workspace_reports_exact_fourteen_runtime_component_ids() {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     select(&mut app, SOURCE_POINT, Modifiers::default());
     let output = app.frame(demo_context(UiInput::default()));
     let owner = app.focused();
 
-    let menu_trigger = semantic_center(&output, &SemanticRole::MenuItem, "Workspace");
+    let menu_trigger = semantic_center(&output, &SemanticRole::MenuItem, "Edit");
     let _ = click_point(&mut app, menu_trigger);
     let menu = app.frame(demo_context(UiInput::default()));
-    let menu_projected = has_label(&menu, "Workspace commands")
+    let menu_projected = has_label(&menu, "Edit menu")
         && has_semantic_role(&menu, &SemanticRole::Menu)
         && has_label(&menu, "Apply Shared State");
     let menu_apply = semantic_center(&menu, &SemanticRole::MenuItem, "Apply Shared State");
@@ -535,12 +536,17 @@ fn graph_workspace_reports_exact_fourteen_runtime_component_ids() {
 #[test]
 fn graph_workspace_composes_public_chrome_above_dock() {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     let output = app.frame(demo_context(UiInput::default()));
 
     assert!(has_workspace_chrome(&output));
+    assert!(
+        output.semantics.nodes().iter().any(
+            |node| matches!(&node.role, SemanticRole::Custom(role) if role == "application-bar")
+        )
+    );
     let dock_index = semantic_index(&output, |node| node.role == SemanticRole::Dock);
-    for label in ["Application toolbar", "Document tabs", "Application status"] {
+    for label in ["Application toolbar", "Application status"] {
         assert!(semantic_index(&output, |node| node.label.as_deref() == Some(label)) > dock_index);
     }
     let clear = clear_node(&output);
@@ -565,7 +571,7 @@ fn graph_workspace_composes_public_chrome_above_dock() {
 #[test]
 fn graph_toolbar_clear_selection_routes_once_and_updates_next_frame() {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     select(&mut app, SOURCE_PORT_POINT, Modifiers::default());
     assert!(matches!(
         app.graph_workspace().selection().selected().as_slice(),
@@ -689,6 +695,7 @@ fn has_action_semantic(output: &stern::core::FrameOutput, action_id: &str) -> bo
 fn has_public_navigation(output: &stern::core::FrameOutput) -> bool {
     output.semantics.nodes().iter().any(|node| {
         node.role == SemanticRole::TabList
+            && node.label.as_deref() == Some("Workspaces")
             && node.children.iter().any(|id| {
                 output.semantics.get(*id).is_some_and(|tab| {
                     tab.role == SemanticRole::Tab
@@ -787,7 +794,7 @@ fn inspector_text_values(output: &stern::core::FrameOutput) -> Vec<&str> {
 
 fn focused_graph_app() -> DemoApp {
     let mut app = DemoApp::new();
-    activate_workspace(&mut app, Point::new(180.0, 70.0), DemoWorkspace::Graph);
+    activate_workspace(&mut app, Point::new(180.0, 56.0), DemoWorkspace::Graph);
     select(&mut app, SOURCE_POINT, Modifiers::default());
     assert_eq!(app.focused(), Some(app.graph_workspace().root_id()));
     app
@@ -1020,9 +1027,9 @@ fn chrome_ids(output: &stern::core::FrameOutput) -> Vec<WidgetId> {
             node.label.as_deref() == Some("Clear selection")
                 || node.label.as_deref() == Some("Application toolbar")
                 || node.label.as_deref() == Some("Application status")
+                || matches!(&node.role, SemanticRole::Custom(role) if role == "application-bar")
                 || (node.role == SemanticRole::TabList
-                    && node.label.as_deref() == Some("Document tabs"))
-                || (node.role == SemanticRole::Tab && node.label.as_deref() == Some("Graph"))
+                    && node.label.as_deref() == Some("Workspaces"))
         })
         .map(|node| node.id)
         .collect()
