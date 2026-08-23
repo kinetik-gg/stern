@@ -64,6 +64,7 @@ use text_support::{
     single_line_hit_offset, single_line_text_primitives, text_field_layout,
     text_input_platform_requests, text_line_fragments,
 };
+pub(crate) use vendored_icons::{CARET_DOWN_ICON, CARET_UP_ICON};
 
 pub use basic::*;
 pub use choice::*;

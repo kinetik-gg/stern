@@ -1019,7 +1019,11 @@ fn column_reorder_preserves_semantic_identity_order_content_geometry_and_retaine
     assert_eq!(reordered_semantic.id, original_semantic.id);
     assert_eq!(reordered_semantic.role, original_semantic.role);
     assert_eq!(reordered_semantic.label, original_semantic.label);
-    assert_eq!(reordered_semantic.label.as_deref(), Some("Kind ↑"));
+    assert_eq!(
+        reordered_semantic.label.as_deref(),
+        Some("Kind"),
+        "the sorted header's accessible label is the plain column name; the caret is a separate icon primitive"
+    );
     assert_eq!(
         reordered_semantic.state.value,
         original_semantic.state.value
@@ -1422,7 +1426,15 @@ fn header_resize_line_color(run: &Run, column: ItemId) -> Color {
         .expect("header response");
     let handle = response.resize_response.expect("resize response");
     let (_, _, text_index) = header_text_evidence(run, column);
-    let Primitive::Rect(line) = &run.frame.primitives[text_index + 1] else {
+    // The sort-caret icon primitive may sit between the label and the
+    // resize line; scan forward for the first following rect.
+    let Some(Primitive::Rect(line)) = run
+        .frame
+        .primitives
+        .iter()
+        .skip(text_index + 1)
+        .find(|primitive| matches!(primitive, Primitive::Rect(_)))
+    else {
         panic!("resize line must follow header text");
     };
     assert_eq!(line.rect.height, handle.rect.height);
@@ -1496,9 +1508,8 @@ fn production_header_primitives_inventory_acc005_and_resize_nonconformities() {
                 let background = header_base_color(&run, column);
                 let (label, label_color, _) = header_text_evidence(&run, column);
                 assert_eq!(
-                    label,
-                    if selected { "Kind ↑" } else { "Kind" },
-                    "actual label primitive includes the production sort arrow"
+                    label, "Kind",
+                    "the header label primitive carries no sort arrow; the caret is a separate icon"
                 );
                 assert_eq!(background, solid(recipe.background));
                 assert_eq!(label_color, recipe.foreground);
@@ -1611,4 +1622,108 @@ fn production_header_primitives_inventory_acc005_and_resize_nonconformities() {
         contrast_ratio(separator, accent) >= 3.0,
         "separator is the adjacent boundary"
     );
+}
+
+/// 06-collections.md §Header row: "Sort indicator: caret icon 12 muted;
+/// active sort column: text secondary + caret focus.indicator." The header
+/// paint path emits a real 12px caret icon primitive (direction-aware on the
+/// active column), not a Unicode arrow appended to the label string.
+#[test]
+fn header_sort_indicator_is_a_caret_icon_primitive() {
+    let theme = default_dark_theme();
+    let items = projection(2);
+    let sorted_column = id(20);
+    let other_column = id(10);
+
+    for direction in [SortDirection::Ascending, SortDirection::Descending] {
+        let sort = TableSort {
+            column: sorted_column,
+            direction,
+        };
+        let run = run_frame(
+            &items,
+            config(Some(sort)),
+            &mut VirtualTableSelection::new(),
+            &mut UiMemory::new(),
+            UiInput::default(),
+        );
+
+        // No header label text contains an arrow any more.
+        for primitive in &run.frame.primitives {
+            if let Primitive::Text(text) = primitive {
+                assert!(
+                    !text.text.contains('↑') && !text.text.contains('↓'),
+                    "header labels must not embed arrow glyphs, got {:?}",
+                    text.text
+                );
+            }
+        }
+
+        let response = header_response(&run, sorted_column);
+        let base_index = header_base_index(&run, sorted_column);
+        let icon = run
+            .frame
+            .primitives
+            .iter()
+            .enumerate()
+            .skip(base_index + 1)
+            .find_map(|(_, primitive)| match primitive {
+                Primitive::Icon(icon) => Some(icon),
+                _ => None,
+            })
+            .expect("sorted header paints a caret icon primitive");
+
+        // Size 12 (`size.icon.sm`), trailing in the header cell with the
+        // inline padding and vertically centered.
+        let side = theme.sizes.icon.sm;
+        let padding = theme.controls.padding_x;
+        assert_eq!(icon.rect.width, side);
+        assert_eq!(icon.rect.height, side);
+        assert_eq!(
+            icon.rect,
+            Rect::new(
+                response.rect.max_x() - padding - side,
+                response.rect.y + (response.rect.height - side) * 0.5,
+                side,
+                side
+            )
+        );
+        // Active sort caret is focus.indicator and direction-aware.
+        assert_eq!(icon.tint, theme.colors.focus.indicator);
+        let expected_icon = match direction {
+            SortDirection::Ascending => stern_icons_phosphor::bold::CARET_UP.icon(),
+            SortDirection::Descending => stern_icons_phosphor::bold::CARET_DOWN.icon(),
+        };
+        assert_eq!(icon.icon, expected_icon);
+
+        // Non-active headers keep the muted caret-down affordance.
+        let other_response = header_response(&run, other_column);
+        let other_base = header_base_index(&run, other_column);
+        let other_icon = run
+            .frame
+            .primitives
+            .iter()
+            .skip(other_base + 1)
+            .find_map(|primitive| match primitive {
+                Primitive::Icon(icon) => Some(icon),
+                _ => None,
+            })
+            .expect("unsorted header paints a muted caret affordance");
+        assert_eq!(other_icon.rect.width, side);
+        assert_eq!(other_icon.rect.height, side);
+        assert_eq!(
+            other_icon.rect.y,
+            other_response.rect.y + (other_response.rect.height - side) * 0.5
+        );
+        assert_eq!(
+            other_icon.icon,
+            stern_icons_phosphor::bold::CARET_DOWN.icon()
+        );
+        assert_eq!(other_icon.tint, theme.colors.content.muted);
+
+        // Active column label text resolves to secondary via the recipe.
+        let (label, label_color, _) = header_text_evidence(&run, sorted_column);
+        assert_eq!(label, "Kind");
+        assert_eq!(label_color, theme.colors.content.secondary);
+    }
 }

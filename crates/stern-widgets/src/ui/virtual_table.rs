@@ -1,9 +1,10 @@
 use std::hash::Hash;
 
 use stern_core::{
-    Brush, ClipId, ComponentState, Key, KeyState, Point, Primitive, Rect, RectPrimitive,
-    RepaintRequest, Response, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
-    SemanticValue, Stroke, TextPrimitive, TextRole, Transform, Vec2, scrollable,
+    Brush, ClipId, Color, ComponentState, IconPrimitive, Key, KeyState, Point, Primitive, Rect,
+    RectPrimitive, RepaintRequest, Response, SemanticAction, SemanticActionKind, SemanticNode,
+    SemanticRole, SemanticValue, StaticIcon, Stroke, TextPrimitive, TextRole, Transform, Vec2,
+    scrollable,
 };
 use stern_text::{TextLayoutKey, TextOverflow, TextStyle};
 
@@ -16,7 +17,7 @@ use crate::{
         VirtualTableMaterializedRow, VirtualTableOutput, VirtualTableRow, VirtualTableSelection,
         VirtualTableSelectionMode, VirtualTableSelectionResponse, VirtualTableTarget,
     },
-    components::{RowFocusPlacement, row_surface_primitives},
+    components::{CARET_DOWN_ICON, CARET_UP_ICON, RowFocusPlacement, row_surface_primitives},
 };
 
 impl Ui<'_> {
@@ -492,7 +493,8 @@ impl Ui<'_> {
         response: stern_core::Response,
         sort: Option<TableSort>,
     ) {
-        let selected = sort.is_some_and(|sort| sort.column == column.id);
+        let active_sort = sort.filter(|sort| sort.column == column.id);
+        let selected = active_sort.is_some();
         let state = ComponentState {
             hovered: response.state.hovered,
             pressed: response.state.pressed,
@@ -511,8 +513,44 @@ impl Ui<'_> {
         ) {
             self.primitive(primitive);
         }
-        let label = table_header_label(column, sort);
+        // 06-collections.md §Header row: "Sort indicator: caret icon 12
+        // muted; active sort column: text secondary + caret
+        // focus.indicator." Every header carries the muted caret-down
+        // affordance; the active column's caret becomes direction-aware and
+        // focus.indicator, and its label text promotes to secondary.
+        let icon_size = self.theme.sizes.icon.sm;
+        let padding = self.theme.controls.padding_x;
+        let slot = Rect::new(
+            rect.max_x() - padding - icon_size,
+            rect.y,
+            icon_size,
+            rect.height,
+        );
+        let (icon, tint) = match active_sort {
+            Some(TableSort {
+                direction: SortDirection::Ascending,
+                ..
+            }) => (CARET_UP_ICON, self.theme.colors.focus.indicator),
+            Some(TableSort {
+                direction: SortDirection::Descending,
+                ..
+            }) => (CARET_DOWN_ICON, self.theme.colors.focus.indicator),
+            None => (CARET_DOWN_ICON, self.theme.colors.content.muted),
+        };
+        let label = table_header_label(column);
         self.paint_virtual_table_text(rect, &label, recipe.foreground);
+        self.paint_virtual_table_caret(slot, icon, tint);
+    }
+
+    fn paint_virtual_table_caret(&mut self, slot: Rect, icon: StaticIcon, tint: Color) {
+        let side = slot.width.min(slot.height).max(0.0);
+        let icon_rect = stern_core::fit_box(
+            slot,
+            stern_core::Size::new(side, side),
+            stern_core::Alignment::Center,
+            stern_core::Alignment::Center,
+        );
+        self.primitive(Primitive::Icon(IconPrimitive::new(icon, icon_rect, tint)));
     }
 
     fn paint_virtual_table_resize_handle(&mut self, rect: Rect, response: Response) {
@@ -695,18 +733,13 @@ fn next_table_sort(current: Option<TableSort>, column: ItemId) -> TableSort {
     TableSort { column, direction }
 }
 
-fn table_header_label(column: &TableColumn, sort: Option<TableSort>) -> String {
-    match sort.filter(|sort| sort.column == column.id) {
-        Some(TableSort {
-            direction: SortDirection::Ascending,
-            ..
-        }) => format!("{} ↑", column.header),
-        Some(TableSort {
-            direction: SortDirection::Descending,
-            ..
-        }) => format!("{} ↓", column.header),
-        None => column.header.clone(),
-    }
+/// The plain header label. The sort indicator is a real caret icon painted
+/// beside the label (06-collections.md §Header row), not a Unicode arrow
+/// appended to the string, so the accessible name stays clean — sorted
+/// state is conveyed by the header's `Sorted ascending`/`descending`
+/// semantic value.
+fn table_header_label(column: &TableColumn) -> String {
+    column.header.clone()
 }
 
 fn virtual_table_header_semantics(
@@ -717,8 +750,8 @@ fn virtual_table_header_semantics(
     disabled: bool,
     response: Response,
 ) -> SemanticNode {
-    let mut node = SemanticNode::new(id, SemanticRole::Cell, rect)
-        .with_label(table_header_label(column, sort));
+    let mut node =
+        SemanticNode::new(id, SemanticRole::Cell, rect).with_label(table_header_label(column));
     node.focusable = !disabled;
     node.state.disabled = disabled;
     node.state.focused = response.state.focused;
