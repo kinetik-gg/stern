@@ -125,13 +125,15 @@ fn compose_tab_insertion_preview(ui: &mut Ui<'_>, rect: Rect) {
 }
 
 fn assets_content(ui: &mut Ui<'_>, body: Rect) {
-    // Two-line asset descriptions composed into fixed 24px rows: the honest
-    // reproduction of the #941 row-clipping defect.
+    // Single-line asset names per docs/visual-spec/06-collections.md row
+    // anatomy: dock chrome stories exercise panel seams and splitters; row
+    // content stays one line tall so no two-line composition is clipped.
+    // Name + trailing meta anatomy lives in the collections sheet story.
     let names = [
-        "Granite cliff scan\nphotogrammetry, 8k diffuse",
-        "Harbor crane rig\nanimation set, 42 clips",
-        "Signal decal pack\nvector, 36 variants",
-        "Night sky HDRI\n32-bit panorama",
+        "Granite cliff scan",
+        "Harbor crane rig",
+        "Signal decal pack",
+        "Night sky HDRI",
     ];
     for (index, name) in names.iter().enumerate() {
         let row = Rect::new(
