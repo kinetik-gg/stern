@@ -13,9 +13,11 @@ and still tracked here.
 
 Content below reflects the 2026-08-03 audit. Items 1, 5, and 8 were
 re-verified 2026-08-23 against `main` after PRs #950–#953 landed (layout L0,
-story harness, layout L1 builder seam, input-localization memo). File and
-line references may drift as the code moves; if a reference looks stale,
-trust the code and send a correction PR.
+story harness, layout L1 builder seam, input-localization memo). Items
+17, 18, 22, 29, 39, 45, and 47 were re-verified and closed or updated on
+2026-08-23 by the issue #948 widget-polish batch (PR refs in each entry).
+File and line references may drift as the code moves; if a reference looks
+stale, trust the code and send a correction PR.
 
 ## Framework pillars — not started
 
@@ -206,42 +208,36 @@ genuine mismatches found there against
 doc drift.
 
 17. **`draggable`'s cancellation invariant is not honored for value edits.**
-    The design system's `draggable` primitive promises cancellation
-    "restores the pre-drag value or geometry"
-    (`../stern-design-system/src/behaviors/primitives-and-contracts.md`,
-    primitive table), but stern's `draggable`
-    (`crates/stern-core/src/interaction/drag_select.rs:97-138`) only owns
-    pointer capture, threshold, delta, and drag-source identity — it has no
-    concept of a caller value to restore. The DS explicitly expects this to
-    be closed by composing `draggable` + `value_transaction`
-    (`primitives-and-contracts.md:25`, the `scrubbable` note), but no
-    stern caller does. See #18 for where this actually bites.
+    RESOLVED for stern's value-drag callers by PR #932: `UiMemory` carries
+    per-owner value-drag snapshot slots
+    (`crates/stern-core/src/memory.rs`, `drag_value_snapshot`/
+    `set_drag_value_snapshot`/`clear_drag_value_snapshot`) and
+    `resolve_drag_value_cancellation`
+    (`crates/stern-widgets/src/components/common.rs`) composes them with
+    `draggable`, so slider and numeric-scrub drags restore the pre-drag
+    value on cancellation (`PointerReleaseAll`, window-focus loss,
+    Escape) and keep the committed value on ordinary release. The design
+    system still has no first-class `value_transaction` primitive that a
+    new caller would compose automatically — each future value-drag widget
+    must call the resolver itself (see #20).
 18. **No `value_transaction` composition for pointer-drag value editing;
-    values leak on cancellation.** `slider`/`slider_with_label_and_step`
-    (`crates/stern-widgets/src/components/slider.rs:115-187`) composes
-    `draggable` (line 127) and then mutates `*value` directly from the
-    absolute pointer x-position every frame the gesture is active
-    (`slider.rs:130-136`), with no captured starting value. The public
-    entry point `numeric_scrub_input`
-    (`crates/stern-widgets/src/components/numeric_inputs.rs:287-299`)
-    delegates to `numeric_scrub_input_with_text_layouts_and_caret_visibility`
-    (`numeric_inputs.rs:328-397`), which similarly accumulates
-    `draggable`'s `drag_delta.x` onto the value every frame
-    (`numeric_inputs.rs:363-383`). Neither path snapshots a "starting
-    value" before the drag begins, so a cancelled or interrupted drag
-    (pointer capture lost via `PointerReleaseAll`/window-focus loss, or the
-    widget disabled mid-drag) leaves `*value` at whatever the last preview
-    position produced instead of restoring it — violating
-    STERN-PRIM-002 ("every cancellable direct-manipulation contract must
-    preserve its starting value... and restore it on cancellation"). The
-    *typed-text* editing path already gets this right —
-    `NumericInputPolicy{draft, commit_requested, revert_requested}`
-    (`numeric_inputs.rs:139-158`, resolved at
-    `crates/stern-widgets/src/components/text_fields.rs:576-587`) commits or
-    reverts via `restore_text_draft` (`text_fields.rs:561`) — proving the
-    begin/change/commit/cancel pattern is understood; it was just never
-    added to the drag-scrub call sites. No fix applied here per this issue's
-    non-goals (no behavior changes, no new primitives).
+    values leak on cancellation.** RESOLVED in practice by PR #932: the
+    leak is closed for both production value-drag call sites —
+    `slider_with_label_and_step`
+    (`crates/stern-widgets/src/components/slider.rs`) and
+    `numeric_scrub_input_*`
+    (`crates/stern-widgets/src/components/numeric_inputs.rs`) snapshot the
+    pre-drag value when a drag arms and restore it whenever
+    `resolve_drag_value_cancellation` observes a cancelled interaction,
+    including capture loss via `PointerReleaseAll`/focus loss. Headless
+    tests reproduce mid-drag cancellation through the real `UiInput` event
+    path for both controls
+    (`tests/basic_component_conformance/slider_and_choice_keyboard.rs`,
+    `tests/text_field_conformance/numeric_and_scrub.rs`). What remains of
+    the original gap is naming/architecture only: the transaction is a
+    shared helper over core snapshot slots, not the DS's named
+    `value_transaction` contract, so nothing enforces its use on new
+    value-drag widgets (see #17, #20).
 19. **`roving_focus` has two independent, divergent implementations instead
     of one canonical primitive** — the exact failure mode STERN-PRIM-001
     exists to prevent. `CollectionCursor::navigate`
@@ -300,18 +296,17 @@ behavior changes beyond the recipe's own fill/border/text values, no layout
 engine, no new components).
 
 22. **Icon-button call sites hardcode `size.icon.md` (16px) instead of
-    following D3's control-height-aware icon size.** `01-buttons.md` (D3):
-    icon size should be 12 in controls ≤24 and 16 in controls ≥28. The 24×24
-    icon button call sites — `static_icon_button`
-    (`crates/stern-widgets/src/components/icons.rs:181`),
-    `image_icon_button_sized`/`image_icon_selectable_button_sized`
-    (`icons.rs:41,119`), and the leading icon in `action_button`
-    (`crates/stern-widgets/src/components/basic.rs:113-118`, though there
-    `theme.sizes.icon.md` is at least clamped to the available rect) — all
-    request `theme.sizes.icon.md` unconditionally, not `theme.sizes.icon.sm`
-    for their 24px box. Fixing this needs a size-aware call at each site (or
-    a rect-height-driven default), not a recipe change, so it is out of scope
-    for the recipe-only fix in #910.
+    following D3's control-height-aware icon size.** RESOLVED by the #948
+    widget-polish batch: `components::control_icon_size(height, theme)`
+    (`crates/stern-widgets/src/components/common.rs`) resolves the D3
+    ladder (sm 12 in controls ≤24 tall, md 16 from 28; the unspecified
+    25-27 band splits at 26), and `static_icon_button`, the unsized
+    `image_icon_button*` defaults, `action_button`'s leading icon (plus its
+    label-width reservation in the Ui facade), and `paint_overlay_icon`
+    are all driven from their control/row rect height. The explicit
+    `image_icon_button_sized` variants keep caller-override semantics.
+    Per-call-site tests pin compact/standard geometry
+    (`components/tests/basic.rs`).
 23. **No "busy" button state.** `01-buttons.md`'s default-variant table
     defines a `busy` row (muted `#999999` text, spinner icon rotating 1s
     linear) distinct from `disabled`. `ComponentState`
@@ -368,16 +363,11 @@ to `Theme::text_field`. Not fixed here per that issue's non-goals (no new
     borders, axis-prefix styling) has no implementation anywhere in
     `crates/stern-widgets` — no "affix" concept exists in the crate at all.
 29. **IME composition underline reuses the selection color instead of
-    `focus.ring`.** `02-fields.md`: "IME composition: 1px underline
-    `#4DB2FF`" (`focus.ring`, same as the caret). `text_geometry.rs`'s
-    composition-underline stroke
-    (`crates/stern-widgets/src/components/text_geometry.rs:394`) paints with
-    `self.recipe.selection` (`selection.background`, `#0C8CE9`) — the same
-    brush used for the selection-highlight fill — so the underline currently
-    renders in the wrong (selection) blue instead of the ring blue. Fixing
-    it is a one-line widget-layer color-source swap, not a recipe value, so
-    left alone here to keep this issue's changes scoped to
-    `crates/stern-core`.
+    `focus.ring`.** RESOLVED by the #948 widget-polish batch:
+    `text_geometry.rs`'s composition-underline stroke now paints with
+    `recipe.caret` (resolved from `colors.focus.ring`, the same source as
+    the caret), and a primitive-level test pins the underline brush against
+    the theme's focus.ring while asserting it is not the selection fill.
 30. **Selected text is not repainted in `selection.foreground`.**
     `00-language.md` §Selection-vs-hover doctrine: selection is
     `selection.background` fill + `selection.foreground` (white) text.
@@ -466,11 +456,12 @@ non-goals (values only — no anatomy/placement rewrites, no new components).
     yet.
 39. **Overlay row icons hardcode `size.icon.md` (16px) regardless of D3's
     control-height-aware sizing**, the same root cause as gap #22 above but
-    a call site #910 didn't enumerate: `paint_overlay_icon`
-    (`crates/stern-widgets/src/ui/overlays.rs`) always requests
-    `theme.sizes.icon.md` for menu rows at `size.row.compact` (24px) height,
-    where D3 calls for `size.icon.sm` (12px). Fixing needs a row-height-aware
-    call, not a recipe change.
+    a call site #910 didn't enumerate. RESOLVED by the same commit as #22:
+    `paint_overlay_icon`
+    (`crates/stern-widgets/src/ui/overlays.rs`) now resolves
+    `control_icon_size` from the row/slot height (12 at the 24px compact
+    row height), clamped to the slot, with menu-row geometry covered by the
+    D3 tests and rendered evidence in the collections story.
 
 ## Visual conformance (Issue #914)
 
@@ -532,15 +523,18 @@ composing existing `Rect`/`Line` shapes).
     upstreaming as tokens") — a typography-scale capability, not a
     collection recipe value.
 45. **Table sort indicator is a text glyph, not the spec's icon.**
-    `06-collections.md`: "Sort indicator: caret icon 12 muted; active sort
-    column: text secondary + caret `focus.indicator`." The production header
-    instead appends a Unicode arrow (`↑`/`↓`) to the label string itself
-    (`table_header_label`, `crates/stern-widgets/src/ui/virtual_table.rs:698`)
-    and paints it as ordinary label text, so it never gets its own muted/
-    focus.indicator color or fixed 12px icon size independent of the label.
-    Fixing this needs a real icon primitive slot in the header paint path
-    (`crates/stern-icons-phosphor`/icon-atlas plumbing), a materially bigger
-    change than a recipe value.
+    RESOLVED by the #948 widget-polish batch: `table_header_label` returns
+    the plain column name again (the sorted state stays conveyed by the
+    header's `Sorted ascending/descending` semantic value), and
+    `paint_virtual_table_header` emits a real 12px `size.icon.sm` vendored
+    Phosphor caret in each header's trailing padding — muted caret-down as
+    the affordance on non-active columns; direction-aware caret-up/down in
+    `focus.indicator` with secondary label text (via the existing
+    `table_header_row` recipe) on the active sort column. Documented
+    interpretation: the spec sentence "caret icon 12 muted" is implemented
+    as a per-column affordance rather than hover-only, since the spec does
+    not define a hover state for headers. Conformance tests pin icon
+    identity, geometry, both tints, and arrow-free label text.
 46. **Outliner visibility/lock toggle hover never promotes to
     `content.primary`.** `06-collections.md` §Tree rows: "Inline visibility/
     lock toggles: quiet icon buttons 16, muted → primary on hover; remain
@@ -555,14 +549,21 @@ composing existing `Rect`/`Line` shapes).
     guessing how it composes with their existing on/off alpha encoding (see
     PR body).
 47. **No scrollbar recipe or paint primitive for virtualized collections.**
-    `06-collections.md` §Virtualized viewport: "Scrollbar: 6 wide thumb,
-    `border.strong` `#3D3D3D`, radius.full, track transparent, inset 2."
-    Nothing under `crates/stern-widgets/src/collections/` (e.g.
-    `virtualization.rs`, whose public surface is scroll-offset/window math
-    only — `crates/stern-widgets/src/collections/virtualization.rs:22-128`)
-    or the `ui/virtual_*`/`outliner`/`asset_browser` paint functions draws a
-    scrollbar at all; scrolling is input-driven with no visible thumb. A new
-    widget/recipe, not a fix to an existing one.
+    RESOLVED by the #948 widget-polish batch:
+    `crates/stern-widgets/src/collections/scrollbar.rs` provides the
+    deterministic thumb geometry (`vertical_thumb`: hidden when content
+    fits or extents are invalid, proportional length with a documented
+    12px floor so extreme content stays visible, position clamped to the
+    inset track) and a `border.strong`/`radius.full`/inset-2 painter with
+    no track primitive (the spec's track is transparent). All five
+    virtualized paint paths — virtual list, virtual table, virtual tree,
+    outliner, asset browser — emit the thumb after their content clip
+    closes so it stays fixed to the container. The thumb is chrome only:
+    it has no hit target or drag interaction; scrolling remains
+    wheel/keyboard-driven, and adding interaction is a separate slice.
+    Geometry unit tests plus scrolled-state primitive assertions in the
+    list/tree conformance tests and rendered evidence in the new
+    collections/sheet story pin the behavior.
 
 ## Story harness (Issue #943)
 
