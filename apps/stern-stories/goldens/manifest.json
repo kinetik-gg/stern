@@ -1,0 +1,30 @@
+{
+  "generator": "stern-stories",
+  "renderer": "cpu-tiny-skia",
+  "entries": [
+    {"story": "basic-controls/sheet", "file": "basic-controls-sheet_640x480@1.00.png", "logical": [640, 480], "scale_percent": 100, "device": [640, 480], "pixel_hash": "fc85e620ca2d3f94"},
+    {"story": "basic-controls/sheet", "file": "basic-controls-sheet_640x480@2.00.png", "logical": [640, 480], "scale_percent": 200, "device": [1280, 960], "pixel_hash": "c5dfd4fde4e1e4e6"},
+    {"story": "collections/sheet", "file": "collections-sheet_640x480@1.00.png", "logical": [640, 480], "scale_percent": 100, "device": [640, 480], "pixel_hash": "a17e2837f6902d77"},
+    {"story": "collections/sheet", "file": "collections-sheet_640x480@2.00.png", "logical": [640, 480], "scale_percent": 200, "device": [1280, 960], "pixel_hash": "7a073427187bcc8c"},
+    {"story": "layout/l1-builders", "file": "layout-l1-builders_640x480@1.00.png", "logical": [640, 480], "scale_percent": 100, "device": [640, 480], "pixel_hash": "e0141e5228ae96de"},
+    {"story": "layout/l1-builders", "file": "layout-l1-builders_640x480@2.00.png", "logical": [640, 480], "scale_percent": 200, "device": [1280, 960], "pixel_hash": "e603850e16a05a4c"},
+    {"story": "fields/sheet", "file": "fields-sheet_640x480@1.00.png", "logical": [640, 480], "scale_percent": 100, "device": [640, 480], "pixel_hash": "7e419240f8441bd6"},
+    {"story": "fields/sheet", "file": "fields-sheet_640x480@2.00.png", "logical": [640, 480], "scale_percent": 200, "device": [1280, 960], "pixel_hash": "54c4eac22e271c2d"},
+    {"story": "feedback/sheet", "file": "feedback-sheet_640x480@1.00.png", "logical": [640, 480], "scale_percent": 100, "device": [640, 480], "pixel_hash": "7037edfe080ac9dd"},
+    {"story": "feedback/sheet", "file": "feedback-sheet_640x480@2.00.png", "logical": [640, 480], "scale_percent": 200, "device": [1280, 960], "pixel_hash": "bd2d6c8bca81719d"},
+    {"story": "inspector/with-rows", "file": "inspector-with-rows_640x480@1.00.png", "logical": [640, 480], "scale_percent": 100, "device": [640, 480], "pixel_hash": "a28a008f0f12d508"},
+    {"story": "inspector/with-rows", "file": "inspector-with-rows_640x480@2.00.png", "logical": [640, 480], "scale_percent": 200, "device": [1280, 960], "pixel_hash": "12a230dcad17b6ca"},
+    {"story": "workspace/dock-with-seams", "file": "workspace-dock-with-seams_960x640@1.00.png", "logical": [960, 640], "scale_percent": 100, "device": [960, 640], "pixel_hash": "8929746b28c71f81"},
+    {"story": "workspace/dock-with-seams", "file": "workspace-dock-with-seams_960x640@2.00.png", "logical": [960, 640], "scale_percent": 200, "device": [1920, 1280], "pixel_hash": "fa465114a7cabf68"},
+    {"story": "workspace/dock-with-seams", "file": "workspace-dock-with-seams_1280x800@1.00.png", "logical": [1280, 800], "scale_percent": 100, "device": [1280, 800], "pixel_hash": "01597b75be077c62"},
+    {"story": "workspace/dock-with-seams", "file": "workspace-dock-with-seams_3840x2160@1.00.png", "logical": [3840, 2160], "scale_percent": 100, "device": [3840, 2160], "pixel_hash": "91e6fdf65dc13aec"},
+    {"story": "workspace/dock-tab-insertion-preview", "file": "workspace-dock-tab-insertion-preview_960x640@1.00.png", "logical": [960, 640], "scale_percent": 100, "device": [960, 640], "pixel_hash": "39f543839560e0c6"},
+    {"story": "workspace/dock-tab-insertion-preview", "file": "workspace-dock-tab-insertion-preview_960x640@2.00.png", "logical": [960, 640], "scale_percent": 200, "device": [1920, 1280], "pixel_hash": "2c684d4652cc6cb6"},
+    {"story": "workspace/dock-tab-insertion-preview", "file": "workspace-dock-tab-insertion-preview_1280x800@1.00.png", "logical": [1280, 800], "scale_percent": 100, "device": [1280, 800], "pixel_hash": "e56f420d20e4d3a6"},
+    {"story": "workspace/dock-tab-insertion-preview", "file": "workspace-dock-tab-insertion-preview_3840x2160@1.00.png", "logical": [3840, 2160], "scale_percent": 100, "device": [3840, 2160], "pixel_hash": "a3d84a961ebd8cd2"},
+    {"story": "workspace/chrome-bands", "file": "workspace-chrome-bands_960x640@1.00.png", "logical": [960, 640], "scale_percent": 100, "device": [960, 640], "pixel_hash": "9a3fb372463c6303"},
+    {"story": "workspace/chrome-bands", "file": "workspace-chrome-bands_960x640@2.00.png", "logical": [960, 640], "scale_percent": 200, "device": [1920, 1280], "pixel_hash": "fcd39f147fca75bb"},
+    {"story": "workspace/chrome-bands", "file": "workspace-chrome-bands_1280x800@1.00.png", "logical": [1280, 800], "scale_percent": 100, "device": [1280, 800], "pixel_hash": "eb84eeb9b96d4e09"},
+    {"story": "workspace/chrome-bands", "file": "workspace-chrome-bands_3840x2160@1.00.png", "logical": [3840, 2160], "scale_percent": 100, "device": [3840, 2160], "pixel_hash": "7b94a93a09b29961"}
+  ]
+}
