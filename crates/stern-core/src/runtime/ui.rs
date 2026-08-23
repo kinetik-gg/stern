@@ -829,6 +829,10 @@ impl<'a> Ui<'a> {
     /// Finishes the frame and returns deterministic output.
     #[must_use]
     pub fn end_frame(mut self) -> FrameOutput {
+        for warning in self.memory.take_pending_warnings() {
+            self.output.push_warning(warning);
+        }
+
         for duplicate in self.ids.duplicates() {
             self.output
                 .push_warning(FrameWarning::DuplicateWidgetId { id: duplicate.id });

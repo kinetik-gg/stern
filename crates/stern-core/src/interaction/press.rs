@@ -6,8 +6,8 @@ use super::{
 };
 use crate::memory::PointerGestureKind;
 use crate::{
-    Key, KeyState, Modifiers, MouseButton, Point, Rect, Transform, UiInput, UiInputEvent, UiMemory,
-    Vec2, WidgetId,
+    FrameWarning, Key, KeyState, Modifiers, MouseButton, Point, Rect, Transform, UiInput,
+    UiInputEvent, UiMemory, Vec2, WidgetId,
 };
 
 pub(super) struct PressResolution {
@@ -249,20 +249,19 @@ fn resolve_canonical_pointer(
     conflicted: bool,
     outcome: &mut PointerOutcome,
 ) {
-    if kind == PointerGestureKind::Selection {
-        let ordinals = event_ordinals.expect("selection gestures require root event ordinals");
-        assert_eq!(
-            ordinals.len(),
-            input.events.len(),
-            "selection gesture ordinal sidecar must match localized input"
-        );
+    if kind == PointerGestureKind::Selection && event_ordinals.is_none() {
+        memory.push_warning(FrameWarning::SelectionGestureOrdinalsMissing { id });
+        return;
     }
-    if let Some(ordinals) = event_ordinals {
-        assert_eq!(
-            ordinals.len(),
-            input.events.len(),
-            "captured gesture ordinal sidecar must match localized input"
-        );
+    if let Some(ordinals) = event_ordinals
+        && ordinals.len() != input.events.len()
+    {
+        memory.push_warning(FrameWarning::GestureOrdinalSidecarMismatch {
+            id,
+            ordinals: ordinals.len(),
+            events: input.events.len(),
+        });
+        return;
     }
 
     let mut primary_transaction_open = memory.has_primary_pointer_transaction();
@@ -746,4 +745,120 @@ fn keyboard_activation_pressed(id: WidgetId, input: &UiInput, memory: &UiMemory)
                 && matches!(event.key, Key::Enter | Key::Space)
                 && !(memory.owns_text_input(id) && matches!(event.key, Key::Space))
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn press_inside(_id: WidgetId) -> UiInputEvent {
+        UiInputEvent::PointerButton {
+            button: MouseButton::Primary,
+            down: true,
+            click_count: 1,
+            position: Some(Point::new(5.0, 5.0)),
+        }
+    }
+
+    #[test]
+    fn selection_gesture_without_ordinals_warns_and_skips_event_processing() {
+        let id = WidgetId::from_key("field");
+        let rect = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let input = UiInput {
+            events: vec![press_inside(id)],
+            ..UiInput::default()
+        };
+        let mut memory = UiMemory::new();
+
+        let resolution = resolve_pressable_with_hit_target(
+            id,
+            rect,
+            HitTarget::Rect,
+            &input,
+            &mut memory,
+            false,
+            PointerGestureKind::Selection,
+            None,
+            true,
+            false,
+        );
+
+        assert_eq!(
+            memory.take_pending_warnings(),
+            vec![FrameWarning::SelectionGestureOrdinalsMissing { id }]
+        );
+        assert!(resolution.selection_actions.is_empty());
+        assert!(!resolution.response.clicked);
+        assert_ne!(memory.pointer_gesture_owner(), Some(id));
+        assert!(!memory.is_active(id));
+    }
+
+    #[test]
+    fn captured_gesture_ordinal_sidecar_mismatch_warns_and_skips_event_processing() {
+        let id = WidgetId::from_key("handle");
+        let rect = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let input = UiInput {
+            events: vec![press_inside(id)],
+            ..UiInput::default()
+        };
+        let ordinals = [0, 1];
+        let mut memory = UiMemory::new();
+
+        let resolution = resolve_pressable_with_hit_target(
+            id,
+            rect,
+            HitTarget::Rect,
+            &input,
+            &mut memory,
+            false,
+            PointerGestureKind::Press,
+            Some(ordinals.as_slice()),
+            true,
+            false,
+        );
+
+        assert_eq!(
+            memory.take_pending_warnings(),
+            vec![FrameWarning::GestureOrdinalSidecarMismatch {
+                id,
+                ordinals: 2,
+                events: 1,
+            }]
+        );
+        assert!(!resolution.response.clicked);
+        assert_ne!(memory.pointer_gesture_owner(), Some(id));
+        assert!(!memory.is_active(id));
+    }
+
+    #[test]
+    fn matching_ordinal_sidecar_processes_without_warnings() {
+        let id = WidgetId::from_key("handle");
+        let rect = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let mut input = UiInput {
+            events: vec![press_inside(id)],
+            ..UiInput::default()
+        };
+        input.pointer.position = Some(Point::new(5.0, 5.0));
+        input.pointer.primary = crate::PointerButtonState::new(true, true, false);
+        input.pointer.click_count = 1;
+        let ordinals = [0];
+        let mut memory = UiMemory::new();
+
+        let resolution = resolve_pressable_with_hit_target(
+            id,
+            rect,
+            HitTarget::Rect,
+            &input,
+            &mut memory,
+            false,
+            PointerGestureKind::Press,
+            Some(ordinals.as_slice()),
+            true,
+            false,
+        );
+
+        assert!(memory.take_pending_warnings().is_empty());
+        assert!(resolution.response.state.active);
+        assert_eq!(memory.pointer_capture(), Some(id));
+    }
 }
