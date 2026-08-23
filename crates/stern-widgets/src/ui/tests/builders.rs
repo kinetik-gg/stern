@@ -60,23 +60,41 @@ fn control_builders_measure_theme_metrics() {
     let mut store = TextLayoutStore::new();
     let mut ctx = MeasureContext::new(&theme, Some(&mut store));
 
+    // Choice builders are content-sized: indicator + label gap (6) + shaped
+    // label, as tall as whichever is higher (family re-pass, epic #948).
     let check_side = theme.checkbox(stern_core::ComponentState::default()).size;
+    let check_label = ctx.measure_text("Check", TextRole::Label);
+    let check_font = theme.font(TextRole::Label);
+    let expected_choice_height = check_side.max(check_font.line_height);
     assert_eq!(
         Checkbox::new("c", "Check", false).measure(&mut ctx).desired,
-        Size::new(check_side, check_side)
+        Size::new(
+            check_side + crate::components::CHOICE_LABEL_GAP + check_label.width,
+            expected_choice_height
+        )
     );
     let radio_side = theme
         .radio_button(stern_core::ComponentState::default())
         .size;
+    let radio_label = ctx.measure_text("Radio", TextRole::Label);
     assert_eq!(
         RadioButton::new("r", "Radio", false)
             .measure(&mut ctx)
             .desired,
-        Size::new(radio_side, radio_side)
+        Size::new(
+            radio_side + crate::components::CHOICE_LABEL_GAP + radio_label.width,
+            expected_choice_height
+        )
     );
+    let toggle_label = ctx.measure_text("Toggle", TextRole::Label);
     assert_eq!(
         Toggle::new("t", "Toggle", false).measure(&mut ctx).desired,
-        Size::new(26.0, 14.0)
+        Size::new(
+            crate::components::TOGGLE_TRACK_WIDTH
+                + crate::components::CHOICE_LABEL_GAP
+                + toggle_label.width,
+            crate::components::TOGGLE_TRACK_HEIGHT.max(check_font.line_height)
+        )
     );
     let side = theme.controls.control_height;
     assert_eq!(

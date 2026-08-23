@@ -18,7 +18,46 @@ pub fn icon_button(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    static_icon_button(id, rect, icon.into(), label, input, memory, theme, disabled)
+    static_icon_button(
+        id,
+        rect,
+        icon.into(),
+        label,
+        false,
+        input,
+        memory,
+        theme,
+        disabled,
+    )
+}
+
+/// Emits a selectable ("chosen" mode) icon button with a required accessible
+/// label. Selection is NEUTRAL per `docs/visual-spec/01-buttons.md` §Icon
+/// button (S3 fill + `border.strong` ring via the shared button recipe's
+/// chosen branch), never accent.
+#[allow(clippy::too_many_arguments)]
+pub fn icon_selectable_button(
+    id: WidgetId,
+    rect: Rect,
+    icon: impl Into<StaticIcon>,
+    label: impl Into<String>,
+    selected: bool,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    disabled: bool,
+) -> WidgetOutput {
+    static_icon_button(
+        id,
+        rect,
+        icon.into(),
+        label,
+        selected,
+        input,
+        memory,
+        theme,
+        disabled,
+    )
 }
 
 /// Emits an icon button backed by a bitmap image resource.
@@ -161,19 +200,23 @@ fn static_icon_button(
     rect: Rect,
     icon: StaticIcon,
     label: impl Into<String>,
+    selected: bool,
     input: &UiInput,
     memory: &mut UiMemory,
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
+    let label = label.into();
     let mut response = focusable(id, rect, input, memory, disabled);
     suppress_disabled_interaction_reporting(&mut response);
+    let selected = clicked_select_state(selected, response.clicked);
+    response.state.selected = selected;
     let state = ComponentState {
         hovered: response.state.hovered,
         pressed: response_reported_pressed(&response),
         focused: response_reported_focus(&response),
         disabled,
-        selected: false,
+        selected,
     };
     let recipe = theme.button(state);
     let icon_size = control_icon_size(rect.height, theme);
@@ -183,6 +226,8 @@ fn static_icon_button(
         stern_core::Alignment::Center,
         stern_core::Alignment::Center,
     );
+    let mut semantics = icon_button_semantics(id, rect, label, disabled);
+    semantics.state.selected = selected;
     let mut primitives = button_surface_primitives(
         theme,
         &recipe,
@@ -198,10 +243,8 @@ fn static_icon_button(
     )));
 
     with_hover_cursor(
-        WidgetOutput::new(Some(response), primitives).with_semantic(with_response_state(
-            icon_button_semantics(id, rect, label, disabled),
-            &response,
-        )),
+        WidgetOutput::new(Some(response), primitives)
+            .with_semantic(with_response_state(semantics, &response)),
         &response,
         CursorShape::PointingHand,
     )

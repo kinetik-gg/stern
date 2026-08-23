@@ -2,12 +2,12 @@ use std::hash::Hash;
 
 #[allow(unused_imports)]
 use stern_core::{
-    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionSource, ClipId, Color,
-    ComponentState, DropTargetResponse, FrameContext, FrameOutput, ImageId, Insets, PhysicalSize,
-    PlatformRequest, Primitive, Rect, RepaintRequest, Response, ScaleFactor, ScrollResponse,
-    SemanticNode, Size, TextPrimitive, Theme, TimeInfo, Transform, Ui as CoreUi, UiInput, UiMemory,
-    Vec2, ViewportInfo, WidgetId, context_menu_trigger, draggable, drop_target, focusable,
-    pressable, scrollable, selectable, tooltip_trigger,
+    ActionContext, ActionDescriptor, ActionId, ActionInvocation, ActionSource, ButtonVariant,
+    ClipId, Color, ComponentState, DropTargetResponse, FrameContext, FrameOutput, ImageId, Insets,
+    PhysicalSize, PlatformRequest, Primitive, Rect, RepaintRequest, Response, ScaleFactor,
+    ScrollResponse, SemanticNode, Size, TextPrimitive, Theme, TimeInfo, Transform, Ui as CoreUi,
+    UiInput, UiMemory, Vec2, ViewportInfo, WidgetId, context_menu_trigger, draggable, drop_target,
+    focusable, pressable, scrollable, selectable, tooltip_trigger,
 };
 #[allow(unused_imports)]
 use stern_text::{
@@ -32,10 +32,11 @@ use crate::{
     PropertyGridAffordanceOutput, PropertyGridAffordanceRects, PropertyGridRow, SearchFieldOutput,
     SelectFieldConfig, SelectFieldOutput, SliderStep, TextFieldOutput, VectorScrubInputConfig,
     VectorScrubInputOutput, WidgetOutput, asset_slot_field as asset_slot_field_widget,
-    button as button_widget, checkbox as checkbox_widget,
+    button_variant as button_variant_widget, checkbox as checkbox_widget,
     checkbox_with_label as checkbox_with_label_widget,
     checkbox_with_label_target as checkbox_with_label_target_widget,
-    color_field as color_field_widget, icon_button as icon_button_widget, image as image_widget,
+    color_field as color_field_widget, icon_button as icon_button_widget,
+    icon_selectable_button as icon_selectable_button_widget, image as image_widget,
     image_icon_button as image_icon_button_widget,
     image_icon_button_sized as image_icon_button_sized_widget,
     image_icon_selectable_button as image_icon_selectable_button_widget,
@@ -70,10 +71,24 @@ impl Ui<'_> {
         text: impl Into<String>,
         disabled: bool,
     ) -> Response {
+        self.button_variant(key, rect, text, ButtonVariant::Standard, disabled)
+    }
+
+    /// Emits a push button in an explicit visual variant
+    /// (`docs/visual-spec/01-buttons.md`) and returns its interaction response.
+    pub fn button_variant(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        text: impl Into<String>,
+        variant: ButtonVariant,
+        disabled: bool,
+    ) -> Response {
         let id = self.id(key);
         let theme = self.theme;
         let (input, memory) = self.runtime.input_and_memory_mut();
-        let mut output = button_widget(id, rect, text, input, memory, theme, disabled);
+        let mut output =
+            button_variant_widget(id, rect, text, variant, input, memory, theme, disabled);
         if let (Some(text_layouts), Some(Primitive::Text(text))) = (
             self.text_layouts.as_deref_mut(),
             output.primitives.last_mut(),
@@ -162,6 +177,26 @@ impl Ui<'_> {
         let theme = self.theme;
         let (input, memory) = self.runtime.input_and_memory_mut();
         let output = icon_button_widget(id, rect, icon, label, input, memory, theme, disabled);
+        self.push_interactive(output)
+    }
+
+    /// Emits a selectable ("chosen" mode) icon button with a required
+    /// accessible label and returns its interaction response.
+    pub fn icon_selectable_button(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        icon: impl Into<stern_core::StaticIcon>,
+        label: impl Into<String>,
+        selected: bool,
+        disabled: bool,
+    ) -> Response {
+        let id = self.id(key);
+        let theme = self.theme;
+        let (input, memory) = self.runtime.input_and_memory_mut();
+        let output = icon_selectable_button_widget(
+            id, rect, icon, label, selected, input, memory, theme, disabled,
+        );
         self.push_interactive(output)
     }
 

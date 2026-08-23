@@ -1304,13 +1304,7 @@ fn production_call_graph_bounds_button_adoption_and_absent_split_busy_consumers(
     let button_widget_calls = sources
         .iter()
         .filter_map(|(path, source)| {
-            let count = source
-                .lines()
-                .filter(|line| {
-                    line.trim_start()
-                        .starts_with("let mut output = button_widget(")
-                })
-                .count();
+            let count = source.matches("button_variant_widget(").count();
             (count > 0).then_some((path.as_str(), count))
         })
         .collect::<Vec<_>>();

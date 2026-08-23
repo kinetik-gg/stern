@@ -717,13 +717,15 @@ fn assert_only_item_content_while_editing(run: &Run, target: ItemId) {
         run.frame.primitives[content_start + 2],
         Primitive::Text(ref text) if text.text == item.item.kind
     ));
-    assert_eq!(
+    // Only the rename field's own focus-ring pair may remain (see
+    // `assert_no_item_annuli`); item annuli must stay omitted.
+    assert!(
         run.frame
             .primitives
             .iter()
             .filter(|primitive| matches!(primitive, Primitive::Path(_)))
-            .count(),
-        0
+            .count()
+            <= 2
     );
     assert!(
         run.frame
@@ -733,14 +735,21 @@ fn assert_only_item_content_while_editing(run: &Run, target: ItemId) {
     );
 }
 
+/// Maximum Path primitives allowed while renaming: the inline-edit field's
+/// own two-layer focus ring (`docs/visual-spec/00-language.md` §Focus model
+/// applies the ring to fields too; family re-pass epic #948). Item annuli
+/// would come on top of that pair, so anything beyond two means the item
+/// ring came back.
 fn assert_no_item_annuli(run: &Run) {
-    assert_eq!(
-        run.frame
-            .primitives
-            .iter()
-            .filter(|primitive| matches!(primitive, Primitive::Path(_)))
-            .count(),
-        0
+    let paths = run
+        .frame
+        .primitives
+        .iter()
+        .filter(|primitive| matches!(primitive, Primitive::Path(_)))
+        .count();
+    assert!(
+        paths <= 2,
+        "expected at most the rename field's own focus-ring pair, found {paths} paths"
     );
 }
 
