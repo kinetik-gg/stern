@@ -68,22 +68,57 @@ fn compose(ui: &mut Ui<'_>, rect: Rect) {
         rect
     };
     let cell = |row_rect: Rect, index: usize, cells: usize| {
-        let w = (row_rect.width / cells as f32 - 12.0).max(0.0);
-        Rect::new(row_rect.x + (w + 12.0) * index as f32, row_rect.y, w, row_rect.height)
+        #[allow(clippy::cast_precision_loss)] // story cell counts are tiny constants
+        let index_f32 = index as f32;
+        #[allow(clippy::cast_precision_loss)] // story cell counts are tiny constants
+        let cells_f32 = cells as f32;
+        let w = (row_rect.width / cells_f32 - 12.0).max(0.0);
+        Rect::new(
+            row_rect.x + (w + 12.0) * index_f32,
+            row_rect.y,
+            w,
+            row_rect.height,
+        )
     };
 
     ui.label(row(16.0), "Buttons — default, hovered, focused, disabled");
     let buttons = row(ROW_HEIGHT);
-    let _ = ui.button("states-button-default", cell(buttons, 0, 4), "Default", false);
+    let _ = ui.button(
+        "states-button-default",
+        cell(buttons, 0, 4),
+        "Default",
+        false,
+    );
     let _ = ui.button(HOVER_BUTTON, cell(buttons, 1, 4), "Hovered", false);
     let _ = ui.button(FOCUS_BUTTON, cell(buttons, 2, 4), "Focused", false);
-    let _ = ui.button("states-button-disabled", cell(buttons, 3, 4), "Disabled", true);
+    let _ = ui.button(
+        "states-button-disabled",
+        cell(buttons, 3, 4),
+        "Disabled",
+        true,
+    );
 
-    ui.label(row(16.0), "Choice — checkbox hovered, radio focused, toggle hovered");
+    ui.label(
+        row(16.0),
+        "Choice — checkbox hovered, radio focused, toggle hovered",
+    );
     let choices = row(24.0);
-    let _ = ui.checkbox_with_label(HOVER_CHECKBOX, cell(choices, 0, 3), "Checkbox hover", true, false);
-    let _ = ui.radio_button_with_label(FOCUS_RADIO, cell(choices, 1, 3), "Radio focus", true, false);
-    let _ = ui.toggle_with_label(HOVER_TOGGLE, cell(choices, 2, 3), "Toggle hover", true, false);
+    let _ = ui.checkbox_with_label(
+        HOVER_CHECKBOX,
+        cell(choices, 0, 3),
+        "Checkbox hover",
+        true,
+        false,
+    );
+    let _ =
+        ui.radio_button_with_label(FOCUS_RADIO, cell(choices, 1, 3), "Radio focus", true, false);
+    let _ = ui.toggle_with_label(
+        HOVER_TOGGLE,
+        cell(choices, 2, 3),
+        "Toggle hover",
+        true,
+        false,
+    );
 
     ui.label(row(16.0), "Fields — field focused, select hovered");
     let fields = row(ROW_HEIGHT);

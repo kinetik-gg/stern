@@ -18,7 +18,17 @@ pub fn icon_button(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    static_icon_button(id, rect, icon.into(), label, false, input, memory, theme, disabled)
+    static_icon_button(
+        id,
+        rect,
+        icon.into(),
+        label,
+        false,
+        input,
+        memory,
+        theme,
+        disabled,
+    )
 }
 
 /// Emits a selectable ("chosen" mode) icon button with a required accessible
@@ -37,7 +47,17 @@ pub fn icon_selectable_button(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
-    static_icon_button(id, rect, icon.into(), label, selected, input, memory, theme, disabled)
+    static_icon_button(
+        id,
+        rect,
+        icon.into(),
+        label,
+        selected,
+        input,
+        memory,
+        theme,
+        disabled,
+    )
 }
 
 /// Emits an icon button backed by a bitmap image resource.
@@ -223,10 +243,8 @@ fn static_icon_button(
     )));
 
     with_hover_cursor(
-        WidgetOutput::new(Some(response), primitives).with_semantic(with_response_state(
-            semantics,
-            &response,
-        )),
+        WidgetOutput::new(Some(response), primitives)
+            .with_semantic(with_response_state(semantics, &response)),
         &response,
         CursorShape::PointingHand,
     )

@@ -136,13 +136,7 @@ impl Widget for Button {
 
     fn compose(self: Box<Self>, ui: &mut Ui<'_>, rect: Rect) -> Option<Response> {
         let this = *self;
-        Some(ui.button_variant(
-            this.key,
-            rect,
-            this.label,
-            this.variant,
-            this.disabled,
-        ))
+        Some(ui.button_variant(this.key, rect, this.label, this.variant, this.disabled))
     }
 }
 
@@ -246,7 +240,10 @@ impl Widget for Checkbox {
         let side = theme.checkbox(stern_core::ComponentState::default()).size;
         let text = ctx.measure_text(&self.label, TextRole::Label);
         let height = side.max(text.height);
-        Measurement::new(Size::new(side + crate::components::CHOICE_LABEL_GAP + text.width, height))
+        Measurement::new(Size::new(
+            side + crate::components::CHOICE_LABEL_GAP + text.width,
+            height,
+        ))
     }
 
     fn compose(self: Box<Self>, ui: &mut Ui<'_>, rect: Rect) -> Option<Response> {
@@ -284,10 +281,15 @@ impl RadioButton {
 impl Widget for RadioButton {
     fn measure(&self, ctx: &mut MeasureContext<'_>) -> Measurement {
         let theme = ctx.theme();
-        let side = theme.radio_button(stern_core::ComponentState::default()).size;
+        let side = theme
+            .radio_button(stern_core::ComponentState::default())
+            .size;
         let text = ctx.measure_text(&self.label, TextRole::Label);
         let height = side.max(text.height);
-        Measurement::new(Size::new(side + crate::components::CHOICE_LABEL_GAP + text.width, height))
+        Measurement::new(Size::new(
+            side + crate::components::CHOICE_LABEL_GAP + text.width,
+            height,
+        ))
     }
 
     fn compose(self: Box<Self>, ui: &mut Ui<'_>, rect: Rect) -> Option<Response> {
@@ -298,7 +300,10 @@ impl Widget for RadioButton {
 /// Toggle (switch) track dimensions from `docs/visual-spec/03`
 /// ("Track: 26×14"). The design system exposes no switch-size token yet; when
 /// one lands this constant must be replaced by it.
-const TOGGLE_TRACK: Size = Size::new(crate::components::TOGGLE_TRACK_WIDTH, crate::components::TOGGLE_TRACK_HEIGHT);
+const TOGGLE_TRACK: Size = Size::new(
+    crate::components::TOGGLE_TRACK_WIDTH,
+    crate::components::TOGGLE_TRACK_HEIGHT,
+);
 
 /// Content-sized toggle builder: the spec switch track plus its label.
 ///

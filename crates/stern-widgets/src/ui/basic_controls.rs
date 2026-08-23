@@ -87,9 +87,8 @@ impl Ui<'_> {
         let id = self.id(key);
         let theme = self.theme;
         let (input, memory) = self.runtime.input_and_memory_mut();
-        let mut output = button_variant_widget(
-            id, rect, text, variant, input, memory, theme, disabled,
-        );
+        let mut output =
+            button_variant_widget(id, rect, text, variant, input, memory, theme, disabled);
         if let (Some(text_layouts), Some(Primitive::Text(text))) = (
             self.text_layouts.as_deref_mut(),
             output.primitives.last_mut(),

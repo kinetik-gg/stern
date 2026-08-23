@@ -624,8 +624,6 @@ fn tab_and_row_reflect_clicked_selection_same_frame() {
 
 #[test]
 fn checkbox_and_toggle_reflect_selection() {
-    use stern_core::Brush;
-
     let theme = default_dark_theme();
     let mut memory = UiMemory::new();
     let checkbox = checkbox(
@@ -666,11 +664,14 @@ fn checkbox_and_toggle_reflect_selection() {
     assert_eq!(tracks.len(), 1, "exactly one 26x14 track rect");
     assert_eq!(
         tracks[0].fill,
-        Some(theme.toggle(ComponentState {
-            selected: true,
-            ..ComponentState::default()
-        })
-        .track)
+        Some(
+            theme
+                .toggle(ComponentState {
+                    selected: true,
+                    ..ComponentState::default()
+                })
+                .track
+        )
     );
     assert_eq!(knobs.len(), 1, "exactly one knob rect");
     let knob = &knobs[0].rect;
