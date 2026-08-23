@@ -628,3 +628,18 @@ composing existing `Rect`/`Line` shapes).
     configured extent (`FrameExtentOutdated`/`AcquiredExtentOutdated`),
     reconfiguring and requesting the next frame rather than presenting
     stale geometry.
+
+## Family re-pass (controls) — found by the controls/states story
+
+52. **Button, checkbox, radio, toggle, text-field, and select recipes do not
+    visually differentiate hover/focus from the default state.** The
+    `controls/states` story seeds `UiMemory::set_hovered`/`set_focused` for
+    one control per family and renders them side by side with the default
+    state; sliders prove the seeding path works (white hover thumb,
+    spec-correct full-row focus ring), but buttons render hover/focus
+    identically to default, choice controls show no hover/focus delta, and
+    the focused text field paints no focus ring. Fixing this is recipe-value
+    work (`Theme::button_variant` / `Theme::text_field` hover and focused
+    rows per `docs/visual-spec/01-buttons.md` and `02-fields.md`), deferred
+    from the geometry-scoped family pass. Evidence:
+    `apps/stern-stories/src/stories/controls_states.rs`.

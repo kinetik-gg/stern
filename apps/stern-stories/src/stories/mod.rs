@@ -8,6 +8,7 @@
 
 mod basic_controls;
 mod collections;
+mod controls_states;
 mod dock;
 mod feedback;
 mod fields;
@@ -22,6 +23,7 @@ use crate::story::Story;
 pub fn all() -> Vec<Story> {
     vec![
         basic_controls::sheet(),
+        controls_states::sheet(),
         collections::sheet(),
         layout_seam::sheet(),
         fields::sheet(),
