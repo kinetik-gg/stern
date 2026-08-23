@@ -36,6 +36,9 @@ pub fn physical_size(logical: Size, scale: f32) -> PhysicalSize {
 #[must_use]
 pub fn compose_story_frame(story: &Story, variant: StoryVariant) -> ComposedFrame {
     let mut state = UiState::new();
+    if let Some(seed) = story.seed_memory {
+        seed(state.memory_mut());
+    }
     let frame = compose_with_state(&mut state, story, variant);
     let resources = state.text_render_resources();
     ComposedFrame {

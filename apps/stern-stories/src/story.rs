@@ -1,6 +1,6 @@
 //! Story registry types and the sizes × scales matrix.
 
-use stern::core::{Rect, Size};
+use stern::core::{Rect, Size, UiMemory};
 use stern::widgets::Ui;
 
 /// Story scope tier, which selects the sizes × scales matrix.
@@ -58,6 +58,12 @@ pub struct Story {
     pub kind: StoryKind,
     /// Composes the story into `ui` within `rect` (logical units).
     pub compose: fn(&mut Ui<'_>, Rect),
+    /// Optional retained-memory seed applied before the frame composes.
+    ///
+    /// Static renders start from fresh state, so widgets that visualize
+    /// retained state (e.g. a scrolled collection's scrollbar thumb) use this
+    /// to stage the state their single rendered frame should show.
+    pub seed_memory: Option<fn(&mut UiMemory)>,
 }
 
 impl Story {

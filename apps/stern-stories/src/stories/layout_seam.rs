@@ -18,6 +18,7 @@ pub fn sheet() -> Story {
         title: "Layout seam — content-sized builders",
         kind: StoryKind::Component,
         compose,
+        seed_memory: None,
     }
 }
 

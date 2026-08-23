@@ -8,6 +8,7 @@ use stern_core::{
 
 use super::Ui;
 use crate::{
+    collections::push_vertical_thumb,
     collections::{
         CollectionCursor, CollectionCursorMove, CollectionCursorTarget, CollectionProjectedItem,
         CollectionProjection, Selection, VirtualList, VirtualListConfig, VirtualListItemResponse,
@@ -236,6 +237,18 @@ impl Ui<'_> {
 
         self.primitive(Primitive::TransformEnd);
         self.primitive(Primitive::ClipEnd { id: clip });
+
+        // 06-collections.md §Virtualized viewport: fixed-position thumb
+        // after the content clip (KNOWN-GAPS #47).
+        let mut chrome = Vec::with_capacity(1);
+        push_vertical_thumb(
+            &mut chrome,
+            self.theme,
+            config.bounds,
+            list.content_size().height,
+            list.window().clamped_scroll_offset,
+        );
+        self.extend(chrome);
 
         if output.selection_changed || output.activated.is_some() {
             self.request_repaint(RepaintRequest::NextFrame);

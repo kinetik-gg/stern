@@ -38,10 +38,11 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
         ("clip_end", 24),
         // Select-trigger disclosures paint caret icons since #946. Since
         // #876 the shared public application bar replaces the per-workspace
-        // menu/tab chrome surfaces.
+        // menu/tab chrome surfaces. The scrolled assets collection paints a
+        // scrollbar thumb rect since #948's widget-polish batch.
         ("icon", 9),
         ("line", 1),
-        ("rect", 127),
+        ("rect", 128),
         ("text", 87),
         ("texture", 1),
         ("transform_begin", 2),

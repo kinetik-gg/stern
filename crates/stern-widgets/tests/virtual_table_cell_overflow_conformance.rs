@@ -1144,7 +1144,7 @@ fn headers_remain_complete_source_visible_consumers_through_focus_sort_narrow_an
         UiInput::default(),
         |_| VirtualTableRow::new([body]),
     );
-    assert_header_visible_policy(&store, &sorted.frame, "Header 0 ↑");
+    assert_header_visible_policy(&store, &sorted.frame, "Header 0");
     assert_eq!(sorted.output.sort_requested, None);
 
     let narrow = run_table(

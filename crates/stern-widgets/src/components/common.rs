@@ -247,6 +247,19 @@ pub(super) fn clicked_select_state(selected: bool, clicked: bool) -> bool {
     selected || clicked
 }
 
+/// Resolves the D3 control-height-aware icon size for a control of the given
+/// height (`docs/visual-spec/00-language.md` divergence table D3 and
+/// `01-buttons.md` D3): `size.icon.sm` (12) in controls up to 24 tall,
+/// `size.icon.md` (16) from 28 up. The 25-27 band splits at the 26 midpoint;
+/// non-finite or negative heights take the compact size.
+pub(crate) fn control_icon_size(control_height: f32, theme: &Theme) -> f32 {
+    if control_height.is_finite() && control_height >= 26.0 {
+        theme.sizes.icon.md
+    } else {
+        theme.sizes.icon.sm
+    }
+}
+
 /// Returns true when `events` contains a non-repeat Escape key press.
 ///
 /// This is the same recognition rule used to blur ordered text-input focus on

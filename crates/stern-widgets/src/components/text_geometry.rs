@@ -391,7 +391,9 @@ impl TextFieldGeometry {
                 primitives.push(Primitive::Line(LinePrimitive {
                     from: Point::new(rect.x, y),
                     to: Point::new(rect.max_x().max(rect.x + 1.0), y),
-                    stroke: Stroke::new(1.0, self.recipe.selection),
+                    // IME composition underline uses the caret's focus.ring
+                    // source, not the selection fill (02-fields.md).
+                    stroke: Stroke::new(1.0, Brush::Solid(self.recipe.caret)),
                 }));
             }
         }

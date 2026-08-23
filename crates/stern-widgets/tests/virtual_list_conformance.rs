@@ -585,14 +585,35 @@ fn fractional_scroll_keeps_logical_focus_contained_under_the_existing_clip_trans
         scrolled.frame.primitives[2],
         Primitive::TransformBegin(Transform::translation(Vec2::new(0.0, -10.5)))
     );
+    let last = scrolled.frame.primitives.len();
     assert!(matches!(
-        scrolled.frame.primitives[scrolled.frame.primitives.len() - 2],
+        scrolled.frame.primitives[last - 3],
         Primitive::TransformEnd
     ));
     assert!(matches!(
-        scrolled.frame.primitives[scrolled.frame.primitives.len() - 1],
+        scrolled.frame.primitives[last - 2],
         Primitive::ClipEnd { .. }
     ));
+    // The fixed-position scrollbar thumb follows the content clip
+    // (06-collections.md §Virtualized viewport).
+    let Primitive::Rect(thumb) = &scrolled.frame.primitives[last - 1] else {
+        panic!("a scrolled virtual list must paint a scrollbar thumb");
+    };
+    let theme = default_dark_theme();
+    let expected_thumb = stern_widgets::collections::vertical_thumb(
+        BOUNDS,
+        scrolled.output.window.content_extent,
+        10.5,
+    )
+    .expect("thumb geometry");
+    assert_eq!(thumb.rect, expected_thumb);
+    assert_eq!(
+        thumb.fill,
+        Some(Brush::Solid(theme.colors.border.strong)),
+        "thumb uses border.strong"
+    );
+    assert_eq!(thumb.stroke, None);
+    assert_eq!(thumb.radius, theme.radii.full);
     assert_virtual_row_focus(&scrolled.frame, Rect::new(0.0, 0.0, 120.0, 20.0));
 }
 

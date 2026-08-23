@@ -19,6 +19,7 @@ pub fn sheet() -> Story {
         title: "System feedback jobs and toasts",
         kind: StoryKind::Composition,
         compose,
+        seed_memory: None,
     }
 }
 

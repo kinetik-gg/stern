@@ -7,6 +7,7 @@ use stern_core::{
 };
 
 use super::Ui;
+use crate::components::control_icon_size;
 use crate::overlays::{
     OverlayKind, OverlayNavigationInput, OverlayScene, OverlaySceneIntent, OverlaySceneOutput,
     OverlaySceneRow, OverlaySceneRowKind, overlay_semantics,
@@ -410,11 +411,9 @@ impl Ui<'_> {
     }
 
     fn paint_overlay_icon(&mut self, icon: StaticIcon, slot: Rect, foreground: Color) -> Rect {
-        let icon_size = self
-            .theme
-            .sizes
-            .icon
-            .md
+        // D3: icon size follows the row's control height (12 in ≤24 rows,
+        // 16 in ≥28), clamped to the slot.
+        let icon_size = control_icon_size(slot.height, self.theme)
             .min(slot.width.max(0.0))
             .min(slot.height.max(0.0));
         let rect = fit_box(

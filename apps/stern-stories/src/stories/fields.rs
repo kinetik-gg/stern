@@ -15,6 +15,7 @@ pub fn sheet() -> Story {
         title: "Fields and sliders state sheet",
         kind: StoryKind::Component,
         compose,
+        seed_memory: None,
     }
 }
 

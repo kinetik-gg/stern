@@ -1269,14 +1269,33 @@ fn fractional_scroll_preserves_clip_transform_and_full_logical_row_annuli() {
             focused.frame.primitives[2],
             Primitive::TransformBegin(Transform::translation(Vec2::new(0.0, -10.5)))
         );
+        let last = focused.frame.primitives.len();
         assert!(matches!(
-            focused.frame.primitives[focused.frame.primitives.len() - 2],
+            focused.frame.primitives[last - 3],
             Primitive::TransformEnd
         ));
         assert!(matches!(
-            focused.frame.primitives[focused.frame.primitives.len() - 1],
+            focused.frame.primitives[last - 2],
             Primitive::ClipEnd { .. }
         ));
+        // Fixed-position scrollbar thumb after the content clip
+        // (06-collections.md §Virtualized viewport).
+        let Primitive::Rect(thumb) = &focused.frame.primitives[last - 1] else {
+            panic!("a scrolled virtual tree must paint a scrollbar thumb");
+        };
+        let theme = default_dark_theme();
+        let expected_thumb = stern_widgets::collections::vertical_thumb(
+            BOUNDS,
+            focused.output.window.content_extent,
+            10.5,
+        )
+        .expect("thumb geometry");
+        assert_eq!(thumb.rect, expected_thumb);
+        assert_eq!(
+            thumb.fill,
+            Some(stern_core::Brush::Solid(theme.colors.border.strong))
+        );
+        assert_eq!(thumb.radius, theme.radii.full);
         assert_tree_row_focus(
             &focused.frame,
             Rect::new(0.0, logical_y, 160.0, 20.0),

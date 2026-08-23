@@ -50,7 +50,7 @@ mod tests;
 
 pub(crate) use common::{
     ButtonFocusPlacement, RowFocusPlacement, TabFocusPlacement, button_surface_primitives,
-    row_surface_primitives, tab_surface_primitives,
+    control_icon_size, row_surface_primitives, tab_surface_primitives,
 };
 use common::{
     clicked_select_state, clicked_toggle_state, control_text_origin, escape_pressed,
@@ -64,6 +64,7 @@ use text_support::{
     single_line_hit_offset, single_line_text_primitives, text_field_layout,
     text_input_platform_requests, text_line_fragments,
 };
+pub(crate) use vendored_icons::{CARET_DOWN_ICON, CARET_UP_ICON};
 
 pub use basic::*;
 pub use choice::*;

@@ -21,7 +21,7 @@ use crate::{
     InlineEditCancelReason, InlineEditCommitReason, InlineEditFocusLossPolicy, InlineEditRequest,
     ItemId, Menu, MenuItem, MenuOverlay, OverlayDismissal, OverlayKind, OverlayScene,
     OverlaySceneIntent, OverlaySceneSurface, PopoverPlacement, Selection, TextFieldAccess,
-    collection_context_actions,
+    collection_context_actions, collections::push_vertical_thumb,
 };
 
 impl Ui<'_> {
@@ -490,6 +490,18 @@ impl Ui<'_> {
             self.paint_asset_browser_drop_preview(scene, preview);
         }
         self.primitive(Primitive::ClipEnd { id: clip });
+
+        // 06-collections.md §Virtualized viewport: fixed-position thumb
+        // after the content clip (KNOWN-GAPS #47).
+        let mut chrome = Vec::with_capacity(1);
+        push_vertical_thumb(
+            &mut chrome,
+            self.theme,
+            config.bounds,
+            scene.content_size().height,
+            scene.layout().scroll_offset,
+        );
+        self.extend(chrome);
 
         if context_was_prepared
             && output.context_opened.is_none()

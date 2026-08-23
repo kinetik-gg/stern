@@ -13,6 +13,7 @@ use crate::{
         CollectionCursor, CollectionCursorMove, CollectionCursorTarget, CollectionProjection,
         ItemId, Selection, TreeExpansion, TreeRow, VirtualTree, VirtualTreeConfig,
         VirtualTreeItemResponse, VirtualTreeOutput, VirtualTreeRow, VirtualTreeSelectionMode,
+        push_vertical_thumb,
     },
     components::{RowFocusPlacement, row_surface_primitives},
 };
@@ -290,6 +291,18 @@ impl Ui<'_> {
 
         self.primitive(Primitive::TransformEnd);
         self.primitive(Primitive::ClipEnd { id: clip });
+
+        // 06-collections.md §Virtualized viewport: fixed-position thumb
+        // after the content clip (KNOWN-GAPS #47).
+        let mut chrome = Vec::with_capacity(1);
+        push_vertical_thumb(
+            &mut chrome,
+            self.theme,
+            config.bounds,
+            tree.content_size().height,
+            tree.window().clamped_scroll_offset,
+        );
+        self.extend(chrome);
 
         if output.selection_changed || output.expansion_changed || output.activated.is_some() {
             self.request_repaint(RepaintRequest::NextFrame);

@@ -5,9 +5,9 @@
 use std::time::Duration;
 
 use stern_core::{
-    ComponentState, FrameContext, PathElement, PathPrimitive, PhysicalSize, Point, PointerOrder,
-    Primitive, Rect, ScaleFactor, Size, TimeInfo, Transform, UiInput, UiMemory, Vec2, ViewportInfo,
-    WidgetId, default_dark_theme,
+    Brush, ComponentState, FrameContext, PathElement, PathPrimitive, PhysicalSize, Point,
+    PointerOrder, Primitive, Rect, ScaleFactor, Size, TimeInfo, Transform, UiInput, UiMemory, Vec2,
+    ViewportInfo, WidgetId, default_dark_theme,
 };
 use stern_vello::{
     RenderCommandKind, RenderFrameInput, RenderResources, VelloRenderer, translate_primitives,
@@ -211,8 +211,61 @@ fn actual_table_header_focus_translates_with_fractional_scroll_at_release_scales
             .iter()
             .filter(|command| matches!(command.kind, RenderCommandKind::Path { .. }))
             .collect::<Vec<_>>();
-        assert_eq!(path_commands.len(), 2);
-        for (command, expected) in path_commands.into_iter().zip([primary, separator]) {
+        // The two focus annuli plus one sort-caret glyph per header column
+        // (06-collections.md §Header row, #948 widget-polish batch) live in
+        // the header scope.
+        assert_eq!(path_commands.len(), 2 + 3);
+        let theme = default_dark_theme();
+        let is_focus_annulus = |command: &&stern_vello::RenderCommand| {
+            let RenderCommandKind::Path { elements, .. } = &command.kind else {
+                return false;
+            };
+            elements == &primary.elements || elements == &separator.elements
+        };
+        let mut muted_carets = 0;
+        let mut active_carets = 0;
+        for command in path_commands
+            .iter()
+            .filter(|command| !is_focus_annulus(command))
+        {
+            let RenderCommandKind::Path {
+                elements,
+                fill,
+                stroke,
+                ..
+            } = &command.kind
+            else {
+                unreachable!()
+            };
+            // Caret glyph outlines (14/15 elements for down/up), filled in
+            // the muted affordance tint or the active column's
+            // focus.indicator.
+            assert!(elements.len() == 14 || elements.len() == 15, "caret glyph");
+            assert_eq!(*stroke, None);
+            match *fill {
+                Some(Brush::Solid(color)) if color == theme.colors.content.muted => {
+                    muted_carets += 1;
+                }
+                Some(Brush::Solid(color)) if color == theme.colors.focus.indicator => {
+                    active_carets += 1;
+                }
+                other => panic!("unexpected caret fill {other:?}"),
+            }
+            // Glyph paths carry their own icon-rect scale; they stay under
+            // the header clip.
+            assert_eq!(command.clips.len(), 1);
+            assert_eq!(command.clips[0].rect, header_clip);
+        }
+        // The sorted case promotes its column's caret to focus.indicator;
+        // the other two columns stay muted affordances.
+        let (expected_muted, expected_active) = if sort.is_some() { (2, 1) } else { (3, 0) };
+        assert_eq!(muted_carets, expected_muted);
+        assert_eq!(active_carets, expected_active);
+        for (command, expected) in path_commands
+            .into_iter()
+            .filter(|command| is_focus_annulus(command))
+            .zip([primary, separator])
+        {
             let RenderCommandKind::Path {
                 elements,
                 fill,
@@ -303,6 +356,14 @@ fn actual_table_header_focus_translates_with_fractional_scroll_at_release_scales
                 .commands
                 .iter()
                 .filter(|command| matches!(command.kind, RenderCommandKind::Path { .. }))
+                .filter(|command| {
+                    // Sort-caret glyph paths carry their own icon scale, not
+                    // the scope translation.
+                    let RenderCommandKind::Path { elements, .. } = &command.kind else {
+                        return false;
+                    };
+                    elements.len() == 20
+                })
             {
                 assert_eq!(
                     command.transform,
