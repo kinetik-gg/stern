@@ -47,9 +47,11 @@ fn assert_default_base_frame_structure(output: &FrameOutput) {
         // Since #876 the shared public application bar replaces the
         // per-workspace menu/tab chrome surfaces (one clip pair and four
         // row surfaces traded for the bar's own rows).
+        // The scrolled assets collection paints a scrollbar thumb rect
+        // since #948's widget-polish batch.
         ("icon", 9),
         ("line", 1),
-        ("rect", 127),
+        ("rect", 128),
         ("text", 87),
         ("texture", 1),
         ("transform_begin", 2),
