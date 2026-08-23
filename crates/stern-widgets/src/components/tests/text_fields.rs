@@ -1558,7 +1558,10 @@ fn ime_composition_underline_paints_focus_ring_not_selection() {
     // 02-fields.md: IME composition underline is the focus.ring blue (the
     // caret's color source), never the selection fill.
     for LinePrimitive { stroke, .. } in underlines {
-        assert_eq!(stroke.brush, stern_core::Brush::Solid(theme.colors.focus.ring));
+        assert_eq!(
+            stroke.brush,
+            stern_core::Brush::Solid(theme.colors.focus.ring)
+        );
         assert_ne!(stroke.brush, recipe.selection);
     }
 }
