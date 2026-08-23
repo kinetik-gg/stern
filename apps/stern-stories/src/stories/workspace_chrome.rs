@@ -34,6 +34,7 @@ pub fn with_bands() -> Story {
         title: "Workspace chrome bands track the viewport",
         kind: StoryKind::Workspace,
         compose,
+        seed_memory: None,
     }
 }
 

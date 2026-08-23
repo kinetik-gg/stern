@@ -14,6 +14,7 @@ pub fn sheet() -> Story {
         title: "Basic controls state sheet",
         kind: StoryKind::Component,
         compose,
+        seed_memory: None,
     }
 }
 

@@ -16,6 +16,7 @@ use crate::{
         VirtualTableCursorMove, VirtualTableCursorTarget, VirtualTableHeaderResponse,
         VirtualTableMaterializedRow, VirtualTableOutput, VirtualTableRow, VirtualTableSelection,
         VirtualTableSelectionMode, VirtualTableSelectionResponse, VirtualTableTarget,
+        push_vertical_thumb,
     },
     components::{CARET_DOWN_ICON, CARET_UP_ICON, RowFocusPlacement, row_surface_primitives},
 };
@@ -401,6 +402,19 @@ impl Ui<'_> {
 
         self.primitive(Primitive::TransformEnd);
         self.primitive(Primitive::ClipEnd { id: body_clip_id });
+
+        // 06-collections.md §Virtualized viewport: fixed-position thumb
+        // after the content clip (KNOWN-GAPS #47).
+        let mut chrome = Vec::with_capacity(1);
+        push_vertical_thumb(
+            &mut chrome,
+            self.theme,
+            config.bounds,
+            table.content_size().height,
+            table.window().offset.y,
+        );
+        self.extend(chrome);
+
         if output.selection_changed || output.resize_requested.is_some() {
             self.request_repaint(RepaintRequest::NextFrame);
         }

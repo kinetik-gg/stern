@@ -25,6 +25,7 @@ pub fn with_rows() -> Story {
         title: "Inspector panel with property-grid rows",
         kind: StoryKind::Composition,
         compose,
+        seed_memory: None,
     }
 }
 

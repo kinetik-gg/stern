@@ -5,6 +5,7 @@ mod identity;
 mod list;
 mod math;
 mod navigation;
+mod scrollbar;
 mod selection;
 mod table;
 mod tree_layout;
@@ -18,6 +19,8 @@ pub use grid::{GridColumns, GridLayout};
 pub use identity::{CollectionProjectedItem, CollectionProjection, ItemId, ItemRect};
 pub use list::ListLayout;
 pub use navigation::{CollectionCursor, CollectionCursorMove, CollectionCursorTarget};
+pub(crate) use scrollbar::push_vertical_thumb;
+pub use scrollbar::{THUMB_WIDTH, vertical_thumb};
 pub use selection::{Selection, SelectionProjection, SelectionProjectionPolicy};
 pub use table::{
     SortDirection, TableCellRect, TableColumn, TableColumnConstraints, TableHeaderRect,

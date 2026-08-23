@@ -22,6 +22,7 @@ pub fn with_seams() -> Story {
         title: "Dock workspace with frames and seams",
         kind: StoryKind::Workspace,
         compose,
+        seed_memory: None,
     }
 }
 
@@ -35,6 +36,7 @@ pub fn with_tab_insertion_preview() -> Story {
         title: "Dock tab-strip insertion line",
         kind: StoryKind::Workspace,
         compose: compose_tab_insertion_preview,
+        seed_memory: None,
     }
 }
 
