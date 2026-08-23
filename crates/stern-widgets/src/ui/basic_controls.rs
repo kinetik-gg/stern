@@ -112,7 +112,8 @@ impl Ui<'_> {
         let id = self.id(key);
         let theme = self.theme;
         let leading_width = action.icon.map_or(0.0, |_| {
-            theme.sizes.icon.md + theme.spacing.resolve(stern_core::SpacingRole::IconLabelGap)
+            crate::components::control_icon_size(rect.height, theme)
+                + theme.spacing.resolve(stern_core::SpacingRole::IconLabelGap)
         });
         let (input, memory) = self.runtime.input_and_memory_mut();
         let mut output = action_button_widget(

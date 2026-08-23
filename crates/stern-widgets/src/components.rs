@@ -50,7 +50,7 @@ mod tests;
 
 pub(crate) use common::{
     ButtonFocusPlacement, RowFocusPlacement, TabFocusPlacement, button_surface_primitives,
-    row_surface_primitives, tab_surface_primitives,
+    control_icon_size, row_surface_primitives, tab_surface_primitives,
 };
 use common::{
     clicked_select_state, clicked_toggle_state, control_text_origin, escape_pressed,

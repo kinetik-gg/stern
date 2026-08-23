@@ -1,9 +1,9 @@
 use super::{
     ButtonFocusPlacement, ComponentState, CursorShape, IconPrimitive, ImageId, ImagePrimitive,
     Primitive, Rect, StaticIcon, Theme, UiInput, UiMemory, WidgetId, WidgetOutput,
-    button_surface_primitives, clicked_select_state, fit_box, focusable, icon_button_semantics,
-    response_reported_focus, response_reported_pressed, suppress_disabled_interaction_reporting,
-    with_hover_cursor, with_response_state,
+    button_surface_primitives, clicked_select_state, control_icon_size, fit_box, focusable,
+    icon_button_semantics, response_reported_focus, response_reported_pressed,
+    suppress_disabled_interaction_reporting, with_hover_cursor, with_response_state,
 };
 
 /// Emits an icon button with a required accessible label.
@@ -38,7 +38,7 @@ pub fn image_icon_button(
         rect,
         image,
         label,
-        theme.sizes.icon.md,
+        control_icon_size(rect.height, theme),
         input,
         memory,
         theme,
@@ -83,7 +83,7 @@ pub fn image_icon_selectable_button(
         image,
         label,
         selected,
-        theme.sizes.icon.md,
+        control_icon_size(rect.height, theme),
         input,
         memory,
         theme,
@@ -176,9 +176,10 @@ fn static_icon_button(
         selected: false,
     };
     let recipe = theme.button(state);
+    let icon_size = control_icon_size(rect.height, theme);
     let icon_rect = fit_box(
         rect,
-        stern_core::Size::new(theme.sizes.icon.md, theme.sizes.icon.md),
+        stern_core::Size::new(icon_size, icon_size),
         stern_core::Alignment::Center,
         stern_core::Alignment::Center,
     );

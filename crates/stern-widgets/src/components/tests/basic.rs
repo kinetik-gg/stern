@@ -128,6 +128,121 @@ fn image_icon_button_uses_common_scale_integer_icon_size() {
     }
 }
 
+fn icon_primitive_rect(primitives: &[Primitive]) -> Rect {
+    primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Icon(icon) => Some(icon.rect),
+            _ => None,
+        })
+        .expect("icon button must emit an icon primitive")
+}
+
+/// D3 (`00-language.md` divergence table / `01-buttons.md` D3): controls up
+/// to 24 tall take `size.icon.sm` (12), controls from 28 tall take
+/// `size.icon.md` (16); the 25-27 band splits at the 26 midpoint.
+#[test]
+fn static_icon_button_icon_size_follows_control_height_d3() {
+    let theme = default_dark_theme();
+    let cases: [(f32, Rect); 4] = [
+        (
+            24.0,
+            Rect::new(14.0, 6.0, theme.sizes.icon.sm, theme.sizes.icon.sm),
+        ),
+        (
+            20.0,
+            Rect::new(14.0, 4.0, theme.sizes.icon.sm, theme.sizes.icon.sm),
+        ),
+        (
+            26.0,
+            Rect::new(12.0, 5.0, theme.sizes.icon.md, theme.sizes.icon.md),
+        ),
+        (
+            28.0,
+            Rect::new(12.0, 6.0, theme.sizes.icon.md, theme.sizes.icon.md),
+        ),
+    ];
+    for (index, (height, expected_rect)) in cases.into_iter().enumerate() {
+        let output = icon_button(
+            WidgetId::from_key(("d3-icon", index)),
+            Rect::new(0.0, 0.0, 40.0, height),
+            stern_icons_phosphor::regular::CHECK,
+            "Check",
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            &theme,
+            false,
+        );
+        assert_eq!(icon_primitive_rect(&output.primitives), expected_rect);
+    }
+}
+
+#[test]
+fn unsized_image_icon_buttons_follow_control_height_d3() {
+    let theme = default_dark_theme();
+    for (height, expected) in [(24.0_f32, theme.sizes.icon.sm), (28.0, theme.sizes.icon.md)] {
+        let plain = image_icon_button(
+            WidgetId::from_key(("d3-bitmap", height.to_bits())),
+            Rect::new(0.0, 0.0, 40.0, height),
+            ImageId::from_raw(1),
+            "Bitmap",
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            &theme,
+            false,
+        );
+        let image_rect = icon_image_rect(&plain);
+        assert_approx(image_rect.width, expected);
+        assert_approx(image_rect.height, expected);
+        assert_approx(image_rect.y, (height - expected) * 0.5);
+
+        let selectable = image_icon_selectable_button(
+            WidgetId::from_key(("d3-bitmap-selectable", height.to_bits())),
+            Rect::new(0.0, 0.0, 40.0, height),
+            ImageId::from_raw(2),
+            "Selectable",
+            true,
+            &UiInput::default(),
+            &mut UiMemory::new(),
+            &theme,
+            false,
+        );
+        assert_eq!(icon_image_rect(&selectable), image_rect);
+    }
+}
+
+#[test]
+fn action_button_leading_icon_follows_control_height_d3() {
+    let theme = default_dark_theme();
+    let compact = action_button(
+        WidgetId::from_key("action-compact"),
+        Rect::new(0.0, 0.0, 96.0, 20.0),
+        "Run",
+        Some(stern_icons_phosphor::regular::PLAY.into()),
+        &UiInput::default(),
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let compact_rect = icon_primitive_rect(&compact.primitives);
+    assert_approx(compact_rect.width, theme.sizes.icon.sm);
+    assert_approx(compact_rect.height, theme.sizes.icon.sm);
+
+    let standard = action_button(
+        WidgetId::from_key("action-standard"),
+        Rect::new(0.0, 0.0, 96.0, 32.0),
+        "Run",
+        Some(stern_icons_phosphor::regular::PLAY.into()),
+        &UiInput::default(),
+        &mut UiMemory::new(),
+        &theme,
+        false,
+    );
+    let standard_rect = icon_primitive_rect(&standard.primitives);
+    assert_approx(standard_rect.width, theme.sizes.icon.md);
+    assert_approx(standard_rect.height, theme.sizes.icon.md);
+}
+
 #[test]
 fn sized_image_icon_button_uses_requested_common_scale_icon_size() {
     let output = image_icon_button_sized(
@@ -175,7 +290,8 @@ fn icon_button_uses_direct_phosphor_handle_without_registration() {
     };
     assert_eq!(icon.icon, source.icon());
     assert!(core::ptr::eq(icon.icon.graphic(), source.icon().graphic()));
-    assert_eq!(icon.rect, Rect::new(4.0, 4.0, 16.0, 16.0));
+    // D3: a 24-tall control takes the compact size.icon.sm (12).
+    assert_eq!(icon.rect, Rect::new(6.0, 6.0, 12.0, 12.0));
     assert_eq!(
         icon.tint,
         theme.button(ComponentState::default()).foreground

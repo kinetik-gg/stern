@@ -3,8 +3,8 @@ use super::{
     Rect, RowFocusPlacement, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
     SpacingRole, StaticIcon, TabFocusPlacement, TextPrimitive, TextRole, Theme, UiInput, UiMemory,
     WidgetId, WidgetOutput, button_semantics, button_surface_primitives, clicked_select_state,
-    control_text_origin, fit_box, focusable, label_baseline, response_reported_focus,
-    response_reported_pressed, row_surface_primitives, selectable,
+    control_icon_size, control_text_origin, fit_box, focusable, label_baseline,
+    response_reported_focus, response_reported_pressed, row_surface_primitives, selectable,
     suppress_disabled_interaction_reporting, tab_surface_primitives, with_hover_cursor,
     with_response_state,
 };
@@ -110,10 +110,7 @@ pub(crate) fn action_button(
     let mut text_origin = control_text_origin(rect, theme);
     if let Some(icon) = icon {
         let padding = theme.controls.padding_x;
-        let icon_size = theme
-            .sizes
-            .icon
-            .md
+        let icon_size = control_icon_size(rect.height, theme)
             .min((rect.width - padding * 2.0).max(0.0))
             .min(rect.height.max(0.0));
         let icon_rect = fit_box(
