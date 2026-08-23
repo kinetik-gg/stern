@@ -15,6 +15,21 @@ accessibility verification have not started. See
 [`docs/catalogue-conformance-matrix.md`](docs/catalogue-conformance-matrix.md)
 and [`KNOWN-GAPS.md`](KNOWN-GAPS.md) for current status.
 
+## Try it
+
+Requires a recent stable Rust toolchain (1.89+).
+
+```bash
+# windowed demo: Edit / Graph / Gallery workspaces
+cargo run -p stern-demo --bin native_shell
+
+# story browser: every component composition, headless-renderable
+cargo run -p stern-stories -- run
+
+# minimal app in ~60 lines
+cargo run -p stern-app --example hello_stern
+```
+
 ## Architecture
 
 Stern separates the system into small, explicit layers:
@@ -144,15 +159,9 @@ ui.icon_button(
 );
 ```
 
-Use checkout-relative paths for lower-level integration boundaries as well:
-
-```toml
-[dependencies]
-stern-render = { path = "../stern/crates/stern-render" } # custom renderer contracts
-stern-vello = { path = "../stern/crates/stern-vello" }   # Vello backend
-stern-winit = { path = "../stern/crates/stern-winit" }   # winit platform adapter
-stern-vello-winit = { path = "../stern/crates/stern-vello-winit" } # live presenter
-```
+Lower-level integration boundaries (`stern-render`, `stern-vello`,
+`stern-winit`, `stern-vello-winit`) are available as checkout-relative path
+dependencies too; see [crate migration notes](docs/crate-migration.md).
 
 ### Future registry use
 
@@ -189,6 +198,12 @@ crate to `stern-vello` and the old `stern-platform-winit` crate to
 `stern-winit`. See [crate migration notes](docs/crate-migration.md).
 
 ## Documentation
+
+> **AI agents and LLMs:** start with [`AGENTS.md`](AGENTS.md) (operating
+> rules and workflow), then [`docs/specs.md`](docs/specs.md) (architecture
+> source of truth) and [`KNOWN-GAPS.md`](KNOWN-GAPS.md) (honest current
+> status). This README stays aimed at human first contact; the verbose
+> material lives in `docs/`.
 
 - [Architecture specification](docs/specs.md)
 - [Accessibility adapter boundary](docs/accessibility-adapters.md)
