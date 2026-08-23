@@ -107,20 +107,33 @@ stale, trust the code and send a correction PR.
     (`crates/stern-core/src/memory.rs`) holds one set of interaction
     singletons (focus, drag, text-input owner, etc.) with no multi-window
     identity or routing concept.
-12. Library code panics on internal invariants instead of surfacing a
-    `FrameWarning`: `crates/stern-core/src/interaction/press.rs:253`
-    (`.expect("selection gestures require root event ordinals")` plus the
-    adjacent `assert_eq!`), `crates/stern-core/src/runtime/spatial.rs:510`
-    and `:597` (`.expect("non-empty polygon")`,
-    `.expect("polygon has at least two points")`), and
-    `crates/stern-core/src/memory.rs:964-1053` (several
-    `.expect("text-input owner epoch overflowed")` calls in
-    `set_text_input_owner`, `set_text_input_owner_mode`, and
-    `clear_text_input_owner`).
-13. `WidgetId` hashes with `std::collections::hash_map::DefaultHasher`
-    (`crates/stern-core/src/identity.rs`), whose output is unspecified
-    across Rust releases. Unsafe if IDs are ever persisted or compared
-    across builds.
+12. RESOLVED 2026-08-23 (PR #962, epic #948 dependability batch): library
+    code no longer panics on these internal invariants. A selection gesture
+    invoked without root event ordinals, or a captured gesture whose ordinal
+    sidecar length mismatches localized input, now emits
+    `FrameWarning::SelectionGestureOrdinalsMissing` /
+    `GestureOrdinalSidecarMismatch` and deterministically skips gesture event
+    processing for the frame with retained pointer state untouched
+    (`crates/stern-core/src/interaction/press.rs`). Text-input owner
+    transitions on an exhausted owner epoch now emit
+    `FrameWarning::TextInputOwnerEpochExhausted` and refuse the change with
+    owner, mode, platform state, and pending stop intact
+    (`crates/stern-core/src/memory.rs`; warnings queue in `UiMemory` and are
+    drained by `Ui::end_frame`). The two polygon `.expect`s in
+    `crates/stern-core/src/runtime/spatial.rs` were provably unreachable
+    behind their own guards and became equivalent non-panicking control flow
+    with no warning site (nothing recoverable to report). `FrameWarning`
+    gained three variants — breaking for exhaustive matchers; pre-alpha.
+13. RESOLVED 2026-08-23 (PR #962, epic #948 dependability batch): `WidgetId`
+    hashes through a pinned hand-rolled FNV-1a 64-bit scheme with
+    little-endian integer encodings (`crates/stern-core/src/identity.rs`,
+    offset basis `0xcbf29ce484222325`, prime `0x100000001b3`) instead of the
+    unspecified `std DefaultHasher`, so derived IDs persist bit-for-bit
+    across compiler releases, processes, and platforms and are safe to
+    persist or compare across builds. Golden-value conformance tests pin
+    exact outputs for representative keys. Documented residual limit: std's
+    `Hash` implementations for key types must keep routing to stable inputs;
+    if they drift, the golden tests fail loudly in CI.
 14. Command palette matching is substring-only and its lookups are `O(n)`
     per query: `matches_iter` does a `.to_lowercase().contains(&query)` scan
     over every entry and keyword, and `match_at`/`selected_match` walk that

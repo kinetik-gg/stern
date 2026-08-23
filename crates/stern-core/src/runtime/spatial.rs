@@ -547,10 +547,9 @@ fn intersect_convex(subject: &[Point], clip: &[Point]) -> Vec<Point> {
         let edge_start = clip[index];
         let edge_end = clip[(index + 1) % clip.len()];
         let input = std::mem::take(&mut output);
-        if input.is_empty() {
+        let Some(mut previous) = input.last().copied() else {
             break;
-        }
-        let mut previous = *input.last().expect("non-empty polygon");
+        };
         let mut previous_inside = inside_edge(previous, edge_start, edge_end);
         for current in input {
             let current_inside = inside_edge(current, edge_start, edge_end);
@@ -635,12 +634,11 @@ fn signed_area(polygon: &[Point]) -> f32 {
 
 fn deduplicate_polygon(polygon: &mut Vec<Point>) {
     polygon.dedup_by(|left, right| left == right);
-    if polygon.len() > 1 {
-        let first = polygon[0];
-        let last = *polygon.last().expect("polygon has at least two points");
-        if first == last {
-            polygon.pop();
-        }
+    if polygon.len() > 1
+        && let (Some(first), Some(last)) = (polygon.first().copied(), polygon.last().copied())
+        && first == last
+    {
+        polygon.pop();
     }
 }
 
@@ -662,4 +660,90 @@ fn point_is_finite(point: Point) -> bool {
 
 fn rect_is_finite(rect: Rect) -> bool {
     rect.x.is_finite() && rect.y.is_finite() && rect.width.is_finite() && rect.height.is_finite()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unit_square(x: f32, y: f32) -> Vec<Point> {
+        vec![
+            Point::new(x, y),
+            Point::new(x + 2.0, y),
+            Point::new(x + 2.0, y + 2.0),
+            Point::new(x, y + 2.0),
+        ]
+    }
+
+    #[test]
+    fn intersect_convex_returns_empty_for_disjoint_polygons_without_panicking() {
+        let subject = unit_square(0.0, 0.0);
+        let clip = unit_square(10.0, 10.0);
+
+        assert!(intersect_convex(&subject, &clip).is_empty());
+    }
+
+    #[test]
+    fn intersect_convex_returns_empty_for_degenerate_inputs_without_panicking() {
+        let square = unit_square(0.0, 0.0);
+
+        assert!(intersect_convex(&[], &square).is_empty());
+        assert!(intersect_convex(&square, &[]).is_empty());
+        assert!(
+            intersect_convex(&square, &[Point::new(1.0, 1.0), Point::new(3.0, 3.0)]).is_empty()
+        );
+    }
+
+    #[test]
+    fn intersect_convex_computes_the_overlapping_region() {
+        let subject = unit_square(0.0, 0.0);
+        let clip = unit_square(1.0, 1.0);
+
+        let intersection = intersect_convex(&subject, &clip);
+
+        let bounds = polygon_bounds(&intersection);
+        assert_eq!(
+            bounds,
+            Some(Rect::new(1.0, 1.0, 1.0, 1.0)),
+            "unit squares offset by (1, 1) must intersect in a 1x1 region"
+        );
+    }
+
+    #[test]
+    fn deduplicate_polygon_collapses_closed_rings_without_panicking() {
+        let mut closed_ring = vec![
+            Point::new(0.0, 0.0),
+            Point::new(2.0, 0.0),
+            Point::new(2.0, 2.0),
+            Point::new(0.0, 0.0),
+        ];
+
+        deduplicate_polygon(&mut closed_ring);
+
+        assert_eq!(closed_ring.len(), 3);
+    }
+
+    #[test]
+    fn deduplicate_polygon_preserves_short_and_open_polygons() {
+        let open = vec![Point::new(0.0, 0.0), Point::new(2.0, 0.0)];
+        let triangle = vec![
+            Point::new(0.0, 0.0),
+            Point::new(2.0, 0.0),
+            Point::new(1.0, 2.0),
+        ];
+
+        let mut single = vec![Point::new(1.0, 1.0)];
+        let mut empty: Vec<Point> = Vec::new();
+        let mut two_points = open.clone();
+
+        deduplicate_polygon(&mut single);
+        deduplicate_polygon(&mut empty);
+        deduplicate_polygon(&mut two_points);
+        deduplicate_polygon(&mut triangle.clone());
+
+        assert_eq!(single.len(), 1);
+        assert!(empty.is_empty());
+        assert_eq!(two_points, open);
+        assert_eq!(triangle.len(), 3);
+    }
 }
