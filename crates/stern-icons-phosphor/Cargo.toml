@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Complete allocation-free Phosphor icon definitions for Stern"
 
 [dependencies]
-stern-core = { path = "../stern-core" }
+stern-core = { version = "=0.0.1-alpha.1", path = "../stern-core" }
 
 [lints]
 workspace = true

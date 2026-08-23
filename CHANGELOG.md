@@ -5,6 +5,27 @@ follow the repository release policy.
 
 ## [Unreleased]
 
+Nothing yet. Changes accumulate here for the next release.
+
+## [0.0.1-alpha.1] - 2026-08-23
+
+**Release summary (honest).** Stern is a pre-alpha Rust UI toolkit for
+editor-style desktop applications. This is a source-only release (tag and
+GitHub release; not published to crates.io). It ships the model-layer
+toolkit: a deterministic immediate-mode runtime with retained UI memory;
+the RFC 0001 layout engine phases L0/L1 with content-sized builders; a
+headless story harness with 26 blessed golden baselines; a dock with
+deterministic tab insertion and local reordering; the public
+ApplicationBar/menu chrome; virtualized lists, tables, and trees; the text
+shaping and editing subsystem; a Vello renderer backend, winit platform
+adapter, and application runner with automatic GPU recovery; and the
+allocation-free 9,072-icon Phosphor 2.1.1 catalog. NOT included: layout
+phases L2-L4, an OS accessibility bridge, system-font fallback (CJK, emoji,
+and Arabic render as tofu), multi-window support, the overlays/chrome/
+collections family visual re-pass (#966), pointer-adjacent menu replacement
+(#961), and the perf metrics API (#967). The complete honest ledger lives
+in KNOWN-GAPS.md.
+
 The workspace version was restated from `1.0.0-rc.2.dev` to `0.0.1-alpha.1` on
 2026-08-03: the rc lineage was adopted in error from the design-system
 specification's document version (commit 4b37e2f); no rc.1 or 1.0 ever existed.
