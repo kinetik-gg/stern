@@ -67,10 +67,12 @@ fn stage9_basic_components_emit_stable_primitive_categories() {
         [Primitive::Rect(_), Primitive::Rect(_), Primitive::Text(_)]
     ));
 
+    // Fixed 26x14 track + 8x8 knob + painted label right of the track
+    // (visual-spec 03 §Switch; family re-pass epic #948).
     let toggle = toggle_with_label(id, rect, "Loop", true, &input, &mut memory, &theme, false);
     assert!(matches!(
         toggle.primitives.as_slice(),
-        [Primitive::Rect(_), Primitive::Rect(_)]
+        [Primitive::Rect(_), Primitive::Rect(_), Primitive::Text(_)]
     ));
 
     let slider = slider_with_label(

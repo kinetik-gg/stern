@@ -1,11 +1,11 @@
 use super::{
-    Brush, ButtonFocusPlacement, ComponentState, CursorShape, IconPrimitive, Point, Primitive,
-    Rect, RowFocusPlacement, SemanticAction, SemanticActionKind, SemanticNode, SemanticRole,
-    SpacingRole, StaticIcon, TabFocusPlacement, TextPrimitive, TextRole, Theme, UiInput, UiMemory,
-    WidgetId, WidgetOutput, button_semantics, button_surface_primitives, clicked_select_state,
-    control_icon_size, control_text_origin, fit_box, focusable, label_baseline,
-    response_reported_focus, response_reported_pressed, row_surface_primitives, selectable,
-    suppress_disabled_interaction_reporting, tab_surface_primitives, with_hover_cursor,
+    Brush, ButtonFocusPlacement, ButtonVariant, ComponentState, CursorShape, IconPrimitive, Point,
+    Primitive, Rect, RowFocusPlacement, SemanticAction, SemanticActionKind, SemanticNode,
+    SemanticRole, SpacingRole, StaticIcon, TabFocusPlacement, TextPrimitive, TextRole, Theme,
+    UiInput, UiMemory, WidgetId, WidgetOutput, button_semantics, button_surface_primitives,
+    clicked_select_state, control_icon_size, control_text_origin, fit_box, focusable,
+    label_baseline, response_reported_focus, response_reported_pressed, row_surface_primitives,
+    selectable, suppress_disabled_interaction_reporting, tab_surface_primitives, with_hover_cursor,
     with_response_state,
 };
 
@@ -37,6 +37,33 @@ pub fn button(
     theme: &Theme,
     disabled: bool,
 ) -> WidgetOutput {
+    button_variant(
+        id,
+        rect,
+        text,
+        ButtonVariant::Standard,
+        input,
+        memory,
+        theme,
+        disabled,
+    )
+}
+
+/// Emits a push button in an explicit visual variant
+/// (`docs/visual-spec/01-buttons.md`: default/primary/quiet/danger tables).
+/// The recipe values stay owned by `Theme::button_variant`; this call site
+/// only threads the variant through.
+#[allow(clippy::too_many_arguments)]
+pub fn button_variant(
+    id: WidgetId,
+    rect: Rect,
+    text: impl Into<String>,
+    variant: ButtonVariant,
+    input: &UiInput,
+    memory: &mut UiMemory,
+    theme: &Theme,
+    disabled: bool,
+) -> WidgetOutput {
     let mut response = focusable(id, rect, input, memory, disabled);
     suppress_disabled_interaction_reporting(&mut response);
     let state = ComponentState {
@@ -46,7 +73,7 @@ pub fn button(
         disabled,
         selected: false,
     };
-    let recipe = theme.button(state);
+    let recipe = theme.button_variant(variant, state);
     let text = text.into();
     let mut primitives = button_surface_primitives(
         theme,

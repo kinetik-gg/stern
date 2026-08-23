@@ -68,9 +68,9 @@ pub use components::{
     NumericScrubInputConfig, NumericScrubInputOutput, PanelFrame, PathFieldConfig, PathFieldOutput,
     SearchFieldOutput, SelectFieldConfig, SelectFieldOutput, SliderStep, TextFieldAccess,
     TextFieldOutput, VectorScrubInputConfig, VectorScrubInputOutput, WidgetOutput,
-    asset_slot_field, button, button_semantics, checkbox, checkbox_semantics, checkbox_with_label,
-    checkbox_with_label_target, choice_label_target_rect, classify_numeric_input_draft,
-    color_field, icon_button, icon_button_semantics, image, image_icon_button,
+    asset_slot_field, button, button_semantics, button_variant, checkbox, checkbox_semantics,
+    checkbox_with_label, checkbox_with_label_target, choice_label_target_rect, classify_numeric_input_draft,
+    color_field, icon_button, icon_button_semantics, icon_selectable_button, image, image_icon_button,
     image_icon_button_sized, image_icon_selectable_button, image_icon_selectable_button_sized,
     image_semantics, label, label_semantics, list_row, multi_line_text_field,
     multi_line_text_field_with_text_layouts, numeric_input, numeric_input_with_text_layouts,
@@ -80,8 +80,8 @@ pub use components::{
     search_field_with_text_layouts, select_field, separator, slider, slider_semantics,
     slider_with_label, slider_with_label_and_step, slider_with_step, tab_button, text_field,
     text_field_semantics, text_field_with_text_layouts, toggle, toggle_semantics,
-    toggle_with_label, toggle_with_label_target, vector2_scrub_input, vector3_scrub_input,
-    vector4_scrub_input,
+    toggle_with_label, toggle_with_label_target, toggle_track_rect, vector2_scrub_input,
+    vector3_scrub_input, vector4_scrub_input,
 };
 pub(crate) use components::{
     multi_line_text_field_with_access_runtime,

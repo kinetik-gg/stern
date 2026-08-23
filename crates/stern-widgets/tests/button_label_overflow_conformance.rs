@@ -1308,7 +1308,7 @@ fn production_call_graph_bounds_button_adoption_and_absent_split_busy_consumers(
                 .lines()
                 .filter(|line| {
                     line.trim_start()
-                        .starts_with("let mut output = button_widget(")
+                        .starts_with("let mut output = button_variant_widget(")
                 })
                 .count();
             (count > 0).then_some((path.as_str(), count))

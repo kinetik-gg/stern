@@ -1,9 +1,9 @@
 use super::{
-    ComponentState, CursorShape, OrderedTextInputResult, Primitive, Rect, RectPrimitive, Response,
-    TextEditMode, TextEditState, TextFeatureSet, TextLayoutKey, TextLayoutStore, TextSelection,
-    TextStyle, Theme, UiInput, UiMemory, WidgetId, WidgetOutput, display_text_with_composition,
-    focusable, multi_line_hit_offset, multi_line_text_primitives, single_line_hit_offset,
-    single_line_text_primitives, text_field_layout, text_field_semantics,
+    ComponentState, CornerRadius, CursorShape, OrderedTextInputResult, Primitive, Rect,
+    RectPrimitive, Response, TextEditMode, TextEditState, TextFeatureSet, TextLayoutKey,
+    TextLayoutStore, TextSelection, TextStyle, Theme, UiInput, UiMemory, WidgetId, WidgetOutput,
+    display_text_with_composition, focusable, multi_line_hit_offset, multi_line_text_primitives,
+    single_line_hit_offset, single_line_text_primitives, text_field_layout, text_field_semantics,
     text_input_platform_requests, text_line_fragments, with_hover_cursor, with_response_state,
 };
 use stern_core::{
@@ -18,6 +18,25 @@ use super::text_interaction::{
     ResolvedTextPointerAction, TextNavigationResolution, TextPointerPhase, TextReplayResult,
     replay_text_field_events_with_navigation, text_wheel_delta,
 };
+
+/// Paints the universal two-layer focus ring just OUTSIDE a focused field's
+/// bounds (`docs/visual-spec/00-language.md` §Focus model: the ring "applies
+/// identically to buttons, fields, checks …" and never recolors the body).
+/// No-op when unfocused or the rect is degenerate.
+fn extend_field_focus_ring(
+    primitives: &mut Vec<Primitive>,
+    theme: &Theme,
+    focused: bool,
+    rect: Rect,
+    radius: CornerRadius,
+) {
+    if !focused || rect.width <= 0.0 || rect.height <= 0.0 {
+        return;
+    }
+    if let Some(ring) = theme.focus_ring(true) {
+        primitives.extend(ring.outward_annulus_primitives(rect, radius));
+    }
+}
 
 /// Access policy for a canonical text field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -420,6 +439,13 @@ pub(crate) fn text_field_with_resolved_response_and_ordered_result(
         &recipe,
         layout,
     ));
+    extend_field_focus_ring(
+        &mut primitives,
+        theme,
+        response.state.focused && !disabled,
+        rect,
+        recipe.radius,
+    );
 
     (
         TextFieldOutput {
@@ -687,6 +713,13 @@ pub(crate) fn multi_line_text_field_with_text_layouts_and_caret_visibility(
         &recipe,
         layout,
     ));
+    extend_field_focus_ring(
+        &mut primitives,
+        theme,
+        response.state.focused && !disabled,
+        rect,
+        recipe.radius,
+    );
 
     MultiLineTextFieldOutput {
         widget: with_hover_cursor(
@@ -1107,7 +1140,7 @@ fn canonical_text_field_runtime(
         && rect.height.is_finite()
         && rect.width > recipe.padding_x * 2.0
         && rect.height > recipe.padding_y * 2.0;
-    let primitives = if content_has_area {
+    let mut primitives = if content_has_area {
         geometry.primitives(
             id,
             response.state.focused,
@@ -1122,6 +1155,13 @@ fn canonical_text_field_runtime(
             radius: recipe.radius,
         })]
     };
+    extend_field_focus_ring(
+        &mut primitives,
+        theme,
+        response.state.focused && !access.is_disabled(),
+        rect,
+        recipe.radius,
+    );
     let widget = with_hover_cursor(
         WidgetOutput::new(Some(response), primitives)
             .with_semantic(with_response_state(

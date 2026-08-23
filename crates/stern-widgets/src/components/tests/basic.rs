@@ -624,6 +624,8 @@ fn tab_and_row_reflect_clicked_selection_same_frame() {
 
 #[test]
 fn checkbox_and_toggle_reflect_selection() {
+    use stern_core::Brush;
+
     let theme = default_dark_theme();
     let mut memory = UiMemory::new();
     let checkbox = checkbox(
@@ -635,6 +637,9 @@ fn checkbox_and_toggle_reflect_selection() {
         &theme,
         false,
     );
+    // Toggle paints the spec's fixed 26x14 track vertically centered in the
+    // control rect plus the 8x8 knob and the label to the right of the track
+    // (visual-spec 03 §Switch; family re-pass epic #948).
     let toggle = toggle(
         WidgetId::from_key("toggle"),
         Rect::new(0.0, 0.0, 36.0, 18.0),
@@ -646,7 +651,40 @@ fn checkbox_and_toggle_reflect_selection() {
     );
 
     assert!(checkbox.response.expect("checkbox response").state.selected);
-    assert_eq!(toggle.primitives.len(), 2);
+    let track_rect = Rect::new(0.0, 2.0, 26.0, 14.0);
+    let mut knobs = Vec::new();
+    let mut tracks = Vec::new();
+    for primitive in &toggle.primitives {
+        if let Primitive::Rect(rect) = primitive {
+            if rect.rect == track_rect {
+                tracks.push(rect);
+            } else if rect.rect.width < 14.0 && rect.rect.height < 14.0 {
+                knobs.push(rect);
+            }
+        }
+    }
+    assert_eq!(tracks.len(), 1, "exactly one 26x14 track rect");
+    assert_eq!(
+        tracks[0].fill,
+        Some(theme.toggle(ComponentState {
+            selected: true,
+            ..ComponentState::default()
+        })
+        .track)
+    );
+    assert_eq!(knobs.len(), 1, "exactly one knob rect");
+    let knob = &knobs[0].rect;
+    assert_eq!(
+        (knob.width, knob.height),
+        (8.0, 8.0),
+        "knob is the spec's 8x8 circle"
+    );
+    // On-state knob x = track.max_x() - 8 - 2*2 = 14 (spec "x=14").
+    assert_eq!((knob.x, knob.y), (14.0, 5.0));
+    assert!(
+        label_text(&toggle).is_some(),
+        "toggle label now paints right of the track"
+    );
 }
 
 fn choice_indicator_rect(output: &crate::WidgetOutput) -> Rect {

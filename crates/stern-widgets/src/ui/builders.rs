@@ -15,8 +15,8 @@
 use std::hash::Hash;
 
 use stern_core::{
-    Alignment, FixedMeasure, Insets, LayoutNodeId, LayoutTree, Measurement, Rect, Response, Size,
-    SizeRule, StaticIcon, TextRole, Theme,
+    Alignment, ButtonVariant, FixedMeasure, Insets, LayoutNodeId, LayoutTree, Measurement, Rect,
+    Response, Size, SizeRule, StaticIcon, TextRole, Theme,
 };
 use stern_text::{TextLayoutKey, TextLayoutStore, TextStyle};
 
@@ -95,6 +95,7 @@ pub struct Button {
     key: String,
     label: String,
     disabled: bool,
+    variant: ButtonVariant,
 }
 
 impl Button {
@@ -104,6 +105,7 @@ impl Button {
             key: key.into(),
             label: label.into(),
             disabled: false,
+            variant: ButtonVariant::Standard,
         }
     }
 
@@ -111,6 +113,13 @@ impl Button {
     #[must_use]
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Sets the visual variant (`docs/visual-spec/01-buttons.md`).
+    #[must_use]
+    pub fn variant(mut self, variant: ButtonVariant) -> Self {
+        self.variant = variant;
         self
     }
 }
@@ -126,7 +135,14 @@ impl Widget for Button {
     }
 
     fn compose(self: Box<Self>, ui: &mut Ui<'_>, rect: Rect) -> Option<Response> {
-        Some(ui.button(self.key, rect, self.label, self.disabled))
+        let this = *self;
+        Some(ui.button_variant(
+            this.key,
+            rect,
+            this.label,
+            this.variant,
+            this.disabled,
+        ))
     }
 }
 
@@ -226,11 +242,11 @@ impl Checkbox {
 
 impl Widget for Checkbox {
     fn measure(&self, ctx: &mut MeasureContext<'_>) -> Measurement {
-        let side = ctx
-            .theme()
-            .checkbox(stern_core::ComponentState::default())
-            .size;
-        Measurement::new(Size::new(side, side))
+        let theme = ctx.theme();
+        let side = theme.checkbox(stern_core::ComponentState::default()).size;
+        let text = ctx.measure_text(&self.label, TextRole::Label);
+        let height = side.max(text.height);
+        Measurement::new(Size::new(side + crate::components::CHOICE_LABEL_GAP + text.width, height))
     }
 
     fn compose(self: Box<Self>, ui: &mut Ui<'_>, rect: Rect) -> Option<Response> {
@@ -267,11 +283,11 @@ impl RadioButton {
 
 impl Widget for RadioButton {
     fn measure(&self, ctx: &mut MeasureContext<'_>) -> Measurement {
-        let side = ctx
-            .theme()
-            .radio_button(stern_core::ComponentState::default())
-            .size;
-        Measurement::new(Size::new(side, side))
+        let theme = ctx.theme();
+        let side = theme.radio_button(stern_core::ComponentState::default()).size;
+        let text = ctx.measure_text(&self.label, TextRole::Label);
+        let height = side.max(text.height);
+        Measurement::new(Size::new(side + crate::components::CHOICE_LABEL_GAP + text.width, height))
     }
 
     fn compose(self: Box<Self>, ui: &mut Ui<'_>, rect: Rect) -> Option<Response> {
@@ -279,12 +295,15 @@ impl Widget for RadioButton {
     }
 }
 
-/// Toggle (switch) track dimensions from `docs/visual-spec/03` ("Track:
-/// 26×14"). The design system exposes no switch-size token yet; when one
-/// lands this constant must be replaced by it.
-const TOGGLE_TRACK: Size = Size::new(26.0, 14.0);
+/// Toggle (switch) track dimensions from `docs/visual-spec/03`
+/// ("Track: 26×14"). The design system exposes no switch-size token yet; when
+/// one lands this constant must be replaced by it.
+const TOGGLE_TRACK: Size = Size::new(crate::components::TOGGLE_TRACK_WIDTH, crate::components::TOGGLE_TRACK_HEIGHT);
 
-/// Content-sized toggle builder: the visual-spec switch track.
+/// Content-sized toggle builder: the spec switch track plus its label.
+///
+/// Measured width is the 26×14 track plus the choice label gap (6) and the
+/// shaped label; measured height fits whichever is taller.
 pub struct Toggle {
     key: String,
     label: String,
@@ -312,8 +331,13 @@ impl Toggle {
 }
 
 impl Widget for Toggle {
-    fn measure(&self, _ctx: &mut MeasureContext<'_>) -> Measurement {
-        Measurement::new(TOGGLE_TRACK)
+    fn measure(&self, ctx: &mut MeasureContext<'_>) -> Measurement {
+        let text = ctx.measure_text(&self.label, TextRole::Label);
+        let height = TOGGLE_TRACK.height.max(text.height);
+        Measurement::new(Size::new(
+            TOGGLE_TRACK.width + crate::components::CHOICE_LABEL_GAP + text.width,
+            height,
+        ))
     }
 
     fn compose(self: Box<Self>, ui: &mut Ui<'_>, rect: Rect) -> Option<Response> {

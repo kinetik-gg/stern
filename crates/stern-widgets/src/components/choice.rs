@@ -20,7 +20,31 @@ const RADIO_DOT_INSET: f32 = 3.0;
 /// `docs/visual-spec/03-choice-sliders-tabs.md` ("gap 6 (label gap; labs 7 →
 /// normalize 6)"). The token ladder has no 6px gap role, so the normative
 /// spec value is pinned here.
-const CHOICE_LABEL_GAP: f32 = 6.0;
+pub(crate) const CHOICE_LABEL_GAP: f32 = 6.0;
+
+/// Switch track width per `docs/visual-spec/03-choice-sliders-tabs.md`
+/// §Switch ("Track: 26×14").
+pub(crate) const TOGGLE_TRACK_WIDTH: f32 = 26.0;
+/// Switch track height per the same section.
+pub(crate) const TOGGLE_TRACK_HEIGHT: f32 = 14.0;
+/// Switch knob side length per the same section ("knob 8×8 circle").
+pub(crate) const TOGGLE_KNOB_SIZE: f32 = 8.0;
+
+/// Returns the switch track rectangle: a fixed 26×14 track vertically
+/// centered inside the caller's control rect and clamped to it. The control
+/// rect stays the row/hit area; only the track paints chrome (family re-pass,
+/// epic #948 Phase 4).
+#[must_use]
+pub fn toggle_track_rect(control_rect: Rect) -> Rect {
+    let width = TOGGLE_TRACK_WIDTH.min(control_rect.width.max(0.0));
+    let height = TOGGLE_TRACK_HEIGHT.min(control_rect.height.max(0.0));
+    Rect::new(
+        control_rect.x,
+        control_rect.y + (control_rect.height - height).max(0.0) * 0.5,
+        width,
+        height,
+    )
+}
 
 /// Returns the region a choice-control label paints into.
 ///
@@ -351,9 +375,9 @@ pub fn toggle(
 
 /// Emits a toggle control with an accessible label.
 ///
-/// The track fills the whole control rect, so this variant has no room for a
-/// visible label; use [`toggle_with_label_target`] with an explicit label
-/// rect to paint one (KNOWN-GAPS #48).
+/// The track paints at the spec's fixed 26×14, vertically centered inside the
+/// control rect; the label paints to the right of the track (gap 6, control
+/// type) inside the same rect (visual-spec 03 §Switch).
 #[allow(clippy::too_many_arguments)]
 pub fn toggle_with_label(
     id: WidgetId,
@@ -380,10 +404,10 @@ pub fn toggle_with_label(
 
 /// Emits a toggle control with a deterministic label activation target.
 ///
-/// The label paints into `label_rect` when it is non-empty. Unlike
-/// checkbox/radio, a toggle given only a control rect has NO label region:
-/// its track fills the whole control rect, so callers that want a visible
-/// label must pass an explicit `label_rect` (KNOWN-GAPS #48).
+/// The label paints into `label_rect` when it is non-empty. The track is the
+/// spec's fixed 26×14 centered vertically in `rect`; the focus ring wraps the
+/// track only (the box-only focus doctrine of visual-spec 03 §Checkbox,
+/// applied to the switch's box).
 #[allow(clippy::too_many_arguments)]
 pub fn toggle_with_label_target(
     id: WidgetId,
@@ -402,49 +426,51 @@ pub fn toggle_with_label_target(
     suppress_disabled_interaction_reporting(&mut response);
     let selected = clicked_toggle_state(on, response.clicked);
     response.state.selected = selected;
-    let recipe = theme.toggle(ComponentState {
+    let state = ComponentState {
         hovered: response.state.hovered,
         pressed: response_reported_pressed(&response),
         focused: response_reported_focus(&response),
         disabled,
         selected,
-    });
-    let knob_x = if selected {
-        rect.max_x() - rect.height
-    } else {
-        rect.x
     };
-    let radius = CornerRadius::all(rect.height * 0.5);
+    let recipe = theme.toggle(state);
+    let track = toggle_track_rect(rect);
+    // Spec knob geometry (visual-spec 03 §Switch): 8×8 circle, x=2 when off
+    // and x=14 when on ("translate 12"), vertically centered. The on position
+    // generalizes as `track.max_x() - knob - 2 × recipe.padding` (26 − 8 − 4
+    // = 14), preserving the spec's asymmetric right gap.
+    let knob_x = if selected {
+        track.max_x() - TOGGLE_KNOB_SIZE - recipe.padding * 2.0
+    } else {
+        track.x + recipe.padding
+    };
+    let knob_y = track.y + (track.height - TOGGLE_KNOB_SIZE.min(track.height)).max(0.0) * 0.5;
+    let knob_side = TOGGLE_KNOB_SIZE.min(track.height).min(track.width);
     let mut primitives = Vec::with_capacity(4);
     push_focus_ring(
         &mut primitives,
         theme,
         response_reported_focus(&response),
-        rect,
-        radius,
+        track,
+        CornerRadius::all(track.height * 0.5),
     );
     primitives.extend([
         Primitive::Rect(RectPrimitive {
-            rect,
+            rect: track,
             fill: Some(recipe.track),
             stroke: Some(recipe.border),
-            radius,
+            radius: CornerRadius::all(track.height * 0.5),
         }),
         Primitive::Rect(RectPrimitive {
-            rect: Rect::new(
-                knob_x + recipe.padding,
-                rect.y + recipe.padding,
-                rect.height - recipe.padding * 2.0,
-                rect.height - recipe.padding * 2.0,
-            ),
+            rect: Rect::new(knob_x, knob_y, knob_side, knob_side),
             fill: Some(recipe.thumb),
             stroke: None,
-            radius: CornerRadius::all((rect.height - recipe.padding * 2.0) * 0.5),
+            radius: CornerRadius::all(knob_side * 0.5),
         }),
     ]);
     push_choice_label(
         &mut primitives,
-        choice_label_paint_region(rect, rect.max_x(), label_rect),
+        choice_label_paint_region(rect, track.max_x(), label_rect),
         &label,
         theme,
         response.state.hovered && !disabled,

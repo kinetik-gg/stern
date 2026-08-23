@@ -9,7 +9,7 @@ use stern_core::{
 };
 use stern_widgets::{
     RadioGroupChoice, Ui, WidgetOutput, checkbox_with_label_target, radio_button_with_label_target,
-    slider, toggle_with_label_target,
+    slider, toggle_track_rect, toggle_with_label_target,
 };
 
 fn sentinel_theme() -> Theme {
@@ -157,7 +157,10 @@ fn focused_choice_and_slider_outputs_prepend_exact_rings_without_changing_bounds
     let toggle_id = WidgetId::from_key("focused-toggle");
     let toggle_rect = Rect::new(10.0, 80.0, 40.0, 20.0);
     let toggle_label = Rect::new(56.0, 80.0, 70.0, 20.0);
-    let toggle_radius = CornerRadius::all(toggle_rect.height * 0.5);
+    // The ring wraps the fixed 26x14 track (visual-spec 03 §Switch), not the
+    // full control rect.
+    let toggle_track = toggle_track_rect(toggle_rect);
+    let toggle_radius = CornerRadius::all(toggle_track.height * 0.5);
     let mut focused = focused_memory(toggle_id);
     let focused_toggle = toggle_with_label_target(
         toggle_id,
@@ -186,7 +189,7 @@ fn focused_choice_and_slider_outputs_prepend_exact_rings_without_changing_bounds
         &focused_toggle,
         &unfocused_toggle,
         &theme,
-        toggle_rect,
+        toggle_track,
         toggle_radius,
     );
 
@@ -348,7 +351,9 @@ fn disabled_choice_and_slider_controls_suppress_retained_focus_rings() {
         &theme,
         true,
     );
-    assert_eq!(toggle.primitives.len(), 2);
+    // Track + knob + label, no ring: the fixed 26x14 switch now paints its
+    // label right of the track (visual-spec 03 §Switch).
+    assert_eq!(toggle.primitives.len(), 3);
 
     let slider_id = WidgetId::from_key("disabled-slider");
     let mut value = 0.5;
