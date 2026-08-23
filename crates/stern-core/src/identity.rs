@@ -131,8 +131,9 @@ impl WidgetId {
     ///
     /// The derivation is pinned: the same key yields the same ID across
     /// compiler releases, processes, and platforms, so IDs may be persisted or
-    /// compared across builds. See [`StableIdHasher`] for the exact scheme and
-    /// its limits.
+    /// compared across builds. The exact scheme and constants live in the
+    /// private `StableIdHasher` in this module: FNV-1a 64 with the pinned
+    /// basis `0xcbf29ce484222325` and prime `0x100000001b3`.
     #[must_use]
     pub fn from_key(key: impl Hash) -> Self {
         let mut hasher = StableIdHasher::new();
