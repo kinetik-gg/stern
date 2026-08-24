@@ -232,6 +232,14 @@ These states are independent and must be reported separately. Packageability
 does not authorize publishing, a tag, or alpha acceptance. Publishing and
 tagging require explicit release authority beyond an implementation PR.
 
+For agent-operated sessions, release authority means a direct owner
+statement in the live session (for example, "cut the release now"). None of
+the following authorize tagging or publishing: approval of a plan that
+mentions the release step, a standing instruction to adopt or close open
+issues (including the release-tracking issue itself), delegated visual or
+merge authority, or overnight autonomy. Agents stop at release *prep*
+(CHANGELOG cut, packaging pins) and ask.
+
 ## Release Checklist
 
 Before tagging a release:
